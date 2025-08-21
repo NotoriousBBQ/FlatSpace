@@ -77,8 +77,8 @@ public class Gameboard : MonoBehaviour
         var scrollValue = context.ReadValue<float>();
         if (scrollValue != 0)
         {
-            float targetSize = _camera.orthographicSize + (scrollValue * _cameraSizeStep);
-            _camera.orthographicSize += scrollValue * 2;
+            float targetSize = _camera.orthographicSize + (scrollValue * -_cameraSizeStep);
+            _camera.orthographicSize = Math.Clamp(targetSize, _minCameraSize, _maxCameraSize);
             Debug.Log($"ortho size " + _camera.orthographicSize);
         }
     }

@@ -288,8 +288,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b28127cb41309b4c8560adb5fa718ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gameboard
-  intialBoardState: 
-  planetPrefab: Assets/UI/PlanetUI.prefab
+  _intialBoardState: 
+  _planetPrefab: Assets/UI/PlanetUI.prefab
+  _minCameraSize: 1
+  _maxCameraSize: 15
+  _cameraSizeStep: 0.5
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -697,7 +700,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &667686347
 Canvas:
   m_ObjectHideFlags: 0
@@ -707,8 +710,8 @@ Canvas:
   m_GameObject: {fileID: 667686343}
   m_Enabled: 1
   serializedVersion: 3
-  m_RenderMode: 0
-  m_Camera: {fileID: 0}
+  m_RenderMode: 2
+  m_Camera: {fileID: 519420031}
   m_PlaneDistance: 100
   m_PixelPerfect: 0
   m_ReceivesEvents: 1
@@ -729,8 +732,8 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 667686343}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 90}
+  m_LocalScale: {x: 0.024813896, y: 0.024813896, z: 0.024813896}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 77940341}
@@ -739,8 +742,8 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0, y: 0}
+  m_SizeDelta: {x: 758, y: 403}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &1137678430 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 5171619969901592877, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
