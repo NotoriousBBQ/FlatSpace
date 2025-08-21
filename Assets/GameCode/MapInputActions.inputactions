@@ -1,0 +1,35 @@
+{
+    "version": 1,
+    "name": "MapInputActions",
+    "maps": [
+        {
+            "name": "MapActions",
+            "id": "c8e6a87d-34d9-4bdd-b6a5-e0d0c22cbb0d",
+            "actions": [
+                {
+                    "name": "MapZoom",
+                    "type": "PassThrough",
+                    "id": "1cda8bb8-828d-44c1-8eb6-01bc05de0424",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "cc05a969-8a35-4f4e-b2f2-845ea5c3e8d0",
+                    "path": "<Mouse>/scroll/y",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "MapZoom",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

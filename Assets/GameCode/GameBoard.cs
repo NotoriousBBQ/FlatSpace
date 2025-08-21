@@ -1,17 +1,21 @@
 using System;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.UIElements;
-
+using UnityEngine.InputSystem;
 public class Gameboard : MonoBehaviour
 {
     [SerializeField] 
-    private string intialBoardState;
+    private string _intialBoardState;
 
     [SerializeField]
-    private string planetPrefab;
+    private string _planetPrefab;
 
+    [SerializeField] private float _minCameraSize = 1;
+    [SerializeField] private float _maxCameraSize = 15;
+    [SerializeField] private float _cameraSizeStep = 0.1f;
+   
+    private MapInputActions _mapInputActions;
+    private Camera _camera;
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -21,30 +25,61 @@ public class Gameboard : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
+
     }
 
     private void Awake()
     {
-        if (string.IsNullOrEmpty(intialBoardState))
+        _camera = Camera.main;
+        if (string.IsNullOrEmpty(_intialBoardState))
         {
             CreateDefaultBoardState();
         }
-                
- 
+
+        InitializeInputActions();
+
     }
     
-    void CreateDefaultBoardState()
+    private void CreateDefaultBoardState()
     {
-        if (!string.IsNullOrEmpty(planetPrefab))
+        if (!string.IsNullOrEmpty(_planetPrefab))
         {
-            GameObject prefab = AssetDatabase.LoadAssetAtPath(planetPrefab, typeof(GameObject)) as GameObject;
+            var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
             prefab.transform.localPosition = new Vector3(100, 100, 0);
             Debug.Log("Prefab local pos " + prefab.transform.localPosition);
             var planetUi = Instantiate(prefab, this.transform);
             planetUi.transform.localPosition = new Vector3(100, 100, 0);
             Debug.Log("GO local pos " + planetUi.transform.localPosition);
         }
-            
+    }
+
+    private void InitializeInputActions()
+    {
+        _mapInputActions = new MapInputActions();
+    }
+
+    private void OnEnable()
+    {
+        if (_mapInputActions != null)
+        {
+            _mapInputActions.Enable();
+            _mapInputActions.MapActions.MapZoom.performed += OnScrollPerformed;
+        }
+    }
+
+    private void OnDisable()
+    {
+        _mapInputActions.Disable();
+    }
+
+    private void OnScrollPerformed(InputAction.CallbackContext context)
+    {
+        var scrollValue = context.ReadValue<float>();
+        if (scrollValue != 0)
+        {
+            float targetSize = _camera.orthographicSize + (scrollValue * _cameraSizeStep);
+            _camera.orthographicSize += scrollValue * 2;
+            Debug.Log($"ortho size " + _camera.orthographicSize);
+        }
     }
 }
