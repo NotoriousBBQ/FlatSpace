@@ -1,9 +1,12 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
+
 public class Gameboard : MonoBehaviour
 {
     [SerializeField] 
@@ -12,7 +15,11 @@ public class Gameboard : MonoBehaviour
     [SerializeField] private float _minCameraSize = 1;
     [SerializeField] private float _maxCameraSize = 15;
     [SerializeField] private float _cameraSizeStep = 0.1f;
-   
+
+    [SerializeField] private Button _nextTurnButton;
+    [SerializeField] private Button _startRunButton;
+    [SerializeField] private Button _stopRunButton;
+
     private MapInputActions _mapInputActions;
     private Camera _camera;
     
@@ -43,25 +50,25 @@ public class Gameboard : MonoBehaviour
     
     private void CreateDefaultBoardState()
     {
-        Planet planet1 = this.AddComponent<Planet>() as Planet;
-        planet1.Init(Planet.PlanetType.PlanetTypePrime, this.transform, new Vector3(0,0,0));
-        _planetList.Add(planet1);
+        Planet planet = this.AddComponent<Planet>() as Planet;
+        planet.Init(Planet.PlanetType.PlanetTypePrime, this.transform, new Vector3(0,0,0));
+        _planetList.Add(planet);
         
-        Planet planet2 = this.AddComponent<Planet>() as Planet;
-        planet2.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(200,0,0));
-        _planetList.Add(planet2);
+        planet = this.AddComponent<Planet>() as Planet;
+        planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(200,0,0));
+        _planetList.Add(planet);
 
-        Planet planet3 = this.AddComponent<Planet>() as Planet;
-        planet3.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(-200,0,0));
-        _planetList.Add(planet3);
+        planet = this.AddComponent<Planet>() as Planet;
+        planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(-200,0,0));
+        _planetList.Add(planet);
 
-        Planet planet4 = this.AddComponent<Planet>() as Planet;
-        planet4.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0,200,0));
-        _planetList.Add(planet4);
+        planet = this.AddComponent<Planet>() as Planet;
+        planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0,200,0));
+        _planetList.Add(planet);
 
-        Planet planet5 = this.AddComponent<Planet>() as Planet;
-        planet5.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0,-200,0));
-        _planetList.Add(planet5);
+        planet = this.AddComponent<Planet>() as Planet;
+        planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0,-200,0));
+        _planetList.Add(planet);
     
 /*       var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
        prefab.transform.localPosition = new Vector3(100, 100, 0);
@@ -74,6 +81,7 @@ public class Gameboard : MonoBehaviour
 
     private void InitializeInputActions()
     {
+        _stopRunButton.interactable = false;
         _mapInputActions = new MapInputActions();
     }
 
@@ -101,4 +109,43 @@ public class Gameboard : MonoBehaviour
             Debug.Log($"ortho size " + _camera.orthographicSize);
         }
     }
+
+    #region Update Functions
+    public void TriggerSingleUpdate()
+    {
+        foreach (Planet planet in _planetList)
+        {
+            planet.SingleUpdate();
+        }
+    }
+
+    private bool _timedUpdateRunning = false;
+    public void StartTimedUpdate()
+    {
+        _nextTurnButton.interactable = false;
+        _startRunButton.interactable = false;
+        _stopRunButton.interactable = true;
+        _timedUpdateRunning = true;
+        StartCoroutine(TimedUpdate(2.0f));
+    }
+
+    IEnumerator TimedUpdate(float waitTime)
+    {
+        while (_timedUpdateRunning)
+        {
+            TriggerSingleUpdate();
+            Debug.Log("Timed Update");
+            yield return new WaitForSeconds(waitTime);
+            Debug.Log("Coroutine Looping");
+        }
+    }
+    
+    public void StopTimedUpdate()
+    {
+        _timedUpdateRunning = false;
+        _nextTurnButton.interactable = true;
+        _startRunButton.interactable = true;
+        _stopRunButton.interactable = false;
+    }
+    #endregion
 }

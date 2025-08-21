@@ -13,7 +13,7 @@ public class Planet : MonoBehaviour
     [SerializeField] private float _maxPopulation = 10.0f;
 
     [SerializeField] private float _food = 0.0f;
-    [SerializeField] private float _MaxFood = 10.0f;
+    [SerializeField] private float _maxFood = 10.0f;
 
     private PlanetUIObject _planetUIObject;
     
@@ -64,6 +64,22 @@ public class Planet : MonoBehaviour
             _planetUIObject._populationTextField.text = _population.ToString();
             _planetUIObject._foodTextField.text = _food.ToString();
         }
+    }
+
+    public void SingleUpdate()
+    {
+        _food += _population;
+        _food = Math.Clamp(_food, 0.0f, _maxFood );
+        if (_food >= _maxFood)
+        {
+            if (_population < _maxPopulation)
+            {
+                _food = 0;
+                _population++;
+            }
+            
+        }
+        UpdateMapUI();
     }
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
