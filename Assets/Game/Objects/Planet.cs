@@ -24,7 +24,8 @@ public class Planet : MonoBehaviour
         PlanetTypeNormal
     }
 
-    public Planet(PlanetType planetType = PlanetType.PlanetTypeNormal, Transform parentTransform = null)
+    public void Init(PlanetType planetType, Transform parentTransform, 
+        Vector3 position)
     {
         if (planetType == PlanetType.PlanetTypePrime)
         {
@@ -36,10 +37,12 @@ public class Planet : MonoBehaviour
         if (!string.IsNullOrEmpty(_planetPrefab))
         {
             var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
-  //          prefab.transform.localPosition = new Vector3(100, 100, 0);
-             _mapUI = Instantiate(prefab, parentTransform);
-
-             InitializeUIObject();
+            if (prefab)
+            {
+                _mapUI = Instantiate(prefab,parentTransform) as GameObject;
+                _mapUI.transform.localPosition += position;
+                InitializeUIObject();
+            }
         }
         
     }
