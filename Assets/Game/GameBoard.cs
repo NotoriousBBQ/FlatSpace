@@ -7,9 +7,6 @@ public class Gameboard : MonoBehaviour
     [SerializeField] 
     private string _intialBoardState;
 
-    [SerializeField]
-    private string _planetPrefab;
-
     [SerializeField] private float _minCameraSize = 1;
     [SerializeField] private float _maxCameraSize = 15;
     [SerializeField] private float _cameraSizeStep = 0.1f;
@@ -42,7 +39,8 @@ public class Gameboard : MonoBehaviour
     
     private void CreateDefaultBoardState()
     {
-        if (!string.IsNullOrEmpty(_planetPrefab))
+        Planet newPlanet = new Planet(Planet.PlanetType.PlanetTypePrime, this.transform);
+     /*   if (!string.IsNullOrEmpty(_planetPrefab))
         {
             var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
             prefab.transform.localPosition = new Vector3(100, 100, 0);
@@ -50,7 +48,7 @@ public class Gameboard : MonoBehaviour
             var planetUi = Instantiate(prefab, this.transform);
             planetUi.transform.localPosition = new Vector3(100, 100, 0);
             Debug.Log("GO local pos " + planetUi.transform.localPosition);
-        }
+        }*/
     }
 
     private void InitializeInputActions()

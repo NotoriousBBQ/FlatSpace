@@ -289,8 +289,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gameboard
   _intialBoardState: 
-  _planetPrefab: Assets/UI/PlanetUI.prefab
-  _minCameraSize: 1
+  _minCameraSize: 3
   _maxCameraSize: 15
   _cameraSizeStep: 0.5
 --- !u!1 &519420028
