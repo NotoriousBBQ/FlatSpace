@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7003864be52ae8c43bfed6b538db3521, type: 3}
+  m_Name: Planet2SpawnData
+  m_EditorClassIdentifier: Assembly-CSharp::PlanetSpawnData
+  _planetName: Venus
+  _planetPosition: {x: 0, y: 200, z: 0}
+  _planetType: 1
+  _resourceData: {fileID: 11400000, guid: e36daa74479bd3a4ab691f3ff26f6fc8, type: 2}

@@ -10,7 +10,7 @@ using UnityEngine.UI;
 public class Gameboard : MonoBehaviour
 {
     [SerializeField] 
-    private string _intialBoardState;
+    private BoardConfiguration _intialBoardState;
 
     [SerializeField] private float _minCameraSize = 1;
     [SerializeField] private float _maxCameraSize = 15;
@@ -39,16 +39,31 @@ public class Gameboard : MonoBehaviour
     {
         _camera = Camera.main;
         _planetList.Clear();
-        if (string.IsNullOrEmpty(_intialBoardState))
+        if (_intialBoardState)
         {
-            CreateDefaultBoardState();
+            InitBoard();
+        }
+        else
+        {
+            CreateTestBoardState(); 
         }
 
         InitializeInputActions();
 
     }
+
+    private void InitBoard()
+    {
+        foreach (var planetSpawnData in _intialBoardState._planetSpawnData)
+        {
+            Planet planet = this.AddComponent<Planet>() as Planet;
+            planet.Init(planetSpawnData, this.transform);
+            _planetList.Add(planet);
+            
+        }
+    }
     
-    private void CreateDefaultBoardState()
+    private void CreateTestBoardState()
     {
         Planet planet = this.AddComponent<Planet>() as Planet;
         planet.Init(Planet.PlanetType.PlanetTypePrime, this.transform, new Vector3(0,0,0));
@@ -69,14 +84,7 @@ public class Gameboard : MonoBehaviour
         planet = this.AddComponent<Planet>() as Planet;
         planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0,-200,0));
         _planetList.Add(planet);
-    
-/*       var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
-       prefab.transform.localPosition = new Vector3(100, 100, 0);
-       Debug.Log("Prefab local pos " + prefab.transform.localPosition);
-       var planetUi = Instantiate(prefab, this.transform);
-       planetUi.transform.localPosition = new Vector3(100, 100, 0);
-       Debug.Log("GO local pos " + planetUi.transform.localPosition);
-   }*/
+
     }
 
     private void InitializeInputActions()
@@ -96,7 +104,7 @@ public class Gameboard : MonoBehaviour
 
     private void OnDisable()
     {
-        _mapInputActions.Disable();
+        _mapInputActions?.Disable();
     }
 
     private void OnScrollPerformed(InputAction.CallbackContext context)
@@ -106,7 +114,6 @@ public class Gameboard : MonoBehaviour
         {
             float targetSize = _camera.orthographicSize + (scrollValue * -_cameraSizeStep);
             _camera.orthographicSize = Math.Clamp(targetSize, _minCameraSize, _maxCameraSize);
-            Debug.Log($"ortho size " + _camera.orthographicSize);
         }
     }
 

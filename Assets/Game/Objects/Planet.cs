@@ -9,15 +9,16 @@ public class Planet : MonoBehaviour
     [SerializeField] private PlanetType _planetType = PlanetType.PlanetTypeNormal;
     [SerializeField] private string _planetPrefab = "Assets/UI/PlanetUI.prefab";
     
-    [SerializeField] private float _population = 0.0f;
-    [SerializeField] private float _maxPopulation = 10.0f;
+    [SerializeField] private int _population = 0;
 
     [SerializeField] private float _food = 0.0f;
-    [SerializeField] private float _maxFood = 10.0f;
+    [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
-    private PlanetUIObject _planetUIObject;
+    private string _planetName = "";
     
+    private PlanetUIObject _planetUIObject;
     private GameObject _mapUI;
+    private PlanetResourceData _resourceData = null;
     public enum PlanetType
     {
         PlanetTypePrime,
@@ -30,10 +31,9 @@ public class Planet : MonoBehaviour
         if (planetType == PlanetType.PlanetTypePrime)
         {
             _planetType = PlanetType.PlanetTypePrime;
-            _population = 1.0f;
+            _population = 1;
         }
-               
-
+        
         if (!string.IsNullOrEmpty(_planetPrefab))
         {
             var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
@@ -43,8 +43,31 @@ public class Planet : MonoBehaviour
                 _mapUI.transform.localPosition += position;
                 InitializeUIObject();
             }
-        }
-        
+        }  
+
+    }
+
+    private void InitUIElement(Vector3 position, Transform parentTransform)
+    {
+        if (!string.IsNullOrEmpty(_planetPrefab))
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
+            if (prefab)
+            {
+                _mapUI = Instantiate(prefab,parentTransform) as GameObject;
+                _mapUI.transform.localPosition += position;
+                InitializeUIObject();
+            }
+        }       
+    }
+    public void Init(PlanetSpawnData spawnData, Transform parentTransform)
+    {
+        _resourceData = spawnData._resourceData;
+        _planetName = spawnData._planetName;
+        _population = _resourceData._initialPopulation;
+        _food = _resourceData._initialFood;
+
+        InitUIElement(spawnData._planetPosition, parentTransform);
     }
 
     private void InitializeUIObject()
@@ -53,7 +76,7 @@ public class Planet : MonoBehaviour
         _planetUIObject  = _mapUI.GetComponent<PlanetUIObject>();
         if (_planetUIObject == null)
             return;
-        _planetUIObject._nameTextField.text = _planetType == PlanetType.PlanetTypePrime ? "Prime" : "Normal";
+        _planetUIObject._nameTextField.text = this._planetName;
         UpdateMapUI();        
     }
 
@@ -68,13 +91,12 @@ public class Planet : MonoBehaviour
 
     public void SingleUpdate()
     {
-        _food += _population;
-        _food = Math.Clamp(_food, 0.0f, _maxFood );
-        if (_food >= _maxFood)
+        _food += _population * _resourceData._foodProduction;
+        if (_food >= _foodNeededForNewPop)
         {
-            if (_population < _maxPopulation)
+            if (_population < _resourceData._maxPopulation)
             {
-                _food = 0;
+                _food -= _foodNeededForNewPop;
                 _population++;
             }
             
