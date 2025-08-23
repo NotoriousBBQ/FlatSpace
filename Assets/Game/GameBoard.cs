@@ -3,12 +3,15 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEditor;
+using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class Gameboard : MonoBehaviour
 {
+    private static Gameboard _instance;
+    public static Gameboard Instance => _instance;
     [SerializeField] 
     private BoardConfiguration _intialBoardState;
 
@@ -36,6 +39,9 @@ public class Gameboard : MonoBehaviour
 
     private void Awake()
     {
+        if (_instance == null)
+            _instance = this;
+            
         _camera = Camera.main;
         _planetList.Clear();
         if (_intialBoardState)

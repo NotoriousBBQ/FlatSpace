@@ -8,9 +8,7 @@ public class GameButtonHandler : MonoBehaviour
     private Button _nextTurnButton;
     private Button _startRunButton;
     private Button _stopRunButton;
-    
-    public Gameboard _gameboard;
-    
+   
     void OnEnable()
     {
         var root = uiDocument.rootVisualElement;
@@ -56,7 +54,7 @@ public class GameButtonHandler : MonoBehaviour
 
     private void OnNextTurnButtonClicked()
     {
-        _gameboard.TriggerSingleUpdate();
+        Gameboard.Instance.TriggerSingleUpdate();
     }
 
     private void OnStartRunButtonClicked()
@@ -64,7 +62,7 @@ public class GameButtonHandler : MonoBehaviour
         _nextTurnButton.SetEnabled(false);
         _startRunButton.SetEnabled(false);
         _stopRunButton.SetEnabled(true);
-        _gameboard.StartTimedUpdate();
+        Gameboard.Instance.StartTimedUpdate();
     }
 
     private void OnStopRunButtonClicked()
@@ -72,6 +70,6 @@ public class GameButtonHandler : MonoBehaviour
         _nextTurnButton.SetEnabled(true);
         _startRunButton.SetEnabled(true);
         _stopRunButton.SetEnabled(false);
-        _gameboard.StopTimedUpdate();
+        Gameboard.Instance.StopTimedUpdate();
     }
 }
