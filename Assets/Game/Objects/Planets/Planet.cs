@@ -17,6 +17,7 @@ public class Planet : MonoBehaviour
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
     private string _planetName = "";
+    private Vector2 _position = new Vector2(0.0f, 0.0f);
     
     private PlanetUIObject _planetUIObject;
     private GameObject _mapUI;
@@ -30,6 +31,9 @@ public class Planet : MonoBehaviour
         PlanetTypeIndustrial,
         PlanetTypeDesolate
     }
+
+    public string PlanetName => _planetName;
+    public Vector2 Position => _position;
 
     public struct PlanetUpdateResult
     {
@@ -99,6 +103,7 @@ public class Planet : MonoBehaviour
         _planetName = spawnData._planetName;
         _population = _resourceData._initialPopulation;
         _food = _resourceData._initialFood;
+        _position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
 
         InitUIElement(spawnData._planetPosition, parentTransform);
     }

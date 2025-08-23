@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using FlatSpace.Pathing;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEditorInternal;
@@ -52,6 +53,8 @@ public class Gameboard : MonoBehaviour
         {
             CreateTestBoardState(); 
         }
+
+        PathingSystem.Instance.InitializePathMap(_planetList);
 
         InitializeInputActions();
 
