@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 998883b0a83447942b0f5b070b122630, type: 3}
-  m_Name: PrimePlanetResourceData
+  m_Name: VerdantPlanetResourceData
   m_EditorClassIdentifier: Assembly-CSharp::PlanetResourceData
   _planetType: 0
-  _initialPopulation: 2
-  _initialFood: 4
-  _foodProduction: 2
-  _grotsitProduction: 2
-  _maxPopulation: 15
+  _initialPopulation: 0
+  _initialFood: 0
+  _foodProduction: 0
+  _grotsitProduction: 0
+  _maxPopulation: 0

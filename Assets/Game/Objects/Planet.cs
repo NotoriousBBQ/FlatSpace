@@ -22,7 +22,11 @@ public class Planet : MonoBehaviour
     public enum PlanetType
     {
         PlanetTypePrime,
-        PlanetTypeNormal
+        PlanetTypeNormal,
+        PlanetTypeFarm,
+        PlanetTypeVerdant,
+        PlanetTypeIndustial,
+        PlanetTypeDesolate
     }
 
     public void Init(PlanetType planetType, Transform parentTransform, 
@@ -80,7 +84,7 @@ public class Planet : MonoBehaviour
         UpdateMapUI();        
     }
 
-    private void UpdateMapUI()
+    public void UpdateMapUI()
     {
         if (_planetUIObject)
         {
@@ -89,9 +93,13 @@ public class Planet : MonoBehaviour
         }
     }
 
-    public void SingleUpdate()
+    public void PlanetUpdate()
     {
+        // grow food
         _food += _population * _resourceData._foodProduction;
+        // feed everybody
+        _food -= _population;
+        // enough to grow?
         if (_food >= _foodNeededForNewPop)
         {
             if (_population < _resourceData._maxPopulation)
@@ -101,7 +109,6 @@ public class Planet : MonoBehaviour
             }
             
         }
-        UpdateMapUI();
     }
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()

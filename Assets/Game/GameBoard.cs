@@ -123,9 +123,27 @@ public class Gameboard : MonoBehaviour
 
     public void TriggerSingleUpdate()
     {
+        PlanetaryUpdate();
+ 
+        // add Ai Actions here
+        
+        PlanetUIUpdate();
+        
+    }
+
+    private void PlanetaryUpdate()
+    {
         foreach (Planet planet in _planetList)
         {
-            planet.SingleUpdate();
+            planet.PlanetUpdate();
+        }
+    }
+
+    private void PlanetUIUpdate()
+    {
+        foreach (Planet planet in _planetList)
+        {
+            planet.UpdateMapUI();
         }
     }
 
