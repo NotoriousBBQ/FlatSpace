@@ -15,15 +15,15 @@ public class Gameboard : MonoBehaviour
     [SerializeField] 
     private BoardConfiguration _intialBoardState;
 
-    [SerializeField] private float _minCameraSize = 1;
-    [SerializeField] private float _maxCameraSize = 15;
-    [SerializeField] private float _cameraSizeStep = 0.1f;
+    [SerializeField] private float _minCameraOrtho = 1;
+    [SerializeField] private float _maxCameraOrtho = 15;
+    [SerializeField] private float _cameraOrthoStep = 0.1f;
 
     private MapInputActions _mapInputActions;
     private Camera _camera;
     
-    private List<Planet> _planetList = new List<Planet>();
-    private List<Planet.PlanetUpdateResult> _resultList = new List<Planet.PlanetUpdateResult>(); 
+    private readonly List<Planet> _planetList = new List<Planet>();
+    private readonly List<Planet.PlanetUpdateResult> _resultList = new List<Planet.PlanetUpdateResult>(); 
     
     private int _turnNumber = 0;
     void Start()
@@ -117,8 +117,8 @@ public class Gameboard : MonoBehaviour
         var scrollValue = context.ReadValue<float>();
         if (scrollValue != 0)
         {
-            float targetSize = _camera.orthographicSize + (scrollValue * -_cameraSizeStep);
-            _camera.orthographicSize = Math.Clamp(targetSize, _minCameraSize, _maxCameraSize);
+            float targetSize = _camera.orthographicSize + (scrollValue * -_cameraOrthoStep);
+            _camera.orthographicSize = Math.Clamp(targetSize, _minCameraOrtho, _maxCameraOrtho);
         }
     }
 
