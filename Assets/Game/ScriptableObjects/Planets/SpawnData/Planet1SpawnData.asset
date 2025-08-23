@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7003864be52ae8c43bfed6b538db3521, type: 3}
   m_Name: Planet1SpawnData
   m_EditorClassIdentifier: Assembly-CSharp::PlanetSpawnData
-  _planetName: Mercury
+  _planetName: Normal 1
   _planetPosition: {x: 200, y: 0, z: 0}
   _planetType: 1
   _resourceData: {fileID: 11400000, guid: e36daa74479bd3a4ab691f3ff26f6fc8, type: 2}

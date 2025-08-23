@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
 public class Planet : MonoBehaviour
 {
     [SerializeField] private PlanetType _planetType = PlanetType.PlanetTypeNormal;
@@ -25,10 +27,37 @@ public class Planet : MonoBehaviour
         PlanetTypeNormal,
         PlanetTypeFarm,
         PlanetTypeVerdant,
-        PlanetTypeIndustial,
+        PlanetTypeIndustrial,
         PlanetTypeDesolate
     }
 
+    public struct PlanetUpdateResult
+    {
+        public enum PlanetUpdateResultType
+        {
+            PlanetUpdateResultTypeNone,
+            PlanetUpdateResultTypeDead,
+            PlanetUpdateResultTypePopulationGain,
+            PlanetUpdateResultTypePopulationLoss,
+            PlanetUpdateResultTypePopulationMaxReached,
+            PlanetUpdateResultTypePopulationSurplus,
+            PlanetUpdateResultTypeFoodShortage,
+            PlanetUpdateResultTypeFoodSurplus,
+            PlanetUpdateResultTypeGrotsits
+        }
+
+        public PlanetUpdateResult(string planetName, ResultType type, object data)
+        {
+            _name = planetName;
+            _resultType = type;
+            _resultData = data;
+        }
+
+        public string _name;
+        public PlanetUpdateResultType _resultType;
+        public object _resultData;
+    }
+    
     public void Init(PlanetType planetType, Transform parentTransform, 
         Vector3 position)
     {
@@ -93,21 +122,63 @@ public class Planet : MonoBehaviour
         }
     }
 
-    public void PlanetUpdate()
+    public void PlanetUpdate(List<PlanetUpdateResult> resultList)
     {
+        if (_population == 0)
+            return;
         // grow food
         _food += _population * _resourceData._foodProduction;
-        // feed everybody
-        _food -= _population;
-        // enough to grow?
-        if (_food >= _foodNeededForNewPop)
+        
+        if (_food < _population)
         {
-            if (_population < _resourceData._maxPopulation)
+            // cant feed everyong
+            resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeFoodShortage, _food - _population));
+            //hinky code to prevent mass dyeoffs
+            _food--;
+            if (_food <= 0.0f)
             {
-                _food -= _foodNeededForNewPop;
-                _population++;
+                // lose a pop
+                _population--;
+                // start the food countdown again
+                _food = _population;
+                resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationLoss, 1));
+                if (_population <= 0)
+                {
+                    // planet id dead
+                    resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeDead, null));
+                }
+                
             }
-            
+        }
+        else
+        {
+            // feed everybody
+            _food -= _population;
+            // enough to grow?
+            if (_food >= _foodNeededForNewPop)
+            {
+                resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
+                _food -= _foodNeededForNewPop;
+                if (_population < _resourceData._maxPopulation)
+                {
+                    _population++;
+                    if (_population == _resourceData._maxPopulation)
+                        resultList.Add(new PlanetUpdateResult(_planetName,
+                            ResultType.PlanetUpdateResultTypePopulationMaxReached, null));
+                }
+                else
+                {
+                    resultList.Add(new PlanetUpdateResult(_planetName,
+                        ResultType.PlanetUpdateResultTypePopulationSurplus, 1));
+                }
+            }
+
+            if (_food > _population)
+            {
+                resultList.Add(new PlanetUpdateResult(_planetName,
+                    ResultType.PlanetUpdateResultTypeFoodSurplus, _food - _population));
+                
+            }
         }
     }
     // Start is called once before the first execution of Update after the MonoBehaviour is created

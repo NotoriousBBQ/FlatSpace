@@ -20,6 +20,9 @@ public class Gameboard : MonoBehaviour
     private Camera _camera;
     
     private List<Planet> _planetList = new List<Planet>();
+    private List<Planet.PlanetUpdateResult> _resultList = new List<Planet.PlanetUpdateResult>(); 
+    
+    private int _turnNumber = 0;
     void Start()
     {
         
@@ -121,21 +124,32 @@ public class Gameboard : MonoBehaviour
 
     #region Update Functions
 
+    private void DEBUG_LogResults()
+    {
+        Debug.Log($"Turn: {_turnNumber} Results count: {_resultList.Count}");
+        foreach (var result in _resultList)
+        {
+            Debug.Log($"{result._name}: {result._resultType.ToString()} {result._resultData?.ToString()}");
+        }
+    }
     public void TriggerSingleUpdate()
     {
         PlanetaryUpdate();
- 
+
+        DEBUG_LogResults();
         // add Ai Actions here
         
         PlanetUIUpdate();
-        
+        _turnNumber++;
+
     }
 
     private void PlanetaryUpdate()
     {
+        _resultList.Clear();
         foreach (Planet planet in _planetList)
         {
-            planet.PlanetUpdate();
+            planet.PlanetUpdate(_resultList);
         }
     }
 

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7003864be52ae8c43bfed6b538db3521, type: 3}
   m_Name: Planet4SpawnData
   m_EditorClassIdentifier: Assembly-CSharp::PlanetSpawnData
-  _planetName: Jupiter
+  _planetName: Industrial 1
   _planetPosition: {x: 0, y: -200, z: 0}
-  _planetType: 1
-  _resourceData: {fileID: 11400000, guid: e36daa74479bd3a4ab691f3ff26f6fc8, type: 2}
+  _planetType: 4
+  _resourceData: {fileID: 11400000, guid: 5c6d22fdaba63c64d9e84cf881b9f427, type: 2}
