@@ -16,10 +16,6 @@ public class Gameboard : MonoBehaviour
     [SerializeField] private float _maxCameraSize = 15;
     [SerializeField] private float _cameraSizeStep = 0.1f;
 
-    [SerializeField] private Button _nextTurnButton;
-    [SerializeField] private Button _startRunButton;
-    [SerializeField] private Button _stopRunButton;
-
     private MapInputActions _mapInputActions;
     private Camera _camera;
     
@@ -89,7 +85,6 @@ public class Gameboard : MonoBehaviour
 
     private void InitializeInputActions()
     {
-        _stopRunButton.interactable = false;
         _mapInputActions = new MapInputActions();
     }
 
@@ -99,6 +94,7 @@ public class Gameboard : MonoBehaviour
         {
             _mapInputActions.Enable();
             _mapInputActions.MapActions.MapZoom.performed += OnScrollPerformed;
+            _mapInputActions.MapActions.MapButtonPress.performed += OnMapButtonPressPerformed;
         }
     }
 
@@ -117,7 +113,14 @@ public class Gameboard : MonoBehaviour
         }
     }
 
+    private void OnMapButtonPressPerformed(InputAction.CallbackContext context)
+    {
+        
+        Debug.Log($"Button press");
+    }
+
     #region Update Functions
+
     public void TriggerSingleUpdate()
     {
         foreach (Planet planet in _planetList)
@@ -129,9 +132,6 @@ public class Gameboard : MonoBehaviour
     private bool _timedUpdateRunning = false;
     public void StartTimedUpdate()
     {
-        _nextTurnButton.interactable = false;
-        _startRunButton.interactable = false;
-        _stopRunButton.interactable = true;
         _timedUpdateRunning = true;
         StartCoroutine(TimedUpdate(2.0f));
     }
@@ -150,9 +150,6 @@ public class Gameboard : MonoBehaviour
     public void StopTimedUpdate()
     {
         _timedUpdateRunning = false;
-        _nextTurnButton.interactable = true;
-        _startRunButton.interactable = true;
-        _stopRunButton.interactable = false;
     }
     #endregion
 }
