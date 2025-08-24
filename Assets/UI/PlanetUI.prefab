@@ -403,7 +403,6 @@ GameObject:
   - component: {fileID: 6758624353610326060}
   - component: {fileID: 1896038282168314571}
   - component: {fileID: 4090082300911639246}
-  - component: {fileID: 1984060522874581512}
   m_Layer: 0
   m_Name: PlanetUI
   m_TagString: Untagged
@@ -485,21 +484,6 @@ MonoBehaviour:
   _nameTextField: {fileID: 1810204264512034258}
   _populationTextField: {fileID: 1156621825437981984}
   _foodTextField: {fileID: 7810404687262578002}
---- !u!114 &1984060522874581512
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4880132024663812303}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bf95ed2ae259895458885ae779f813d2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlanetUIObject
-  _nameTextField: {fileID: 0}
-  _populationTextField: {fileID: 0}
-  _foodTextField: {fileID: 0}
 --- !u!1 &4946243049215526171
 GameObject:
   m_ObjectHideFlags: 0
