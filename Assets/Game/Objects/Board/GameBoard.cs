@@ -82,10 +82,10 @@ namespace FlatSpace
                 List<(Vector3, Vector3)> connectionPoints = new List<(Vector3, Vector3)>();
                 PathingSystem.Instance.ConnectionVectors(connectionPoints);
 
-                foreach (var linePoints in connectionPoints)
+                var prefab = AssetDatabase.LoadAssetAtPath(_lineDrawObjectPrefab, typeof(LineDrawObject)) as LineDrawObject;
+                if (prefab)
                 {
-                    var prefab = AssetDatabase.LoadAssetAtPath(_lineDrawObjectPrefab, typeof(LineDrawObject)) as LineDrawObject;
-                    if (prefab)
+                    foreach (var linePoints in connectionPoints)
                     {
                         LineDrawObject lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
 
