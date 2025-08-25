@@ -180,6 +180,10 @@ namespace FlatSpace
                 // add Ai Actions here
 
                 PlanetUIUpdate();
+                
+                // debug 
+                Path path;
+                PathingSystem.Instance.FindPath("Capitol", "Desolate", out path);
                 _turnNumber++;
 
             }

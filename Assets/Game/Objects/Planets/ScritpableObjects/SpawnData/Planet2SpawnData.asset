@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Planet2SpawnData
   m_EditorClassIdentifier: Assembly-CSharp::PlanetSpawnData
   _planetName: Farm 1
-  _planetPosition: {x: 0, y: 200, z: 0}
+  _planetPosition: {x: 25, y: 300, z: 0}
   _planetType: 2
   _resourceData: {fileID: 11400000, guid: 5783d2e78b42b784db662a9ad54def04, type: 2}

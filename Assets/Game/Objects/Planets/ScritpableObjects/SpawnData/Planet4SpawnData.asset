@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Planet4SpawnData
   m_EditorClassIdentifier: Assembly-CSharp::PlanetSpawnData
   _planetName: Industrial 1
-  _planetPosition: {x: 0, y: -200, z: 0}
+  _planetPosition: {x: 0, y: -270, z: 0}
   _planetType: 4
   _resourceData: {fileID: 11400000, guid: 5c6d22fdaba63c64d9e84cf881b9f427, type: 2}
