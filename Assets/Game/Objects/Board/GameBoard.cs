@@ -22,6 +22,7 @@ namespace FlatSpace
             [SerializeField] private float _minCameraOrtho = 1;
             [SerializeField] private float _maxCameraOrtho = 15;
             [SerializeField] private float _cameraOrthoStep = 0.1f;
+            [SerializeField] private GameAI _gameAI;
 
             private MapInputActions _mapInputActions;
             private Camera _camera;
@@ -52,7 +53,7 @@ namespace FlatSpace
                 _planetList.Clear();
                 if (_intialBoardState)
                 {
-                    InitBoard();
+                    InitGame();
                 }
                 else
                 {
@@ -63,7 +64,7 @@ namespace FlatSpace
 
             }
 
-            private void InitBoard()
+            private void InitGame()
             {
                 foreach (var planetSpawnData in _intialBoardState._planetSpawnData)
                 {
@@ -73,6 +74,8 @@ namespace FlatSpace
 
                 }
                 PathingSystem.Instance.InitializePathMap(_planetList);
+                _gameAI = this.AddComponent<GameAI>() as GameAI;
+                _gameAI.InitGameAI(_planetList);
                 InitPathGraphics();
             }
             
@@ -172,34 +175,18 @@ namespace FlatSpace
                 }
             }
 
-            public void TriggerSingleUpdate()
+            public void SingleUpdate()
             {
-                PlanetaryUpdate();
-
-                DEBUG_LogResults();
                 // add Ai Actions here
-
-                PlanetUIUpdate();
-                
-                // debug 
-                Path path;
-                PathingSystem.Instance.FindPath("Capitol", "Desolate", out path);
+                _gameAI.GameAIUpdate(_planetList);
+                PlanetaryUIUpdate();
                 _turnNumber++;
 
             }
 
-            private void PlanetaryUpdate()
+            private void PlanetaryUIUpdate()
             {
-                _resultList.Clear();
-                foreach (Planet planet in _planetList)
-                {
-                    planet.PlanetUpdate(_resultList);
-                }
-            }
-
-            private void PlanetUIUpdate()
-            {
-                foreach (Planet planet in _planetList)
+                foreach (var planet in _planetList)
                 {
                     planet.UpdateMapUI();
                 }
@@ -217,7 +204,7 @@ namespace FlatSpace
             {
                 while (_timedUpdateRunning)
                 {
-                    TriggerSingleUpdate();
+                    SingleUpdate();
                     Debug.Log("Timed Update");
                     yield return new WaitForSeconds(waitTime);
                     Debug.Log("Coroutine Looping");

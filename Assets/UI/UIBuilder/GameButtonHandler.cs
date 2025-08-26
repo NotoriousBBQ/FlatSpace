@@ -55,7 +55,7 @@ public class GameButtonHandler : MonoBehaviour
 
     private void OnNextTurnButtonClicked()
     {
-        Gameboard.Instance.TriggerSingleUpdate();
+        Gameboard.Instance.SingleUpdate();
     }
 
     private void OnStartRunButtonClicked()

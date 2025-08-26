@@ -50,15 +50,49 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeGrotsits
         }
 
+        public enum PlanetUpdateResultPriority
+        {
+            PlanetUpdateResultPriorityNone,
+            PlanetUpdateResultPriorityLow,
+            PlanetUpdateResultPriorityMedium,
+            PlanetUpdateResultPriorityHigh,
+            PlanetUpdateResultPriorityUrgent
+        }
+
         public PlanetUpdateResult(string planetName, ResultType type, object data)
         {
             _name = planetName;
             _resultType = type;
             _resultData = data;
+            switch (_resultType)
+            {
+                case ResultType.PlanetUpdateResultTypeNone:
+                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityNone;
+                    break;
+                case ResultType.PlanetUpdateResultTypeDead:
+                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityHigh;
+                    break;
+                case ResultType.PlanetUpdateResultTypePopulationGain:
+                case ResultType.PlanetUpdateResultTypeFoodSurplus:
+                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityLow;
+                    break;
+                case ResultType.PlanetUpdateResultTypePopulationLoss:
+                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityUrgent;
+                    break;
+                case ResultType.PlanetUpdateResultTypePopulationMaxReached:
+                case ResultType.PlanetUpdateResultTypePopulationSurplus:
+                case ResultType.PlanetUpdateResultTypeFoodShortage:
+                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityHigh;
+                    break;
+                default:
+                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityNone;
+                    break;
+            }
         }
 
         public string _name;
         public PlanetUpdateResultType _resultType;
+        public PlanetUpdateResultPriority _resultPriority;
         public object _resultData;
     }
     
@@ -127,7 +161,7 @@ public class Planet : MonoBehaviour
         }
     }
 
-    public void PlanetUpdate(List<PlanetUpdateResult> resultList)
+    public void PlanetProductionUpdate(List<PlanetUpdateResult> resultList)
     {
         if (_population == 0)
             return;

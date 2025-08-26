@@ -41,18 +41,17 @@ namespace FlatSpace
 
         public class Path
         {
-            private int _cost;
+            public float Cost;
             public List<PathNode> PathNodes = new List<PathNode>();
         }
         
         public class PathingSystem : MonoBehaviour
         {
             private static PathingSystem _instance;
-//            public static PathingSystem Instance => _instance ?? (_instance = new GameObject("PathingSystem").AddComponent<PathingSystem>());
             public static PathingSystem Instance => _instance ?? (_instance = new GameObject("PathingSystem").AddComponent<PathingSystem>());
 
             private const float MaxConnectionSize = 400.0f;
-            private Dictionary<string, PathNode> _pathNodes = new Dictionary<string, PathNode>();
+            private readonly Dictionary<string, PathNode> _pathNodes = new Dictionary<string, PathNode>();
             private List<PathNode> _openPathNodes = new List<PathNode>();
             private List<PathNode> _closedPathNodes = new List<PathNode>();
             private List<NodeScore> _nodeScores = new List<NodeScore>();
@@ -133,16 +132,18 @@ namespace FlatSpace
                     for(var i = 0; i < currentNode.Connections.Count; i++)
                     {
                         Connection currentConnection = currentNode.Connections[i];
+                        var nodeGValue = currentNode.GValue + currentConnection.Cost;
+                        var nodeFValue = nodeGValue + _pathNodes[currentConnection.NodeName].HValue;
+                        
                         if (currentConnection.NodeName == destinationName)
                         {
                             var tempDestinationNode = _pathNodes[currentConnection.NodeName];
                             tempDestinationNode.ParentName = currentNode.Name;
+                            tempDestinationNode.GValue = nodeGValue;
                             _pathNodes[currentConnection.NodeName] = tempDestinationNode;
                             openList.Clear();
                             break;
                         }
-                        var nodeGValue = currentNode.GValue + currentConnection.Cost;
-                        var nodeFValue = nodeGValue + _pathNodes[currentConnection.NodeName].HValue;
                         
                         var closedListElement = closedList.Find(x => x.Item1 == currentConnection.NodeName);
                         if (closedListElement.Item1 != null)
@@ -180,6 +181,7 @@ namespace FlatSpace
 
             private void ConstructPath(PathNode destination, ref Path path)
             {
+                path.Cost = destination.GValue;
                 var node = destination;
                 while (!string.IsNullOrEmpty(node.ParentName))
                 {
