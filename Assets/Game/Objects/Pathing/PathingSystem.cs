@@ -51,7 +51,7 @@ namespace FlatSpace
             public static PathingSystem Instance => _instance ?? (_instance = new GameObject("PathingSystem").AddComponent<PathingSystem>());
 
             private const float MaxConnectionSize = 400.0f;
-            private readonly Dictionary<string, PathNode> _pathNodes = new Dictionary<string, PathNode>();
+            public Dictionary<string, PathNode> PathNodes = new Dictionary<string, PathNode>();
             private List<PathNode> _openPathNodes = new List<PathNode>();
             private List<PathNode> _closedPathNodes = new List<PathNode>();
             private List<NodeScore> _nodeScores = new List<NodeScore>();
@@ -59,17 +59,17 @@ namespace FlatSpace
             public void InitializePathMap(List<Planet> planets)
             {
                 // create nodes for all planets
-                _pathNodes.Clear();
+                PathNodes.Clear();
                 foreach (var planet in planets)
                 {
-                    _pathNodes[planet.PlanetName]= new PathNode(planet.PlanetName, new Vector2(planet.Position.x, planet.Position.y));
+                    PathNodes[planet.PlanetName]= new PathNode(planet.PlanetName, new Vector2(planet.Position.x, planet.Position.y));
                 }
                 // for each node, for wach other node that is closer than max distance, add a connection 
-                foreach (var pathNode in _pathNodes.Values)
+                foreach (var pathNode in PathNodes.Values)
                 {
                     // a little inefficient here, since all connections are 2-way, but the sample set is small
                     // and this will only be done once
-                    foreach (var possibleNeighborNode in _pathNodes.Values)
+                    foreach (var possibleNeighborNode in PathNodes.Values)
                     {
                         if (possibleNeighborNode.Name == pathNode.Name)
                             continue;
@@ -104,14 +104,14 @@ namespace FlatSpace
                 var openList = new List<(string, float)>();
                 var closedList = new List<(string, float)>();
 
-                var tempDestination = _pathNodes[destinationName];
+                var tempDestination = PathNodes[destinationName];
                 var destinationPosition = tempDestination.Position;
                 
                 // initialize search nodes
-                var keyList = _pathNodes.Keys.ToList();
+                var keyList = PathNodes.Keys.ToList();
                 foreach (var key in keyList)
                 {
-                    var tempNode = _pathNodes[key];
+                    var tempNode = PathNodes[key];
                     if (tempNode.Name == originName || tempNode.Name == destinationName)
                         tempNode.HValue = 0.0f;
                     else
@@ -119,28 +119,28 @@ namespace FlatSpace
 
                     tempNode.ParentName = string.Empty;
                     tempNode.FValue = tempNode.GValue = 0.0f;
-                    _pathNodes[tempNode.Name] = tempNode;
+                    PathNodes[tempNode.Name] = tempNode;
                 }
                 // start the search
                 openList.Add((originName, 0.0f));
                 while (openList.Count > 0)
                 {
                     openList.Sort((p1, p2) => p1.Item2.CompareTo(p2.Item2));
-                    var currentNode = _pathNodes[openList[0].Item1];
+                    var currentNode = PathNodes[openList[0].Item1];
                     openList.RemoveAt(0);
 
                     for(var i = 0; i < currentNode.Connections.Count; i++)
                     {
                         Connection currentConnection = currentNode.Connections[i];
                         var nodeGValue = currentNode.GValue + currentConnection.Cost;
-                        var nodeFValue = nodeGValue + _pathNodes[currentConnection.NodeName].HValue;
+                        var nodeFValue = nodeGValue + PathNodes[currentConnection.NodeName].HValue;
                         
                         if (currentConnection.NodeName == destinationName)
                         {
-                            var tempDestinationNode = _pathNodes[currentConnection.NodeName];
+                            var tempDestinationNode = PathNodes[currentConnection.NodeName];
                             tempDestinationNode.ParentName = currentNode.Name;
                             tempDestinationNode.GValue = nodeGValue;
-                            _pathNodes[currentConnection.NodeName] = tempDestinationNode;
+                            PathNodes[currentConnection.NodeName] = tempDestinationNode;
                             openList.Clear();
                             break;
                         }
@@ -158,11 +158,11 @@ namespace FlatSpace
                             if (openListElement.Item2 < nodeFValue)
                                 continue;
                         }
-                        var tempConnectionNode = _pathNodes[currentConnection.NodeName];
+                        var tempConnectionNode = PathNodes[currentConnection.NodeName];
                         tempConnectionNode.FValue = nodeFValue;
                         tempConnectionNode.GValue = nodeGValue;
                         tempConnectionNode.ParentName = currentNode.Name;
-                        _pathNodes[tempConnectionNode.Name] = tempConnectionNode;
+                        PathNodes[tempConnectionNode.Name] = tempConnectionNode;
                         if(closedListElement.Item1 != null)
                             closedList.Remove(closedListElement);
                         if(openListElement.Item1 != null)
@@ -175,7 +175,7 @@ namespace FlatSpace
                 }
                
                 path = new Path();
-                ConstructPath(_pathNodes[destinationName], ref path);
+                ConstructPath(PathNodes[destinationName], ref path);
                 return;
             }
 
@@ -186,7 +186,7 @@ namespace FlatSpace
                 while (!string.IsNullOrEmpty(node.ParentName))
                 {
                     path.PathNodes.Add(node);
-                    node = _pathNodes[node.ParentName];
+                    node = PathNodes[node.ParentName];
                 }
                 path.PathNodes.Add(node);
                 path.PathNodes.Reverse();
@@ -195,7 +195,7 @@ namespace FlatSpace
             public void ConnectionVectors(List<(Vector3, Vector3)> connectionVectorList)
             {
                 var alreadySeen = new List<string>();
-                foreach (var node in _pathNodes.Values)
+                foreach (var node in PathNodes.Values)
                 {
                     alreadySeen.Add(node.Name);
                     foreach (var connection in node.Connections)
@@ -203,7 +203,7 @@ namespace FlatSpace
                         if (alreadySeen.Contains(connection.NodeName))
                             continue;
                         var p1 = new Vector3(node.Position.x, node.Position.y, 0.0f);
-                        var p2 = new Vector3(_pathNodes[connection.NodeName].Position.x, _pathNodes[connection.NodeName].Position.y, 0.0f);
+                        var p2 = new Vector3(PathNodes[connection.NodeName].Position.x, PathNodes[connection.NodeName].Position.y, 0.0f);
                         connectionVectorList.Add((p1, p2));
                     }
                     

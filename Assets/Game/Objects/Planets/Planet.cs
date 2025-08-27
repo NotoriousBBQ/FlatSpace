@@ -12,7 +12,9 @@ public class Planet : MonoBehaviour
     [SerializeField] private string _planetPrefab = "Assets/UI/PlanetUI.prefab";
     
     [SerializeField] private int _population = 0;
-
+    public int Population => _population;
+    public int MaxPopulation => _resourceData._maxPopulation;
+    
     [SerializeField] private float _food = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 

@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7003864be52ae8c43bfed6b538db3521, type: 3}
+  m_Name: Planet2SpawnDataNoPop 1
+  m_EditorClassIdentifier: Assembly-CSharp::PlanetSpawnData
+  _planetName: Farm 2
+  _planetPosition: {x: 25, y: 300, z: 0}
+  _planetType: 2
+  _resourceData: {fileID: 11400000, guid: d0a201acbf569e04baf53499c6eab426, type: 2}
