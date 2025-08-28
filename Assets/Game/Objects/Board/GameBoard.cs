@@ -23,6 +23,7 @@ namespace FlatSpace
             [SerializeField] private float _maxCameraOrtho = 15;
             [SerializeField] private float _cameraOrthoStep = 0.1f;
             [SerializeField] private GameAI _gameAI;
+            public List<PlanetUIObject> planetUIObjects = new List<PlanetUIObject>();
 
             private MapInputActions _mapInputActions;
             private Camera _camera;

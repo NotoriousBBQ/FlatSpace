@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlatSpace.Game;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -10,7 +11,6 @@ using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
 public class Planet : MonoBehaviour
 {
     [SerializeField] private PlanetType _planetType = PlanetType.PlanetTypeNormal;
-    [SerializeField] private string _planetPrefab = "Assets/UI/PlanetUI.prefab";
     
     [SerializeField] private int _population = 0;
     public int Population => _population;
@@ -23,7 +23,7 @@ public class Planet : MonoBehaviour
     private Vector2 _position = new Vector2(0.0f, 0.0f);
     
     private PlanetUIObject _planetUIObject;
-    private GameObject _mapUI;
+    private PlanetUIObject _mapUI;
     private PlanetResourceData _resourceData = null;
     public enum PlanetType
     {
@@ -102,6 +102,7 @@ public class Planet : MonoBehaviour
     public void Init(PlanetType planetType, Transform parentTransform, 
         Vector3 position)
     {
+#if USE_ALGORIGHMIC_BOARD
         if (planetType == PlanetType.PlanetTypePrime)
         {
             _planetType = PlanetType.PlanetTypePrime;
@@ -110,29 +111,27 @@ public class Planet : MonoBehaviour
         
         if (!string.IsNullOrEmpty(_planetPrefab))
         {
+
             var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
             if (prefab)
             {
-                _mapUI = Instantiate(prefab,parentTransform) as GameObject;
+                _mapUI = Instantiate<PlanetUIObject>(prefab,parentTransform) as PlanetUIObject;
                 _mapUI.transform.localPosition += position;
                 InitializeUIObject();
             }
         }  
-
+#endif
     }
 
     private void InitUIElement(Vector3 position, Transform parentTransform)
     {
-        if (!string.IsNullOrEmpty(_planetPrefab))
-        {
-            var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
-            if (prefab)
-            {
-                _mapUI = Instantiate(prefab,parentTransform) as GameObject;
-                _mapUI.transform.localPosition += position;
-                InitializeUIObject();
-            }
-        }       
+        var prefab = Gameboard.Instance.planetUIObjects[(int)_planetType];
+        if (!prefab)
+            return;
+            
+        _mapUI = Instantiate(prefab,parentTransform) as PlanetUIObject;
+        _mapUI.transform.localPosition += position;
+        InitializeUIObject();
     }
     public void Init(PlanetSpawnData spawnData, Transform parentTransform)
     {
@@ -141,6 +140,7 @@ public class Planet : MonoBehaviour
         _population = _resourceData._initialPopulation;
         _food = _resourceData._initialFood;
         _position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
+        _planetType = spawnData._planetType;
 
         InitUIElement(spawnData._planetPosition, parentTransform);
     }

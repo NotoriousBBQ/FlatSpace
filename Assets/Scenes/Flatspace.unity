@@ -318,7 +318,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0.6, g: 0.6, b: 0.6, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -326,7 +326,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_Sprite: {fileID: 1231163625832447664, guid: 60126986264036148aed01f3b1b52fb3, type: 3}
-  m_Type: 0
+  m_Type: 2
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -360,6 +360,13 @@ MonoBehaviour:
   _maxCameraOrtho: 15
   _cameraOrthoStep: 0.5
   _gameAI: {fileID: 0}
+  planetUIObjects:
+  - {fileID: 7211847835160773503, guid: 7e1a3f594dceb5346965588647847830, type: 3}
+  - {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
+  - {fileID: 4364794477706667327, guid: a251d7739ec4db54b915a872c7727209, type: 3}
+  - {fileID: 2185536516442171816, guid: 7137036bbe627f1498df183eae1e35b5, type: 3}
+  - {fileID: 3892574561670857451, guid: bec16939920d37c4da74f45fdc1f1b70, type: 3}
+  - {fileID: 6271191905666452642, guid: 8fe5dda47068d8545a90de27ef203ea3, type: 3}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
