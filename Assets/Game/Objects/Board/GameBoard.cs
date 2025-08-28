@@ -24,6 +24,9 @@ namespace FlatSpace
             [SerializeField] private float _maxCameraOrtho = 15;
             [SerializeField] private float _cameraOrthoStep = 0.1f;
             [SerializeField] private GameAI _gameAI;
+            [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
+            [SerializeField]private LineDrawObject _orderLineDrawObjectPrefab;
+
             public List<PlanetUIObject> planetUIObjects = new List<PlanetUIObject>();
 
             private MapInputActions _mapInputActions;
@@ -80,14 +83,12 @@ namespace FlatSpace
                 InitPathGraphics();
             }
             
-            private const string _lineDrawObjectPrefab = "Assets/UI/LineDrawObject.prefab";
-            private const string _orderLineDrawObjectPrefab = "Assets/UI/BlueLineDrawObject.prefab";
             private void InitPathGraphics()
             {
                 List<(Vector3, Vector3)> connectionPoints = new List<(Vector3, Vector3)>();
                 PathingSystem.Instance.ConnectionVectors(connectionPoints);
 
-                var prefab = AssetDatabase.LoadAssetAtPath(_lineDrawObjectPrefab, typeof(LineDrawObject)) as LineDrawObject;
+                var prefab = _lineDrawObjectPrefab;
                 if (!prefab)
                     return;
 
@@ -104,7 +105,7 @@ namespace FlatSpace
 
             private void DisplayOrderGraphics(List<GameAI.GameAIOrder> orders)
             {
-                var prefab = AssetDatabase.LoadAssetAtPath(_orderLineDrawObjectPrefab, typeof(LineDrawObject)) as LineDrawObject;
+                var prefab = _orderLineDrawObjectPrefab;
                 if (!prefab)
                     return;
                 
