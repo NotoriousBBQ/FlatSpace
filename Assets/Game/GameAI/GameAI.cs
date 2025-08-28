@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlatSpace.Game;
 using FlatSpace.Pathing;
 using Unity.VisualScripting;
 using Unity.VisualScripting.Dependencies.Sqlite;
@@ -44,15 +45,36 @@ public class GameAI : MonoBehaviour
     {
         List<GameAIOrder> gameAIOrders;
         List<Planet.PlanetUpdateResult> planetUpdateResults;
-        ProcessCurrentOrders();
+        ProcessCurrentOrders(planetList);
         PlanetaryProductionUpdate(planetList, out planetUpdateResults);
         ProcessResults(planetUpdateResults, planetList, out gameAIOrders);
         ProcessNewOrders(gameAIOrders);
     }
 
-    private void ProcessCurrentOrders()
+    private void ProcessCurrentOrders(List<Planet> planetList)
     {
+        foreach (var gameAIOrder in _currentAIOrders)
+        {
+            gameAIOrder.TimingDelay--;
+        }
         
+        var executableOrders = _currentAIOrders.FindAll(x => x.TimingDelay <= 0);
+        foreach (var executableOrder in executableOrders)
+        {
+            ExecuteOrder(executableOrder, planetList);
+        }
+        _currentAIOrders.RemoveAll(x => x.TimingDelay <= 0);
+    }
+
+    private void ExecuteOrder(GameAIOrder executableOrder, List<Planet> planetList)
+    {
+        // onmly population surplus currently active
+        if (executableOrder.Type == GameAIOrder.OrderType.OrderTypePopulationTransport)
+        {
+            var targetPlanet = planetList.Find(x=>x.PlanetName == executableOrder.Target);
+            var numTransported = (int)executableOrder.Data;
+            targetPlanet.Population += numTransported;
+        }
     }
     private void ProcessNewOrders(List<GameAIOrder> newOrders)
     {
@@ -103,6 +125,7 @@ public class GameAI : MonoBehaviour
             var chosenTarget = scoreMatrix[0].Name;
             orders.Add(new GameAIOrder
             {
+                Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
                 Origin = result.Name,
                 Target = chosenTarget,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,

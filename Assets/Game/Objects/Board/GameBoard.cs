@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FlatSpace.Pathing;
 using Unity.VisualScripting;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -30,8 +31,7 @@ namespace FlatSpace
 
             private readonly List<Planet> _planetList = new List<Planet>();
             private readonly List<Planet.PlanetUpdateResult> _resultList = new List<Planet.PlanetUpdateResult>();
-            private List<LineDrawObject> _lineDrawObjectList = new List<LineDrawObject>(); 
-
+ 
             private int _turnNumber = 0;
 
             void Start()
@@ -69,7 +69,7 @@ namespace FlatSpace
             {
                 foreach (var planetSpawnData in _intialBoardState._planetSpawnData)
                 {
-                    Planet planet = this.AddComponent<Planet>() as Planet;
+                    var planet = this.AddComponent<Planet>() as Planet;
                     planet.Init(planetSpawnData, this.transform);
                     _planetList.Add(planet);
 
@@ -80,8 +80,8 @@ namespace FlatSpace
                 InitPathGraphics();
             }
             
-            private readonly string _lineDrawObjectPrefab = "Assets/UI/LineDrawObject.prefab";
-            private readonly string _gradientLineDrawObjectPrefab = "Assets/UI/GradientLineDrawObject.prefab";
+            private const string _lineDrawObjectPrefab = "Assets/UI/LineDrawObject.prefab";
+            private const string _orderLineDrawObjectPrefab = "Assets/UI/BlueLineDrawObject.prefab";
             private void InitPathGraphics()
             {
                 List<(Vector3, Vector3)> connectionPoints = new List<(Vector3, Vector3)>();
@@ -98,27 +98,36 @@ namespace FlatSpace
                     if (lineDrawObject)
                     {
                         lineDrawObject.SetPoints(linePoints);
-                        _lineDrawObjectList.Add(lineDrawObject);
                     }
                 }
             }
 
             private void DisplayOrderGraphics(List<GameAI.GameAIOrder> orders)
             {
-                var prefab = AssetDatabase.LoadAssetAtPath(_gradientLineDrawObjectPrefab, typeof(GradientLineDrawObject)) as GradientLineDrawObject;
+                var prefab = AssetDatabase.LoadAssetAtPath(_orderLineDrawObjectPrefab, typeof(LineDrawObject)) as LineDrawObject;
                 if (!prefab)
                     return;
+                
+                var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
+                var taggedChildren = new List<LineDrawObject>();
+                foreach (var linedrawObject in lineDrawObjects)
+                {
+                    if(linedrawObject.CompareTag("OrderLineDraw"))
+                        taggedChildren.Add(linedrawObject);
+                }
+                foreach (var child in taggedChildren)
+                    Destroy(child.gameObject);
+                
                 foreach (var order in orders)
                 {
-                    GradientLineDrawObject gradientLineDrawObject = Instantiate<GradientLineDrawObject>(prefab,transform) as GradientLineDrawObject;
+                    var lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
 
-                    if (gradientLineDrawObject)
+                    if (lineDrawObject)
                     {
                         var point1 = _planetList.Find(x => x.PlanetName == order.Origin).Position;
                         var point2 = _planetList.Find(x => x.PlanetName == order.Target).Position;
                         var linePoints = (new Vector3(point1.x + 5.0f, point1.y + 5.0f, 0.0f), new Vector3(point2.x + 5.0f, point2.y + 5.0f, 0.0f) );
-                        gradientLineDrawObject.SetPoints(linePoints);
-                        _lineDrawObjectList.Add(gradientLineDrawObject);
+                        lineDrawObject.SetPoints(linePoints);
                     }
                 }
             }
@@ -224,7 +233,7 @@ namespace FlatSpace
             public void StartTimedUpdate()
             {
                 _timedUpdateRunning = true;
-                StartCoroutine(TimedUpdate(2.0f));
+                StartCoroutine(TimedUpdate(1.0f));
             }
 
             IEnumerator TimedUpdate(float waitTime)

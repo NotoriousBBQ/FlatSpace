@@ -13,7 +13,12 @@ public class Planet : MonoBehaviour
     [SerializeField] private PlanetType _planetType = PlanetType.PlanetTypeNormal;
     
     [SerializeField] private int _population = 0;
-    public int Population => _population;
+
+    public int Population
+    {
+        get { return _population; }
+        set { _population = value; }
+    }
     public int MaxPopulation => _resourceData._maxPopulation;
     
     [SerializeField] private float _food = 0.0f;
@@ -201,9 +206,10 @@ public class Planet : MonoBehaviour
             {
                 resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
                 _food -= _foodNeededForNewPop;
-                if (_population < _resourceData._maxPopulation)
+                _population++;
+                if (_population <= _resourceData._maxPopulation)
                 {
-                    _population++;
+
                     if (_population == _resourceData._maxPopulation)
                         resultList.Add(new PlanetUpdateResult(_planetName,
                             ResultType.PlanetUpdateResultTypePopulationMaxReached, null));
@@ -211,7 +217,8 @@ public class Planet : MonoBehaviour
                 else
                 {
                     resultList.Add(new PlanetUpdateResult(_planetName,
-                        ResultType.PlanetUpdateResultTypePopulationSurplus, 1));
+                        ResultType.PlanetUpdateResultTypePopulationSurplus, _population - _resourceData._maxPopulation));
+                    _population =  _resourceData._maxPopulation;
                 }
             }
 
