@@ -20,11 +20,17 @@ public class GameAIMap : MonoBehaviour
     }
     private struct GameAIPlanetNode
     {
+        public Vector2 Position;
         public Dictionary<string, DestinationToPathingListEntry> DistanceMapToPathingList;
     }
     
     private List<GameAIPlanetPathing> _planetPathings;
     private Dictionary<string, GameAIPlanetNode> _planetAINodes;
+
+    public Vector2 PlanetAILocation(string planetName)
+    {
+        return _planetAINodes[planetName].Position;
+    }
 
     public void GameAIMapInit(List<Planet> planetList)
     {
@@ -36,7 +42,8 @@ public class GameAIMap : MonoBehaviour
        for (var i = 0; i < planetList.Count; i++)
        {
            _planetAINodes[planetList[i].PlanetName] = new GameAIPlanetNode{
-           DistanceMapToPathingList = new Dictionary<string, DestinationToPathingListEntry>() 
+                Position = planetList[i].Position,
+                DistanceMapToPathingList = new Dictionary<string, DestinationToPathingListEntry>() 
            };
            
        }

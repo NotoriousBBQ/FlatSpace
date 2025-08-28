@@ -355,10 +355,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b28127cb41309b4c8560adb5fa718ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gameboard
-  _intialBoardState: {fileID: 11400000, guid: 481b8b70d3f697149ad21134cfe72820, type: 2}
+  _intialBoardState: {fileID: 11400000, guid: 427d82123c1bf9f4c9277a9675a52def, type: 2}
   _minCameraOrtho: 1
   _maxCameraOrtho: 15
   _cameraOrthoStep: 0.5
+  _gameAI: {fileID: 0}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0

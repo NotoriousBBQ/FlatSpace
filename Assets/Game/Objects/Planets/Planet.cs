@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
+using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
 public class Planet : MonoBehaviour
 {
     [SerializeField] private PlanetType _planetType = PlanetType.PlanetTypeNormal;
@@ -63,39 +64,39 @@ public class Planet : MonoBehaviour
 
         public PlanetUpdateResult(string planetName, ResultType type, object data)
         {
-            _name = planetName;
-            _resultType = type;
-            _resultData = data;
-            switch (_resultType)
+            Name = planetName;
+            Result = type;
+            Data = data;
+            switch (Result)
             {
                 case ResultType.PlanetUpdateResultTypeNone:
-                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityNone;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityNone;
                     break;
                 case ResultType.PlanetUpdateResultTypeDead:
-                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityHigh;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationGain:
                 case ResultType.PlanetUpdateResultTypeFoodSurplus:
-                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityLow;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityLow;
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationLoss:
-                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityUrgent;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityUrgent;
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationMaxReached:
                 case ResultType.PlanetUpdateResultTypePopulationSurplus:
                 case ResultType.PlanetUpdateResultTypeFoodShortage:
-                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityHigh;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
                     break;
                 default:
-                    _resultPriority = PlanetUpdateResultPriority.PlanetUpdateResultPriorityNone;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityNone;
                     break;
             }
         }
 
-        public string _name;
-        public PlanetUpdateResultType _resultType;
-        public PlanetUpdateResultPriority _resultPriority;
-        public object _resultData;
+        public readonly string Name;
+        public readonly ResultType Result;
+        public ResultPriority Priority;
+        public readonly object Data;
     }
     
     public void Init(PlanetType planetType, Transform parentTransform, 

@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 998883b0a83447942b0f5b070b122630, type: 3}
-  m_Name: NormalPlanetResourceDataNoPop
+  m_Name: DesolatePlanetTypeData 2
   m_EditorClassIdentifier: Assembly-CSharp::PlanetResourceData
-  _planetType: 1
-  _initialPopulation: 0
-  _initialFood: 0
-  _foodProduction: 1.5
-  _grotsitProduction: 1
-  _maxPopulation: 10
+  _planetType: 5
+  _initialPopulation: 2
+  _initialFood: 2
+  _foodProduction: 0
+  _grotsitProduction: 15
+  _maxPopulation: 5

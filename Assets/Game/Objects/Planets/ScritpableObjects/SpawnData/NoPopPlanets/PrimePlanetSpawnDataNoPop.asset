@@ -15,4 +15,4 @@ MonoBehaviour:
   _planetName: Capitol
   _planetPosition: {x: 0, y: 0, z: 0}
   _planetType: 0
-  _resourceData: {fileID: 11400000, guid: 2cbb18515bcb137429129ad8b659ae5a, type: 2}
+  _resourceData: {fileID: 11400000, guid: 6f1f1856bae802941bc98d868d1f172f, type: 2}

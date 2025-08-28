@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: PopulationGrowth
   m_EditorClassIdentifier: Assembly-CSharp::BoardConfiguration
   _planetSpawnData:
-  - {fileID: 11400000, guid: af9a416b6101ea44ba3c8d28443631a2, type: 2}
+  - {fileID: 11400000, guid: 91bd93a3e90036a42bb25f23db0d47a0, type: 2}
   - {fileID: 11400000, guid: 554fc15a956268645b9ca72787a41194, type: 2}
   - {fileID: 11400000, guid: d34cf6410de5ef74b99126913f79920e, type: 2}
   - {fileID: 11400000, guid: 8af02d6d0c9175f4996746eaf373a2fd, type: 2}

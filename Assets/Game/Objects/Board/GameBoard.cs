@@ -79,28 +79,47 @@ namespace FlatSpace
                 InitPathGraphics();
             }
             
-            private string _lineDrawObjectPrefab = "Assets/UI/LineDrawObject.prefab";
+            private readonly string _lineDrawObjectPrefab = "Assets/UI/LineDrawObject.prefab";
+            private readonly string _gradientLineDrawObjectPrefab = "Assets/UI/GradientLineDrawObject.prefab";
             private void InitPathGraphics()
             {
                 List<(Vector3, Vector3)> connectionPoints = new List<(Vector3, Vector3)>();
                 PathingSystem.Instance.ConnectionVectors(connectionPoints);
 
                 var prefab = AssetDatabase.LoadAssetAtPath(_lineDrawObjectPrefab, typeof(LineDrawObject)) as LineDrawObject;
-                if (prefab)
-                {
-                    foreach (var linePoints in connectionPoints)
-                    {
-                        LineDrawObject lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
+                if (!prefab)
+                    return;
 
-                        if (lineDrawObject)
-                        {
-                            lineDrawObject.SetPoints(linePoints);
-                            _lineDrawObjectList.Add(lineDrawObject);
-                        }
+                foreach (var linePoints in connectionPoints)
+                {
+                    LineDrawObject lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
+
+                    if (lineDrawObject)
+                    {
+                        lineDrawObject.SetPoints(linePoints);
+                        _lineDrawObjectList.Add(lineDrawObject);
                     }
                 }
+            }
 
-                
+            private void DisplayOrderGraphics(List<GameAI.GameAIOrder> orders)
+            {
+                var prefab = AssetDatabase.LoadAssetAtPath(_gradientLineDrawObjectPrefab, typeof(GradientLineDrawObject)) as GradientLineDrawObject;
+                if (!prefab)
+                    return;
+                foreach (var order in orders)
+                {
+                    GradientLineDrawObject gradientLineDrawObject = Instantiate<GradientLineDrawObject>(prefab,transform) as GradientLineDrawObject;
+
+                    if (gradientLineDrawObject)
+                    {
+                        var point1 = _planetList.Find(x => x.PlanetName == order.Origin).Position;
+                        var point2 = _planetList.Find(x => x.PlanetName == order.Target).Position;
+                        var linePoints = (new Vector3(point1.x + 5.0f, point1.y + 5.0f, 0.0f), new Vector3(point2.x + 5.0f, point2.y + 5.0f, 0.0f) );
+                        gradientLineDrawObject.SetPoints(linePoints);
+                        _lineDrawObjectList.Add(gradientLineDrawObject);
+                    }
+                }
             }
 
             private void CreateTestBoardState()
@@ -171,7 +190,7 @@ namespace FlatSpace
                 Debug.Log($"Turn: {_turnNumber} Results count: {_resultList.Count}");
                 foreach (var result in _resultList)
                 {
-                    Debug.Log($"{result._name}: {result._resultType.ToString()} {result._resultData?.ToString()}");
+                    Debug.Log($"{result.Name}: {result.Result.ToString()} {result.Data?.ToString()}");
                 }
             }
 
@@ -180,6 +199,7 @@ namespace FlatSpace
                 // add Ai Actions here
                 _gameAI.GameAIUpdate(_planetList);
                 PlanetaryUIUpdate();
+                BoardUIUpdate();
                 _turnNumber++;
 
             }
@@ -190,6 +210,12 @@ namespace FlatSpace
                 {
                     planet.UpdateMapUI();
                 }
+            }
+
+            private void BoardUIUpdate()
+            {
+                var currentAIOrders = _gameAI.CurrentAIOrders;
+                DisplayOrderGraphics(currentAIOrders);
             }
 
             private bool _timedUpdateRunning = false;

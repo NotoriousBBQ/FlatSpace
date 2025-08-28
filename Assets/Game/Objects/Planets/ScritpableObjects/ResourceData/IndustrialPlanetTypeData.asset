@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 998883b0a83447942b0f5b070b122630, type: 3}
-  m_Name: PrimePlanetResourceDataPopTest
+  m_Name: IndustrialPlanetTypeData
   m_EditorClassIdentifier: Assembly-CSharp::PlanetResourceData
   _planetType: 0
-  _initialPopulation: 2
-  _initialFood: 4
-  _foodProduction: 2
-  _grotsitProduction: 2
-  _maxPopulation: 15
+  _initialPopulation: 1
+  _initialFood: 1
+  _foodProduction: 1
+  _grotsitProduction: 3
+  _maxPopulation: 10

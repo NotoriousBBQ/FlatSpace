@@ -2,16 +2,38 @@ using System;
 using System.Collections.Generic;
 using FlatSpace.Pathing;
 using Unity.VisualScripting;
+using Unity.VisualScripting.Dependencies.Sqlite;
 using UnityEngine;
 
 public class GameAI : MonoBehaviour
 {
     public class GameAIOrder
     {
+        public enum OrderType
+        {
+            OrderTypeNone,
+            OrderTypePopulationTransport,
+            OrderTypePopulationAssign,
+        }
         
+        public enum OrderTimingType
+        {
+            OrderTimingTypeDelayed,
+            OrderTimingTypeImmediate,
+            OrderTimingTypeHold,
+        }
+        
+        public OrderType Type;
+        public OrderTimingType TimingType;
+        public int TimingDelay;
+        public object Data;
+        public string Target;
+        public string Origin;
     }
     
     private GameAIMap _gameAIMap;
+    private List<GameAIOrder> _currentAIOrders = new List<GameAIOrder>();
+    public List<GameAIOrder> CurrentAIOrders => _currentAIOrders;
     public void InitGameAI(List<Planet> planetList)
     {
         _gameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
@@ -25,38 +47,41 @@ public class GameAI : MonoBehaviour
         ProcessCurrentOrders();
         PlanetaryProductionUpdate(planetList, out planetUpdateResults);
         ProcessResults(planetUpdateResults, planetList, out gameAIOrders);
-        ProcessOrders(gameAIOrders);
+        ProcessNewOrders(gameAIOrders);
     }
 
     private void ProcessCurrentOrders()
     {
         
     }
-    
-    private void PlanetaryProductionUpdate(List<Planet> planetList, out List<Planet.PlanetUpdateResult> planetUpdateResults)
+    private void ProcessNewOrders(List<GameAIOrder> newOrders)
+    {
+        _currentAIOrders.AddRange(newOrders.FindAll(x => x.TimingType == GameAIOrder.OrderTimingType.OrderTimingTypeDelayed));
+    }
+    private static void PlanetaryProductionUpdate(List<Planet> planetList, out List<Planet.PlanetUpdateResult> planetUpdateResults)
     {
         planetUpdateResults = new List<Planet.PlanetUpdateResult>();
-        foreach (Planet planet in planetList)
+        foreach (var planet in planetList)
         {
             planet.PlanetProductionUpdate(planetUpdateResults);
         }
     }
 
 
-    private void ProcessResults(List<Planet.PlanetUpdateResult> results, List<Planet> planetList, out List<GameAIOrder> orders)
+    private static void ProcessResults(List<Planet.PlanetUpdateResult> results, List<Planet> planetList, out List<GameAIOrder> orders)
     {
         orders = new List<GameAIOrder>();
-        List<Planet.PlanetUpdateResult> SurplusUpdateResults = 
-            results.FindAll(x => x._resultType == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationSurplus);
-        ProcessPopulationSurplus(SurplusUpdateResults, planetList, orders);
+        var surplusUpdateResults = 
+            results.FindAll(x => x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationSurplus);
+        ProcessPopulationSurplus(surplusUpdateResults, planetList, orders);
     }
 
-    private void ProcessPopulationSurplus(List<Planet.PlanetUpdateResult> results, List<Planet> planetList, List<GameAIOrder> orders)
+    private static void ProcessPopulationSurplus(List<Planet.PlanetUpdateResult> results, List<Planet> planetList, List<GameAIOrder> orders)
     {
 
         foreach (var result in results)
         {
-            var sourceNode = PathingSystem.Instance.PathNodes[result._name];
+            var sourceNode = PathingSystem.Instance.PathNodes[result.Name];
             
             List<(string Name, float Score)> scoreMatrix = new List<(string, float)>();
             foreach (var connection in sourceNode.Connections)
@@ -65,7 +90,7 @@ public class GameAI : MonoBehaviour
                 var possibleDestination = planetList.Find(x => x.PlanetName == connection.NodeName);
                 if(possibleDestination.Population >= possibleDestination.MaxPopulation)
                 {
-                    scoreTuple.Score = 0.0f;
+                    scoreTuple.Score = Single.MaxValue;
                 }
                 else
                 {
@@ -74,12 +99,20 @@ public class GameAI : MonoBehaviour
                 scoreMatrix.Add(scoreTuple);
             }
             
-            scoreMatrix.Sort((a, b) => a.Item2.CompareTo(b.Item2));
+            scoreMatrix.Sort((a, b) => a.Score.CompareTo(b.Score));
             var chosenTarget = scoreMatrix[0].Name;
+            orders.Add(new GameAIOrder
+            {
+                Origin = result.Name,
+                Target = chosenTarget,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                TimingDelay = 1,
+                Data = result.Data,
+            });
         }
     }
 
-    private void ProcessOrders(List<GameAIOrder> orders)
+    private static void ProcessOrders(List<GameAIOrder> orders)
     {
         
     }
