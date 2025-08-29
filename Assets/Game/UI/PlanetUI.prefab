@@ -372,7 +372,7 @@ GameObject:
   - component: {fileID: 4090082300911639246}
   - component: {fileID: 2643599698521063528}
   m_Layer: 0
-  m_Name: NormalPlanetUI
+  m_Name: PlanetUI
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

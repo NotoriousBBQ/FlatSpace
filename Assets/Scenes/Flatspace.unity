@@ -362,13 +362,7 @@ MonoBehaviour:
   _gameAI: {fileID: 0}
   _lineDrawObjectPrefab: {fileID: 5226953852233311075, guid: 0e55f099c06447b41b421337a3648791, type: 3}
   _orderLineDrawObjectPrefab: {fileID: 4779870425705875092, guid: 387624431a5c15e428e7d465ff2d0775, type: 3}
-  planetUIObjects:
-  - {fileID: 7211847835160773503, guid: 7e1a3f594dceb5346965588647847830, type: 3}
-  - {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
-  - {fileID: 4364794477706667327, guid: a251d7739ec4db54b915a872c7727209, type: 3}
-  - {fileID: 2185536516442171816, guid: 7137036bbe627f1498df183eae1e35b5, type: 3}
-  - {fileID: 3892574561670857451, guid: bec16939920d37c4da74f45fdc1f1b70, type: 3}
-  - {fileID: 6271191905666452642, guid: 8fe5dda47068d8545a90de27ef203ea3, type: 3}
+  _PlanetUIPrefab: {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0

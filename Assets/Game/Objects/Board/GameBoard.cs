@@ -27,7 +27,7 @@ namespace FlatSpace
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
             [SerializeField]private LineDrawObject _orderLineDrawObjectPrefab;
 
-            public List<PlanetUIObject> planetUIObjects = new List<PlanetUIObject>();
+            public PlanetUIObject _PlanetUIPrefab;
 
             private MapInputActions _mapInputActions;
             private Camera _camera;
@@ -83,7 +83,7 @@ namespace FlatSpace
                 
             private void InitUIElement(PlanetSpawnData spawnData, Transform parentTransform)
             {
-                var prefab = Gameboard.Instance.planetUIObjects[(int)spawnData._planetType];
+                var prefab = Gameboard.Instance._PlanetUIPrefab;
                 if (!prefab)
                     return;
             
@@ -99,8 +99,9 @@ namespace FlatSpace
                     return;
                 uiObject._nameTextField.text = spawnData._planetName;
                 uiObject._planetName = spawnData._planetName;
+                uiObject.SetPlanetColor(spawnData._planetType);
                 uiObject.UIUpdate();        
-                _planetUIObjects.Add(uiObject);
+                _planetUIObjects.Add(uiObject); 
             }
 
             private void InitPathGraphics()
