@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: PrimePlanetTypeDataPopTest
   m_EditorClassIdentifier: Assembly-CSharp::PlanetResourceData
   _planetType: 0
-  _initialPopulation: 15
+  _initialPopulation: 10
   _initialFood: 4
-  _foodProduction: 2
+  _foodProduction: 3
+  _initialGrotsits: 4
   _grotsitProduction: 2
   _maxPopulation: 15
+  _initialStrategy: 1

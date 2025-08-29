@@ -8,8 +8,9 @@ public class PlanetResourceData : ScriptableObject
     public int _initialPopulation;
     public float _initialFood;
     public float _foodProduction;
+    public float _initialGrotsits;
     public float _grotsitProduction;
     public int _maxPopulation;
-    public string UIPrefab;
+    public Planet.PlanetStrategy _initialStrategy;
 }
  

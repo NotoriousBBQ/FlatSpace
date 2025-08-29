@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FlatSpace.Game;
 using TMPro;
+using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -14,6 +15,11 @@ public class Planet : MonoBehaviour
     
     [SerializeField] private int _population = 0;
 
+    public int FoodWorkers { get; private set; }
+    public int GrotsitsWorkers { get; private set; }
+    public PlanetStrategy CurrentStrategy { get; private set; }
+    public float Morale { get; private set; }
+
     public int Population
     {
         get { return _population; }
@@ -24,6 +30,8 @@ public class Planet : MonoBehaviour
     [SerializeField] private float _food = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
+    public float Grotsits {get; private set;}
+    
     private string _planetName = "";
     private Vector2 _position = new Vector2(0.0f, 0.0f);
     
@@ -39,6 +47,16 @@ public class Planet : MonoBehaviour
         PlanetTypeVerdant,
         PlanetTypeIndustrial,
         PlanetTypeDesolate
+    }
+
+    public enum PlanetStrategy
+    {
+        PlanetStrategyBalanced,
+        PlanetStrategyGrowth,
+        PlanetStrategyFood,
+        PlanetStrategyFocusedFood,
+        PlanetStrategyGrotsits,
+        PlanetStrategyFocusedGrotsits,
     }
 
     public string PlanetName => _planetName;
@@ -57,7 +75,8 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypePopulationSurplus,
             PlanetUpdateResultTypeFoodShortage,
             PlanetUpdateResultTypeFoodSurplus,
-            PlanetUpdateResultTypeGrotsits
+            PlanetUpdateResultTypeGrotsitsShortage,
+            PlanetUpdateResultTypeGrotsitsSurplus,
         }
 
         public enum PlanetUpdateResultPriority
@@ -112,39 +131,106 @@ public class Planet : MonoBehaviour
         _planetName = spawnData._planetName;
         _population = _resourceData._initialPopulation;
         _food = _resourceData._initialFood;
+        Grotsits = _resourceData._initialGrotsits;
         _position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
         _planetType = spawnData._planetType;
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
+        CurrentStrategy = _resourceData._initialStrategy;
+        Morale = 100.0f;
 
+    }
+
+    private void AssignWorkForStrategy()
+    {
+        int remainingWorkers;
+        switch (CurrentStrategy)
+        {
+            case PlanetStrategy.PlanetStrategyBalanced:
+                // first, make sure the basics are covered
+                FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
+                GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
+                // the even out the rest
+                remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
+                if (remainingWorkers > 0)
+                {
+                    FoodWorkers += remainingWorkers / 2;
+                    GrotsitsWorkers += remainingWorkers / 2;
+                    remainingWorkers = Population -(FoodWorkers + GrotsitsWorkers);
+                    if (remainingWorkers > 0)
+                        FoodWorkers += remainingWorkers;
+                }
+
+                break;
+            case PlanetStrategy.PlanetStrategyGrowth:
+            case PlanetStrategy.PlanetStrategyFood:
+                // first, make sure the basics are covered 
+                FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
+                GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
+                // the focus on food
+                remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
+                if (remainingWorkers > 0)
+                {
+                    FoodWorkers += remainingWorkers;
+                }
+                break;
+            case PlanetStrategy.PlanetStrategyFocusedFood:
+                FoodWorkers = _population;
+                break;
+            case PlanetStrategy.PlanetStrategyGrotsits:
+                FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
+                GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
+                // the focus on grotsits
+                remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
+                if (remainingWorkers > 0)
+                {
+                    GrotsitsWorkers += remainingWorkers;
+                }
+                break;
+            case PlanetStrategy.PlanetStrategyFocusedGrotsits:
+                GrotsitsWorkers = _population;
+                break;
+        }
     }
 
     public void PlanetProductionUpdate(List<PlanetUpdateResult> resultList)
     {
         if (_population == 0)
             return;
+        AssignWorkForStrategy();
         // grow food
-        _food += _population * _resourceData._foodProduction;
+        _food += FoodWorkers * _resourceData._foodProduction;
+        // produce grosits
+        Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction;
         
-        if (_food < _population)
-        {
+        ConsumeFood(resultList);
+        ConsumeGrotsits(resultList);
+     
+    }
+
+    private void ConsumeFood(List<PlanetUpdateResult> resultList)
+    {
+        if (_population <= 0)
+            return;
+        if (_food < _population) 
+        { 
             // cant feed everyong
             resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeFoodShortage, _food - _population));
-            //hinky code to prevent mass dyeoffs
-            _food--;
-            if (_food <= 0.0f)
-            {
-                // lose a pop
-                _population--;
-                // start the food countdown again
-                _food = _population;
-                resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationLoss, 1));
-                if (_population <= 0)
-                {
-                    // planet id dead
-                    resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeDead, null));
-                }
-                
-            }
+            //hinky code to prevent mass dieoffs
+             _food--;
+             if (_food <= 0.0f)
+             {
+                 // lose a pop
+                 _population--;
+                 // start the food countdown again
+                 _food = _population;
+                 resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationLoss,
+                     1));
+                 if (_population <= 0)
+                 {
+                     // planet id dead
+                     resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeDead, null));
+                 }
+             }
         }
         else
         {
@@ -177,8 +263,37 @@ public class Planet : MonoBehaviour
                     ResultType.PlanetUpdateResultTypeFoodSurplus, _food - _population));
                 
             }
-        }
+        }     
     }
+
+    private void ConsumeGrotsits(List<PlanetUpdateResult> resultList)
+    {
+        if (_population <= 0)
+            return;
+        if (Grotsits < _population) 
+        { 
+            // Can't give everyone goods
+            resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage, Grotsits - _population));
+
+            var numberShort = _population - Grotsits;
+            Grotsits = 0.0f;
+            Morale = Math.Clamp(Morale - (100.0f * numberShort/_population), 0.0f, Morale);
+        }
+        else
+        {
+            // feed everybody
+            Grotsits -= _population;
+            // enough to grow?
+            if (Grotsits > _population)
+            {
+                resultList.Add(new PlanetUpdateResult(_planetName,
+                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Grotsits - _population));
+                Morale = Math.Clamp(Morale - (100.0f * Grotsits/_population), 0.0f, 200.0f);                
+            }
+        }     
+        
+    }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {

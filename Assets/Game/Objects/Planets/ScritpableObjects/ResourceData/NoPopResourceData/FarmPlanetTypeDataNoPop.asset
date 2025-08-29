@@ -16,5 +16,7 @@ MonoBehaviour:
   _initialPopulation: 0
   _initialFood: 0
   _foodProduction: 3
+  _initialGrotsits: 0
   _grotsitProduction: 1
   _maxPopulation: 10
+  _initialStrategy: 2

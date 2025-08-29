@@ -34,7 +34,7 @@ namespace FlatSpace
 
             private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
  
-            private int _turnNumber = 0;
+            public int TurnNumber { get; private set; }= 0;
 
             void Start()
             {
@@ -202,7 +202,7 @@ namespace FlatSpace
                 _gameAI.GameAIUpdate();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
-                _turnNumber++;
+                TurnNumber++;
 
             }
 

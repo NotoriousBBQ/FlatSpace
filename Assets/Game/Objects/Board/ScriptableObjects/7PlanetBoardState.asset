@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 95c82db5aa10e3b4cbb94878f4e8a8d0, type: 3}
+  m_Name: 7PlanetBoardState
+  m_EditorClassIdentifier: Assembly-CSharp::BoardConfiguration
+  _planetSpawnData:
+  - {fileID: 11400000, guid: af9a416b6101ea44ba3c8d28443631a2, type: 2}
+  - {fileID: 11400000, guid: 554fc15a956268645b9ca72787a41194, type: 2}
+  - {fileID: 11400000, guid: 0749dbec788155843a98ae7cecd70633, type: 2}
+  - {fileID: 11400000, guid: 858e56d554cdb7343b3c5fc24b26a9db, type: 2}
+  - {fileID: 11400000, guid: a771f88a58e934e4bba4bc4f880bb6ee, type: 2}
+  - {fileID: 11400000, guid: 48e82d7528363f341ab35cfc81f72120, type: 2}
+  - {fileID: 11400000, guid: 0129e44029a09ec44b5eecb05a763e9b, type: 2}

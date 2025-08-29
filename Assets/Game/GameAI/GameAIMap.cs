@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using FlatSpace.Game;
 using FlatSpace.Pathing;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -98,9 +99,19 @@ public class GameAIMap : MonoBehaviour
         {
             planet.PlanetProductionUpdate(resultList);
         }
+        DEBUG_LogResults(resultList);
     }
     public Planet GetPlanet(string planetName)
     {
         return _planets[planetName];
+    }
+    
+    private void DEBUG_LogResults(List<Planet.PlanetUpdateResult> resultList)
+    {
+        Debug.Log($"Turn: {Gameboard.Instance.TurnNumber} Results count: {resultList.Count}");
+        foreach (var result in resultList)
+        {
+            Debug.Log($"{result.Name}: {result.Result.ToString()} {result.Data?.ToString()}");
+        }
     }
 }
