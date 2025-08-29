@@ -35,23 +35,23 @@ public class GameAI : MonoBehaviour
     private GameAIMap _gameAIMap;
     private List<GameAIOrder> _currentAIOrders = new List<GameAIOrder>();
     public List<GameAIOrder> CurrentAIOrders => _currentAIOrders;
-    public void InitGameAI(List<Planet> planetList)
+    public void InitGameAI(List<PlanetSpawnData> spawnDataList)
     {
         _gameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
-        _gameAIMap.GameAIMapInit(planetList);
-    }
+        _gameAIMap.GameAIMapInit(spawnDataList);
+   }
 
-    public void GameAIUpdate(List<Planet> planetList)
+    public void GameAIUpdate()
     {
         List<GameAIOrder> gameAIOrders;
         List<Planet.PlanetUpdateResult> planetUpdateResults;
-        ProcessCurrentOrders(planetList);
-        PlanetaryProductionUpdate(planetList, out planetUpdateResults);
-        ProcessResults(planetUpdateResults, planetList, out gameAIOrders);
+        ProcessCurrentOrders();
+        PlanetaryProductionUpdate(out planetUpdateResults);
+        ProcessResults(planetUpdateResults, out gameAIOrders);
         ProcessNewOrders(gameAIOrders);
     }
 
-    private void ProcessCurrentOrders(List<Planet> planetList)
+    private void ProcessCurrentOrders()
     {
         foreach (var gameAIOrder in _currentAIOrders)
         {
@@ -61,17 +61,17 @@ public class GameAI : MonoBehaviour
         var executableOrders = _currentAIOrders.FindAll(x => x.TimingDelay <= 0);
         foreach (var executableOrder in executableOrders)
         {
-            ExecuteOrder(executableOrder, planetList);
+            ExecuteOrder(executableOrder);
         }
         _currentAIOrders.RemoveAll(x => x.TimingDelay <= 0);
     }
 
-    private void ExecuteOrder(GameAIOrder executableOrder, List<Planet> planetList)
+    private void ExecuteOrder(GameAIOrder executableOrder)
     {
         // onmly population surplus currently active
         if (executableOrder.Type == GameAIOrder.OrderType.OrderTypePopulationTransport)
         {
-            var targetPlanet = planetList.Find(x=>x.PlanetName == executableOrder.Target);
+            var targetPlanet = _gameAIMap.GetPlanet(executableOrder.Target);
             var numTransported = (int)executableOrder.Data;
             targetPlanet.Population += numTransported;
         }
@@ -80,25 +80,22 @@ public class GameAI : MonoBehaviour
     {
         _currentAIOrders.AddRange(newOrders.FindAll(x => x.TimingType == GameAIOrder.OrderTimingType.OrderTimingTypeDelayed));
     }
-    private static void PlanetaryProductionUpdate(List<Planet> planetList, out List<Planet.PlanetUpdateResult> planetUpdateResults)
+    private void PlanetaryProductionUpdate(out List<Planet.PlanetUpdateResult> planetUpdateResults)
     {
         planetUpdateResults = new List<Planet.PlanetUpdateResult>();
-        foreach (var planet in planetList)
-        {
-            planet.PlanetProductionUpdate(planetUpdateResults);
-        }
+        _gameAIMap.PlanetaryProductionUpdate(out planetUpdateResults);
     }
 
 
-    private static void ProcessResults(List<Planet.PlanetUpdateResult> results, List<Planet> planetList, out List<GameAIOrder> orders)
+    private void ProcessResults(List<Planet.PlanetUpdateResult> results, out List<GameAIOrder> orders)
     {
         orders = new List<GameAIOrder>();
         var surplusUpdateResults = 
             results.FindAll(x => x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationSurplus);
-        ProcessPopulationSurplus(surplusUpdateResults, planetList, orders);
+        ProcessPopulationSurplus(surplusUpdateResults, orders);
     }
 
-    private static void ProcessPopulationSurplus(List<Planet.PlanetUpdateResult> results, List<Planet> planetList, List<GameAIOrder> orders)
+    private void ProcessPopulationSurplus(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
     {
 
         foreach (var result in results)
@@ -109,7 +106,7 @@ public class GameAI : MonoBehaviour
             foreach (var connection in sourceNode.Connections)
             {
                 (string Name, float Score) scoreTuple = (connection.NodeName, connection.Cost);
-                var possibleDestination = planetList.Find(x => x.PlanetName == connection.NodeName);
+                var possibleDestination = GetPlanet(connection.NodeName);
                 if(possibleDestination.Population >= possibleDestination.MaxPopulation)
                 {
                     scoreTuple.Score = Single.MaxValue;
@@ -135,10 +132,11 @@ public class GameAI : MonoBehaviour
         }
     }
 
-    private static void ProcessOrders(List<GameAIOrder> orders)
+    public Planet GetPlanet(string planetName)
     {
-        
+        return _gameAIMap.GetPlanet(planetName);
     }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {

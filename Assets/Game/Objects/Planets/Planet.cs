@@ -28,8 +28,9 @@ public class Planet : MonoBehaviour
     private Vector2 _position = new Vector2(0.0f, 0.0f);
     
     private PlanetUIObject _planetUIObject;
-    private PlanetUIObject _mapUI;
+
     private PlanetResourceData _resourceData = null;
+    public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
     public enum PlanetType
     {
         PlanetTypePrime,
@@ -42,6 +43,7 @@ public class Planet : MonoBehaviour
 
     public string PlanetName => _planetName;
     public Vector2 Position => _position;
+    public float Food => _food;
 
     public struct PlanetUpdateResult
     {
@@ -103,41 +105,7 @@ public class Planet : MonoBehaviour
         public ResultPriority Priority;
         public readonly object Data;
     }
-    
-    public void Init(PlanetType planetType, Transform parentTransform, 
-        Vector3 position)
-    {
-#if USE_ALGORIGHMIC_BOARD
-        if (planetType == PlanetType.PlanetTypePrime)
-        {
-            _planetType = PlanetType.PlanetTypePrime;
-            _population = 1;
-        }
-        
-        if (!string.IsNullOrEmpty(_planetPrefab))
-        {
 
-            var prefab = AssetDatabase.LoadAssetAtPath(_planetPrefab, typeof(GameObject)) as GameObject;
-            if (prefab)
-            {
-                _mapUI = Instantiate<PlanetUIObject>(prefab,parentTransform) as PlanetUIObject;
-                _mapUI.transform.localPosition += position;
-                InitializeUIObject();
-            }
-        }  
-#endif
-    }
-
-    private void InitUIElement(Vector3 position, Transform parentTransform)
-    {
-        var prefab = Gameboard.Instance.planetUIObjects[(int)_planetType];
-        if (!prefab)
-            return;
-            
-        _mapUI = Instantiate(prefab,parentTransform) as PlanetUIObject;
-        _mapUI.transform.localPosition += position;
-        InitializeUIObject();
-    }
     public void Init(PlanetSpawnData spawnData, Transform parentTransform)
     {
         _resourceData = spawnData._resourceData;
@@ -146,27 +114,8 @@ public class Planet : MonoBehaviour
         _food = _resourceData._initialFood;
         _position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
         _planetType = spawnData._planetType;
+        DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
 
-        InitUIElement(spawnData._planetPosition, parentTransform);
-    }
-
-    private void InitializeUIObject()
-    {
-
-        _planetUIObject  = _mapUI.GetComponent<PlanetUIObject>();
-        if (_planetUIObject == null)
-            return;
-        _planetUIObject._nameTextField.text = this._planetName;
-        UpdateMapUI();        
-    }
-
-    public void UpdateMapUI()
-    {
-        if (_planetUIObject)
-        {
-            _planetUIObject._populationTextField.text = _population.ToString();
-            _planetUIObject._foodTextField.text = _food.ToString();
-        }
     }
 
     public void PlanetProductionUpdate(List<PlanetUpdateResult> resultList)

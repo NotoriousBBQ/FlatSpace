@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using FlatSpace.Pathing;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class GameAIMap : MonoBehaviour
@@ -12,47 +14,49 @@ public class GameAIMap : MonoBehaviour
         public Path Path1To2;
     }
     
-    private struct DestinationToPathingListEntry
+    public struct DestinationToPathingListEntry
     {
         public float Cost;
         public int PathingIndex;
         public bool PathReversed;
     }
-    private struct GameAIPlanetNode
-    {
-        public Vector2 Position;
-        public Dictionary<string, DestinationToPathingListEntry> DistanceMapToPathingList;
-    }
-    
+
     private List<GameAIPlanetPathing> _planetPathings;
-    private Dictionary<string, GameAIPlanetNode> _planetAINodes;
+    
+    private Dictionary<string, Planet> _planets;
+
+    public List<Planet> PlanetList
+    {
+        get { return _planets.Values.ToList(); }
+    }
 
     public Vector2 PlanetAILocation(string planetName)
     {
-        return _planetAINodes[planetName].Position;
+        return _planets[planetName].Position;
     }
 
-    public void GameAIMapInit(List<Planet> planetList)
+    public void GameAIMapInit(List<PlanetSpawnData> spawnDataList)
     {
+       _planets = new Dictionary<string, Planet>(); 
+        
+        foreach (var planetSpawnData in spawnDataList)
+        {
+            var planet =  this.AddComponent<Planet>() as Planet;
+            planet.Init(planetSpawnData, this.transform);
+            _planets[planetSpawnData._planetName] =  planet;
+        }
+        
+        PathingSystem.Instance.InitializePathMap(PlanetList);
+
         // painfully ineffeceint process here
        _planetPathings = new List<GameAIPlanetPathing>();
-       _planetAINodes = new Dictionary<string,GameAIPlanetNode>();
        
-       //first create ai nodes for each planet
-       for (var i = 0; i < planetList.Count; i++)
+       for (var i = 0; i < PlanetList.Count - 1; i++)
        {
-           _planetAINodes[planetList[i].PlanetName] = new GameAIPlanetNode{
-                Position = planetList[i].Position,
-                DistanceMapToPathingList = new Dictionary<string, DestinationToPathingListEntry>() 
-           };
-           
-       }
-       for (var i = 0; i < planetList.Count - 1; i++)
-       {
-           var planet1 = planetList[i];
-           for (var j = i + 1; j < planetList.Count; j++)
+           var planet1 = PlanetList[i];
+           for (var j = i + 1; j < PlanetList.Count; j++)
            {
-               var planet2 = planetList[j];
+               var planet2 = PlanetList[j];
                var planetPathing = new GameAIPlanetPathing{
                    Planet1Name=planet1.PlanetName, 
                    Planet2Name=planet2.PlanetName
@@ -61,28 +65,42 @@ public class GameAIMap : MonoBehaviour
                PathingSystem.Instance.FindPath(planet1.PlanetName, planet2.PlanetName, out planetPathing.Path1To2);
                
                // must be done before adding planetPathing to list
-               AddPathingToAINode(planetPathing, _planetPathings.Count);
+               AddPathingToPlanet(planetPathing, _planetPathings.Count);
                _planetPathings.Add(planetPathing);
            }
        }
     }
 
-    private void AddPathingToAINode(GameAIPlanetPathing planetPathing, int pathIndex)
+    private void AddPathingToPlanet(GameAIPlanetPathing planetPathing, int pathIndex)
     {
-        _planetAINodes[planetPathing.Planet1Name].DistanceMapToPathingList[planetPathing.Planet2Name]
-            = new DestinationToPathingListEntry
+    
+        _planets[planetPathing.Planet1Name].DistanceMapToPathingList[planetPathing.Planet2Name]
+            = new GameAIMap.DestinationToPathingListEntry
             {
                 PathingIndex = pathIndex,
                 Cost = planetPathing.Path1To2.Cost,
                 PathReversed = false
             };
         
-        _planetAINodes[planetPathing.Planet2Name].DistanceMapToPathingList[planetPathing.Planet1Name]
-            = new DestinationToPathingListEntry
+        _planets[planetPathing.Planet2Name].DistanceMapToPathingList[planetPathing.Planet1Name]
+            = new GameAIMap.DestinationToPathingListEntry
             {
                 PathingIndex = pathIndex,
                 Cost = planetPathing.Path1To2.Cost,
                 PathReversed = true
             };
+    }
+
+    public void PlanetaryProductionUpdate(out List<Planet.PlanetUpdateResult> resultList)
+    {
+        resultList = new List<Planet.PlanetUpdateResult>();
+        foreach (var planet in PlanetList)
+        {
+            planet.PlanetProductionUpdate(resultList);
+        }
+    }
+    public Planet GetPlanet(string planetName)
+    {
+        return _planets[planetName];
     }
 }

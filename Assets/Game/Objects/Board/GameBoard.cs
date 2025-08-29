@@ -32,8 +32,7 @@ namespace FlatSpace
             private MapInputActions _mapInputActions;
             private Camera _camera;
 
-            private readonly List<Planet> _planetList = new List<Planet>();
-            private readonly List<Planet.PlanetUpdateResult> _resultList = new List<Planet.PlanetUpdateResult>();
+            private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
  
             private int _turnNumber = 0;
 
@@ -54,35 +53,56 @@ namespace FlatSpace
                     _instance = this;
 
                 _camera = Camera.main;
-                _planetList.Clear();
+                _planetUIObjects.Clear();
                 if (_intialBoardState)
                 {
                     InitGame();
                 }
-                else
-                {
-                    CreateTestBoardState();
-                }
-
                 InitializeInputActions();
 
             }
 
             private void InitGame()
             {
-                foreach (var planetSpawnData in _intialBoardState._planetSpawnData)
-                {
-                    var planet = this.AddComponent<Planet>() as Planet;
-                    planet.Init(planetSpawnData, this.transform);
-                    _planetList.Add(planet);
-
-                }
-                PathingSystem.Instance.InitializePathMap(_planetList);
                 _gameAI = this.AddComponent<GameAI>() as GameAI;
-                _gameAI.InitGameAI(_planetList);
+                _gameAI.InitGameAI(_intialBoardState._planetSpawnData);
+
+                InitPlanetGraphics(_intialBoardState._planetSpawnData);
                 InitPathGraphics();
             }
+
+            private void InitPlanetGraphics(List<PlanetSpawnData> spawnDataList)
+            {
+                foreach (var spawnData in spawnDataList)
+                {
+                    InitUIElement(spawnData, transform);   
+                    
+                }
+            }
             
+                
+            private void InitUIElement(PlanetSpawnData spawnData, Transform parentTransform)
+            {
+                var prefab = Gameboard.Instance.planetUIObjects[(int)spawnData._planetType];
+                if (!prefab)
+                    return;
+            
+                var uiObject = Instantiate(prefab,parentTransform) as PlanetUIObject;
+                uiObject.transform.localPosition += spawnData._planetPosition;
+                InitializeUIObject(uiObject, spawnData);
+            }
+            
+            private void InitializeUIObject(PlanetUIObject uiObject , PlanetSpawnData spawnData)
+            {
+
+                if (uiObject == null)
+                    return;
+                uiObject._nameTextField.text = spawnData._planetName;
+                uiObject._planetName = spawnData._planetName;
+                uiObject.UIUpdate();        
+                _planetUIObjects.Add(uiObject);
+            }
+
             private void InitPathGraphics()
             {
                 List<(Vector3, Vector3)> connectionPoints = new List<(Vector3, Vector3)>();
@@ -125,38 +145,18 @@ namespace FlatSpace
 
                     if (lineDrawObject)
                     {
-                        var point1 = _planetList.Find(x => x.PlanetName == order.Origin).Position;
-                        var point2 = _planetList.Find(x => x.PlanetName == order.Target).Position;
+                        var point1 = _planetUIObjects.Find(x => x._planetName == order.Origin).transform.localPosition;
+                        var point2 = _planetUIObjects.Find(x => x._planetName == order.Target).transform.localPosition;
                         var linePoints = (new Vector3(point1.x + 5.0f, point1.y + 5.0f, 0.0f), new Vector3(point2.x + 5.0f, point2.y + 5.0f, 0.0f) );
                         lineDrawObject.SetPoints(linePoints);
                     }
                 }
             }
 
-            private void CreateTestBoardState()
+            public Planet GetPlanet(string planetName)
             {
-                Planet planet = this.AddComponent<Planet>() as Planet;
-                planet.Init(Planet.PlanetType.PlanetTypePrime, this.transform, new Vector3(0, 0, 0));
-                _planetList.Add(planet);
-
-                planet = this.AddComponent<Planet>() as Planet;
-                planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(200, 0, 0));
-                _planetList.Add(planet);
-
-                planet = this.AddComponent<Planet>() as Planet;
-                planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(-200, 0, 0));
-                _planetList.Add(planet);
-
-                planet = this.AddComponent<Planet>() as Planet;
-                planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0, 200, 0));
-                _planetList.Add(planet);
-
-                planet = this.AddComponent<Planet>() as Planet;
-                planet.Init(Planet.PlanetType.PlanetTypeNormal, this.transform, new Vector3(0, -200, 0));
-                _planetList.Add(planet);
-
+                return _gameAI.GetPlanet(planetName);
             }
-
             private void InitializeInputActions()
             {
                 _mapInputActions = new MapInputActions();
@@ -196,19 +196,10 @@ namespace FlatSpace
             #endregion
             #region Update Functions
 
-            private void DEBUG_LogResults()
-            {
-                Debug.Log($"Turn: {_turnNumber} Results count: {_resultList.Count}");
-                foreach (var result in _resultList)
-                {
-                    Debug.Log($"{result.Name}: {result.Result.ToString()} {result.Data?.ToString()}");
-                }
-            }
-
             public void SingleUpdate()
             {
                 // add Ai Actions here
-                _gameAI.GameAIUpdate(_planetList);
+                _gameAI.GameAIUpdate();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
                 _turnNumber++;
@@ -217,16 +208,15 @@ namespace FlatSpace
 
             private void PlanetaryUIUpdate()
             {
-                foreach (var planet in _planetList)
+                foreach (var planetUI in _planetUIObjects)
                 {
-                    planet.UpdateMapUI();
+                    planetUI.UIUpdate();
                 }
             }
 
             private void BoardUIUpdate()
             {
-                var currentAIOrders = _gameAI.CurrentAIOrders;
-                DisplayOrderGraphics(currentAIOrders);
+                DisplayOrderGraphics(_gameAI.CurrentAIOrders);
             }
 
             private bool _timedUpdateRunning = false;
