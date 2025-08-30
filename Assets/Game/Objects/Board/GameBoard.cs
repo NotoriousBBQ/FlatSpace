@@ -148,7 +148,7 @@ namespace FlatSpace
                     {
                         var point1 = _planetUIObjects.Find(x => x._planetName == order.Origin).transform.localPosition;
                         var point2 = _planetUIObjects.Find(x => x._planetName == order.Target).transform.localPosition;
-                        var linePoints = (new Vector3(point1.x + 5.0f, point1.y + 5.0f, 0.0f), new Vector3(point2.x + 5.0f, point2.y + 5.0f, 0.0f) );
+                        var linePoints = (new Vector3(point1.x + 10.0f, point1.y + 10.0f, 0.0f), new Vector3(point2.x + 10.0f, point2.y + 10.0f, 0.0f) );
                         lineDrawObject.SetPoints(linePoints);
                     }
                 }
