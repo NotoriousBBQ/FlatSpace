@@ -100,22 +100,28 @@ public class GameAI : MonoBehaviour
 
         foreach (var result in results)
         {
-            var sourceNode = PathingSystem.Instance.PathNodes[result.Name];
+            var planet = _gameAIMap.GetPlanet(result.Name);
             
             List<(string Name, float Score)> scoreMatrix = new List<(string, float)>();
-            foreach (var connection in sourceNode.Connections)
+            int maxNodes = _gameAIMap.GameAIConstants.MaxPathNodesToSearch;
+            
+            foreach (var pathMap in planet.DistanceMapToPathingList)
             {
-                (string Name, float Score) scoreTuple = (connection.NodeName, connection.Cost);
-                var possibleDestination = GetPlanet(connection.NodeName);
-                if(possibleDestination.Population >= possibleDestination.MaxPopulation)
+                if (pathMap.Value.NumNodes <= maxNodes)
                 {
-                    scoreTuple.Score = Single.MaxValue;
+                    (string Name, float Score) scoreTuple = (pathMap.Key, pathMap.Value.Cost);
+                    var possibleDestination = GetPlanet(scoreTuple.Name);
+                    if(possibleDestination.Population >= possibleDestination.MaxPopulation)
+                    {
+                        scoreTuple.Score = Single.MaxValue;
+                    }
+                    else
+                    {
+                        scoreTuple.Score += possibleDestination.Population * 10.0f;
+                    }
+                    scoreMatrix.Add(scoreTuple);                    
                 }
-                else
-                {
-                    scoreTuple.Score += possibleDestination.Population * 100.0f;
-                }
-                scoreMatrix.Add(scoreTuple);
+
             }
             
             scoreMatrix.Sort((a, b) => a.Score.CompareTo(b.Score));

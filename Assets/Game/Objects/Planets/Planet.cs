@@ -84,7 +84,6 @@ public class Planet : MonoBehaviour
     
     public float Food { get; private set; } = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
-    [SerializeField] private float _moraleStep = 5;
 
     public float Grotsits {get; private set;}
     
@@ -277,7 +276,7 @@ public class Planet : MonoBehaviour
 
             var numberShort = Population - Grotsits;
             Grotsits = 0.0f;
-            Morale = Math.Clamp(Morale - _moraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale - _gameAIConstants.MoraleStep, 0.0f, 200.0f);
         }
         else
         {
@@ -288,7 +287,7 @@ public class Planet : MonoBehaviour
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Grotsits - Population));
-                Morale = Math.Clamp(Morale + _moraleStep, 0.0f, 200.0f);                
+                Morale = Math.Clamp(Morale + _gameAIConstants.MoraleStep, 0.0f, 200.0f);                
             }
             else
             {

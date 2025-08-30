@@ -42,6 +42,7 @@ namespace FlatSpace
         public class Path
         {
             public float Cost;
+            public int NumNodes;
             public List<PathNode> PathNodes = new List<PathNode>();
         }
         
@@ -190,6 +191,7 @@ namespace FlatSpace
                 }
                 path.PathNodes.Add(node);
                 path.PathNodes.Reverse();
+                path.NumNodes = path.PathNodes.Count;
             }
 
             public void ConnectionVectors(List<(Vector3, Vector3)> connectionVectorList)

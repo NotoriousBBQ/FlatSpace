@@ -18,6 +18,7 @@ public class GameAIMap : MonoBehaviour
     public struct DestinationToPathingListEntry
     {
         public float Cost;
+        public int NumNodes;
         public int PathingIndex;
         public bool PathReversed;
     }
@@ -25,7 +26,7 @@ public class GameAIMap : MonoBehaviour
     private List<GameAIPlanetPathing> _planetPathings;
     
     private Dictionary<string, Planet> _planets;
-    private GameAIConstants _gameAIConstants;
+    public GameAIConstants GameAIConstants { get; private set; }
 
     public List<Planet> PlanetList
     {
@@ -39,13 +40,13 @@ public class GameAIMap : MonoBehaviour
 
     public void GameAIMapInit(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
     {
-        _gameAIConstants = gameAIConstants;
+        GameAIConstants = gameAIConstants;
        _planets = new Dictionary<string, Planet>(); 
         
         foreach (var planetSpawnData in spawnDataList)
         {
             var planet =  this.AddComponent<Planet>() as Planet;
-            planet.Init(planetSpawnData, this.transform, _gameAIConstants);
+            planet.Init(planetSpawnData, this.transform, GameAIConstants);
             _planets[planetSpawnData._planetName] =  planet;
         }
         
@@ -82,7 +83,8 @@ public class GameAIMap : MonoBehaviour
             {
                 PathingIndex = pathIndex,
                 Cost = planetPathing.Path1To2.Cost,
-                PathReversed = false
+                PathReversed = false,
+                NumNodes = planetPathing.Path1To2.NumNodes
             };
         
         _planets[planetPathing.Planet2Name].DistanceMapToPathingList[planetPathing.Planet1Name]
@@ -90,7 +92,8 @@ public class GameAIMap : MonoBehaviour
             {
                 PathingIndex = pathIndex,
                 Cost = planetPathing.Path1To2.Cost,
-                PathReversed = true
+                PathReversed = true,
+                NumNodes = planetPathing.Path1To2.NumNodes
             };
     }
 
