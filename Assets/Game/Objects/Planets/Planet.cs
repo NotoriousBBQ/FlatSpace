@@ -11,60 +11,6 @@ using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
 using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
 public class Planet : MonoBehaviour
 {
-    [SerializeField] private PlanetType _planetType = PlanetType.PlanetTypeNormal;
-    
-    [SerializeField] private int _population = 0;
-
-    public int FoodWorkers { get; private set; }
-    public int GrotsitsWorkers { get; private set; }
-    public PlanetStrategy CurrentStrategy { get; private set; }
-    public float Morale { get; private set; }
-
-    public int Population
-    {
-        get { return _population; }
-        set { _population = value; }
-    }
-    public int MaxPopulation => _resourceData._maxPopulation;
-    
-    [SerializeField] private float _food = 0.0f;
-    [SerializeField] private float _foodNeededForNewPop = 10.0f;
-    [SerializeField] private float _moraleStep = 5;
-
-    public float Grotsits {get; private set;}
-    
-    private string _planetName = "";
-    private Vector2 _position = new Vector2(0.0f, 0.0f);
-    
-    private PlanetUIObject _planetUIObject;
-
-    private PlanetResourceData _resourceData = null;
-    public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
-    public enum PlanetType
-    {
-        PlanetTypePrime,
-        PlanetTypeNormal,
-        PlanetTypeFarm,
-        PlanetTypeVerdant,
-        PlanetTypeIndustrial,
-        PlanetTypeDesolate
-    }
-
-    public enum PlanetStrategy
-    {
-        PlanetStrategyBalanced,
-        PlanetStrategyGrowth,
-        PlanetStrategyFood,
-        PlanetStrategyFocusedFood,
-        PlanetStrategyGrotsits,
-        PlanetStrategyFocusedGrotsits,
-    }
-
-    public string PlanetName => _planetName;
-    public Vector2 Position => _position;
-    public float Food => _food;
-    private GameAIConstants _gameAIConstants;
-
     public struct PlanetUpdateResult
     {
         public enum PlanetUpdateResultType
@@ -126,16 +72,62 @@ public class Planet : MonoBehaviour
         public ResultPriority Priority;
         public readonly object Data;
     }
+    private PlanetType _planetType = PlanetType.PlanetTypeNormal;
+    
+    public int Population { get; set; }= 0;
+
+    public int FoodWorkers { get; private set; }
+    public int GrotsitsWorkers { get; private set; }
+    public PlanetStrategy CurrentStrategy { get; private set; }
+    public float Morale { get; private set; }
+    public int MaxPopulation => _resourceData._maxPopulation;
+    
+    public float Food { get; private set; } = 0.0f;
+    [SerializeField] private float _foodNeededForNewPop = 10.0f;
+    [SerializeField] private float _moraleStep = 5;
+
+    public float Grotsits {get; private set;}
+    
+    public string PlanetName {get; private set;} = "";
+    public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
+    
+    private PlanetUIObject _planetUIObject;
+
+    private PlanetResourceData _resourceData = null;
+    public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
+    public enum PlanetType
+    {
+        PlanetTypePrime,
+        PlanetTypeNormal,
+        PlanetTypeFarm,
+        PlanetTypeVerdant,
+        PlanetTypeIndustrial,
+        PlanetTypeDesolate
+    }
+
+    public enum PlanetStrategy
+    {
+        PlanetStrategyBalanced,
+        PlanetStrategyGrowth,
+        PlanetStrategyFood,
+        PlanetStrategyFocusedFood,
+        PlanetStrategyGrotsits,
+        PlanetStrategyFocusedGrotsits,
+    }
+
+    private GameAIConstants _gameAIConstants;
+
+
 
     public void Init(PlanetSpawnData spawnData, Transform parentTransform, GameAIConstants gameAIConstants)
     {
         _gameAIConstants = gameAIConstants;
         _resourceData = spawnData._resourceData;
-        _planetName = spawnData._planetName;
-        _population = _resourceData._initialPopulation;
-        _food = _resourceData._initialFood;
+        PlanetName = spawnData._planetName;
+        Population = _resourceData._initialPopulation;
+        Food = _resourceData._initialFood;
         Grotsits = _resourceData._initialGrotsits;
-        _position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
+        Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
         _planetType = spawnData._planetType;
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
         CurrentStrategy = _resourceData._initialStrategy;
@@ -180,7 +172,7 @@ public class Planet : MonoBehaviour
                 GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
-                FoodWorkers = _population;
+                FoodWorkers = Population;
                 break;
             case PlanetStrategy.PlanetStrategyGrotsits:
                 FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
@@ -188,25 +180,25 @@ public class Planet : MonoBehaviour
                 if(GrotsitsWorkers <= 0)
                     GrotsitsWorkers = 1;
                 // the focus on grotsits
-                remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
+                remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
                 {
                     GrotsitsWorkers += remainingWorkers;
                 }
                 break;
             case PlanetStrategy.PlanetStrategyFocusedGrotsits:
-                GrotsitsWorkers = _population;
+                GrotsitsWorkers = Population;
                 break;
         }
     }
 
     public void PlanetProductionUpdate(List<PlanetUpdateResult> resultList)
     {
-        if (_population == 0)
+        if (Population == 0)
             return;
         AssignWorkForStrategy();
         // grow food
-        _food += FoodWorkers * _resourceData._foodProduction;
+        Food += FoodWorkers * _resourceData._foodProduction;
         // produce grosits
         Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction;
         
@@ -217,58 +209,58 @@ public class Planet : MonoBehaviour
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
     {
-        if (_population <= 0)
+        if (Population <= 0)
             return;
-        if (_food < _population) 
+        if (Food < Population) 
         { 
             // cant feed everyong
-            resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeFoodShortage, _food - _population));
+            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeFoodShortage, Food - Population));
             //hinky code to prevent mass dieoffs
-             _food--;
-             if (_food <= 0.0f)
+             Food--;
+             if (Food <= 0.0f)
              {
                  // lose a pop
-                 _population--;
+                 Population--;
                  // start the food countdown again
-                 _food = _population;
-                 resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationLoss,
+                 Food = Population;
+                 resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationLoss,
                      1));
-                 if (_population <= 0)
+                 if (Population <= 0)
                  {
                      // planet id dead
-                     resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeDead, null));
+                     resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
                  }
              }
         }
         else
         {
             // feed everybody
-            _food -= _population;
+            Food -= Population;
             // enough to grow?
-            if (_food >= _foodNeededForNewPop)
+            if (Food >= _foodNeededForNewPop)
             {
-                resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
-                _food -= _foodNeededForNewPop;
-                _population++;
-                if (_population <= _resourceData._maxPopulation)
+                resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
+                Food -= _foodNeededForNewPop;
+                Population++;
+                if (Population <= _resourceData._maxPopulation)
                 {
 
-                    if (_population == _resourceData._maxPopulation)
-                        resultList.Add(new PlanetUpdateResult(_planetName,
+                    if (Population == _resourceData._maxPopulation)
+                        resultList.Add(new PlanetUpdateResult(PlanetName,
                             ResultType.PlanetUpdateResultTypePopulationMaxReached, null));
                 }
                 else
                 {
-                    resultList.Add(new PlanetUpdateResult(_planetName,
-                        ResultType.PlanetUpdateResultTypePopulationSurplus, _population - _resourceData._maxPopulation));
-                    _population =  _resourceData._maxPopulation;
+                    resultList.Add(new PlanetUpdateResult(PlanetName,
+                        ResultType.PlanetUpdateResultTypePopulationSurplus, Population - _resourceData._maxPopulation));
+                    Population =  _resourceData._maxPopulation;
                 }
             }
 
-            if (_food > _population)
+            if (Food > Population)
             {
-                resultList.Add(new PlanetUpdateResult(_planetName,
-                    ResultType.PlanetUpdateResultTypeFoodSurplus, _food - _population));
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeFoodSurplus, Food - Population));
                 
             }
         }     
@@ -276,26 +268,26 @@ public class Planet : MonoBehaviour
 
     private void ConsumeGrotsits(List<PlanetUpdateResult> resultList)
     {
-        if (_population <= 0)
+        if (Population <= 0)
             return;
-        if (Grotsits < _population) 
+        if (Grotsits < Population) 
         { 
             // Can't give everyone goods
-            resultList.Add(new PlanetUpdateResult(_planetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage, Grotsits - _population));
+            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage, Grotsits - Population));
 
-            var numberShort = _population - Grotsits;
+            var numberShort = Population - Grotsits;
             Grotsits = 0.0f;
             Morale = Math.Clamp(Morale - _moraleStep, 0.0f, 200.0f);
         }
         else
         {
             // feed everybody
-            Grotsits -= _population;
+            Grotsits -= Population;
             // enough to grow?
-            if (Grotsits > _population)
+            if (Grotsits > Population)
             {
-                resultList.Add(new PlanetUpdateResult(_planetName,
-                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Grotsits - _population));
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Grotsits - Population));
                 Morale = Math.Clamp(Morale + _moraleStep, 0.0f, 200.0f);                
             }
             else
