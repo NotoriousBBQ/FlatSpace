@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FlatSpace.Game;
 using TMPro;
@@ -9,6 +10,9 @@ public class PlanetUIObject : MonoBehaviour
     [SerializeField] public TextMeshProUGUI _nameTextField;
     [SerializeField] public TextMeshProUGUI _populationTextField;
     [SerializeField] public TextMeshProUGUI _foodTextField;
+    [SerializeField] public TextMeshProUGUI _grotsitsTextField;
+    [SerializeField] public TextMeshProUGUI _moraleTextField;
+
     public string _planetName;
 
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
@@ -27,7 +31,9 @@ public class PlanetUIObject : MonoBehaviour
         if (planet)
         {
             _populationTextField.text = planet.Population.ToString();
-            _foodTextField.text = planet.Food.ToString();
+            _foodTextField.text = Math.Floor(planet.Food).ToString();
+            _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
+            _moraleTextField.text = Math.Floor(planet.Morale).ToString();
         }
     }
 

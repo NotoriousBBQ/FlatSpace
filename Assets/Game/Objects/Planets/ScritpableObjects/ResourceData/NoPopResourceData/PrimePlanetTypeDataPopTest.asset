@@ -19,4 +19,4 @@ MonoBehaviour:
   _initialGrotsits: 4
   _grotsitProduction: 2
   _maxPopulation: 15
-  _initialStrategy: 1
+  _initialStrategy: 0

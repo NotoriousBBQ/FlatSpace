@@ -29,6 +29,7 @@ public class Planet : MonoBehaviour
     
     [SerializeField] private float _food = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
+    [SerializeField] private float _moraleStep = 5;
 
     public float Grotsits {get; private set;}
     
@@ -149,8 +150,9 @@ public class Planet : MonoBehaviour
                 // first, make sure the basics are covered
                 FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
                 GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
                 // the even out the rest
-                remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
+                remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
                 {
                     FoodWorkers += remainingWorkers / 2;
@@ -162,16 +164,18 @@ public class Planet : MonoBehaviour
 
                 break;
             case PlanetStrategy.PlanetStrategyGrowth:
+                FoodWorkers = Math.Clamp(
+                    Convert.ToInt32(Convert.ToSingle(2 * Population) / _resourceData._foodProduction), 0, Population);
+                GrotsitsWorkers = Math.Clamp(
+                    Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction), 0, Population);
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
+                break;
             case PlanetStrategy.PlanetStrategyFood:
-                // first, make sure the basics are covered 
-                FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
-                GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
-                // the focus on food
-                remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
-                if (remainingWorkers > 0)
-                {
-                    FoodWorkers += remainingWorkers;
-                }
+                FoodWorkers = Math.Clamp(
+                    Convert.ToInt32(Convert.ToSingle(2 * Population) / _resourceData._foodProduction), 0, Population);
+                GrotsitsWorkers = Math.Clamp(
+                    Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction), 0, Population);
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
                 FoodWorkers = _population;
@@ -179,6 +183,8 @@ public class Planet : MonoBehaviour
             case PlanetStrategy.PlanetStrategyGrotsits:
                 FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
                 GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
+                if(GrotsitsWorkers <= 0)
+                    GrotsitsWorkers = 1;
                 // the focus on grotsits
                 remainingWorkers = _population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
@@ -277,7 +283,7 @@ public class Planet : MonoBehaviour
 
             var numberShort = _population - Grotsits;
             Grotsits = 0.0f;
-            Morale = Math.Clamp(Morale - (100.0f * numberShort/_population), 0.0f, Morale);
+            Morale = Math.Clamp(Morale - _moraleStep, 0.0f, 200.0f);
         }
         else
         {
@@ -288,7 +294,11 @@ public class Planet : MonoBehaviour
             {
                 resultList.Add(new PlanetUpdateResult(_planetName,
                     ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Grotsits - _population));
-                Morale = Math.Clamp(Morale - (100.0f * Grotsits/_population), 0.0f, 200.0f);                
+                Morale = Math.Clamp(Morale + _moraleStep, 0.0f, 200.0f);                
+            }
+            else
+            {
+                Morale = 100.0f;
             }
         }     
         
