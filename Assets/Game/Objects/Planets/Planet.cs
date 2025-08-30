@@ -63,6 +63,7 @@ public class Planet : MonoBehaviour
     public string PlanetName => _planetName;
     public Vector2 Position => _position;
     public float Food => _food;
+    private GameAIConstants _gameAIConstants;
 
     public struct PlanetUpdateResult
     {
@@ -126,8 +127,9 @@ public class Planet : MonoBehaviour
         public readonly object Data;
     }
 
-    public void Init(PlanetSpawnData spawnData, Transform parentTransform)
+    public void Init(PlanetSpawnData spawnData, Transform parentTransform, GameAIConstants gameAIConstants)
     {
+        _gameAIConstants = gameAIConstants;
         _resourceData = spawnData._resourceData;
         _planetName = spawnData._planetName;
         _population = _resourceData._initialPopulation;

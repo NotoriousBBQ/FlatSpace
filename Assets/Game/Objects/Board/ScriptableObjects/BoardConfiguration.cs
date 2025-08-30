@@ -7,4 +7,5 @@ using System.Collections.Generic;
 public class BoardConfiguration : ScriptableObject
 {
     public List<PlanetSpawnData> _planetSpawnData;
+    public GameAIConstants _gameAIConstants;
 }

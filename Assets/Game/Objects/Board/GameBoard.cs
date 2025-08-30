@@ -65,7 +65,7 @@ namespace FlatSpace
             private void InitGame()
             {
                 _gameAI = this.AddComponent<GameAI>() as GameAI;
-                _gameAI.InitGameAI(_intialBoardState._planetSpawnData);
+                _gameAI.InitGameAI(_intialBoardState._planetSpawnData, _intialBoardState._gameAIConstants);
 
                 InitPlanetGraphics(_intialBoardState._planetSpawnData);
                 InitPathGraphics();

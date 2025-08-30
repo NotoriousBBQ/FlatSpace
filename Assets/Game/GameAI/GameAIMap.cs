@@ -25,6 +25,7 @@ public class GameAIMap : MonoBehaviour
     private List<GameAIPlanetPathing> _planetPathings;
     
     private Dictionary<string, Planet> _planets;
+    private GameAIConstants _gameAIConstants;
 
     public List<Planet> PlanetList
     {
@@ -36,14 +37,15 @@ public class GameAIMap : MonoBehaviour
         return _planets[planetName].Position;
     }
 
-    public void GameAIMapInit(List<PlanetSpawnData> spawnDataList)
+    public void GameAIMapInit(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
     {
+        _gameAIConstants = gameAIConstants;
        _planets = new Dictionary<string, Planet>(); 
         
         foreach (var planetSpawnData in spawnDataList)
         {
             var planet =  this.AddComponent<Planet>() as Planet;
-            planet.Init(planetSpawnData, this.transform);
+            planet.Init(planetSpawnData, this.transform, _gameAIConstants);
             _planets[planetSpawnData._planetName] =  planet;
         }
         

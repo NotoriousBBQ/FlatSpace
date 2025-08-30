@@ -35,10 +35,10 @@ public class GameAI : MonoBehaviour
     private GameAIMap _gameAIMap;
     private List<GameAIOrder> _currentAIOrders = new List<GameAIOrder>();
     public List<GameAIOrder> CurrentAIOrders => _currentAIOrders;
-    public void InitGameAI(List<PlanetSpawnData> spawnDataList)
+    public void InitGameAI(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
     {
         _gameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
-        _gameAIMap.GameAIMapInit(spawnDataList);
+        _gameAIMap.GameAIMapInit(spawnDataList, gameAIConstants);
    }
 
     public void GameAIUpdate()
