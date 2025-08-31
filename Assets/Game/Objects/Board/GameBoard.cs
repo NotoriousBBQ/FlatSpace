@@ -124,6 +124,32 @@ namespace FlatSpace
                 }
             }
 
+            private static bool OrderHasGraphic(GameAI.GameAIOrder order)
+            {
+                var hasGraphicList = new GameAI.GameAIOrder.OrderType[2] 
+                    {GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport};
+                
+                return Array.Exists(hasGraphicList, t => t == order.Type);
+
+            }
+
+            private static Color32 ColorForOrderType(GameAI.GameAIOrder.OrderType type)
+            {
+                Color color;
+                switch (type)
+                {
+                    case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
+                        color = new Color32(0, 255,0, 255 );
+                        break;
+                    case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
+                        color = new Color32(0, 255, 255, 255);
+                        break;
+                    default:
+                        color = new Color32(255, 255, 255, 255);
+                        break;
+                }
+                return color;
+            }
             private void DisplayOrderGraphics(List<GameAI.GameAIOrder> orders)
             {
                 var prefab = _orderLineDrawObjectPrefab;
@@ -142,14 +168,20 @@ namespace FlatSpace
                 
                 foreach (var order in orders)
                 {
+                    if(!OrderHasGraphic(order))
+                        continue;
                     var lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
 
                     if (lineDrawObject)
                     {
                         var point1 = _planetUIObjects.Find(x => x._planetName == order.Origin).transform.localPosition;
                         var point2 = _planetUIObjects.Find(x => x._planetName == order.Target).transform.localPosition;
-                        var linePoints = (new Vector3(point1.x + 10.0f, point1.y + 10.0f, 0.0f), new Vector3(point2.x + 10.0f, point2.y + 10.0f, 0.0f) );
+                        float offset = 10.0f;
+                        if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport)
+                            offset = -10.0f;
+                        var linePoints = (new Vector3(point1.x + offset, point1.y + offset, 0.0f), new Vector3(point2.x + offset, point2.y + offset, 0.0f) );
                         lineDrawObject.SetPoints(linePoints);
+                        lineDrawObject.SetColor(ColorForOrderType(order.Type));
                     }
                 }
             }

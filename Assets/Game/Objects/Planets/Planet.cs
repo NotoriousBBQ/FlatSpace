@@ -82,7 +82,7 @@ public class Planet : MonoBehaviour
     public float Morale { get; private set; }
     public int MaxPopulation => _resourceData._maxPopulation;
     
-    public float Food { get; private set; } = 0.0f;
+    public float Food { get; set; } = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
     public float Grotsits {get; private set;}

@@ -19,6 +19,15 @@ public class LineDrawObject : MonoBehaviour
             spriteRenderer.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
         }
     }
+
+    public virtual void SetColor(Color32 color)
+    {
+        lineRenderer.SetColors(color, color);
+        if (spriteRenderer)
+        {
+            spriteRenderer.color = color;
+        }
+    }
    
     private void Awake()
     {

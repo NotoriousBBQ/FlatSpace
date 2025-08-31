@@ -14,7 +14,9 @@ public class GameAI : MonoBehaviour
             OrderTypeNone,
             OrderTypePopulationTransport,
             OrderTypePopulationChange,
-            OrderTypeColonizationInProgress
+            OrderTypeColonizationInProgress,
+            OrderTypeFoodTransport,
+            OrderTypeFoodChange,
         }
         
         public enum OrderTimingType
@@ -88,13 +90,14 @@ public class GameAI : MonoBehaviour
             case GameAIOrder.OrderType.OrderTypeColonizationInProgress:
                 targetPlanet.ColonizationInProgress = true;
                 break;
+            case GameAIOrder.OrderType.OrderTypeFoodTransport:
+            case GameAIOrder.OrderType.OrderTypeFoodChange:
+                targetPlanet.Food += Convert.ToSingle(executableOrder.Data);
+                break;
             default:
                 break;
         }
-        
-        if (executableOrder.Type == GameAIOrder.OrderType.OrderTypePopulationTransport || executableOrder.Type == GameAIOrder.OrderType.OrderTypePopulationChange)
-        {
-        }
+
     }
     private void ProcessNewOrders(List<GameAIOrder> newOrders)
     {
@@ -131,33 +134,10 @@ public class GameAI : MonoBehaviour
 
     private void ProcessResultsStrategyExpand(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
     {
-        // find every gain pop result where the total pop is over the colonization trigger
-        var possibleColonizers = results.FindAll(x =>
-            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
-            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * _gameAIMap.GameAIConstants.ExpandPopultionTrigger);
-        if (possibleColonizers.Count > 0)
-        {
-            // find all planets with no population
-            var possibleColonizerTargets = _gameAIMap.PlanetList.FindAll(
-                x => x.Population == 0 && !x.ColonizationInProgress);
-            if (possibleColonizerTargets.Count > 0)
-            {
-                // create a score matrix for each potential colonizer's distance to each possible target
-                ScoreMatrix scoreMatrix = new ScoreMatrix();
-
-                foreach (var colonizer in possibleColonizers)
-                {
-                    scoreMatrix.Add(colonizer.Name, new List<(string, float)>());
-                    var colonizerPathMap = GetPlanet(colonizer.Name).DistanceMapToPathingList;
-                    foreach (var colonizerTarget in possibleColonizerTargets)
-                    {
-                        scoreMatrix[colonizer.Name].Add((colonizerTarget.PlanetName, colonizerPathMap[colonizerTarget.PlanetName].Cost));
-                    }
-                }
-                
-                SendColonizers(scoreMatrix, orders, possibleColonizers);
-            }
-        }
+        ProcessColonizers(results, orders);
+        ProcessFoodShortage(results, orders);
+        
+ 
     }
 
     private static int CompareScoreTuples((string, float) x, (string , float) y)
@@ -167,9 +147,10 @@ public class GameAI : MonoBehaviour
         return x.Item2.CompareTo(y.Item2);
     }
 
-    private void SendColonizers(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> possibleColonizers)
+    private static void GenerateActionList(ScoreMatrix scoreMatrix, out List<(string, string, float)> actionList)
     {
-        foreach (var tupleList in scoreMatrix.Values)
+        actionList = new List<(string, string, float)>();
+         foreach (var tupleList in scoreMatrix.Values)
         {
             tupleList.Sort(CompareScoreTuples);
         }
@@ -182,15 +163,119 @@ public class GameAI : MonoBehaviour
 
             minimumDistanceList.Sort(CompareScoreTuples);
             string closestTargetName =  scoreMatrix[minimumDistanceList[0].Item1][0].Item1;
+            actionList.Add(( minimumDistanceList[0].Item1, closestTargetName, minimumDistanceList[0].Item2));
+
+            scoreMatrix.Remove(minimumDistanceList[0].Item1);
+            foreach (var tupleList in scoreMatrix.Values)
+            {
+                tupleList.RemoveAll(x => x.Item1 == closestTargetName);
+            }
+            
+            minimumDistanceList.Clear();
+        }
+    }
+
+    private void ProcessFoodShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    {
+        var shortageResults = results.FindAll(x =>
+            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage);
+        if(shortageResults.Count <= 0)
+            return;
+
+        var surplusResults = results.FindAll(x =>
+            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus);
+        if (surplusResults.Count <= 0)
+            return;
+        
+        var scoreMatrix = new ScoreMatrix();
+        foreach (var surplusProducer in surplusResults)
+        {
+            scoreMatrix.Add(surplusProducer.Name, new List<(string, float)>());
+            var surplusPathMap = GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
+            foreach (var shortageResult in shortageResults)
+            {
+                scoreMatrix[surplusProducer.Name].Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost));
+            }
+        }
+        
+        ShipFood(scoreMatrix, orders, surplusResults);
+    }
+
+    private void ShipFood(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
+    {
+        List<(string, string, float)> actionList;
+        
+        GenerateActionList(scoreMatrix, out actionList);
+
+        foreach (var actionTuple in actionList)
+        {
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypeFoodTransport,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                TimingDelay = Convert.ToInt32(actionTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                Data = surplusResults.Find(x => x.Name == actionTuple.Item1).Data,
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item2,
+            });
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypeFoodChange,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                TimingDelay = 0,
+                Data = -1,
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item1
+
+            });
+
+        }
+    }
+
+    void ProcessColonizers(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    {
+        // find every gain pop result where the total pop is over the colonization trigger
+        var possibleColonizers = results.FindAll(x =>
+            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
+            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * _gameAIMap.GameAIConstants.ExpandPopultionTrigger);
+        if (possibleColonizers.Count <= 0)
+            return;
+        // find all planets with no population
+        var possibleColonizerTargets = _gameAIMap.PlanetList.FindAll(
+            x => x.Population == 0 && !x.ColonizationInProgress);
+        if (possibleColonizerTargets.Count > 0)
+        {
+            // create a score matrix for each potential colonizer's distance to each possible target
+            ScoreMatrix scoreMatrix = new ScoreMatrix();
+
+            foreach (var colonizer in possibleColonizers)
+            {
+                scoreMatrix.Add(colonizer.Name, new List<(string, float)>());
+                var colonizerPathMap = GetPlanet(colonizer.Name).DistanceMapToPathingList;
+                foreach (var colonizerTarget in possibleColonizerTargets)
+                {
+                    scoreMatrix[colonizer.Name].Add((colonizerTarget.PlanetName, colonizerPathMap[colonizerTarget.PlanetName].Cost));
+                }
+            }
+            SendColonizers(scoreMatrix, orders, possibleColonizers);
+        }
+    }
+
+    private void SendColonizers(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> possibleColonizers)
+    {
+        List<(string, string, float)> actionList;
+        
+        GenerateActionList(scoreMatrix, out actionList);
+        foreach (var actionTuple in actionList)
+        {
             orders.Add(new GameAIOrder
             {
                 Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay =
-                    Convert.ToInt32(minimumDistanceList[0].Item2 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-                Data = possibleColonizers.Find(x => x.Name == minimumDistanceList[0].Item1).Data,
-                Origin = minimumDistanceList[0].Item1,
-                Target = closestTargetName
+                TimingDelay = Convert.ToInt32(actionTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                Data = possibleColonizers.Find(x => x.Name == actionTuple.Item1).Data,
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item2,
             });
             orders.Add(new GameAIOrder
             {
@@ -198,8 +283,8 @@ public class GameAI : MonoBehaviour
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
                 Data = -1,
-                Origin = minimumDistanceList[0].Item1,
-                Target = minimumDistanceList[0].Item1
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item1
 
             });
 
@@ -209,18 +294,10 @@ public class GameAI : MonoBehaviour
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
                 Data = -1,
-                Origin = minimumDistanceList[0].Item1,
-                Target = closestTargetName
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item2
 
             });
-            scoreMatrix.Remove(minimumDistanceList[0].Item1);
-
-            foreach (var tupleList in scoreMatrix.Values)
-            {
-                tupleList.RemoveAll(x => x.Item1 == closestTargetName);
-            }
-            
-            minimumDistanceList.Clear();
         }
 
     }
