@@ -17,6 +17,8 @@ public class GameAI : MonoBehaviour
             OrderTypeColonizationInProgress,
             OrderTypeFoodTransport,
             OrderTypeFoodChange,
+            OrderTypeGrotsitsTransport,
+            OrderTypeGrotsitsChange,
         }
         
         public enum OrderTimingType
@@ -81,11 +83,11 @@ public class GameAI : MonoBehaviour
         switch (executableOrder.Type)
         {
             case GameAIOrder.OrderType.OrderTypePopulationTransport:
-                targetPlanet.Population += (int)executableOrder.Data;
+                targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
                 targetPlanet.ColonizationInProgress = false;
                 break;
             case GameAIOrder.OrderType.OrderTypePopulationChange:
-                targetPlanet.Population += (int)executableOrder.Data;
+                targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
                 break;
             case GameAIOrder.OrderType.OrderTypeColonizationInProgress:
                 targetPlanet.ColonizationInProgress = true;
@@ -93,6 +95,10 @@ public class GameAI : MonoBehaviour
             case GameAIOrder.OrderType.OrderTypeFoodTransport:
             case GameAIOrder.OrderType.OrderTypeFoodChange:
                 targetPlanet.Food += Convert.ToSingle(executableOrder.Data);
+                break;
+            case GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
+            case GameAIOrder.OrderType.OrderTypeGrotsitsChange:
+                targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
                 break;
             default:
                 break;
@@ -136,7 +142,7 @@ public class GameAI : MonoBehaviour
     {
         ProcessColonizers(results, orders);
         ProcessFoodShortage(results, orders);
-        
+        ProcessGrotsitsShortage(results, orders);
  
     }
 
@@ -174,6 +180,64 @@ public class GameAI : MonoBehaviour
             minimumDistanceList.Clear();
         }
     }
+    
+        private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    {
+        var shortageResults = results.FindAll(x =>
+            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage);
+        if(shortageResults.Count <= 0)
+            return;
+
+        var surplusResults = results.FindAll(x =>
+            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus);
+        if (surplusResults.Count <= 0)
+            return;
+        
+        var scoreMatrix = new ScoreMatrix();
+        foreach (var surplusProducer in surplusResults)
+        {
+            scoreMatrix.Add(surplusProducer.Name, new List<(string, float)>());
+            var surplusPathMap = GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
+            foreach (var shortageResult in shortageResults)
+            {
+                scoreMatrix[surplusProducer.Name].Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost));
+            }
+        }
+        
+        ShipGrotsits(scoreMatrix, orders, surplusResults);
+    }
+
+    private void ShipGrotsits(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
+    {
+        List<(string, string, float)> actionList;
+        
+        GenerateActionList(scoreMatrix, out actionList);
+
+        foreach (var actionTuple in actionList)
+        {
+            float changeAmount = Convert.ToSingle(surplusResults.Find(x => x.Name == actionTuple.Item1).Data);
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                TimingDelay = Convert.ToInt32(actionTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                Data = changeAmount,
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item2,
+            });
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypeGrotsitsChange,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                TimingDelay = 0,
+                Data =  changeAmount * -1.0f,
+                Origin = actionTuple.Item1,
+                Target = actionTuple.Item1
+
+            });
+
+        }
+    }
 
     private void ProcessFoodShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
     {
@@ -209,12 +273,13 @@ public class GameAI : MonoBehaviour
 
         foreach (var actionTuple in actionList)
         {
+            float changeAmount =Convert.ToSingle(surplusResults.Find(x => x.Name == actionTuple.Item1).Data);
             orders.Add(new GameAIOrder
             {
                 Type = GameAIOrder.OrderType.OrderTypeFoodTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
                 TimingDelay = Convert.ToInt32(actionTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-                Data = surplusResults.Find(x => x.Name == actionTuple.Item1).Data,
+                Data = changeAmount,
                 Origin = actionTuple.Item1,
                 Target = actionTuple.Item2,
             });
@@ -223,7 +288,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeFoodChange,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
-                Data = -1,
+                Data = changeAmount * -1.0f,
                 Origin = actionTuple.Item1,
                 Target = actionTuple.Item1
 
@@ -268,12 +333,13 @@ public class GameAI : MonoBehaviour
         GenerateActionList(scoreMatrix, out actionList);
         foreach (var actionTuple in actionList)
         {
+            Int32 changeAmount = Convert.ToInt32(possibleColonizers.Find(x => x.Name == actionTuple.Item1).Data);
             orders.Add(new GameAIOrder
             {
                 Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
                 TimingDelay = Convert.ToInt32(actionTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-                Data = possibleColonizers.Find(x => x.Name == actionTuple.Item1).Data,
+                Data = changeAmount,
                 Origin = actionTuple.Item1,
                 Target = actionTuple.Item2,
             });
@@ -282,7 +348,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypePopulationChange,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
-                Data = -1,
+                Data = changeAmount * -1.0f,
                 Origin = actionTuple.Item1,
                 Target = actionTuple.Item1
 
@@ -293,7 +359,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeColonizationInProgress,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
-                Data = -1,
+                Data = changeAmount,
                 Origin = actionTuple.Item1,
                 Target = actionTuple.Item2
 

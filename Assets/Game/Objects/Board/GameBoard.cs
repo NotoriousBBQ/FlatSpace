@@ -126,8 +126,12 @@ namespace FlatSpace
 
             private static bool OrderHasGraphic(GameAI.GameAIOrder order)
             {
-                var hasGraphicList = new GameAI.GameAIOrder.OrderType[2] 
-                    {GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport};
+                var hasGraphicList = new GameAI.GameAIOrder.OrderType[3]
+                {
+                    GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 
+                    GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
+                    GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
+                };
                 
                 return Array.Exists(hasGraphicList, t => t == order.Type);
 
@@ -143,6 +147,9 @@ namespace FlatSpace
                         break;
                     case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
                         color = new Color32(0, 255, 255, 255);
+                        break;
+                    case GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
+                        color = new Color32(210, 105, 30, 255);
                         break;
                     default:
                         color = new Color32(255, 255, 255, 255);
@@ -179,6 +186,8 @@ namespace FlatSpace
                         float offset = 10.0f;
                         if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport)
                             offset = -10.0f;
+                        else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport)
+                            offset = 20.0f;
                         var linePoints = (new Vector3(point1.x + offset, point1.y + offset, 0.0f), new Vector3(point2.x + offset, point2.y + offset, 0.0f) );
                         lineDrawObject.SetPoints(linePoints);
                         lineDrawObject.SetColor(ColorForOrderType(order.Type));

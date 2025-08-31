@@ -22,7 +22,7 @@ public class LineDrawObject : MonoBehaviour
 
     public virtual void SetColor(Color32 color)
     {
-        lineRenderer.SetColors(color, color);
+        lineRenderer.startColor = lineRenderer.endColor = color;
         if (spriteRenderer)
         {
             spriteRenderer.color = color;

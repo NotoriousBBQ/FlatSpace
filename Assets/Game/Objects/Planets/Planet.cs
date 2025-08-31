@@ -85,7 +85,7 @@ public class Planet : MonoBehaviour
     public float Food { get; set; } = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
-    public float Grotsits {get; private set;}
+    public float Grotsits {get; set;}
     
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
