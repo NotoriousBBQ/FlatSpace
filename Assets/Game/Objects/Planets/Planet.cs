@@ -51,7 +51,7 @@ public class Planet : MonoBehaviour
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationGain:
                 case ResultType.PlanetUpdateResultTypeFoodSurplus:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityLow;
+                    Priority = ResultPriority.PlanetUpdateResultPriorityMedium;
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationLoss:
                     Priority = ResultPriority.PlanetUpdateResultPriorityUrgent;

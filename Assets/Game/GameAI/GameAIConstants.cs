@@ -6,4 +6,5 @@ public class GameAIConstants : ScriptableObject
     public float MoraleStep;
     public float DefaultTravelSpeed;
     public int MaxPathNodesToSearch;
+    public float ExpandPopultionTrigger;
 }
