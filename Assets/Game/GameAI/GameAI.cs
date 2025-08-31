@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.VisualScripting;
 using UnityEngine;
 using ScoreMatrix = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<(string, float)>>;
@@ -172,44 +173,56 @@ public class GameAI : MonoBehaviour
         {
             tupleList.Sort(CompareScoreTuples);
         }
-        
         var minimumDistanceList = new List<(string, float)>();
-        foreach(var key in scoreMatrix.Keys)
-            minimumDistanceList.Add((key, scoreMatrix[key][0].Item2));
-        
-        minimumDistanceList.Sort(CompareScoreTuples);
-        orders.Add(new GameAIOrder
+        while (scoreMatrix.Count > 0 && scoreMatrix.Values.First().Count > 0)
         {
-            Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
-            TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-            TimingDelay = Convert.ToInt32(minimumDistanceList[0].Item2 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-            Data = possibleColonizers.Find(x => x.Name == minimumDistanceList[0].Item1).Data,
-            Origin = minimumDistanceList[0].Item1,
-            Target = scoreMatrix[minimumDistanceList[0].Item1][0].Item1
-        });
-        orders.Add(new GameAIOrder
-        {
-            Type = GameAIOrder.OrderType.OrderTypePopulationChange,
-            TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
-            TimingDelay = 0,
-            Data = -1,
-            Origin = minimumDistanceList[0].Item1,
-            Target = minimumDistanceList[0].Item1
-            
-        });
 
-        orders.Add(new GameAIOrder
-        {
-            Type = GameAIOrder.OrderType.OrderTypeColonizationInProgress,
-            TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
-            TimingDelay = 0,
-            Data = -1,
-            Origin = minimumDistanceList[0].Item1,
-            Target = scoreMatrix[minimumDistanceList[0].Item1][0].Item1
+            foreach (var key in scoreMatrix.Keys)
+                minimumDistanceList.Add((key, scoreMatrix[key][0].Item2));
+
+            minimumDistanceList.Sort(CompareScoreTuples);
+            string closestTargetName =  scoreMatrix[minimumDistanceList[0].Item1][0].Item1;
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                TimingDelay =
+                    Convert.ToInt32(minimumDistanceList[0].Item2 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                Data = possibleColonizers.Find(x => x.Name == minimumDistanceList[0].Item1).Data,
+                Origin = minimumDistanceList[0].Item1,
+                Target = closestTargetName
+            });
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypePopulationChange,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                TimingDelay = 0,
+                Data = -1,
+                Origin = minimumDistanceList[0].Item1,
+                Target = minimumDistanceList[0].Item1
+
+            });
+
+            orders.Add(new GameAIOrder
+            {
+                Type = GameAIOrder.OrderType.OrderTypeColonizationInProgress,
+                TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                TimingDelay = 0,
+                Data = -1,
+                Origin = minimumDistanceList[0].Item1,
+                Target = closestTargetName
+
+            });
+            scoreMatrix.Remove(minimumDistanceList[0].Item1);
+
+            foreach (var tupleList in scoreMatrix.Values)
+            {
+                tupleList.RemoveAll(x => x.Item1 == closestTargetName);
+            }
             
-        });
-        
-        
+            minimumDistanceList.Clear();
+        }
+
     }
     private void ProcessPopulationSurplus(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
     {
