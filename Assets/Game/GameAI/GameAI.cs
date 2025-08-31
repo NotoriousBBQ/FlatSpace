@@ -13,6 +13,7 @@ public class GameAI : MonoBehaviour
             OrderTypeNone,
             OrderTypePopulationTransport,
             OrderTypePopulationChange,
+            OrderTypeColonizationInProgress
         }
         
         public enum OrderTimingType
@@ -73,12 +74,25 @@ public class GameAI : MonoBehaviour
 
     private void ExecuteOrder(GameAIOrder executableOrder)
     {
-        // onmly population surplus currently active
+        var targetPlanet = _gameAIMap.GetPlanet(executableOrder.Target);
+        switch (executableOrder.Type)
+        {
+            case GameAIOrder.OrderType.OrderTypePopulationTransport:
+                targetPlanet.Population += (int)executableOrder.Data;
+                targetPlanet.ColonizationInProgress = false;
+                break;
+            case GameAIOrder.OrderType.OrderTypePopulationChange:
+                targetPlanet.Population += (int)executableOrder.Data;
+                break;
+            case GameAIOrder.OrderType.OrderTypeColonizationInProgress:
+                targetPlanet.ColonizationInProgress = true;
+                break;
+            default:
+                break;
+        }
+        
         if (executableOrder.Type == GameAIOrder.OrderType.OrderTypePopulationTransport || executableOrder.Type == GameAIOrder.OrderType.OrderTypePopulationChange)
         {
-            var targetPlanet = _gameAIMap.GetPlanet(executableOrder.Target);
-            var numChange = (int)executableOrder.Data;
-            targetPlanet.Population += numChange;
         }
     }
     private void ProcessNewOrders(List<GameAIOrder> newOrders)
@@ -123,7 +137,8 @@ public class GameAI : MonoBehaviour
         if (possibleColonizers.Count > 0)
         {
             // find all planets with no population
-            var possibleColonizerTargets = _gameAIMap.PlanetList.FindAll(x => x.Population == 0);
+            var possibleColonizerTargets = _gameAIMap.PlanetList.FindAll(
+                x => x.Population == 0 && !x.ColonizationInProgress);
             if (possibleColonizerTargets.Count > 0)
             {
                 // create a score matrix for each potential colonizer's distance to each possible target
@@ -180,6 +195,17 @@ public class GameAI : MonoBehaviour
             Data = -1,
             Origin = minimumDistanceList[0].Item1,
             Target = minimumDistanceList[0].Item1
+            
+        });
+
+        orders.Add(new GameAIOrder
+        {
+            Type = GameAIOrder.OrderType.OrderTypeColonizationInProgress,
+            TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+            TimingDelay = 0,
+            Data = -1,
+            Origin = minimumDistanceList[0].Item1,
+            Target = scoreMatrix[minimumDistanceList[0].Item1][0].Item1
             
         });
         

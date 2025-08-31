@@ -89,6 +89,7 @@ public class Planet : MonoBehaviour
     
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
+    public bool ColonizationInProgress {get; set;}
     
     private PlanetUIObject _planetUIObject;
 
