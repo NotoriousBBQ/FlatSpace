@@ -104,7 +104,7 @@ public class GameAIMap : MonoBehaviour
         {
             planet.PlanetProductionUpdate(resultList);
         }
-        DEBUG_LogResults(resultList);
+    //    DEBUG_LogResults(resultList);
     }
     public Planet GetPlanet(string planetName)
     {

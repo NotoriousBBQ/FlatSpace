@@ -24,6 +24,7 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeFoodShortage,
             PlanetUpdateResultTypeFoodSurplus,
             PlanetUpdateResultTypeGrotsitsShortage,
+            PlanetUpdateResultTypeGrotsitsProjectedShortage,
             PlanetUpdateResultTypeGrotsitsSurplus,
         }
 
@@ -59,7 +60,11 @@ public class Planet : MonoBehaviour
                 case ResultType.PlanetUpdateResultTypePopulationMaxReached:
                 case ResultType.PlanetUpdateResultTypePopulationSurplus:
                 case ResultType.PlanetUpdateResultTypeFoodShortage:
+                case ResultType.PlanetUpdateResultTypeGrotsitsShortage:
                     Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
+                    break;
+                case ResultType.PlanetUpdateResultTypeGrotsitsProjectedShortage:
+                    Priority = ResultPriority.PlanetUpdateResultPriorityMedium;
                     break;
                 default:
                     Priority = ResultPriority.PlanetUpdateResultPriorityNone;
@@ -86,13 +91,12 @@ public class Planet : MonoBehaviour
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
     public float Grotsits {get; set;}
+    public float ProjectedGrotsits {get; set;}
     
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
     public bool ColonizationInProgress {get; set;}
     
-    private PlanetUIObject _planetUIObject;
-
     private PlanetResourceData _resourceData = null;
     public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
     public enum PlanetType
@@ -126,7 +130,7 @@ public class Planet : MonoBehaviour
         PlanetName = spawnData._planetName;
         Population = _resourceData._initialPopulation;
         Food = _resourceData._initialFood;
-        Grotsits = _resourceData._initialGrotsits;
+        Grotsits = ProjectedGrotsits = _resourceData._initialGrotsits;
         Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
         _planetType = spawnData._planetType;
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
@@ -142,9 +146,11 @@ public class Planet : MonoBehaviour
         {
             case PlanetStrategy.PlanetStrategyBalanced:
                 // first, make sure the basics are covered
-                FoodWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._foodProduction);
-                GrotsitsWorkers = Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction);
-                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
+                // always err on the side of more food
+                double foodWorkersFloat = Math.Ceiling((Convert.ToDouble(Population) / _resourceData._foodProduction));
+                FoodWorkers = Math.Clamp(Convert.ToInt32(foodWorkersFloat), 0, Population);
+                // fopr grotsits, use the existing first
+                GrotsitsWorkers = Math.Clamp(Convert.ToInt32((Convert.ToSingle(Population)) / _resourceData._grotsitProduction), 0, Population - FoodWorkers);
                 // the even out the rest
                 remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
@@ -270,7 +276,7 @@ public class Planet : MonoBehaviour
     {
         if (Population <= 0)
             return;
-        if (Grotsits < Population) 
+        if ((Grotsits * 0.9f) < Population) 
         { 
             // Can't give everyone goods
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage, Grotsits - Population));
@@ -281,18 +287,25 @@ public class Planet : MonoBehaviour
         }
         else
         {
-            // feed everybody
+            // Grotsits for everyone
             Grotsits -= Population;
             // enough to grow?
-            if (Grotsits > Population)
+            ProjectedGrotsits = Grotsits - Population + (GrotsitsWorkers *_resourceData._grotsitProduction);
+            if ((ProjectedGrotsits * 1.1f) >= Population)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Grotsits - Population));
+                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus, Math.Clamp(ProjectedGrotsits - Population, 0, Grotsits)));
                 Morale = Math.Clamp(Morale + _gameAIConstants.MoraleStep, 0.0f, 200.0f);                
             }
             else
             {
-                Morale = 100.0f;
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeGrotsitsProjectedShortage, ProjectedGrotsits - Population));
+                
+                if(Morale < 100.0f)
+                    Morale += _gameAIConstants.MoraleStep;
+                else 
+                    Morale -= _gameAIConstants.MoraleStep;
             }
         }     
         

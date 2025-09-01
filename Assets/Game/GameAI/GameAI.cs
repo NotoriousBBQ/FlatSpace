@@ -184,7 +184,8 @@ public class GameAI : MonoBehaviour
         private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
     {
         var shortageResults = results.FindAll(x =>
-            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage);
+            x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage
+            or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsProjectedShortage);
         if(shortageResults.Count <= 0)
             return;
 
