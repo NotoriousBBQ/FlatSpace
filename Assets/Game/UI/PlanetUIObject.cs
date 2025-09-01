@@ -18,10 +18,10 @@ public class PlanetUIObject : MonoBehaviour
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
     {
         { Planet.PlanetType.PlanetTypeDesolate,  new Color32(196, 65,19, 255 )},
-        { Planet.PlanetType.PlanetTypeFarm,  new Color32(143, 255,143, 255 )},
+        { Planet.PlanetType.PlanetTypeFarm,  new Color32(91, 188,93, 255 )},
         { Planet.PlanetType.PlanetTypeIndustrial , new Color32(205, 133,65, 255 )},
         { Planet.PlanetType.PlanetTypeNormal , new Color32(135, 206,250, 255 )},
-        { Planet.PlanetType.PlanetTypePrime , new Color32(255,255,255, 255 )},
+        { Planet.PlanetType.PlanetTypePrime , new Color32(173,173,22, 255 )},
         { Planet.PlanetType.PlanetTypeVerdant , new Color32(0,206,0, 255 )}
     };
     

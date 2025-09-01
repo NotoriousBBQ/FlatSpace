@@ -302,7 +302,8 @@ public class GameAI : MonoBehaviour
     {
         // find every gain pop result where the total pop is over the colonization trigger
         var possibleColonizers = results.FindAll(x =>
-            x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
+            (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
+                or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMaxReached) 
             && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * _gameAIMap.GameAIConstants.ExpandPopultionTrigger);
         if (possibleColonizers.Count <= 0)
             return;

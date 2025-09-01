@@ -22,6 +22,7 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypePopulationMaxReached,
             PlanetUpdateResultTypePopulationSurplus,
             PlanetUpdateResultTypeFoodShortage,
+            PlanetUpdateResultTypeFoodProjectedShortage,
             PlanetUpdateResultTypeFoodSurplus,
             PlanetUpdateResultTypeGrotsitsShortage,
             PlanetUpdateResultTypeGrotsitsProjectedShortage,
@@ -63,6 +64,7 @@ public class Planet : MonoBehaviour
                 case ResultType.PlanetUpdateResultTypeGrotsitsShortage:
                     Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
                     break;
+                case ResultType.PlanetUpdateResultTypeFoodProjectedShortage:
                 case ResultType.PlanetUpdateResultTypeGrotsitsProjectedShortage:
                     Priority = ResultPriority.PlanetUpdateResultPriorityMedium;
                     break;
@@ -88,6 +90,7 @@ public class Planet : MonoBehaviour
     public int MaxPopulation => _resourceData._maxPopulation;
     
     public float Food { get; set; } = 0.0f;
+    public float ProjectedFood { get; set; } = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
 
     public float Grotsits {get; set;}
@@ -129,7 +132,7 @@ public class Planet : MonoBehaviour
         _resourceData = spawnData._resourceData;
         PlanetName = spawnData._planetName;
         Population = _resourceData._initialPopulation;
-        Food = _resourceData._initialFood;
+        Food = ProjectedFood = _resourceData._initialFood;
         Grotsits = ProjectedGrotsits = _resourceData._initialGrotsits;
         Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
         _planetType = spawnData._planetType;
@@ -243,31 +246,39 @@ public class Planet : MonoBehaviour
             // feed everybody
             Food -= Population;
             // enough to grow?
-            if (Food >= _foodNeededForNewPop)
+            int previousPopulation = Population;
+            if (Food >= _foodNeededForNewPop && Population < MaxPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
                 Food -= _foodNeededForNewPop;
                 Population++;
-                if (Population <= _resourceData._maxPopulation)
-                {
 
-                    if (Population == _resourceData._maxPopulation)
-                        resultList.Add(new PlanetUpdateResult(PlanetName,
-                            ResultType.PlanetUpdateResultTypePopulationMaxReached, null));
-                }
-                else
-                {
-                    resultList.Add(new PlanetUpdateResult(PlanetName,
-                        ResultType.PlanetUpdateResultTypePopulationSurplus, Population - _resourceData._maxPopulation));
-                    Population =  _resourceData._maxPopulation;
-                }
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypePopulationSurplus, Population - _resourceData._maxPopulation));
+                Population =  _resourceData._maxPopulation;
             }
-
-            if (Food > Population)
+            
+            if (Population >= MaxPopulation && previousPopulation == Population)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypeFoodSurplus, Food - Population));
+                    ResultType.PlanetUpdateResultTypePopulationMaxReached, 1));                    
+            }
+            
+            // add 1 to population here to allow for growth if possible
+            int growthProjectedPopulation = Population + (Population < MaxPopulation ? 1 : 0);
+            ProjectedFood = Food - growthProjectedPopulation + (FoodWorkers *_resourceData._foodProduction);
+
+            if (ProjectedFood > growthProjectedPopulation)
+            {
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeFoodSurplus, Math.Clamp(ProjectedFood - growthProjectedPopulation, 0, Food)));
                 
+            }
+            else
+            {
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeFoodProjectedShortage, ProjectedFood - growthProjectedPopulation));
+
             }
         }     
     }

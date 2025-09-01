@@ -13,5 +13,6 @@ MonoBehaviour:
   m_Name: GameAIConstantsDefault
   m_EditorClassIdentifier: Assembly-CSharp::GameAIConstants
   MoraleStep: 4
-  DefaultTravelSpeed: 100
+  DefaultTravelSpeed: 150
   MaxPathNodesToSearch: 2
+  ExpandPopultionTrigger: 0.75
