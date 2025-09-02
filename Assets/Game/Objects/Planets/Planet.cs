@@ -146,7 +146,7 @@ public class Planet : MonoBehaviour
             case PlanetStrategy.PlanetStrategyBalanced:
                 // first, make sure the basics are covered
                 // always err on the side of more food
-                double foodWorkersFloat = Math.Ceiling((Convert.ToDouble(Population) / _resourceData._foodProduction));
+                var foodWorkersFloat = Math.Ceiling((Convert.ToSingle(Population + 1) / _resourceData._foodProduction));
                 FoodWorkers = Math.Clamp(Convert.ToInt32(foodWorkersFloat), 0, Population);
                 // fopr grotsits, use the existing first
                 GrotsitsWorkers = Math.Clamp(Convert.ToInt32((Convert.ToSingle(Population)) / _resourceData._grotsitProduction), 0, Population - FoodWorkers);
@@ -256,13 +256,16 @@ public class Planet : MonoBehaviour
         // add 1 to population here to allow for growth if possible
         var projectedPopulation = Population + (Population < MaxPopulation ? 1 : 0);
         SetProjectedWorkers(projectedPopulation);
-        ProjectedFood = Food  + (ProjectedFoodWorkers *_resourceData._foodProduction);
+        ProjectedFood = ProjectedFoodWorkers *_resourceData._foodProduction;
 
-        if (ProjectedFood > projectedPopulation && foodShortage >= 0.0f)
+        if (ProjectedFood + Food > projectedPopulation && foodShortage >= 0.0f)
         {
-            resultList.Add(new PlanetUpdateResult(PlanetName,
-                ResultType.PlanetUpdateResultTypeFoodSurplus, Math.Clamp(ProjectedFood - projectedPopulation, 0, Food)));
-            DEBUG_HAD_SURPLUS = true;
+            if (Food > projectedPopulation)
+            {
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeFoodSurplus, Food - projectedPopulation));
+                DEBUG_HAD_SURPLUS = true;
+            }
         }
         else if (ProjectedFood < projectedPopulation)
         {
