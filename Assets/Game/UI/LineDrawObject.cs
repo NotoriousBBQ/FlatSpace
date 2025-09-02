@@ -8,13 +8,13 @@ public class LineDrawObject : MonoBehaviour
     public LineRenderer lineRenderer;
     public SpriteRenderer spriteRenderer;
 
-    public virtual void SetPoints((Vector3, Vector3) points)
+    public virtual void SetPoints((Vector3, Vector3) points, float progressAmount = 0.0f)
     {
         lineRenderer.SetPosition(0, points.Item1);
         lineRenderer.SetPosition(1, points.Item2);
         if (spriteRenderer)
         {
-            spriteRenderer.transform.localPosition = (points.Item1 + points.Item2) / 2.0f;
+            spriteRenderer.transform.localPosition = points.Item1 + ((points.Item2 - points.Item1) * progressAmount);
             float angle = Vector2.SignedAngle(Vector2.up, points.Item2 - points.Item1);
             spriteRenderer.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
         }

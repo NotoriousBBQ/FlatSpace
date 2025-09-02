@@ -31,6 +31,7 @@ public class GameAI : MonoBehaviour
         public OrderType Type;
         public OrderTimingType TimingType;
         public int TimingDelay;
+        public int TotalDelay;
         public object Data;
         public string Target;
         public string Origin;
@@ -218,6 +219,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
                 TimingDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -227,6 +229,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeGrotsitsChange,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
+                TotalDelay = 0,
                 Data =  changeAmount * -1.0f,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item1
@@ -276,6 +279,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeFoodTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
                 TimingDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -285,6 +289,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeFoodChange,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
+                TotalDelay = 0,
                 Data = changeAmount * -1.0f,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item1
@@ -338,6 +343,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
                 TimingDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -347,6 +353,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypePopulationChange,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
+                TotalDelay = 0,
                 Data = changeAmount * -1.0f,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item1
@@ -358,6 +365,7 @@ public class GameAI : MonoBehaviour
                 Type = GameAIOrder.OrderType.OrderTypeColonizationInProgress,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
+                TotalDelay = 0,
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2

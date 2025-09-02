@@ -306,10 +306,10 @@ public class Planet : MonoBehaviour
 
         bool DEBUG_HAD_SURPLUS = false;
         var grotsitsShort = 0.0f;
-        if ((Grotsits) < Population) 
+        if (Grotsits < Population) 
         { 
             // Can't give everyone goods
-            grotsitsShort += Population - Grotsits;
+            grotsitsShort += Grotsits - Population;
             Grotsits = 0.0f;
             Morale = Math.Clamp(Morale - _gameAIConstants.MoraleStep, 0.0f, 200.0f);
         }
@@ -324,17 +324,19 @@ public class Planet : MonoBehaviour
         var projectedPopulation = Population + (Population < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
         ProjectedGrotsits = Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction);
-        if ((ProjectedGrotsits) >= projectedPopulation)
+        if (ProjectedGrotsits >= projectedPopulation)
         {
-
-            resultList.Add(new PlanetUpdateResult(PlanetName,
-                ResultType.PlanetUpdateResultTypeGrotsitsSurplus,
-                Math.Clamp(ProjectedGrotsits - Population, 0, Grotsits)));
+            if (Grotsits > projectedPopulation)
+            {
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus,
+                    Math.Clamp(Grotsits - projectedPopulation, 0, Grotsits)));
+            }
             DEBUG_HAD_SURPLUS = true;
         }
         else
         {
-            grotsitsShort += ProjectedGrotsits-Population;
+            grotsitsShort += ProjectedGrotsits - projectedPopulation;
         }
 
         if (grotsitsShort < 0.0f)

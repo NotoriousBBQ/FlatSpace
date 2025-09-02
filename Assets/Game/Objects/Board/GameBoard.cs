@@ -189,7 +189,11 @@ namespace FlatSpace
                         else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport)
                             offset = 20.0f;
                         var linePoints = (new Vector3(point1.x + offset, point1.y + offset, 0.0f), new Vector3(point2.x + offset, point2.y + offset, 0.0f) );
-                        lineDrawObject.SetPoints(linePoints);
+                        var progressAmount =
+                            Math.Clamp(
+                                Convert.ToSingle(order.TotalDelay - (order.TimingDelay)) /
+                                Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
+                        lineDrawObject.SetPoints(linePoints,progressAmount );
                         lineDrawObject.SetColor(ColorForOrderType(order.Type));
                     }
                 }
