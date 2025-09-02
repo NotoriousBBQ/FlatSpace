@@ -184,8 +184,7 @@ public class GameAI : MonoBehaviour
         private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
     {
         var shortageResults = results.FindAll(x =>
-            x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage
-            or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsProjectedShortage);
+            x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage);
         if(shortageResults.Count <= 0)
             return;
 
@@ -303,7 +302,7 @@ public class GameAI : MonoBehaviour
         // find every gain pop result where the total pop is over the colonization trigger
         var possibleColonizers = results.FindAll(x =>
             (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
-                or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMaxReached) 
+                or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax) 
             && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * _gameAIMap.GameAIConstants.ExpandPopultionTrigger);
         if (possibleColonizers.Count <= 0)
             return;
@@ -317,7 +316,8 @@ public class GameAI : MonoBehaviour
 
             foreach (var colonizer in possibleColonizers)
             {
-                scoreMatrix.Add(colonizer.Name, new List<(string, float)>());
+                if(!scoreMatrix.ContainsKey(colonizer.Name))
+                    scoreMatrix.Add(colonizer.Name, new List<(string, float)>());
                 var colonizerPathMap = GetPlanet(colonizer.Name).DistanceMapToPathingList;
                 foreach (var colonizerTarget in possibleColonizerTargets)
                 {
