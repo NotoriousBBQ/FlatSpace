@@ -9,6 +9,8 @@ public class GameButtonHandler : MonoBehaviour
     private Button _nextTurnButton;
     private Button _startRunButton;
     private Button _stopRunButton;
+    private Button _testSaveButton;
+    private Button _testLoadButton;
    
     void OnEnable()
     {
@@ -32,6 +34,18 @@ public class GameButtonHandler : MonoBehaviour
             _stopRunButton.clicked += OnStopRunButtonClicked;
             _stopRunButton.SetEnabled(false);
         }
+        
+        _testSaveButton = root.Q<Button>("TestSaveButton"); 
+        if (_testSaveButton != null)
+        {
+            _testSaveButton.clicked += OnTestSaveButtonClicked;
+        }
+        
+        _testLoadButton = root.Q<Button>("TestLoadButton"); 
+        if (_testLoadButton != null)
+        {
+            _testLoadButton.clicked += OnTestLoadButtonClicked;
+        }
 
     }
 
@@ -50,6 +64,16 @@ public class GameButtonHandler : MonoBehaviour
         if (_stopRunButton != null)
         {
             _stopRunButton.clicked -= OnStopRunButtonClicked;
+        }
+        
+        if (_testSaveButton != null)
+        {
+            _testSaveButton.clicked -= OnTestSaveButtonClicked;
+        }
+        
+        if (_testLoadButton != null)
+        {
+            _testLoadButton.clicked -= OnTestLoadButtonClicked;
         }
     }
 
@@ -72,5 +96,15 @@ public class GameButtonHandler : MonoBehaviour
         _startRunButton.SetEnabled(true);
         _stopRunButton.SetEnabled(false);
         Gameboard.Instance.StopTimedUpdate();
+    }
+
+    private static void OnTestSaveButtonClicked()
+    {
+        SaveLoadSystem.Instance.SaveGame(Gameboard.Instance.GameAI, @"C:\Temp\TestSave.json");
+    }
+
+    private static  void OnTestLoadButtonClicked()
+    {
+        SaveLoadSystem.Instance.LoadGame(Gameboard.Instance.GameAI, @"C:\Temp\TestSave.json");
     }
 }

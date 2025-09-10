@@ -7,6 +7,7 @@ using ScoreMatrix = System.Collections.Generic.Dictionary<string, System.Collect
 
 public class GameAI : MonoBehaviour
 {
+    [Serializable]
     public class GameAIOrder
     {
         public enum OrderType
@@ -43,14 +44,14 @@ public class GameAI : MonoBehaviour
         AIStrategyConsolidate,
         AIStrategyAmass
     }
-    private GameAIMap _gameAIMap;
+    public GameAIMap GameAIMap {get; private set;}
     public List<GameAIOrder> CurrentAIOrders { get; private set; }= new List<GameAIOrder>();
     
-    private AIStrategy _aiStrategy = AIStrategy.AIStrategyExpand;
+    public AIStrategy Strategy { get; set; } = AIStrategy.AIStrategyExpand;
     public void InitGameAI(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
     {
-        _gameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
-        _gameAIMap.GameAIMapInit(spawnDataList, gameAIConstants);
+        GameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
+        GameAIMap.GameAIMapInit(spawnDataList, gameAIConstants);
    }
 
     public void GameAIUpdate()
@@ -80,7 +81,7 @@ public class GameAI : MonoBehaviour
 
     private void ExecuteOrder(GameAIOrder executableOrder)
     {
-        var targetPlanet = _gameAIMap.GetPlanet(executableOrder.Target);
+        var targetPlanet = GameAIMap.GetPlanet(executableOrder.Target);
         switch (executableOrder.Type)
         {
             case GameAIOrder.OrderType.OrderTypePopulationTransport:
@@ -116,7 +117,7 @@ public class GameAI : MonoBehaviour
     private void PlanetaryProductionUpdate(out List<Planet.PlanetUpdateResult> planetUpdateResults)
     {
         planetUpdateResults = new List<Planet.PlanetUpdateResult>();
-        _gameAIMap.PlanetaryProductionUpdate(out planetUpdateResults);
+        GameAIMap.PlanetaryProductionUpdate(out planetUpdateResults);
     }
 
 
@@ -124,7 +125,7 @@ public class GameAI : MonoBehaviour
     {
         orders = new List<GameAIOrder>();
 
-        switch (_aiStrategy)
+        switch (Strategy)
         {
             case AIStrategy.AIStrategyExpand:
                 ProcessResultsStrategyExpand(results, orders);
@@ -218,8 +219,8 @@ public class GameAI : MonoBehaviour
             {
                 Type = GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -278,8 +279,8 @@ public class GameAI : MonoBehaviour
             {
                 Type = GameAIOrder.OrderType.OrderTypeFoodTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -305,11 +306,11 @@ public class GameAI : MonoBehaviour
         var possibleColonizers = results.FindAll(x =>
             (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
                 or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax) 
-            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * _gameAIMap.GameAIConstants.ExpandPopultionTrigger);
+            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.ExpandPopultionTrigger);
         if (possibleColonizers.Count <= 0)
             return;
         // find all planets with no population
-        var possibleColonizerTargets = _gameAIMap.PlanetList.FindAll(
+        var possibleColonizerTargets = GameAIMap.PlanetList.FindAll(
             x => x.Population == 0 && !x.ColonizationInProgress);
         if (possibleColonizerTargets.Count > 0)
         {
@@ -342,8 +343,8 @@ public class GameAI : MonoBehaviour
             {
                 Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / _gameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -379,10 +380,10 @@ public class GameAI : MonoBehaviour
 
         foreach (var result in results)
         {
-            var planet = _gameAIMap.GetPlanet(result.Name);
+            var planet = GameAIMap.GetPlanet(result.Name);
             
             List<(string Name, float Score)> scoreMatrix = new List<(string, float)>();
-            int maxNodes = _gameAIMap.GameAIConstants.MaxPathNodesToSearch;
+            int maxNodes = GameAIMap.GameAIConstants.MaxPathNodesToSearch;
             
             foreach (var pathMap in planet.DistanceMapToPathingList)
             {
@@ -414,7 +415,7 @@ public class GameAI : MonoBehaviour
 
     public Planet GetPlanet(string planetName)
     {
-        return _gameAIMap.GetPlanet(planetName);
+        return GameAIMap.GetPlanet(planetName);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

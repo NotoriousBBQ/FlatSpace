@@ -355,11 +355,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b28127cb41309b4c8560adb5fa718ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gameboard
-  _intialBoardState: {fileID: 11400000, guid: 427d82123c1bf9f4c9277a9675a52def, type: 2}
+  IntialBoardState: {fileID: 11400000, guid: 427d82123c1bf9f4c9277a9675a52def, type: 2}
   _minCameraOrtho: 1
   _maxCameraOrtho: 15
   _cameraOrthoStep: 0.5
-  _gameAI: {fileID: 0}
   _lineDrawObjectPrefab: {fileID: 5226953852233311075, guid: 0e55f099c06447b41b421337a3648791, type: 3}
   _orderLineDrawObjectPrefab: {fileID: 4779870425705875092, guid: 387624431a5c15e428e7d465ff2d0775, type: 3}
   _PlanetUIPrefab: {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
@@ -584,6 +583,50 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &645020731
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 645020733}
+  - component: {fileID: 645020732}
+  m_Layer: 0
+  m_Name: SaveLoadSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &645020732
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 645020731}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b36d2917faf240a48b4a9a16a4eeb124, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SaveLoadSystem
+--- !u!4 &645020733
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 645020731}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 4.37638, y: -0.73201, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &667686343
 GameObject:
   m_ObjectHideFlags: 0
@@ -726,3 +769,4 @@ SceneRoots:
   - {fileID: 619394802}
   - {fileID: 16667292}
   - {fileID: 667686348}
+  - {fileID: 645020733}

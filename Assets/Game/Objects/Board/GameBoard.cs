@@ -18,12 +18,12 @@ namespace FlatSpace
         {
             private static Gameboard _instance;
             public static Gameboard Instance => _instance;
-            [SerializeField] private BoardConfiguration _intialBoardState;
+            [SerializeField] public BoardConfiguration IntialBoardState;
 
             [SerializeField] private float _minCameraOrtho = 1;
             [SerializeField] private float _maxCameraOrtho = 15;
             [SerializeField] private float _cameraOrthoStep = 0.1f;
-            [SerializeField] private GameAI _gameAI;
+            public GameAI GameAI {get; private set;}
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
             [SerializeField]private LineDrawObject _orderLineDrawObjectPrefab;
 
@@ -54,7 +54,7 @@ namespace FlatSpace
 
                 _camera = Camera.main;
                 _planetUIObjects.Clear();
-                if (_intialBoardState)
+                if (IntialBoardState)
                 {
                     InitGame();
                 }
@@ -64,10 +64,10 @@ namespace FlatSpace
 
             private void InitGame()
             {
-                _gameAI = this.AddComponent<GameAI>() as GameAI;
-                _gameAI.InitGameAI(_intialBoardState._planetSpawnData, _intialBoardState._gameAIConstants);
+                GameAI = this.AddComponent<GameAI>() as GameAI;
+                GameAI.InitGameAI(IntialBoardState._planetSpawnData, IntialBoardState._gameAIConstants);
 
-                InitPlanetGraphics(_intialBoardState._planetSpawnData);
+                InitPlanetGraphics(IntialBoardState._planetSpawnData);
                 InitPathGraphics();
             }
 
@@ -201,7 +201,7 @@ namespace FlatSpace
 
             public Planet GetPlanet(string planetName)
             {
-                return _gameAI.GetPlanet(planetName);
+                return GameAI.GetPlanet(planetName);
             }
             private void InitializeInputActions()
             {
@@ -245,7 +245,7 @@ namespace FlatSpace
             public void SingleUpdate()
             {
                 // add Ai Actions here
-                _gameAI.GameAIUpdate();
+                GameAI.GameAIUpdate();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
                 TurnNumber++;
@@ -262,7 +262,7 @@ namespace FlatSpace
 
             private void BoardUIUpdate()
             {
-                DisplayOrderGraphics(_gameAI.CurrentAIOrders);
+                DisplayOrderGraphics(GameAI.CurrentAIOrders);
             }
 
             private bool _timedUpdateRunning = false;

@@ -73,7 +73,7 @@ public class Planet : MonoBehaviour
         public ResultPriority Priority;
         public readonly object Data;
     }
-    private PlanetType _planetType = PlanetType.PlanetTypeNormal;
+    public PlanetType Type { get; private set; } = PlanetType.PlanetTypeNormal;
     
     public int Population { get; set; }= 0;
 
@@ -131,7 +131,7 @@ public class Planet : MonoBehaviour
         Food = ProjectedFood = _resourceData._initialFood;
         Grotsits = ProjectedGrotsits = _resourceData._initialGrotsits;
         Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
-        _planetType = spawnData._planetType;
+        Type = spawnData._planetType;
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
         CurrentStrategy = _resourceData._initialStrategy;
         Morale = 100.0f;
