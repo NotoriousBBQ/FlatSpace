@@ -115,6 +115,18 @@ public class GameAIMap : MonoBehaviour
     {
         return _planets[planetName];
     }
+
+    public void SetPlanetSimulationStats(SaveLoadSystem.SaveConfig saveConfig)
+    {
+        foreach (var planetStatus in saveConfig.planetStatuses)
+        {
+            var planet = _planets[planetStatus.name];
+            planet.CurrentStrategy = planetStatus.planetStrategy;
+            planet.Food = planetStatus.food;
+            planet.Morale = planetStatus.morale;
+            planet.Grotsits = planetStatus.grotsits;
+        }
+    }
     
     private void DEBUG_LogResults(List<Planet.PlanetUpdateResult> resultList)
     {

@@ -63,24 +63,32 @@ namespace FlatSpace
 
             }
 
-            private void AssetLoadCallback(AsyncOperationHandle<BoardConfiguration> loadRequest)
-            {
-                if (loadRequest.Status == AsyncOperationStatus.Succeeded)
-                {
-                    IntialBoardState = Instantiate<BoardConfiguration>(loadRequest.Result) ;
-                    ClearExistingGameState();
-                    InitGame();
-                }                
-            }
-
             public bool InitGameFromSaveConfig(SaveLoadSystem.SaveConfig saveConfig)
             {
                 if (saveConfig == null || string.IsNullOrEmpty(saveConfig.boardConfigurationPath))
                     return false;
                 
-                SaveLoadSystem.Instance.LoadBoardConfigAddressable(saveConfig.boardConfigurationPath, AssetLoadCallback);
+                SaveLoadSystem.Instance.LoadBoardConfigAddressable(saveConfig.boardConfigurationPath, asyncOp =>
+                {
+                    if (asyncOp.Status == AsyncOperationStatus.Succeeded)
+                    {
+                        IntialBoardState = Instantiate<BoardConfiguration>(asyncOp.Result) ;
+                        ClearExistingGameState();
+                        InitGame();
+                        SetSimulationStatus(saveConfig);
+                        PlanetaryUIUpdate();
+                        BoardUIUpdate();
+                    }                     
+                });
 
                 return true;
+            }
+
+            private void SetSimulationStatus(SaveLoadSystem.SaveConfig saveConfig)
+            {
+                
+                TurnNumber = saveConfig.turnNumber;
+                GameAI.SetSimulationStats(saveConfig);
             }
 
             private void ClearExistingGameState()

@@ -419,6 +419,26 @@ public class GameAI : MonoBehaviour
         }
     }
 
+    public void SetSimulationStats(SaveLoadSystem.SaveConfig saveConfig)
+    {
+        Strategy = saveConfig.strategy;
+        foreach (var orderStatus in saveConfig.orders)
+        {
+            CurrentAIOrders.Add(new GameAIOrder
+            {
+                Type = orderStatus.type,
+                TimingType = orderStatus.timingType,
+                TimingDelay = orderStatus.timingDelay,
+                TotalDelay = orderStatus.totalDelay,
+                Data = (orderStatus.dataType == "float" ? (float)orderStatus.data : (int)orderStatus.data),
+                Origin = orderStatus.origin,
+                Target = orderStatus.target,
+            });            
+        }
+        
+        GameAIMap.SetPlanetSimulationStats(saveConfig);
+    }
+
     public Planet GetPlanet(string planetName)
     {
         return GameAIMap.GetPlanet(planetName);

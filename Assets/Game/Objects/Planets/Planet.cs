@@ -81,8 +81,8 @@ public class Planet : MonoBehaviour
     public int ProjectedFoodWorkers { get; private set; }
     public int GrotsitsWorkers { get; private set; }
     public int ProjectedGrotsitsWorkers { get; private set; }
-    public PlanetStrategy CurrentStrategy { get; private set; }
-    public float Morale { get; private set; }
+    public PlanetStrategy CurrentStrategy { get; set; }
+    public float Morale { get; set; }
     public int MaxPopulation => _resourceData._maxPopulation;
     
     public float Food { get; set; } = 0.0f;
