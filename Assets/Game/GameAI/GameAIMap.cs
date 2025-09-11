@@ -38,6 +38,11 @@ public class GameAIMap : MonoBehaviour
         return _planets[planetName].Position;
     }
 
+    public void ClearGameAIMap()
+    {
+        _planets.Clear();
+        _planetPathings.Clear();
+    }
     public void GameAIMapInit(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
     {
         GameAIConstants = gameAIConstants;

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using FlatSpace.Game;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 public class SaveLoadSystem : MonoBehaviour
 {
@@ -36,14 +38,14 @@ public class SaveLoadSystem : MonoBehaviour
         
         public GameAI.AIStrategy strategy;
         public int turnNumber;
- //       public BoardConfiguration BoardConfiguration;
+        public string boardConfigurationPath;
         public List<OrderSave> orders = new List<OrderSave>();
         public List<PlanetSave> planetStatuses = new List<PlanetSave>();
         public SaveConfig(GameAI gameAI)
         {
             strategy = gameAI.Strategy;
             turnNumber = Gameboard.Instance.TurnNumber;
- //           BoardConfiguration = Gameboard.Instance.IntialBoardState;
+            boardConfigurationPath = Gameboard.Instance.IntialBoardState.name;
             foreach (var planet in gameAI.GameAIMap.PlanetList)
             {
                 planetStatuses.Add(
@@ -71,19 +73,18 @@ public class SaveLoadSystem : MonoBehaviour
                         timingDelay = order.TimingDelay,
                         totalDelay = order.TotalDelay,
                         data = Convert.ToSingle(order.Data),
-                        dataType = order.Data is float ? "float" : "int"
+                        dataType = order.Data is float ? "float" : "int" 
                     });
             }
         }
     }
-    
-    private static SaveLoadSystem _instance;
-    public static SaveLoadSystem Instance => _instance;
 
+    public static SaveLoadSystem Instance { get; private set; }
+    private List<AsyncOperationHandle> loadingList = new List<AsyncOperationHandle>();
     private void Awake()
     {
-        if (_instance == null)
-            _instance = this;
+        if (Instance == null)
+            Instance = this;
     }
 
     public void SaveGame(GameAI gameAI, string filePath)
@@ -100,7 +101,23 @@ public class SaveLoadSystem : MonoBehaviour
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
-        var saveConfigcfg = JsonUtility.FromJson<SaveConfig>(readText);
-        return true;
+        var saveConfig = JsonUtility.FromJson<SaveConfig>(readText);
+        if (saveConfig == null)
+            return false;
+        return Gameboard.Instance.InitGameFromSaveConfig(saveConfig);
+    }
+
+    public void LoadBoardConfigAddressable(string address, Action<AsyncOperationHandle<BoardConfiguration>> loadCompleteDelegate)
+    {
+        var loadRequest = Addressables.LoadAssetAsync<BoardConfiguration>(address);
+        loadRequest.Completed += BoardConfigurationLoadComplete;
+        loadRequest.Completed += loadCompleteDelegate;
+        loadingList.Add(loadRequest);
+    }
+
+    private void BoardConfigurationLoadComplete(AsyncOperationHandle<BoardConfiguration> loadRequest)
+    {
+        loadRequest.Completed -= BoardConfigurationLoadComplete;
+        loadingList.Remove(loadRequest);
     }
 }

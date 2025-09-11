@@ -52,7 +52,13 @@ public class GameAI : MonoBehaviour
     {
         GameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
         GameAIMap.GameAIMapInit(spawnDataList, gameAIConstants);
-   }
+    }
+
+    public void ClearGameAI()
+    {
+        CurrentAIOrders.Clear();
+        
+    }
 
     public void GameAIUpdate()
     {

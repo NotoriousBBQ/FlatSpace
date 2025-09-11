@@ -146,10 +146,10 @@ public class Planet : MonoBehaviour
             case PlanetStrategy.PlanetStrategyBalanced:
                 // first, make sure the basics are covered
                 // always err on the side of more food
-                var foodWorkersFloat = Math.Ceiling((Convert.ToSingle(Population + 1) / _resourceData._foodProduction));
+                var foodWorkersFloat = Math.Ceiling((Convert.ToSingle(Population + 1) / (_resourceData._foodProduction * (Morale/100.0f))));
                 FoodWorkers = Math.Clamp(Convert.ToInt32(foodWorkersFloat), 0, Population);
                 // fopr grotsits, use the existing first
-                GrotsitsWorkers = Math.Clamp(Convert.ToInt32((Convert.ToSingle(Population)) / _resourceData._grotsitProduction), 0, Population - FoodWorkers);
+                GrotsitsWorkers = Math.Clamp(Convert.ToInt32((Convert.ToSingle(Population)) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population - FoodWorkers);
                 // the even out the rest
                 remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
@@ -164,25 +164,25 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyGrowth:
                 FoodWorkers = Math.Clamp(
-                    Convert.ToInt32(Convert.ToSingle(2 * Population) / _resourceData._foodProduction), 0, Population);
+                    Convert.ToInt32(Convert.ToSingle(2 * Population) / (_resourceData._foodProduction * (Morale/100.0f))), 0, Population);
                 GrotsitsWorkers = Math.Clamp(
-                    Convert.ToInt32(Convert.ToSingle(Population) / _resourceData._grotsitProduction), 0, Population);
+                    Convert.ToInt32(Convert.ToSingle(Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
                 GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
                 break;
             case PlanetStrategy.PlanetStrategyFood:
-                FoodWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(2 * Population) / _resourceData._grotsitProduction), 0, Population);
+                FoodWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(2 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
                 GrotsitsWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
-                FoodWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(3 * Population) / _resourceData._grotsitProduction), 0, Population);
+                FoodWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(3 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
                 GrotsitsWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
                 break;
             case PlanetStrategy.PlanetStrategyGrotsits:
-                GrotsitsWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(2 * Population) / _resourceData._grotsitProduction), 0, Population);
+                GrotsitsWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(2 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
                 FoodWorkers = Math.Clamp(Population - GrotsitsWorkers, 0, Population);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedGrotsits:
-                GrotsitsWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(3 * Population) / _resourceData._grotsitProduction), 0, Population);
+                GrotsitsWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(3 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
                 FoodWorkers = Math.Clamp(Population - GrotsitsWorkers, 0, Population);
                 break;
         }
@@ -194,9 +194,9 @@ public class Planet : MonoBehaviour
             return;
         AssignWorkForStrategy();
         // grow food
-        Food += FoodWorkers * _resourceData._foodProduction;
+        Food += FoodWorkers * _resourceData._foodProduction * (Morale/100.0f);
         // produce grosits
-        Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction;
+        Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction * (Morale/100.0f);
         
         ConsumeFood(resultList);
         ConsumeGrotsits(resultList);

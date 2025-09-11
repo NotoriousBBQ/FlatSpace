@@ -8,6 +8,7 @@ using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 
 namespace FlatSpace
@@ -62,9 +63,45 @@ namespace FlatSpace
 
             }
 
+            private void AssetLoadCallback(AsyncOperationHandle<BoardConfiguration> loadRequest)
+            {
+                if (loadRequest.Status == AsyncOperationStatus.Succeeded)
+                {
+                    IntialBoardState = Instantiate<BoardConfiguration>(loadRequest.Result) ;
+                    ClearExistingGameState();
+                    InitGame();
+                }                
+            }
+
+            public bool InitGameFromSaveConfig(SaveLoadSystem.SaveConfig saveConfig)
+            {
+                if (saveConfig == null || string.IsNullOrEmpty(saveConfig.boardConfigurationPath))
+                    return false;
+                
+                SaveLoadSystem.Instance.LoadBoardConfigAddressable(saveConfig.boardConfigurationPath, AssetLoadCallback);
+
+                return true;
+            }
+
+            private void ClearExistingGameState()
+            {
+                if (GameAI != null)
+                    GameAI.ClearGameAI();
+                ClearGraphics();
+            }
+
+            private void ClearGraphics()
+            {
+                _planetUIObjects.Clear();
+                var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
+                foreach (var linedrawObject in lineDrawObjects)
+                    Destroy(linedrawObject.gameObject);
+            }
+
             private void InitGame()
             {
-                GameAI = this.AddComponent<GameAI>() as GameAI;
+                if (GameAI == null)
+                    GameAI = this.AddComponent<GameAI>() as GameAI;
                 GameAI.InitGameAI(IntialBoardState._planetSpawnData, IntialBoardState._gameAIConstants);
 
                 InitPlanetGraphics(IntialBoardState._planetSpawnData);
