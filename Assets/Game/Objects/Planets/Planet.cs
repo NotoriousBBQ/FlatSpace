@@ -74,12 +74,10 @@ public class Planet : MonoBehaviour
         public readonly object Data;
     }
     public PlanetType Type { get; private set; } = PlanetType.PlanetTypeNormal;
-    
     public int Population { get; set; }= 0;
-
-    public int FoodWorkers { get; private set; }
+    public int FoodWorkers = 0;
     public int ProjectedFoodWorkers { get; private set; }
-    public int GrotsitsWorkers { get; private set; }
+    public int GrotsitsWorkers = 0;
     public int ProjectedGrotsitsWorkers { get; private set; }
     public PlanetStrategy CurrentStrategy { get; set; }
     public float Morale { get; set; }
@@ -88,7 +86,6 @@ public class Planet : MonoBehaviour
     public float Food { get; set; } = 0.0f;
     public float ProjectedFood { get; set; } = 0.0f;
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
-
     public float Grotsits {get; set;}
     public float ProjectedGrotsits {get; set;}
     
@@ -120,8 +117,6 @@ public class Planet : MonoBehaviour
 
     private GameAIConstants _gameAIConstants;
 
-
-
     public void Init(PlanetSpawnData spawnData, Transform parentTransform, GameAIConstants gameAIConstants)
     {
         _gameAIConstants = gameAIConstants;
@@ -135,8 +130,48 @@ public class Planet : MonoBehaviour
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
         CurrentStrategy = _resourceData._initialStrategy;
         Morale = 100.0f;
-
     }
+
+    private bool FoodWorkerRequirementForPopulation(out int foodWorkers)
+    {
+        foodWorkers = 0;
+
+        var strategyPopulaitonModifer = 1;
+        var modifierData = _gameAIConstants.FoodWorkerAjustment.Find(x => x.planetStrategy == CurrentStrategy);
+        if (modifierData != null)
+            strategyPopulaitonModifer = modifierData.modifier;
+        var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
+        if(populationAdjustedForPlanetType <= 0.0f)
+            return false;
+        return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out foodWorkers);
+    }
+    
+    private bool GrotsitWorkerRequirementForPopulation(out int grotsitsWorkers)
+    {
+        grotsitsWorkers = 0;
+        var strategyPopulaitonModifer = 1;
+        var modifierData = _gameAIConstants.GrotsitWorkerAjustment.Find(x => x.planetStrategy == CurrentStrategy);
+        if (modifierData != null)
+            strategyPopulaitonModifer = modifierData.modifier;
+        var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
+        if(populationAdjustedForPlanetType <= 0.0f)
+            return false;
+        return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out grotsitsWorkers);
+    }
+
+    private bool ResourceWorkerRequirementForPopulation(int population, float productionRate,out int requiredWorkers)
+    {
+        requiredWorkers = 0;
+        if (productionRate <= 0.0f || Morale <= 0.0f)
+            return false;
+        var moraleModifier = Morale / 100.0f;
+        var actualProductionRate = productionRate * moraleModifier;
+        requiredWorkers = Convert.ToInt32(Math.Ceiling(population / actualProductionRate));
+        // note this clamp is for the planets population, not the param 'population'
+        Math.Clamp(requiredWorkers, 0, Population);
+        return true;
+    }
+    
 
     private void AssignWorkForStrategy()
     {
@@ -146,10 +181,10 @@ public class Planet : MonoBehaviour
             case PlanetStrategy.PlanetStrategyBalanced:
                 // first, make sure the basics are covered
                 // always err on the side of more food
-                var foodWorkersFloat = Math.Ceiling((Convert.ToSingle(Population + 1) / (_resourceData._foodProduction * (Morale/100.0f))));
-                FoodWorkers = Math.Clamp(Convert.ToInt32(foodWorkersFloat), 0, Population);
+                FoodWorkerRequirementForPopulation(out FoodWorkers);
                 // fopr grotsits, use the existing first
-                GrotsitsWorkers = Math.Clamp(Convert.ToInt32((Convert.ToSingle(Population)) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population - FoodWorkers);
+                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
+                Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
                 // the even out the rest
                 remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
@@ -163,26 +198,24 @@ public class Planet : MonoBehaviour
 
                 break;
             case PlanetStrategy.PlanetStrategyGrowth:
-                FoodWorkers = Math.Clamp(
-                    Convert.ToInt32(Convert.ToSingle(2 * Population) / (_resourceData._foodProduction * (Morale/100.0f))), 0, Population);
-                GrotsitsWorkers = Math.Clamp(
-                    Convert.ToInt32(Convert.ToSingle(Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
+                FoodWorkerRequirementForPopulation(out FoodWorkers);
+                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
                 GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
                 break;
             case PlanetStrategy.PlanetStrategyFood:
-                FoodWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(2 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
+                FoodWorkerRequirementForPopulation(out FoodWorkers);
                 GrotsitsWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
-                FoodWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(3 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
+                FoodWorkerRequirementForPopulation(out FoodWorkers);
                 GrotsitsWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
                 break;
             case PlanetStrategy.PlanetStrategyGrotsits:
-                GrotsitsWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(2 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
+                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
                 FoodWorkers = Math.Clamp(Population - GrotsitsWorkers, 0, Population);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedGrotsits:
-                GrotsitsWorkers = Math.Clamp(Convert.ToInt32(Convert.ToSingle(3 * Population) / (_resourceData._grotsitProduction * (Morale/100.0f))), 0, Population);
+                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
                 FoodWorkers = Math.Clamp(Population - GrotsitsWorkers, 0, Population);
                 break;
         }
@@ -293,7 +326,9 @@ public class Planet : MonoBehaviour
         }
         else
         {
-            var projectedFoodWorkersFloat = Math.Ceiling((projectedFoodGap / _resourceData._foodProduction));
+            var projectedFoodWorkersFloat =  _resourceData._foodProduction > 0.0f ? 
+                Math.Ceiling((projectedFoodGap / _resourceData._foodProduction))
+                : 0;
             ProjectedFoodWorkers = Math.Clamp(Convert.ToInt32(projectedFoodWorkersFloat), 0, Population); 
             ProjectedFoodWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
         }
