@@ -9,8 +9,8 @@ public class GameAIConstants : ScriptableObject
     public float MoraleStep;
     public float DefaultTravelSpeed;
     public int MaxPathNodesToSearch;
-    public float ExpandPopultionTrigger;
-    public List<ModifierForPlanetStrategy> FoodWorkerAjustment;
-    public List<ModifierForPlanetStrategy> GrotsitWorkerAjustment;
+    public float ExpandPopulationTrigger;
+    public List<ModifierForPlanetStrategy> FoodWorkerAdjustment;
+    public List<ModifierForPlanetStrategy> GrotsitWorkerAdjustment;
 
 }

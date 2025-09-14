@@ -312,7 +312,7 @@ public class GameAI : MonoBehaviour
         var possibleColonizers = results.FindAll(x =>
             (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
                 or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax) 
-            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.ExpandPopultionTrigger);
+            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.ExpandPopulationTrigger);
         if (possibleColonizers.Count <= 0)
             return;
         // find all planets with no population

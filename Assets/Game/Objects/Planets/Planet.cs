@@ -137,7 +137,7 @@ public class Planet : MonoBehaviour
         foodWorkers = 0;
 
         var strategyPopulaitonModifer = 1;
-        var modifierData = _gameAIConstants.FoodWorkerAjustment.Find(x => x.planetStrategy == CurrentStrategy);
+        var modifierData = _gameAIConstants.FoodWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.modifier;
         var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
@@ -150,7 +150,7 @@ public class Planet : MonoBehaviour
     {
         grotsitsWorkers = 0;
         var strategyPopulaitonModifer = 1;
-        var modifierData = _gameAIConstants.GrotsitWorkerAjustment.Find(x => x.planetStrategy == CurrentStrategy);
+        var modifierData = _gameAIConstants.GrotsitWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.modifier;
         var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
