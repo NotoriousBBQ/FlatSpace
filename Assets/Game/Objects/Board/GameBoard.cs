@@ -282,7 +282,10 @@ namespace FlatSpace
             }
             private void OnOpenMainMenuButtonPressed(InputAction.CallbackContext context)
             {
-             //   GameButtonHandler.EscapeButtonPressed();
+                Debug.Log("Open Main Menu");
+                var gameButtonHandler = GetComponentInChildren<GameButtonHandler>();
+                if (gameButtonHandler)
+                    gameButtonHandler.EscapeButtonPressed();
             }
             #endregion
             #region Update Functions
