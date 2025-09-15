@@ -5,6 +5,9 @@ using FlatSpace.Game;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using UnityEngine.SceneManagement;
+using SimpleFileBrowser;
+using UnityEngine.Events;
 
 public class SaveLoadSystem : MonoBehaviour
 {
@@ -85,19 +88,20 @@ public class SaveLoadSystem : MonoBehaviour
     {
         if (Instance == null)
             Instance = this;
+        SetFileBrowserFilters();
     }
 
-    public void SaveGame(GameAI gameAI, string filePath)
+    private static void SaveGame(GameAI gameAI, string filePath)
     {
         var saveConfig = new SaveConfig(gameAI);
         if (!File.Exists(filePath)) 
-            File.Create(filePath);
+            File.Create(filePath).Dispose();
         
         string temp = JsonUtility.ToJson(saveConfig);
         File.WriteAllText(filePath, temp);
     }
 
-    public bool LoadGame(GameAI gameAI, string filePath)
+    private static bool LoadGame(GameAI gameAI, string filePath)
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
@@ -120,4 +124,63 @@ public class SaveLoadSystem : MonoBehaviour
         loadRequest.Completed -= BoardConfigurationLoadComplete;
         loadingList.Remove(loadRequest);
     }
+    #region MainMenuFunctions
+
+    public static void LoadGame()
+    {
+        var gameScene = SceneManager.GetSceneByName("Flatspace");
+        if (!gameScene.isLoaded)
+        {
+            LoadGameInternal(SceneManagerOnGameLoadingSceneLoaded);   
+            return;
+        }
+
+        SceneManagerOnGameLoadingSceneLoaded(gameScene, LoadSceneMode.Single);
+    }
+
+    public static void SaveGame()
+    {
+        ShowSaveGameFileBrowser();
+    }
+
+    public static void LoadNewGame()
+    {
+        LoadGameInternal(SceneManagerOnNewGameSceneLoaded);
+    }
+    private static void LoadGameInternal(UnityAction<Scene, LoadSceneMode> loadedCallback)
+    {
+        SceneManager.LoadScene("Flatspace");
+        SceneManager.sceneLoaded += loadedCallback;
+    }
+    private static void SceneManagerOnNewGameSceneLoaded(Scene scene, LoadSceneMode sceneMode)
+    {
+        SceneManager.SetActiveScene(scene);
+    }
+
+    private static void SceneManagerOnGameLoadingSceneLoaded(Scene scene, LoadSceneMode sceneMode)
+    {
+        SceneManager.SetActiveScene(scene);
+        ShowLoadGameFileBrowser();
+    }
+    #endregion
+    
+    #region FilePicker
+
+    private static void SetFileBrowserFilters()
+    {
+        FileBrowser.SetFilters(false, ".json");
+    }
+    private static void ShowLoadGameFileBrowser()
+    {
+        FileBrowser.ShowLoadDialog((paths) => LoadGame(Gameboard.Instance.GameAI, paths[0]), 
+            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+    }
+    
+    private static void ShowSaveGameFileBrowser()
+    {
+        FileBrowser.ShowSaveDialog((paths) => SaveGame(Gameboard.Instance.GameAI, paths[0]), 
+            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+    }
+   
+    #endregion
 }

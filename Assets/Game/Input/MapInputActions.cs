@@ -102,9 +102,9 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""MapButtonPress"",
+                    ""name"": ""OpenMainMenu"",
                     ""type"": ""Button"",
-                    ""id"": ""e7f12cef-8237-41e1-8cad-c99736245475"",
+                    ""id"": ""e6d6063c-f37f-483b-8de1-e507ca337bb3"",
                     ""expectedControlType"": """",
                     ""processors"": """",
                     ""interactions"": """",
@@ -125,12 +125,12 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
                 },
                 {
                     ""name"": """",
-                    ""id"": ""266f0cfe-2353-4c1d-9dab-774975b931e3"",
-                    ""path"": """",
+                    ""id"": ""ed5467a1-1dcf-4c80-94f5-fd8535eef2d3"",
+                    ""path"": ""<Keyboard>/escape"",
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""MapButtonPress"",
+                    ""action"": ""OpenMainMenu"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -142,7 +142,7 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
         // MapActions
         m_MapActions = asset.FindActionMap("MapActions", throwIfNotFound: true);
         m_MapActions_MapZoom = m_MapActions.FindAction("MapZoom", throwIfNotFound: true);
-        m_MapActions_MapButtonPress = m_MapActions.FindAction("MapButtonPress", throwIfNotFound: true);
+        m_MapActions_OpenMainMenu = m_MapActions.FindAction("OpenMainMenu", throwIfNotFound: true);
     }
 
     ~@MapInputActions()
@@ -224,7 +224,7 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
     private readonly InputActionMap m_MapActions;
     private List<IMapActionsActions> m_MapActionsActionsCallbackInterfaces = new List<IMapActionsActions>();
     private readonly InputAction m_MapActions_MapZoom;
-    private readonly InputAction m_MapActions_MapButtonPress;
+    private readonly InputAction m_MapActions_OpenMainMenu;
     /// <summary>
     /// Provides access to input actions defined in input action map "MapActions".
     /// </summary>
@@ -241,9 +241,9 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
         /// </summary>
         public InputAction @MapZoom => m_Wrapper.m_MapActions_MapZoom;
         /// <summary>
-        /// Provides access to the underlying input action "MapActions/MapButtonPress".
+        /// Provides access to the underlying input action "MapActions/OpenMainMenu".
         /// </summary>
-        public InputAction @MapButtonPress => m_Wrapper.m_MapActions_MapButtonPress;
+        public InputAction @OpenMainMenu => m_Wrapper.m_MapActions_OpenMainMenu;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -273,9 +273,9 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
             @MapZoom.started += instance.OnMapZoom;
             @MapZoom.performed += instance.OnMapZoom;
             @MapZoom.canceled += instance.OnMapZoom;
-            @MapButtonPress.started += instance.OnMapButtonPress;
-            @MapButtonPress.performed += instance.OnMapButtonPress;
-            @MapButtonPress.canceled += instance.OnMapButtonPress;
+            @OpenMainMenu.started += instance.OnOpenMainMenu;
+            @OpenMainMenu.performed += instance.OnOpenMainMenu;
+            @OpenMainMenu.canceled += instance.OnOpenMainMenu;
         }
 
         /// <summary>
@@ -290,9 +290,9 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
             @MapZoom.started -= instance.OnMapZoom;
             @MapZoom.performed -= instance.OnMapZoom;
             @MapZoom.canceled -= instance.OnMapZoom;
-            @MapButtonPress.started -= instance.OnMapButtonPress;
-            @MapButtonPress.performed -= instance.OnMapButtonPress;
-            @MapButtonPress.canceled -= instance.OnMapButtonPress;
+            @OpenMainMenu.started -= instance.OnOpenMainMenu;
+            @OpenMainMenu.performed -= instance.OnOpenMainMenu;
+            @OpenMainMenu.canceled -= instance.OnOpenMainMenu;
         }
 
         /// <summary>
@@ -341,11 +341,11 @@ public partial class @MapInputActions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnMapZoom(InputAction.CallbackContext context);
         /// <summary>
-        /// Method invoked when associated input action "MapButtonPress" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// Method invoked when associated input action "OpenMainMenu" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
         /// </summary>
         /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
-        void OnMapButtonPress(InputAction.CallbackContext context);
+        void OnOpenMainMenu(InputAction.CallbackContext context);
     }
 }

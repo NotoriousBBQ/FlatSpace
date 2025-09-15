@@ -100,6 +100,8 @@ namespace FlatSpace
 
             private void ClearGraphics()
             {
+                foreach(var planetUIObject in _planetUIObjects)
+                    Destroy(planetUIObject.gameObject);
                 _planetUIObjects.Clear();
                 var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
                 foreach (var linedrawObject in lineDrawObjects)
@@ -259,7 +261,7 @@ namespace FlatSpace
                 {
                     _mapInputActions.Enable();
                     _mapInputActions.MapActions.MapZoom.performed += OnScrollPerformed;
-                    _mapInputActions.MapActions.MapButtonPress.performed += OnMapButtonPressPerformed;
+                    _mapInputActions.MapActions.OpenMainMenu.performed += OnOpenMainMenuButtonPressed;
                 }
             }
 
@@ -278,11 +280,9 @@ namespace FlatSpace
                     _camera.orthographicSize = Math.Clamp(targetSize, _minCameraOrtho, _maxCameraOrtho);
                 }
             }
-
-            private void OnMapButtonPressPerformed(InputAction.CallbackContext context)
+            private void OnOpenMainMenuButtonPressed(InputAction.CallbackContext context)
             {
-
-                Debug.Log($"Button press");
+             //   GameButtonHandler.EscapeButtonPressed();
             }
             #endregion
             #region Update Functions

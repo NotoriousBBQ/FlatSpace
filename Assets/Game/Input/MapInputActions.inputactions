@@ -16,9 +16,9 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "MapButtonPress",
+                    "name": "OpenMainMenu",
                     "type": "Button",
-                    "id": "e7f12cef-8237-41e1-8cad-c99736245475",
+                    "id": "e6d6063c-f37f-483b-8de1-e507ca337bb3",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
@@ -39,12 +39,12 @@
                 },
                 {
                     "name": "",
-                    "id": "266f0cfe-2353-4c1d-9dab-774975b931e3",
-                    "path": "",
+                    "id": "ed5467a1-1dcf-4c80-94f5-fd8535eef2d3",
+                    "path": "<Keyboard>/escape",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "MapButtonPress",
+                    "action": "OpenMainMenu",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

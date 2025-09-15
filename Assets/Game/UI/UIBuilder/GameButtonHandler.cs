@@ -9,8 +9,8 @@ public class GameButtonHandler : MonoBehaviour
     private Button _nextTurnButton;
     private Button _startRunButton;
     private Button _stopRunButton;
-    private Button _testSaveButton;
-    private Button _testLoadButton;
+    private Button _saveButton;
+    private Button _loadButton;
    
     void OnEnable()
     {
@@ -35,16 +35,18 @@ public class GameButtonHandler : MonoBehaviour
             _stopRunButton.SetEnabled(false);
         }
         
-        _testSaveButton = root.Q<Button>("TestSaveButton"); 
-        if (_testSaveButton != null)
+        _saveButton = root.Q<Button>("TestSaveButton"); 
+        if (_saveButton != null)
         {
-            _testSaveButton.clicked += OnTestSaveButtonClicked;
+            _saveButton.clicked += OnSaveButtonClicked;
+            _saveButton.visible = false;
         }
         
-        _testLoadButton = root.Q<Button>("TestLoadButton"); 
-        if (_testLoadButton != null)
+        _loadButton = root.Q<Button>("TestLoadButton"); 
+        if (_loadButton != null)
         {
-            _testLoadButton.clicked += OnTestLoadButtonClicked;
+            _loadButton.clicked += OnLoadButtonClicked;
+            _loadButton.visible = false;
         }
 
     }
@@ -66,14 +68,14 @@ public class GameButtonHandler : MonoBehaviour
             _stopRunButton.clicked -= OnStopRunButtonClicked;
         }
         
-        if (_testSaveButton != null)
+        if (_saveButton != null)
         {
-            _testSaveButton.clicked -= OnTestSaveButtonClicked;
+            _saveButton.clicked -= OnSaveButtonClicked;
         }
         
-        if (_testLoadButton != null)
+        if (_loadButton != null)
         {
-            _testLoadButton.clicked -= OnTestLoadButtonClicked;
+            _loadButton.clicked -= OnLoadButtonClicked;
         }
     }
 
@@ -98,13 +100,19 @@ public class GameButtonHandler : MonoBehaviour
         Gameboard.Instance.StopTimedUpdate();
     }
 
-    private static void OnTestSaveButtonClicked()
+    private static void OnSaveButtonClicked()
     {
-        SaveLoadSystem.Instance.SaveGame(Gameboard.Instance.GameAI, @"C:\Temp\TestSave.json");
+        SaveLoadSystem.SaveGame();
     }
 
-    private static  void OnTestLoadButtonClicked()
+    private static  void OnLoadButtonClicked()
     {
-        SaveLoadSystem.Instance.LoadGame(Gameboard.Instance.GameAI, @"C:\Temp\TestSave.json");
+        SaveLoadSystem.LoadGame();
+    }
+
+    public void EscapeButtonPressed()
+    {
+        _saveButton.visible = !_saveButton.visible;
+        _loadButton.visible = !_loadButton.visible;
     }
 }

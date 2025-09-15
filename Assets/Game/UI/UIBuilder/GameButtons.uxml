@@ -4,8 +4,8 @@
             <ui:Button text="Next Turn" name="NextTurnButton" style="width: 180px;" />
             <ui:Button text="Start Run" name="StartRunButton" style="width: 180px;" />
             <ui:Button text="Stop Run" name="StopRunButton" style="width: 180px;" />
-            <ui:Button text="Test Save" name="TestSaveButton" style="width: 180px;" />
-            <ui:Button text="Test Load" name="TestLoadButton" parse-escape-sequences="true" style="width: 180px;" />
+            <ui:Button text="Save" name="TestSaveButton" double-click-selects-word="false" style="width: 180px;" />
+            <ui:Button text="Load" name="TestLoadButton" parse-escape-sequences="true" style="width: 180px;" />
         </ui:GroupBox>
     </ui:VisualElement>
 </ui:UXML>
