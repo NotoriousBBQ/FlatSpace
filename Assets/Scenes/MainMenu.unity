@@ -456,7 +456,7 @@ MonoBehaviour:
     m_HighlightedColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 0.68235296}
     m_PressedColor: {r: 0, g: 1, b: 0.4980392, a: 0.68235296}
     m_SelectedColor: {r: 0.54509807, g: 0.27058825, b: 0.07450981, a: 1}
-    m_DisabledColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+    m_DisabledColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.2
   m_SpriteState:
@@ -1113,7 +1113,7 @@ MonoBehaviour:
     m_HighlightedColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 0.68235296}
     m_PressedColor: {r: 0, g: 1, b: 0.4980392, a: 0.68235296}
     m_SelectedColor: {r: 0.54509807, g: 0.27058825, b: 0.07450981, a: 1}
-    m_DisabledColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+    m_DisabledColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.2
   m_SpriteState:
@@ -1400,7 +1400,7 @@ MonoBehaviour:
     m_HighlightedColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 0.68235296}
     m_PressedColor: {r: 0, g: 1, b: 0.4980392, a: 0.68235296}
     m_SelectedColor: {r: 0.54509807, g: 0.27058825, b: 0.07450981, a: 1}
-    m_DisabledColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+    m_DisabledColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.2
   m_SpriteState:
@@ -1549,7 +1549,7 @@ MonoBehaviour:
     m_HighlightedColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 0.68235296}
     m_PressedColor: {r: 0, g: 1, b: 0.4980392, a: 0.68235296}
     m_SelectedColor: {r: 0.54509807, g: 0.27058825, b: 0.07450981, a: 1}
-    m_DisabledColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+    m_DisabledColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     m_ColorMultiplier: 1
     m_FadeDuration: 0.2
   m_SpriteState:
@@ -1872,6 +1872,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d594b26980a7bf345b68741ac79c28e3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MainMenu
+  _startButton: {fileID: 365828894}
+  _saveButton: {fileID: 1540968071}
+  _loadButton: {fileID: 1205404232}
+  _optionsButton: {fileID: 1568998821}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

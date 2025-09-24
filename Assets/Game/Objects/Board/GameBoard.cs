@@ -63,19 +63,19 @@ namespace FlatSpace
 
             }
 
-            public bool InitGameFromSaveConfig(SaveLoadSystem.SaveConfig saveConfig)
+            public bool InitGameFromSaveConfig(SaveLoadSystem.GameSave gameSave)
             {
-                if (saveConfig == null || string.IsNullOrEmpty(saveConfig.boardConfigurationPath))
+                if (gameSave == null || string.IsNullOrEmpty(gameSave.boardConfigurationPath))
                     return false;
                 
-                SaveLoadSystem.Instance.LoadBoardConfigAddressable(saveConfig.boardConfigurationPath, asyncOp =>
+                SaveLoadSystem.Instance.LoadBoardConfigAddressable(gameSave.boardConfigurationPath, asyncOp =>
                 {
                     if (asyncOp.Status == AsyncOperationStatus.Succeeded)
                     {
                         IntialBoardState = Instantiate<BoardConfiguration>(asyncOp.Result) ;
                         ClearExistingGameState();
                         InitGame();
-                        SetSimulationStatus(saveConfig);
+                        SetSimulationStatus(gameSave);
                         PlanetaryUIUpdate();
                         BoardUIUpdate();
                     }                     
@@ -84,11 +84,11 @@ namespace FlatSpace
                 return true;
             }
 
-            private void SetSimulationStatus(SaveLoadSystem.SaveConfig saveConfig)
+            private void SetSimulationStatus(SaveLoadSystem.GameSave gameSave)
             {
                 
-                TurnNumber = saveConfig.turnNumber;
-                GameAI.SetSimulationStats(saveConfig);
+                TurnNumber = gameSave.turnNumber;
+                GameAI.SetSimulationStats(gameSave);
             }
 
             private void ClearExistingGameState()

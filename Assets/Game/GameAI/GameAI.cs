@@ -419,10 +419,10 @@ public class GameAI : MonoBehaviour
         }
     }
 
-    public void SetSimulationStats(SaveLoadSystem.SaveConfig saveConfig)
+    public void SetSimulationStats(SaveLoadSystem.GameSave gameSave)
     {
-        Strategy = saveConfig.strategy;
-        foreach (var orderStatus in saveConfig.orders)
+        Strategy = gameSave.strategy;
+        foreach (var orderStatus in gameSave.orders)
         {
             CurrentAIOrders.Add(new GameAIOrder
             {
@@ -436,7 +436,7 @@ public class GameAI : MonoBehaviour
             });            
         }
         
-        GameAIMap.SetPlanetSimulationStats(saveConfig);
+        GameAIMap.SetPlanetSimulationStats(gameSave);
     }
 
     public Planet GetPlanet(string planetName)

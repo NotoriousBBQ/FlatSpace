@@ -116,9 +116,9 @@ public class GameAIMap : MonoBehaviour
         return _planets[planetName];
     }
 
-    public void SetPlanetSimulationStats(SaveLoadSystem.SaveConfig saveConfig)
+    public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
     {
-        foreach (var planetStatus in saveConfig.planetStatuses)
+        foreach (var planetStatus in gameSave.planetStatuses)
         {
             var planet = _planets[planetStatus.name];
             planet.CurrentStrategy = planetStatus.planetStrategy;

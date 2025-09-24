@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: ResourceData
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: ResourceData
+  m_GUID: 7c636c7dbca17ed498f785e42bd4f855
+  m_SerializeEntries:
+  - m_GUID: 2ed03b01019d2f347839aa6784bdce1a
+    m_Address: DesolatePlanetTypeDataNoPop.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 36a318dcff54eab4ab7fb6e66ad1aa22
+    m_Address: VerdantPlanetTypeDataNoPop.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6f1f1856bae802941bc98d868d1f172f
+    m_Address: PrimePlanetTypeDataPopTest.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9a1928cbd5670b5438daa15781329c10
+    m_Address: NormalPlanetTypeDataNoPop.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d0a201acbf569e04baf53499c6eab426
+    m_Address: FarmPlanetTypeDataNoPop.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e5c9d305df4f3644a8ab24a52146c43c
+    m_Address: IndustrialPlanetTypeDataNoPop.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: 9f2ee23d17d69bf4db1c8150f710c26a, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: eaaa64d1cc4634e4d9aef28c23a7488a, type: 2}
+    - {fileID: 11400000, guid: 5be6cbf8cef41db4e8fb27b1b98445bb, type: 2}

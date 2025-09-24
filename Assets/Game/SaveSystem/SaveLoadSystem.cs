@@ -11,8 +11,18 @@ using UnityEngine.Events;
 
 public class SaveLoadSystem : MonoBehaviour
 {
+    public static SaveLoadSystem Instance { get; private set; }
+    private List<AsyncOperationHandle> loadingList = new List<AsyncOperationHandle>();
+    private void Awake()
+    {
+        if (Instance == null)
+            Instance = this;
+        SetFileBrowserFilters();
+    }
+    
+    #region SaveLoadGame
     [Serializable]
-    public class SaveConfig
+    public class GameSave
     {
         [Serializable]
         public struct PlanetSave
@@ -44,7 +54,7 @@ public class SaveLoadSystem : MonoBehaviour
         public string boardConfigurationPath;
         public List<OrderSave> orders = new List<OrderSave>();
         public List<PlanetSave> planetStatuses = new List<PlanetSave>();
-        public SaveConfig(GameAI gameAI)
+        public GameSave(GameAI gameAI)
         {
             strategy = gameAI.Strategy;
             turnNumber = Gameboard.Instance.TurnNumber;
@@ -81,19 +91,9 @@ public class SaveLoadSystem : MonoBehaviour
             }
         }
     }
-
-    public static SaveLoadSystem Instance { get; private set; }
-    private List<AsyncOperationHandle> loadingList = new List<AsyncOperationHandle>();
-    private void Awake()
-    {
-        if (Instance == null)
-            Instance = this;
-        SetFileBrowserFilters();
-    }
-
     private static void SaveGame(GameAI gameAI, string filePath)
     {
-        var saveConfig = new SaveConfig(gameAI);
+        var saveConfig = new GameSave(gameAI);
         if (!File.Exists(filePath)) 
             File.Create(filePath).Dispose();
         
@@ -105,7 +105,7 @@ public class SaveLoadSystem : MonoBehaviour
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
-        var saveConfig = JsonUtility.FromJson<SaveConfig>(readText);
+        var saveConfig = JsonUtility.FromJson<GameSave>(readText);
         if (saveConfig == null)
             return false;
         return Gameboard.Instance.InitGameFromSaveConfig(saveConfig);
@@ -124,6 +124,10 @@ public class SaveLoadSystem : MonoBehaviour
         loadRequest.Completed -= BoardConfigurationLoadComplete;
         loadingList.Remove(loadRequest);
     }
+    #endregion
+    #region BoardDesignerSave
+    #endregion
+
     #region MainMenuFunctions
 
     public static void LoadGame()
@@ -182,5 +186,16 @@ public class SaveLoadSystem : MonoBehaviour
             ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
     }
    
+    private static void ShowLoadGameConfigFileBrowser()
+    {
+        FileBrowser.ShowLoadDialog((paths) => LoadGameConfig(Gameboard.Instance.GameAI, paths[0]), 
+            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+    }
+    
+    private static void ShowSaveGameConfigFileBrowser()
+    {
+        FileBrowser.ShowSaveDialog((paths) => SaveGameConfig(Gameboard.Instance.GameAI, paths[0]), 
+            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+    }
     #endregion
 }

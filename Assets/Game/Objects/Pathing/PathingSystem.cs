@@ -208,7 +208,6 @@ namespace FlatSpace
                         var p2 = new Vector3(PathNodes[connection.NodeName].Position.x, PathNodes[connection.NodeName].Position.y, 0.0f);
                         connectionVectorList.Add((p1, p2));
                     }
-                    
                 }
             }
            
