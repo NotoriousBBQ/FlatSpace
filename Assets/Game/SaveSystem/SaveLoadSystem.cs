@@ -93,11 +93,11 @@ public class SaveLoadSystem : MonoBehaviour
     }
     private static void SaveGame(GameAI gameAI, string filePath)
     {
-        var saveConfig = new GameSave(gameAI);
+        var gameSave = new GameSave(gameAI);
         if (!File.Exists(filePath)) 
             File.Create(filePath).Dispose();
         
-        string temp = JsonUtility.ToJson(saveConfig);
+        var  temp = JsonUtility.ToJson(gameSave);
         File.WriteAllText(filePath, temp);
     }
 
@@ -126,16 +126,64 @@ public class SaveLoadSystem : MonoBehaviour
     }
     #endregion
     #region BoardDesignerSave
+
+    [Serializable]
+    public class BoardDesignerSave
+    {
+        [Serializable]
+        public struct BoardDesignerEntry
+        {
+            public string name;
+            public Planet.PlanetType planetType;
+            public Vector2 position;
+        }
+        public List<BoardDesignerEntry> planetEntries = new List<BoardDesignerEntry>();
+
+        public BoardDesignerSave(List<PlanetDesigner> planetList)
+        {
+            planetEntries.Clear();
+            foreach (var planet in planetList)
+            {
+                planetEntries.Add(new BoardDesignerEntry
+                {
+                    name = planet.planetName,
+                    planetType = planet.type,
+                    position = planet.transform.localPosition,
+                });
+            }
+            
+        }
+    }
+    private static void SaveDesignerConfig(BoardDesignerSave saveData, string filePath)
+    {
+        if (!File.Exists(filePath)) 
+            File.Create(filePath).Dispose();
+        
+        var  temp = JsonUtility.ToJson(saveData);
+        File.WriteAllText(filePath, temp); 
+    }
+    private static bool LoadDesignerContent(string filePath)
+    {
+        if (!File.Exists(filePath)) return false;
+        var readText = File.ReadAllText(filePath);
+        var saveConfig = JsonUtility.FromJson<BoardDesignerSave>(readText);
+        if (saveConfig == null)
+            return false;
+     //   return Gameboard.Instance.InitGameFromSaveConfig(saveConfig);  
+     // init game here
+        return true;        
+    }
+    
     #endregion
 
-    #region MainMenuFunctions
+    #region MenuFunctions
 
     public static void LoadGame()
     {
         var gameScene = SceneManager.GetSceneByName("Flatspace");
         if (!gameScene.isLoaded)
         {
-            LoadGameInternal(SceneManagerOnGameLoadingSceneLoaded);   
+            LoadGameScene("Flatspace", SceneManagerOnGameLoadingSceneLoaded);   
             return;
         }
 
@@ -146,14 +194,26 @@ public class SaveLoadSystem : MonoBehaviour
     {
         ShowSaveGameFileBrowser();
     }
+    
+    public static void LoadDesigner()
+    {
+        var scene = SceneManager.GetSceneByName("MapDesigner");
+        if (!scene.isLoaded)
+        {
+            LoadGameScene("MapDesigner", SceneManagerOnDesignerLoadingSceneLoaded);   
+            return;
+        }
+
+        SceneManagerOnDesignerLoadingSceneLoaded(scene, LoadSceneMode.Single);        
+    }
 
     public static void LoadNewGame()
     {
-        LoadGameInternal(SceneManagerOnNewGameSceneLoaded);
+        LoadGameScene("Flatspace",SceneManagerOnNewGameSceneLoaded);
     }
-    private static void LoadGameInternal(UnityAction<Scene, LoadSceneMode> loadedCallback)
+    private static void LoadGameScene(string sceneName, UnityAction<Scene, LoadSceneMode> loadedCallback)
     {
-        SceneManager.LoadScene("Flatspace");
+        SceneManager.LoadScene(sceneName);
         SceneManager.sceneLoaded += loadedCallback;
     }
     private static void SceneManagerOnNewGameSceneLoaded(Scene scene, LoadSceneMode sceneMode)
@@ -165,6 +225,10 @@ public class SaveLoadSystem : MonoBehaviour
     {
         SceneManager.SetActiveScene(scene);
         ShowLoadGameFileBrowser();
+    }
+    private static void SceneManagerOnDesignerLoadingSceneLoaded(Scene scene, LoadSceneMode sceneMode)
+    {
+        SceneManager.SetActiveScene(scene);
     }
     #endregion
     
@@ -179,23 +243,38 @@ public class SaveLoadSystem : MonoBehaviour
         FileBrowser.ShowLoadDialog((paths) => LoadGame(Gameboard.Instance.GameAI, paths[0]), 
             ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
     }
+
+    private static void ShowLoadDesignerFileBrowser()
+    {
+        FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
+            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\BoardDesigner\");
+    }
     
     private static void ShowSaveGameFileBrowser()
     {
         FileBrowser.ShowSaveDialog((paths) => SaveGame(Gameboard.Instance.GameAI, paths[0]), 
             ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
     }
+
+    public static void SaveBoardDesign(List<PlanetDesigner> planetList)
+    {
+        var designData = new BoardDesignerSave(planetList);
+        if (designData.planetEntries.Count == 0)
+            return;
+        ShowSaveGameConfigFileBrowser(designData);
+
+    }
    
     private static void ShowLoadGameConfigFileBrowser()
     {
-        FileBrowser.ShowLoadDialog((paths) => LoadGameConfig(Gameboard.Instance.GameAI, paths[0]), 
-            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+        FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
+            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\BoardConfig\");
     }
     
-    private static void ShowSaveGameConfigFileBrowser()
+    private static void ShowSaveGameConfigFileBrowser(BoardDesignerSave saveData)
     {
-        FileBrowser.ShowSaveDialog((paths) => SaveGameConfig(Gameboard.Instance.GameAI, paths[0]), 
-            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+        FileBrowser.ShowSaveDialog((paths) => SaveDesignerConfig(saveData, paths[0]), 
+            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\BoardConfig\");
     }
     #endregion
 }

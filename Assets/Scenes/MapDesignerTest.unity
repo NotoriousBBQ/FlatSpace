@@ -206,6 +206,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 77940341}
     m_Modifications:
+    - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: type
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: planetName
+      value: Normal Planet
+      objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
       value: 0.08627451
@@ -829,6 +837,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 77940341}
     m_Modifications:
+    - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: planetName
+      value: Prime
+      objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
       value: 0.08627451

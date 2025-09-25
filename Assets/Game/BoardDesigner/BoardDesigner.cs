@@ -87,10 +87,16 @@ public class BoardDesigner : MonoBehaviour
         
     }
 
-    [ContextMenu("Save Board Config")]
     public void SaveBoardConfig()
     {
-        
+        var planetList = new List<PlanetDesigner>();
+        foreach (Transform child in transform)
+        {
+            if (child.GetComponent<PlanetDesigner>()) 
+                planetList.Add(child.GetComponent<PlanetDesigner>());
+        }
+        SaveLoadSystem.SaveBoardDesign(planetList);
     }
+
     public float MaxConnectionSize { get; set; } = 400.0f;
 }
