@@ -2,10 +2,10 @@ using UnityEngine;
 using System.Collections.Generic;
 public class BoardDesigner : MonoBehaviour
 {
+    [SerializeField] public GameAIConstants aiConstants;
     [SerializeField] private LineDrawObject lineDrawObjectPrefab;
     private List<LineDrawObject> _lineDrawObjects = new List<LineDrawObject>();
 
-    [ContextMenu("Clear Connections")]
     public void ClearConnections()
     {
         for (var i = _lineDrawObjects.Count - 1; i >= 0; i--)
@@ -17,7 +17,6 @@ public class BoardDesigner : MonoBehaviour
         }
         _lineDrawObjects.Clear();
     }
-    [ContextMenu("Generate Connections")]
     public void GenerateStarConnections()
     {
 
@@ -89,13 +88,7 @@ public class BoardDesigner : MonoBehaviour
 
     public void SaveBoardConfig()
     {
-        var planetList = new List<PlanetDesigner>();
-        foreach (Transform child in transform)
-        {
-            if (child.GetComponent<PlanetDesigner>()) 
-                planetList.Add(child.GetComponent<PlanetDesigner>());
-        }
-        SaveLoadSystem.SaveBoardDesign(planetList);
+        SaveLoadSystem.SaveBoardDesign(this);
     }
 
     public float MaxConnectionSize { get; set; } = 400.0f;

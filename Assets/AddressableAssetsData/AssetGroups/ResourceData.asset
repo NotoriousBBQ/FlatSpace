@@ -16,32 +16,32 @@ MonoBehaviour:
   m_GUID: 7c636c7dbca17ed498f785e42bd4f855
   m_SerializeEntries:
   - m_GUID: 2ed03b01019d2f347839aa6784bdce1a
-    m_Address: DesolatePlanetTypeDataNoPop.asset
+    m_Address: DesolatePlanetTypeDataNoPop
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 36a318dcff54eab4ab7fb6e66ad1aa22
-    m_Address: VerdantPlanetTypeDataNoPop.asset
+    m_Address: VerdantPlanetTypeDataNoPop
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6f1f1856bae802941bc98d868d1f172f
-    m_Address: PrimePlanetTypeDataPopTest.asset
+    m_Address: PrimePlanetTypeDataPopTest
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9a1928cbd5670b5438daa15781329c10
-    m_Address: NormalPlanetTypeDataNoPop.asset
+    m_Address: NormalPlanetTypeDataNoPop
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d0a201acbf569e04baf53499c6eab426
-    m_Address: FarmPlanetTypeDataNoPop.asset
+    m_Address: FarmPlanetTypeDataNoPop
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e5c9d305df4f3644a8ab24a52146c43c
-    m_Address: IndustrialPlanetTypeDataNoPop.asset
+    m_Address: IndustrialPlanetTypeDataNoPop
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

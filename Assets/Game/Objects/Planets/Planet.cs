@@ -137,7 +137,7 @@ public class Planet : MonoBehaviour
         foodWorkers = 0;
 
         var strategyPopulaitonModifer = 1;
-        var modifierData = _gameAIConstants.FoodWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
+        var modifierData = _gameAIConstants.foodWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.modifier;
         var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
@@ -150,7 +150,7 @@ public class Planet : MonoBehaviour
     {
         grotsitsWorkers = 0;
         var strategyPopulaitonModifer = 1;
-        var modifierData = _gameAIConstants.GrotsitWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
+        var modifierData = _gameAIConstants.grotsitWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.modifier;
         var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
@@ -346,13 +346,13 @@ public class Planet : MonoBehaviour
             // Can't give everyone goods
             grotsitsShort += Grotsits - Population;
             Grotsits = 0.0f;
-            Morale = Math.Clamp(Morale - _gameAIConstants.MoraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale - _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
         else
         {
             // Grotsits for everyone
             Grotsits -= Population;
-            Morale = Math.Clamp(Morale + _gameAIConstants.MoraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale + _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
 
         // add 1 to population here to allow for growth if possible

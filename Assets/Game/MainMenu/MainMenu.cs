@@ -12,7 +12,7 @@ public class MainMenu : MonoBehaviour
 
     public void StartGame()
     {
-        SaveLoadSystem.LoadNewGame();
+        SaveLoadSystem.StartNewGame();
     }
 
     public void SaveGame()

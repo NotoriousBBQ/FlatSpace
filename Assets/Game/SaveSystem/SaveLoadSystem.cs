@@ -101,7 +101,7 @@ public class SaveLoadSystem : MonoBehaviour
         File.WriteAllText(filePath, temp);
     }
 
-    private static bool LoadGame(GameAI gameAI, string filePath)
+    private static bool LoadSaveGame(GameAI gameAI, string filePath)
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
@@ -137,6 +137,8 @@ public class SaveLoadSystem : MonoBehaviour
             public Planet.PlanetType planetType;
             public Vector2 position;
         }
+
+        public string aiConstants;
         public List<BoardDesignerEntry> planetEntries = new List<BoardDesignerEntry>();
 
         public BoardDesignerSave(List<PlanetDesigner> planetList)
@@ -167,13 +169,23 @@ public class SaveLoadSystem : MonoBehaviour
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
         var saveConfig = JsonUtility.FromJson<BoardDesignerSave>(readText);
-        if (saveConfig == null)
-            return false;
-     //   return Gameboard.Instance.InitGameFromSaveConfig(saveConfig);  
-     // init game here
-        return true;        
+        return (saveConfig != null && Gameboard.Instance.InitGameFromDesignerConfig(saveConfig));
     }
     
+    public void LoadAIConstantsAddressable(string address, Action<AsyncOperationHandle<GameAIConstants>> loadCompleteDelegate)
+    {
+        var loadRequest = Addressables.LoadAssetAsync<GameAIConstants>(address);
+        loadRequest.Completed += AIConstantsLoadComplete;
+        loadRequest.Completed += loadCompleteDelegate;
+        loadingList.Add(loadRequest);
+    }
+
+    private void AIConstantsLoadComplete(AsyncOperationHandle<GameAIConstants> loadRequest)
+    {
+        loadRequest.Completed -= AIConstantsLoadComplete;
+        loadingList.Remove(loadRequest);
+    }
+
     #endregion
 
     #region MenuFunctions
@@ -207,7 +219,7 @@ public class SaveLoadSystem : MonoBehaviour
         SceneManagerOnDesignerLoadingSceneLoaded(scene, LoadSceneMode.Single);        
     }
 
-    public static void LoadNewGame()
+    public static void StartNewGame()
     {
         LoadGameScene("Flatspace",SceneManagerOnNewGameSceneLoaded);
     }
@@ -219,6 +231,7 @@ public class SaveLoadSystem : MonoBehaviour
     private static void SceneManagerOnNewGameSceneLoaded(Scene scene, LoadSceneMode sceneMode)
     {
         SceneManager.SetActiveScene(scene);
+        ShowLoadGameConfigFileBrowser();
     }
 
     private static void SceneManagerOnGameLoadingSceneLoaded(Scene scene, LoadSceneMode sceneMode)
@@ -240,14 +253,8 @@ public class SaveLoadSystem : MonoBehaviour
     }
     private static void ShowLoadGameFileBrowser()
     {
-        FileBrowser.ShowLoadDialog((paths) => LoadGame(Gameboard.Instance.GameAI, paths[0]), 
+        FileBrowser.ShowLoadDialog((paths) => LoadSaveGame(Gameboard.Instance.GameAI, paths[0]), 
             ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
-    }
-
-    private static void ShowLoadDesignerFileBrowser()
-    {
-        FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
-            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\BoardDesigner\");
     }
     
     private static void ShowSaveGameFileBrowser()
@@ -256,9 +263,16 @@ public class SaveLoadSystem : MonoBehaviour
             ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
     }
 
-    public static void SaveBoardDesign(List<PlanetDesigner> planetList)
+    public static void SaveBoardDesign(BoardDesigner designer)
     {
+        var planetList = new List<PlanetDesigner>();
+        foreach (Transform child in designer.transform)
+        {
+            if (child.GetComponent<PlanetDesigner>()) 
+                planetList.Add(child.GetComponent<PlanetDesigner>());
+        }
         var designData = new BoardDesignerSave(planetList);
+        designData.aiConstants = designer.aiConstants.name;
         if (designData.planetEntries.Count == 0)
             return;
         ShowSaveGameConfigFileBrowser(designData);

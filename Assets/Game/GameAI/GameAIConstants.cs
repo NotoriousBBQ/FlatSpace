@@ -6,11 +6,11 @@ using UnityEngine;
 public class GameAIConstants : ScriptableObject
 {
 
-    public float MoraleStep;
-    public float DefaultTravelSpeed;
-    public int MaxPathNodesToSearch;
-    public float ExpandPopulationTrigger;
-    public List<ModifierForPlanetStrategy> FoodWorkerAdjustment;
-    public List<ModifierForPlanetStrategy> GrotsitWorkerAdjustment;
+    public float moraleStep;
+    public float defaultTravelSpeed;
+    public float expandPopulationTrigger;
+    public List<ModifierForPlanetStrategy> foodWorkerAdjustment;
+    public List<ModifierForPlanetStrategy> grotsitWorkerAdjustment;
+    public List<PlanetResourceData> resourceData;
 
 }

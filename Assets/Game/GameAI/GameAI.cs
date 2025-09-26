@@ -225,8 +225,8 @@ public class GameAI : MonoBehaviour
             {
                 Type = GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -285,8 +285,8 @@ public class GameAI : MonoBehaviour
             {
                 Type = GameAIOrder.OrderType.OrderTypeFoodTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -312,7 +312,7 @@ public class GameAI : MonoBehaviour
         var possibleColonizers = results.FindAll(x =>
             (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
                 or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax) 
-            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.ExpandPopulationTrigger);
+            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.expandPopulationTrigger);
         if (possibleColonizers.Count <= 0)
             return;
         // find all planets with no population
@@ -349,8 +349,8 @@ public class GameAI : MonoBehaviour
             {
                 Type = GameAIOrder.OrderType.OrderTypePopulationTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.DefaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
@@ -378,44 +378,6 @@ public class GameAI : MonoBehaviour
                 Target = actionNTuple.Item2
 
             });
-        }
-
-    }
-    private void ProcessPopulationSurplus(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
-    {
-
-        foreach (var result in results)
-        {
-            var planet = GameAIMap.GetPlanet(result.Name);
-            
-            List<(string Name, float Score)> scoreMatrix = new List<(string, float)>();
-            int maxNodes = GameAIMap.GameAIConstants.MaxPathNodesToSearch;
-            
-            foreach (var pathMap in planet.DistanceMapToPathingList)
-            {
-                var possibleDestination = GetPlanet(pathMap.Key);
-                if (pathMap.Value.NumNodes <= maxNodes && possibleDestination.Population < possibleDestination.MaxPopulation)
-                {
-                    (string Name, float Score) scoreNTuple = (pathMap.Key, pathMap.Value.Cost * (Convert.ToSingle(possibleDestination.Population + 1) / Convert.ToSingle(possibleDestination.MaxPopulation)));
-                    scoreMatrix.Add(scoreNTuple);                    
-                }
-
-            }
-
-            if (scoreMatrix.Count > 0)
-            {
-                scoreMatrix.Sort((a, b) => a.Score.CompareTo(b.Score));
-                var chosenTarget = scoreMatrix[0].Name;
-                orders.Add(new GameAI.GameAIOrder
-                {
-                    Type = GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
-                    Origin = result.Name,
-                    Target = chosenTarget,
-                    TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                    TimingDelay = 1,
-                    Data = result.Data,
-                });
-            }
         }
     }
 

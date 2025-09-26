@@ -25,6 +25,7 @@ namespace FlatSpace
             [SerializeField] private float _maxCameraOrtho = 15;
             [SerializeField] private float _cameraOrthoStep = 0.1f;
             public GameAI GameAI {get; private set;}
+            [SerializeField] private GameAIConstants gameAIConstants;
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
             [SerializeField]private LineDrawObject _orderLineDrawObjectPrefab;
 
@@ -63,6 +64,20 @@ namespace FlatSpace
 
             }
 
+            public bool InitGameFromDesignerConfig(SaveLoadSystem.BoardDesignerSave boardData)
+            {
+                if (boardData == null)
+                    return false;
+
+                IntialBoardState = null;
+                ClearExistingGameState();
+                InitGame(boardData);
+                PlanetaryUIUpdate();
+                BoardUIUpdate();
+
+                return true;
+                
+            }
             public bool InitGameFromSaveConfig(SaveLoadSystem.GameSave gameSave)
             {
                 if (gameSave == null || string.IsNullOrEmpty(gameSave.boardConfigurationPath))
@@ -112,10 +127,24 @@ namespace FlatSpace
             {
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
-                GameAI.InitGameAI(IntialBoardState._planetSpawnData, IntialBoardState._gameAIConstants);
 
+                GameAI.InitGameAI(IntialBoardState._planetSpawnData, gameAIConstants);
                 InitPlanetGraphics(IntialBoardState._planetSpawnData);
                 InitPathGraphics();
+            }
+
+            private bool InitGame(SaveLoadSystem.BoardDesignerSave boardData)
+            {
+                if (GameAI == null)
+                    GameAI = this.AddComponent<GameAI>() as GameAI;
+
+                var planetSpawnData = new List<PlanetSpawnData>();
+                var gameAIConstants = new GameAIConstants();
+                GameAI.InitGameAI(planetSpawnData, gameAIConstants);
+                InitPlanetGraphics(IntialBoardState._planetSpawnData);
+                InitPathGraphics();
+                
+                return true;
             }
 
             private void InitPlanetGraphics(List<PlanetSpawnData> spawnDataList)

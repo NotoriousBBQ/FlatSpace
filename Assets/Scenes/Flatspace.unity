@@ -360,6 +360,7 @@ MonoBehaviour:
   _minCameraOrtho: 1
   _maxCameraOrtho: 15
   _cameraOrthoStep: 0.5
+  gameAIConstants: {fileID: 11400000, guid: 497d1527c2a7ee341a4b31d747a9519d, type: 2}
   _lineDrawObjectPrefab: {fileID: 5226953852233311075, guid: 0e55f099c06447b41b421337a3648791, type: 3}
   _orderLineDrawObjectPrefab: {fileID: 4779870425705875092, guid: 387624431a5c15e428e7d465ff2d0775, type: 3}
   _PlanetUIPrefab: {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}

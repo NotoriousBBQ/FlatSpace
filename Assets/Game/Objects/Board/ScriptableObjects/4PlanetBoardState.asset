@@ -17,3 +17,4 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0b9139e86876d1a4fb191743995f5b3f, type: 2}
   - {fileID: 11400000, guid: 0749dbec788155843a98ae7cecd70633, type: 2}
   - {fileID: 11400000, guid: 48e82d7528363f341ab35cfc81f72120, type: 2}
+  _gameAIConstants: {fileID: 11400000, guid: 497d1527c2a7ee341a4b31d747a9519d, type: 2}

@@ -289,6 +289,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 53476a4f43c73bf4b90b323129de6998, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoardDesigner
+  aiConstants: {fileID: 11400000, guid: 6e83925ce2d2ae148bd51f3a2bbd46ef, type: 2}
   lineDrawObjectPrefab: {fileID: 5226953852233311075, guid: 0e55f099c06447b41b421337a3648791, type: 3}
 --- !u!1001 &155162897
 PrefabInstance:
