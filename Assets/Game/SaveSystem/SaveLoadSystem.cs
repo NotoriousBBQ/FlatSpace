@@ -51,14 +51,16 @@ public class SaveLoadSystem : MonoBehaviour
         
         public GameAI.AIStrategy strategy;
         public int turnNumber;
-        public string boardConfigurationPath;
+        public string initialBoardStatePath;
+        public string boardDesignDataPath;
         public List<OrderSave> orders = new List<OrderSave>();
         public List<PlanetSave> planetStatuses = new List<PlanetSave>();
         public GameSave(GameAI gameAI)
         {
             strategy = gameAI.Strategy;
             turnNumber = Gameboard.Instance.TurnNumber;
-            boardConfigurationPath = Gameboard.Instance.IntialBoardState.name;
+            initialBoardStatePath = Gameboard.Instance.IntialBoardState != null ? Gameboard.Instance.IntialBoardState.name : null;
+            boardDesignDataPath = Gameboard.Instance._boardDesignPath;
             foreach (var planet in gameAI.GameAIMap.PlanetList)
             {
                 planetStatuses.Add(
@@ -97,7 +99,7 @@ public class SaveLoadSystem : MonoBehaviour
         if (!File.Exists(filePath)) 
             File.Create(filePath).Dispose();
         
-        var  temp = JsonUtility.ToJson(gameSave);
+        var  temp = JsonUtility.ToJson(gameSave, true);
         File.WriteAllText(filePath, temp);
     }
 
@@ -164,7 +166,7 @@ public class SaveLoadSystem : MonoBehaviour
         var  temp = JsonUtility.ToJson(saveData);
         File.WriteAllText(filePath, temp); 
     }
-    private static bool LoadDesignerContent(string filePath)
+    public static bool LoadDesignerContent(string filePath)
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);

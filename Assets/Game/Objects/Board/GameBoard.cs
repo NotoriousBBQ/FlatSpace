@@ -20,7 +20,7 @@ namespace FlatSpace
             private static Gameboard _instance;
             public static Gameboard Instance => _instance;
             [SerializeField] public BoardConfiguration IntialBoardState;
-            private string _boardDesignPath;
+            public string _boardDesignPath;
 
             [SerializeField] private float _minCameraOrtho = 1;
             [SerializeField] private float _maxCameraOrtho = 15;
@@ -82,23 +82,34 @@ namespace FlatSpace
             }
             public bool InitGameFromSaveConfig(SaveLoadSystem.GameSave gameSave)
             {
-                if (gameSave == null || string.IsNullOrEmpty(gameSave.boardConfigurationPath))
+                if (gameSave == null || (string.IsNullOrEmpty(gameSave.initialBoardStatePath) && string.IsNullOrEmpty(gameSave.boardDesignDataPath)))
                     return false;
-                
-                SaveLoadSystem.Instance.LoadBoardConfigAddressable(gameSave.boardConfigurationPath, asyncOp =>
-                {
-                    if (asyncOp.Status == AsyncOperationStatus.Succeeded)
-                    {
-                        IntialBoardState = Instantiate<BoardConfiguration>(asyncOp.Result) ;
-                        ClearExistingGameState();
-                        InitGame();
-                        SetSimulationStatus(gameSave);
-                        PlanetaryUIUpdate();
-                        BoardUIUpdate();
-                    }                     
-                });
 
-                return true;
+                if (!string.IsNullOrEmpty(gameSave.boardDesignDataPath))
+                {
+                    SaveLoadSystem.LoadDesignerContent(gameSave.boardDesignDataPath);   
+                    SetSimulationStatus(gameSave);
+                    PlanetaryUIUpdate();
+                    BoardUIUpdate();
+                    return true;
+                }
+                else if (!string.IsNullOrEmpty(gameSave.initialBoardStatePath))
+                {
+                    SaveLoadSystem.Instance.LoadBoardConfigAddressable(gameSave.initialBoardStatePath, asyncOp =>
+                    {
+                        if (asyncOp.Status == AsyncOperationStatus.Succeeded)
+                        {
+                            IntialBoardState = Instantiate<BoardConfiguration>(asyncOp.Result) ;
+                            ClearExistingGameState();
+                            InitGame();
+                            SetSimulationStatus(gameSave);
+                            PlanetaryUIUpdate();
+                            BoardUIUpdate();
+                        }                     
+                    });
+                    return true;
+                }
+                return false;
             }
 
             private void SetSimulationStatus(SaveLoadSystem.GameSave gameSave)
