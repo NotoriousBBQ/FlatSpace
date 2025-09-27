@@ -20,6 +20,7 @@ namespace FlatSpace
             private static Gameboard _instance;
             public static Gameboard Instance => _instance;
             [SerializeField] public BoardConfiguration IntialBoardState;
+            private string _boardDesignPath;
 
             [SerializeField] private float _minCameraOrtho = 1;
             [SerializeField] private float _maxCameraOrtho = 15;
@@ -64,12 +65,13 @@ namespace FlatSpace
 
             }
 
-            public bool InitGameFromDesignerConfig(SaveLoadSystem.BoardDesignerSave boardData)
+            public bool InitGameFromDesignerConfig(string filePath, SaveLoadSystem.BoardDesignerSave boardData)
             {
                 if (boardData == null)
                     return false;
 
                 IntialBoardState = null;
+                _boardDesignPath = filePath;
                 ClearExistingGameState();
                 InitGame(boardData);
                 PlanetaryUIUpdate();
@@ -139,9 +141,31 @@ namespace FlatSpace
                     GameAI = this.AddComponent<GameAI>() as GameAI;
 
                 var planetSpawnData = new List<PlanetSpawnData>();
-                var gameAIConstants = new GameAIConstants();
+                if (gameAIConstants.name != boardData.aiConstants)
+                {
+                    SaveLoadSystem.Instance.LoadAIConstantsAddressable(boardData.aiConstants, asyncOp =>
+                    {
+                        if (asyncOp.Status == AsyncOperationStatus.Succeeded)
+                        {
+                            gameAIConstants = asyncOp.Result;
+                        }
+                    });
+                }
+
+                foreach (var planetDesignData in boardData.planetEntries)
+                {
+                    var spawnData = ScriptableObject.CreateInstance<PlanetSpawnData>();
+                    spawnData._planetName = planetDesignData.name;
+                    spawnData._planetPosition =
+                        new Vector3(planetDesignData.position.x, planetDesignData.position.y, 0.0f);
+                    spawnData._planetType = planetDesignData.planetType;
+                    spawnData._resourceData =
+                        gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);                       
+                    planetSpawnData.Add(spawnData);
+                }
+
                 GameAI.InitGameAI(planetSpawnData, gameAIConstants);
-                InitPlanetGraphics(IntialBoardState._planetSpawnData);
+                InitPlanetGraphics(planetSpawnData);
                 InitPathGraphics();
                 
                 return true;

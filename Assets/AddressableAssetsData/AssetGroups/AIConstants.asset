@@ -14,12 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
   m_GroupName: AIConstants
   m_GUID: fc8f447244c76be40bf5f07d6151de28
-  m_SerializeEntries:
-  - m_GUID: 497d1527c2a7ee341a4b31d747a9519d
-    m_Address: GameAIConstants
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
+  m_SerializeEntries: []
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 9f2ee23d17d69bf4db1c8150f710c26a, type: 2}
   m_SchemaSet:

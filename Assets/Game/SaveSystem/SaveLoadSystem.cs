@@ -169,7 +169,7 @@ public class SaveLoadSystem : MonoBehaviour
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
         var saveConfig = JsonUtility.FromJson<BoardDesignerSave>(readText);
-        return (saveConfig != null && Gameboard.Instance.InitGameFromDesignerConfig(saveConfig));
+        return (saveConfig != null && Gameboard.Instance.InitGameFromDesignerConfig(filePath, saveConfig));
     }
     
     public void LoadAIConstantsAddressable(string address, Action<AsyncOperationHandle<GameAIConstants>> loadCompleteDelegate)
@@ -178,6 +178,8 @@ public class SaveLoadSystem : MonoBehaviour
         loadRequest.Completed += AIConstantsLoadComplete;
         loadRequest.Completed += loadCompleteDelegate;
         loadingList.Add(loadRequest);
+        var loadComplete = loadRequest.WaitForCompletion();
+        Addressables.Release(loadComplete);
     }
 
     private void AIConstantsLoadComplete(AsyncOperationHandle<GameAIConstants> loadRequest)
