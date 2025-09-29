@@ -163,7 +163,7 @@ public class SaveLoadSystem : MonoBehaviour
         if (!File.Exists(filePath)) 
             File.Create(filePath).Dispose();
         
-        var  temp = JsonUtility.ToJson(saveData);
+        var  temp = JsonUtility.ToJson(saveData, true);
         File.WriteAllText(filePath, temp); 
     }
     public static bool LoadDesignerContent(string filePath)
@@ -272,8 +272,9 @@ public class SaveLoadSystem : MonoBehaviour
         var planetList = new List<PlanetDesigner>();
         foreach (Transform child in designer.transform)
         {
-            if (child.GetComponent<PlanetDesigner>()) 
-                planetList.Add(child.GetComponent<PlanetDesigner>());
+            var planetDesign = child.GetComponent<PlanetDesigner>();
+            if (planetDesign) 
+                planetList.Add(planetDesign);
         }
         var designData = new BoardDesignerSave(planetList);
         designData.aiConstants = designer.aiConstants.name;

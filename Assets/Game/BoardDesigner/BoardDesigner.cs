@@ -17,6 +17,7 @@ public class BoardDesigner : MonoBehaviour
         }
         _lineDrawObjects.Clear();
     }
+    [ContextMenu("Generate Connections")]
     public void GenerateStarConnections()
     {
 
@@ -45,6 +46,72 @@ public class BoardDesigner : MonoBehaviour
         }
         DrawConnections(planetList);
     }
+
+    [ContextMenu("Generate Names")]
+    public void GenerateNames()
+    {
+        var planetList = new List<PlanetDesigner>();
+        foreach (Transform child in transform)
+        {
+            if (child.GetComponent<PlanetDesigner>()) 
+                planetList.Add(child.GetComponent<PlanetDesigner>());
+        }
+
+        var count = 0;
+        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesolate))
+        {
+            planet.name = "Desolate " + count.ToString();
+            planet.planetName = planet.name;
+            planet.UpdateGraphic();
+            count++;
+        }
+
+        count = 0;
+        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeFarm))
+        {
+            planet.name = "Farm " + count.ToString();
+            planet.planetName = planet.name;
+            planet.UpdateGraphic();
+            count++;
+        }
+
+        count = 0;
+        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeIndustrial))
+        {
+            planet.name = "Industrial " + count.ToString();
+            planet.planetName = planet.name;
+            planet.UpdateGraphic();
+            count++;
+        }
+
+        count = 0;
+        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeNormal))
+        {
+            planet.name = "Normal " + count.ToString();
+            planet.planetName = planet.name;
+            planet.UpdateGraphic();
+            count++;
+        }
+
+        count = 0;
+        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypePrime))
+        {
+            planet.name = "Prime " + count.ToString();
+            planet.planetName = planet.name;
+            planet.UpdateGraphic();
+            count++;
+        }
+
+        count = 0;
+        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeVerdant))
+        {
+            planet.name = "Verdant " + count.ToString();
+            planet.planetName = planet.name;
+            planet.UpdateGraphic();
+            count++;
+        }
+    }
+    
 
     private void DrawConnections(List<PlanetDesigner> planetList)
     {

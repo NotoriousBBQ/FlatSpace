@@ -31,10 +31,7 @@ public class PlanetDesigner : MonoBehaviour
     public List<DesignerConnection> Connections = new List<DesignerConnection>();
  
     [SerializeField] public TextMeshProUGUI nameTextField;
-    [SerializeField] public TextMeshProUGUI populationTextField;
-    [SerializeField] public TextMeshProUGUI foodTextField;
-    [SerializeField] public TextMeshProUGUI grotsitsTextField;
-    [SerializeField] public TextMeshProUGUI moraleTextField;
+    [SerializeField] public TextMeshProUGUI typeTextField;
 
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
     {
@@ -49,14 +46,16 @@ public class PlanetDesigner : MonoBehaviour
 
     private void OnValidate()
     {
-        /*
+        
         nameTextField.text = planetName;
-        populationTextField.text = population.ToString();
-        foodTextField.text = food.ToString();
-        grotsitsTextField.text = grotsits.ToString();
-        moraleTextField.text = morale.ToString();
-        position = new Vector2(transform.position.x, transform.position.y);
-        SetPlanetColor(type);*/
+        typeTextField.text = type.ToString();
+
+        SetPlanetColor(type);
+    }
+
+    public void UpdateGraphic()
+    {
+        OnValidate();
     }
 
     public void SetPlanetColor(Planet.PlanetType planetType)
