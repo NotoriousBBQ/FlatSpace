@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.VisualScripting;
 using UnityEngine;
+using ScoreMatricElementList = System.Collections.Generic.List<(string Target, float Distance, float Surplus)>;
 using ScoreMatrix = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<(string Target, float Distance, float Surplus)>>;
 
 public class GameAI : MonoBehaviour
@@ -161,7 +162,7 @@ public class GameAI : MonoBehaviour
     private static void GenerateActionList(ScoreMatrix scoreMatrix, out List<(string, string, float)> actionList)
     {
         actionList = new List<(string, string, float)>();
-         foreach (var nNTupleList in scoreMatrix.Values)
+        foreach (var nNTupleList in scoreMatrix.Values)
         {
             nNTupleList.Sort(CompareScoreNTuples);
         }
@@ -170,7 +171,11 @@ public class GameAI : MonoBehaviour
         {
 
             foreach (var key in scoreMatrix.Keys)
+            {
+                if (scoreMatrix[key].Count <= 0)
+                    continue;
                 minimumDistanceList.Add((key, scoreMatrix[key][0].Item2, scoreMatrix[key][0].Item3));
+            }
 
             minimumDistanceList.Sort(CompareScoreNTuples);
             string closestTargetName =  scoreMatrix[minimumDistanceList[0].Item1][0].Item1;
@@ -186,7 +191,7 @@ public class GameAI : MonoBehaviour
         }
     }
     
-        private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
     {
         var shortageResults = results.FindAll(x =>
             x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage);
@@ -201,12 +206,16 @@ public class GameAI : MonoBehaviour
         var scoreMatrix = new ScoreMatrix();
         foreach (var surplusProducer in surplusResults)
         {
-            scoreMatrix.Add(surplusProducer.Name, new List<(string Target, float Distance, float Surplus)>());
+            var validMatrixEntries = new ScoreMatricElementList();
             var surplusPathMap = GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
             foreach (var shortageResult in shortageResults)
             {
-                scoreMatrix[surplusProducer.Name].Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost, (float)surplusProducer.Data));
+                if(surplusPathMap[shortageResult.Name].NumNodes <= GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                    validMatrixEntries.Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost, (float)surplusProducer.Data));
             }
+            if (validMatrixEntries.Count <= 0)
+                continue;
+            scoreMatrix.Add(surplusProducer.Name,validMatrixEntries);
         }
         
         ShipGrotsits(scoreMatrix, orders, surplusResults);
@@ -261,12 +270,17 @@ public class GameAI : MonoBehaviour
         var scoreMatrix = new ScoreMatrix();
         foreach (var surplusProducer in surplusResults)
         {
-            scoreMatrix.Add(surplusProducer.Name, new List<(string Target, float Distance, float Surplus)>());
+            var validMatrixEntries = new ScoreMatricElementList();
             var surplusPathMap = GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
             foreach (var shortageResult in shortageResults)
             {
-                scoreMatrix[surplusProducer.Name].Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost,  (float)surplusProducer.Data));
+                if(surplusPathMap[shortageResult.Name].NumNodes <= GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                    validMatrixEntries.Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost,  (float)surplusProducer.Data));
             }
+
+            if (validMatrixEntries.Count <= 0)
+                continue;
+            scoreMatrix.Add(surplusProducer.Name, validMatrixEntries);
         }
         
         ShipFood(scoreMatrix, orders, surplusResults);
@@ -274,9 +288,7 @@ public class GameAI : MonoBehaviour
 
     private void ShipFood(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
     {
-        List<(string, string, float)> actionList;
-        
-        GenerateActionList(scoreMatrix, out actionList);
+        GenerateActionList(scoreMatrix, out var actionList);
 
         foreach (var actionNTuple in actionList)
         {
@@ -321,17 +333,21 @@ public class GameAI : MonoBehaviour
         if (possibleColonizerTargets.Count > 0)
         {
             // create a score matrix for each potential colonizer's distance to each possible target
-            ScoreMatrix scoreMatrix = new ScoreMatrix();
+            var scoreMatrix = new ScoreMatrix();
 
             foreach (var colonizer in possibleColonizers)
             {
-                if(!scoreMatrix.ContainsKey(colonizer.Name))
-                    scoreMatrix.Add(colonizer.Name, new List<(string, float, float)>());
+                var validMatrixEntries = new ScoreMatricElementList();
                 var colonizerPathMap = GetPlanet(colonizer.Name).DistanceMapToPathingList;
                 foreach (var colonizerTarget in possibleColonizerTargets)
                 {
-                    scoreMatrix[colonizer.Name].Add((colonizerTarget.PlanetName, colonizerPathMap[colonizerTarget.PlanetName].Cost, 1.0f));
+                    if(colonizerPathMap[colonizerTarget.PlanetName].NumNodes <= GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                        validMatrixEntries.Add((colonizerTarget.PlanetName, colonizerPathMap[colonizerTarget.PlanetName].Cost, 1.0f));
                 }
+
+                if (validMatrixEntries.Count <= 0)
+                    continue;
+                scoreMatrix.Add(colonizer.Name, validMatrixEntries);
             }
             SendColonizers(scoreMatrix, orders, possibleColonizers);
         }

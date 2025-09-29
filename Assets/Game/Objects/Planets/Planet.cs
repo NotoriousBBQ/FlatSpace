@@ -184,7 +184,7 @@ public class Planet : MonoBehaviour
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
                 // fopr grotsits, use the existing first
                 GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
+                Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population - FoodWorkers, 0));
                 // the even out the rest
                 remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
@@ -200,7 +200,7 @@ public class Planet : MonoBehaviour
             case PlanetStrategy.PlanetStrategyGrowth:
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
                 GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Population - FoodWorkers);
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population - FoodWorkers, 0));
                 break;
             case PlanetStrategy.PlanetStrategyFood:
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
@@ -278,8 +278,7 @@ public class Planet : MonoBehaviour
                     resultList.Add(new PlanetUpdateResult(PlanetName,
                         ResultType.PlanetUpdateResultTypePopulationSurplus, Population - _resourceData._maxPopulation));
             }
-
-            if (Population >= MaxPopulation)
+            else if (Population >= MaxPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypePopulationMax, 1));
@@ -339,7 +338,6 @@ public class Planet : MonoBehaviour
         if (Population <= 0 && Grotsits <= _resourceData._initialGrotsits)
             return;
 
-        bool DEBUG_HAD_SURPLUS = false;
         var grotsitsShort = 0.0f;
         if (Grotsits < Population) 
         { 
@@ -361,13 +359,14 @@ public class Planet : MonoBehaviour
         ProjectedGrotsits = Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction);
         if (ProjectedGrotsits >= projectedPopulation)
         {
+            grotsitsShort += ProjectedGrotsits - projectedPopulation;
             if (Grotsits > projectedPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypeGrotsitsSurplus,
                     Math.Clamp(Grotsits - projectedPopulation, 0, Grotsits)));
             }
-            DEBUG_HAD_SURPLUS = true;
+
         }
         else
         {
@@ -378,8 +377,6 @@ public class Planet : MonoBehaviour
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage,
                 grotsitsShort));
-            if(DEBUG_HAD_SURPLUS)
-                Debug.LogError($"Planet {PlanetName} had grotsists surplus and shortage");
         }
     }
 

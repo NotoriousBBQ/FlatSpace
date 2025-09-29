@@ -2,7 +2,6 @@ using UnityEngine;
 using System.Collections.Generic;
 public class BoardDesigner : MonoBehaviour
 {
-    [SerializeField] public GameAIConstants aiConstants;
     [SerializeField] private LineDrawObject lineDrawObjectPrefab;
     private List<LineDrawObject> _lineDrawObjects = new List<LineDrawObject>();
 

@@ -277,7 +277,7 @@ public class SaveLoadSystem : MonoBehaviour
                 planetList.Add(planetDesign);
         }
         var designData = new BoardDesignerSave(planetList);
-        designData.aiConstants = designer.aiConstants.name;
+
         if (designData.planetEntries.Count == 0)
             return;
         ShowSaveGameConfigFileBrowser(designData);
