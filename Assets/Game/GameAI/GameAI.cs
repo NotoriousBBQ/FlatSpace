@@ -427,6 +427,11 @@ public class GameAI : MonoBehaviour
         return GameAIMap.GetPlanet(planetName);
     }
 
+    public Planet GetPlayerCapitol(int playerID)
+    {
+        return GameAIMap.GetPlayerCapitol(playerID);
+    }
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {

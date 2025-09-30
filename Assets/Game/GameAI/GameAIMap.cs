@@ -126,6 +126,11 @@ public class GameAIMap : MonoBehaviour
         return _planets[planetName];
     }
 
+    public Planet GetPlayerCapitol(int playerID)
+    {
+        return PlanetList.Find(x => x.Owner == playerID && x.Type == Planet.PlanetType.PlanetTypePrime);
+    }
+
     public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
     {
         foreach (var planetStatus in gameSave.planetStatuses)

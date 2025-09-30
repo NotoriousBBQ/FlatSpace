@@ -28,7 +28,8 @@ namespace FlatSpace
             public GameAI GameAI {get; private set;}
             [SerializeField] private GameAIConstants gameAIConstants;
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
-            [SerializeField]private LineDrawObject _orderLineDrawObjectPrefab;
+            [SerializeField] private LineDrawObject _orderLineDrawObjectPrefab;
+            [SerializeField] private ScrollRect _scrollRect;
 
             public PlanetUIObject _PlanetUIPrefab;
 
@@ -63,7 +64,7 @@ namespace FlatSpace
                 CreatePlayerData();
                 if (IntialBoardState)
                 {
-                    InitGame();
+                    InitGame(IntialBoardState._planetSpawnData);
                 }
                 InitializeInputActions();
 
@@ -118,7 +119,7 @@ namespace FlatSpace
                         {
                             IntialBoardState = Instantiate<BoardConfiguration>(asyncOp.Result) ;
                             ClearExistingGameState();
-                            InitGame();
+                            InitGame(IntialBoardState._planetSpawnData);
                             SetSimulationStatus(gameSave);
                             PlanetaryUIUpdate();
                             BoardUIUpdate();
@@ -157,14 +158,17 @@ namespace FlatSpace
                     Destroy(linedrawObject.gameObject);
             }
 
-            private void InitGame()
+            private void InitGame(List<PlanetSpawnData> planetSpawnData)
             {
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
                 ClearPlayerData();
-                GameAI.InitGameAI(IntialBoardState._planetSpawnData, gameAIConstants);
-                InitPlanetGraphics(IntialBoardState._planetSpawnData);
+                GameAI.InitGameAI(planetSpawnData, gameAIConstants);
+                InitPlanetGraphics(planetSpawnData);
                 InitPathGraphics();
+                var playerOneCapital = GetPlayerCapitol(0);
+                if(playerOneCapital)
+                    ViewPlanet(playerOneCapital);
             }
 
             private bool InitGame(SaveLoadSystem.BoardDesignerSave boardData)
@@ -172,7 +176,6 @@ namespace FlatSpace
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
                 var planetSpawnData = new List<PlanetSpawnData>();
-                ClearPlayerData();
                 // TODO come up with the correct loading ai constants
                 /*
                 if (gameAIConstants.name != boardData.aiConstants)
@@ -197,9 +200,7 @@ namespace FlatSpace
                         gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);                       
                     planetSpawnData.Add(spawnData);
                 }
-                GameAI.InitGameAI(planetSpawnData, gameAIConstants);
-                InitPlanetGraphics(planetSpawnData);
-                InitPathGraphics();
+                InitGame(planetSpawnData);
                 
                 return true;
             }
@@ -335,6 +336,23 @@ namespace FlatSpace
             public Planet GetPlanet(string planetName)
             {
                 return GameAI.GetPlanet(planetName);
+            }
+
+            private Planet GetPlayerCapitol(int playerID)
+            {
+                return GameAI.GetPlayerCapitol(playerID);
+            }
+
+            private void ViewPlanet(Planet planet)
+            {
+                if (_scrollRect)
+                {
+                    var normalizedWidth = planet.Position.x + (.5f * _scrollRect.content.sizeDelta.x);
+                    normalizedWidth /= _scrollRect.content.sizeDelta.x;  
+                    var normalizedHeight = planet.Position.y + (.5f * _scrollRect.content.sizeDelta.y);
+                    normalizedHeight /= _scrollRect.content.sizeDelta.y;
+                    _scrollRect.normalizedPosition = new Vector2(normalizedWidth, normalizedHeight);
+                }
             }
             private void InitializeInputActions()
             {
