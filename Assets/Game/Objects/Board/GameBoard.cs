@@ -35,6 +35,9 @@ namespace FlatSpace
             private MapInputActions _mapInputActions;
             private Camera _camera;
 
+            private int _numPlayers = 2;
+            public List<Player> players = new List<Player>();
+
             private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
  
             public int TurnNumber { get; private set; }= 0;
@@ -57,12 +60,26 @@ namespace FlatSpace
 
                 _camera = Camera.main;
                 _planetUIObjects.Clear();
+                CreatePlayerData();
                 if (IntialBoardState)
                 {
                     InitGame();
                 }
                 InitializeInputActions();
 
+            }
+
+            private void CreatePlayerData()
+            {
+                for(var i = 0; i < _numPlayers; i++)
+                    players.Add(this.AddComponent<Player>());
+
+            }
+
+            private void ClearPlayerData()
+            {
+                foreach(var player in players)
+                    player.Clear();
             }
 
             public bool InitGameFromDesignerConfig(string filePath, SaveLoadSystem.BoardDesignerSave boardData)
@@ -116,6 +133,10 @@ namespace FlatSpace
             {
                 
                 TurnNumber = gameSave.turnNumber;
+                foreach (var playerSave in gameSave.players)
+                {
+                    players[playerSave.playerId].Strategy = playerSave.strategy;
+                }
                 GameAI.SetSimulationStats(gameSave);
             }
 
@@ -140,7 +161,7 @@ namespace FlatSpace
             {
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
-
+                ClearPlayerData();
                 GameAI.InitGameAI(IntialBoardState._planetSpawnData, gameAIConstants);
                 InitPlanetGraphics(IntialBoardState._planetSpawnData);
                 InitPathGraphics();
@@ -150,8 +171,10 @@ namespace FlatSpace
             {
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
-
                 var planetSpawnData = new List<PlanetSpawnData>();
+                ClearPlayerData();
+                // TODO come up with the correct loading ai constants
+                /*
                 if (gameAIConstants.name != boardData.aiConstants)
                 {
                     SaveLoadSystem.Instance.LoadAIConstantsAddressable(boardData.aiConstants, asyncOp =>
@@ -161,7 +184,7 @@ namespace FlatSpace
                             gameAIConstants = asyncOp.Result;
                         }
                     });
-                }
+                }*/
 
                 foreach (var planetDesignData in boardData.planetEntries)
                 {
@@ -174,7 +197,6 @@ namespace FlatSpace
                         gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);                       
                     planetSpawnData.Add(spawnData);
                 }
-
                 GameAI.InitGameAI(planetSpawnData, gameAIConstants);
                 InitPlanetGraphics(planetSpawnData);
                 InitPathGraphics();

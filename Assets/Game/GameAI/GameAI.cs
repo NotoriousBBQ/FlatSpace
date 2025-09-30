@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FlatSpace.Game;
 using Unity.VisualScripting;
 using UnityEngine;
 using ScoreMatricElementList = System.Collections.Generic.List<(string Target, float Distance, float Surplus)>;
@@ -37,18 +38,12 @@ public class GameAI : MonoBehaviour
         public object Data;
         public string Target;
         public string Origin;
+        public int PlayerId;
     }
 
-    public enum AIStrategy
-    {
-        AIStrategyExpand,
-        AIStrategyConsolidate,
-        AIStrategyAmass
-    }
     public GameAIMap GameAIMap {get; private set;}
     public List<GameAIOrder> CurrentAIOrders { get; private set; }= new List<GameAIOrder>();
     
-    public AIStrategy Strategy { get; set; } = AIStrategy.AIStrategyExpand;
     public void InitGameAI(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
     {
         GameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
@@ -63,11 +58,16 @@ public class GameAI : MonoBehaviour
 
     public void GameAIUpdate()
     {
-        List<GameAIOrder> gameAIOrders;
-        List<Planet.PlanetUpdateResult> planetUpdateResults;
+        var gameAIOrders = new List<GameAIOrder>();
+        var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
         ProcessCurrentOrders();
-        PlanetaryProductionUpdate(out planetUpdateResults);
-        ProcessResults(planetUpdateResults, out gameAIOrders);
+        for(var i = 0; i < Gameboard.Instance.players.Count; i++)
+        {
+            planetUpdateResults.Clear();
+            PlanetaryProductionUpdate(planetUpdateResults, i);
+            ProcessResults(planetUpdateResults, i, gameAIOrders);
+            
+        }
         ProcessNewOrders(gameAIOrders);
     }
 
@@ -93,7 +93,11 @@ public class GameAI : MonoBehaviour
         {
             case GameAIOrder.OrderType.OrderTypePopulationTransport:
                 targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
-                targetPlanet.ColonizationInProgress = false;
+                if (targetPlanet.ColonizationInProgress == true)
+                {
+                    targetPlanet.Owner = executableOrder.PlayerId;
+                    targetPlanet.ColonizationInProgress = false;
+                }
                 break;
             case GameAIOrder.OrderType.OrderTypePopulationChange:
                 targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
@@ -121,34 +125,31 @@ public class GameAI : MonoBehaviour
         foreach (var executableOrder in executableOrders)
             ExecuteOrder(executableOrder);
     }
-    private void PlanetaryProductionUpdate(out List<Planet.PlanetUpdateResult> planetUpdateResults)
+    private void PlanetaryProductionUpdate(List<Planet.PlanetUpdateResult> planetUpdateResults, int playerID)
     {
-        planetUpdateResults = new List<Planet.PlanetUpdateResult>();
-        GameAIMap.PlanetaryProductionUpdate(out planetUpdateResults);
+        GameAIMap.PlanetaryProductionUpdate(planetUpdateResults, playerID);
     }
 
 
-    private void ProcessResults(List<Planet.PlanetUpdateResult> results, out List<GameAIOrder> orders)
+    private void ProcessResults(List<Planet.PlanetUpdateResult> results, int playerID, List<GameAIOrder> orders)
     {
-        orders = new List<GameAIOrder>();
-
-        switch (Strategy)
+        switch (Gameboard.Instance.players[playerID].Strategy)
         {
-            case AIStrategy.AIStrategyExpand:
-                ProcessResultsStrategyExpand(results, orders);
+            case Player.AIStrategy.AIStrategyExpand:
+                ProcessResultsStrategyExpand(results, playerID, ref orders);
                 break;
-            case AIStrategy.AIStrategyConsolidate:
+            case Player.AIStrategy.AIStrategyConsolidate:
                 break;
-            case AIStrategy.AIStrategyAmass:
+            case Player.AIStrategy.AIStrategyAmass:
                 break;
         }        
     }
 
-    private void ProcessResultsStrategyExpand(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    private void ProcessResultsStrategyExpand(List<Planet.PlanetUpdateResult> results, int playerID, ref List<GameAIOrder> orders)
     {
-        ProcessColonizers(results, orders);
-        ProcessFoodShortage(results, orders);
-        ProcessGrotsitsShortage(results, orders);
+        ProcessColonizers(results, playerID, orders);
+        ProcessFoodShortage(results, playerID, orders);
+        ProcessGrotsitsShortage(results, playerID, orders);
  
     }
 
@@ -191,7 +192,7 @@ public class GameAI : MonoBehaviour
         }
     }
     
-    private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    private void ProcessGrotsitsShortage(List<Planet.PlanetUpdateResult> results, int playerID, List<GameAIOrder> orders)
     {
         var shortageResults = results.FindAll(x =>
             x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage);
@@ -218,10 +219,10 @@ public class GameAI : MonoBehaviour
             scoreMatrix.Add(surplusProducer.Name,validMatrixEntries);
         }
         
-        ShipGrotsits(scoreMatrix, orders, surplusResults);
+        ShipGrotsits(scoreMatrix, playerID, orders, surplusResults);
     }
 
-    private void ShipGrotsits(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
+    private void ShipGrotsits(ScoreMatrix scoreMatrix, int playerID, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
     {
         List<(string, string, float)> actionList;
         
@@ -239,6 +240,7 @@ public class GameAI : MonoBehaviour
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
+                PlayerId = playerID
             });
             orders.Add(new GameAIOrder
             {
@@ -248,14 +250,15 @@ public class GameAI : MonoBehaviour
                 TotalDelay = 0,
                 Data =  changeAmount * -1.0f,
                 Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item1
+                Target = actionNTuple.Item1,
+                PlayerId = playerID
 
             });
 
         }
     }
 
-    private void ProcessFoodShortage(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    private void ProcessFoodShortage(List<Planet.PlanetUpdateResult> results, int playerID, List<GameAIOrder> orders)
     {
         var shortageResults = results.FindAll(x =>
             x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage);
@@ -283,10 +286,10 @@ public class GameAI : MonoBehaviour
             scoreMatrix.Add(surplusProducer.Name, validMatrixEntries);
         }
         
-        ShipFood(scoreMatrix, orders, surplusResults);
+        ShipFood(scoreMatrix, playerID, orders, surplusResults);
     }
 
-    private void ShipFood(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
+    private void ShipFood(ScoreMatrix scoreMatrix, int playerID, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
     {
         GenerateActionList(scoreMatrix, out var actionList);
 
@@ -302,6 +305,7 @@ public class GameAI : MonoBehaviour
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
+                PlayerId = playerID
             });
             orders.Add(new GameAIOrder
             {
@@ -311,14 +315,14 @@ public class GameAI : MonoBehaviour
                 TotalDelay = 0,
                 Data = changeAmount * -1.0f,
                 Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item1
-
+                Target = actionNTuple.Item1,
+                PlayerId = playerID
             });
 
         }
     }
 
-    void ProcessColonizers(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+    void ProcessColonizers(List<Planet.PlanetUpdateResult> results, int PlayerID, List<GameAIOrder> orders)
     {
         // find every gain pop result where the total pop is over the colonization trigger
         var possibleColonizers = results.FindAll(x =>
@@ -349,11 +353,11 @@ public class GameAI : MonoBehaviour
                     continue;
                 scoreMatrix.Add(colonizer.Name, validMatrixEntries);
             }
-            SendColonizers(scoreMatrix, orders, possibleColonizers);
+            SendColonizers(scoreMatrix, orders, PlayerID, possibleColonizers);
         }
     }
 
-    private void SendColonizers(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> possibleColonizers)
+    private void SendColonizers(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, int PlayerID, List<Planet.PlanetUpdateResult> possibleColonizers)
     {
         List<(string, string, float)> actionList;
         
@@ -370,6 +374,7 @@ public class GameAI : MonoBehaviour
                 Data = changeAmount,
                 Origin = actionNTuple.Item1,
                 Target = actionNTuple.Item2,
+                PlayerId = PlayerID
             });
             orders.Add(new GameAIOrder
             {
@@ -379,8 +384,8 @@ public class GameAI : MonoBehaviour
                 TotalDelay = 0,
                 Data = changeAmount * -1.0f,
                 Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item1
-
+                Target = actionNTuple.Item1,
+                PlayerId = PlayerID
             });
 
             orders.Add(new GameAIOrder
@@ -399,7 +404,6 @@ public class GameAI : MonoBehaviour
 
     public void SetSimulationStats(SaveLoadSystem.GameSave gameSave)
     {
-        Strategy = gameSave.strategy;
         foreach (var orderStatus in gameSave.orders)
         {
             CurrentAIOrders.Add(new GameAIOrder
@@ -411,6 +415,7 @@ public class GameAI : MonoBehaviour
                 Data = (orderStatus.dataType == "float" ? (float)orderStatus.data : (int)orderStatus.data),
                 Origin = orderStatus.origin,
                 Target = orderStatus.target,
+                PlayerId = orderStatus.playerId
             });            
         }
         

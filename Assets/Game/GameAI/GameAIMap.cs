@@ -78,6 +78,18 @@ public class GameAIMap : MonoBehaviour
                _planetPathings.Add(planetPathing);
            }
        }
+
+       SetInitialOwnership();
+    }
+
+    private void SetInitialOwnership()
+    {
+        var playerID = 0;
+        foreach (var planet in PlanetList.FindAll(x => x.Type == Planet.PlanetType.PlanetTypePrime))
+        {
+            planet.Owner = playerID;
+            playerID++;
+        }
     }
 
     private void AddPathingToPlanet(GameAIPlanetPathing planetPathing, int pathIndex)
@@ -102,14 +114,12 @@ public class GameAIMap : MonoBehaviour
             };
     }
 
-    public void PlanetaryProductionUpdate(out List<Planet.PlanetUpdateResult> resultList)
+    public void PlanetaryProductionUpdate(List<Planet.PlanetUpdateResult> resultList, int playerID)
     {
-        resultList = new List<Planet.PlanetUpdateResult>();
-        foreach (var planet in PlanetList)
+        foreach (var planet in PlanetList.FindAll(x => x.Owner == playerID))
         {
             planet.PlanetProductionUpdate(resultList);
         }
-    //    DEBUG_LogResults(resultList);
     }
     public Planet GetPlanet(string planetName)
     {
@@ -125,6 +135,7 @@ public class GameAIMap : MonoBehaviour
             planet.Food = planetStatus.food;
             planet.Morale = planetStatus.morale;
             planet.Grotsits = planetStatus.grotsits;
+            planet.Owner = planetStatus.owner;
         }
     }
     

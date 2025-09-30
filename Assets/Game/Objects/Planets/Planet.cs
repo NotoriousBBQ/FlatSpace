@@ -81,6 +81,8 @@ public class Planet : MonoBehaviour
     public int ProjectedGrotsitsWorkers { get; private set; }
     public PlanetStrategy CurrentStrategy { get; set; }
     public float Morale { get; set; }
+    public static int NoOwner = -1;
+    public int Owner = NoOwner;
     public int MaxPopulation => _resourceData._maxPopulation;
     
     public float Food { get; set; } = 0.0f;

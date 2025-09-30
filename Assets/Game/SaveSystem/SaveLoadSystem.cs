@@ -34,6 +34,7 @@ public class SaveLoadSystem : MonoBehaviour
             public int population;
             public float grotsits;
             public float morale;
+            public int owner;
         }
 
         [Serializable]
@@ -46,21 +47,38 @@ public class SaveLoadSystem : MonoBehaviour
             public float data;
             public string dataType;
             public string target;
-            public string origin;            
+            public string origin;
+            public int playerId;
+        }
+
+        [Serializable]
+        public struct PlayerSave
+        {
+            public int playerId;
+            public Player.AIStrategy strategy;
         }
         
-        public GameAI.AIStrategy strategy;
         public int turnNumber;
         public string initialBoardStatePath;
         public string boardDesignDataPath;
+        public List<PlayerSave> players = new List<PlayerSave>();
         public List<OrderSave> orders = new List<OrderSave>();
         public List<PlanetSave> planetStatuses = new List<PlanetSave>();
         public GameSave(GameAI gameAI)
         {
-            strategy = gameAI.Strategy;
             turnNumber = Gameboard.Instance.TurnNumber;
             initialBoardStatePath = Gameboard.Instance.IntialBoardState != null ? Gameboard.Instance.IntialBoardState.name : null;
             boardDesignDataPath = Gameboard.Instance._boardDesignPath;
+            for(var i = 0; i < Gameboard.Instance.players.Count; i++)
+            {
+                players.Add(
+                    new PlayerSave
+                    { 
+                        playerId = i,
+                        strategy = Gameboard.Instance.players[i].Strategy    
+                    });
+            }
+                
             foreach (var planet in gameAI.GameAIMap.PlanetList)
             {
                 planetStatuses.Add(
@@ -72,7 +90,8 @@ public class SaveLoadSystem : MonoBehaviour
                         food = planet.Food,
                         population = planet.Population,
                         grotsits = planet.Grotsits,
-                        morale = planet.Morale
+                        morale = planet.Morale,
+                        owner = planet.Owner,
                     });
             }
 
@@ -88,7 +107,8 @@ public class SaveLoadSystem : MonoBehaviour
                         timingDelay = order.TimingDelay,
                         totalDelay = order.TotalDelay,
                         data = Convert.ToSingle(order.Data),
-                        dataType = order.Data is float ? "float" : "int" 
+                        dataType = order.Data is float ? "float" : "int", 
+                        playerId = order.PlayerId
                     });
             }
         }
@@ -140,7 +160,6 @@ public class SaveLoadSystem : MonoBehaviour
             public Vector2 position;
         }
 
-        public string aiConstants;
         public List<BoardDesignerEntry> planetEntries = new List<BoardDesignerEntry>();
 
         public BoardDesignerSave(List<PlanetDesigner> planetList)

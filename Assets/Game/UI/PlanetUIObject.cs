@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using FlatSpace.Game;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class PlanetUIObject : MonoBehaviour
 {
@@ -33,6 +34,7 @@ public class PlanetUIObject : MonoBehaviour
             _foodTextField.text = Math.Floor(planet.Food).ToString();
             _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
             _moraleTextField.text = Math.Floor(planet.Morale).ToString();
+            SetOwnerColor(planet.Owner);
         }
     }
 
@@ -40,6 +42,19 @@ public class PlanetUIObject : MonoBehaviour
     {
         var sprintRenderer = GetComponent<SpriteRenderer>();
         sprintRenderer.color = _planetColors[planetType];
+
+    }
+
+    public void SetOwnerColor(int owner)
+    {
+        var statsPanelImage = GetComponentInChildren<Image>();
+        if (statsPanelImage)
+        {
+            if (owner == Planet.NoOwner)
+                statsPanelImage.color = Player.NoPlayerColor;
+            else
+                statsPanelImage.color = Player.PlayerColors[owner];
+        }
     }
 
     void Start()
