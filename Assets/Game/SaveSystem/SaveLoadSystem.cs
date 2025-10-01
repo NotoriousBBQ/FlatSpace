@@ -35,7 +35,7 @@ public class SaveLoadSystem : MonoBehaviour
             public float grotsits;
             public float morale;
             public int owner;
-            public bool colonizationInProgress;
+            public bool populationTransferInProgress;
         }
 
         [Serializable]
@@ -93,7 +93,7 @@ public class SaveLoadSystem : MonoBehaviour
                         grotsits = planet.Grotsits,
                         morale = planet.Morale,
                         owner = planet.Owner,
-                        colonizationInProgress = planet.ColonizationInProgress,
+                        populationTransferInProgress = planet.PopulationTransferInProgress,
                     });
             }
 

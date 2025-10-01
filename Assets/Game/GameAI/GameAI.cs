@@ -4,8 +4,7 @@ using System.Linq;
 using FlatSpace.Game;
 using Unity.VisualScripting;
 using UnityEngine;
-using ScoreMatricElementList = System.Collections.Generic.List<(string Target, float Distance, float Surplus)>;
-using ScoreMatrix = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<(string Target, float Distance, float Surplus)>>;
+using ScoreMatrixElementList = System.Collections.Generic.List<ScoreMatrix.ScoreMatrixElement>;
 
 public class GameAI : MonoBehaviour
 {
@@ -17,7 +16,7 @@ public class GameAI : MonoBehaviour
             OrderTypeNone,
             OrderTypePopulationTransport,
             OrderTypePopulationChange,
-            OrderTypeColonizationInProgress,
+            OrderTypePopulationTransferInProgress,
             OrderTypeFoodTransport,
             OrderTypeFoodChange,
             OrderTypeGrotsitsTransport,
@@ -93,17 +92,17 @@ public class GameAI : MonoBehaviour
         {
             case GameAIOrder.OrderType.OrderTypePopulationTransport:
                 targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
-                if (targetPlanet.ColonizationInProgress == true)
+                if (targetPlanet.PopulationTransferInProgress == true)
                 {
                     targetPlanet.Owner = executableOrder.PlayerId;
-                    targetPlanet.ColonizationInProgress = false;
+                    targetPlanet.PopulationTransferInProgress = false;
                 }
                 break;
             case GameAIOrder.OrderType.OrderTypePopulationChange:
                 targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
                 break;
-            case GameAIOrder.OrderType.OrderTypeColonizationInProgress:
-                targetPlanet.ColonizationInProgress = true;
+            case GameAIOrder.OrderType.OrderTypePopulationTransferInProgress:
+                targetPlanet.PopulationTransferInProgress = true;
                 break;
             case GameAIOrder.OrderType.OrderTypeFoodTransport:
             case GameAIOrder.OrderType.OrderTypeFoodChange:
@@ -153,41 +152,38 @@ public class GameAI : MonoBehaviour
  
     }
 
-    private static int CompareScoreNTuples((string Target, float Distance, float Surplus) x, (string Target, float Distance, float Surplus) y)
-    {
-        var xScore = x.Distance - x.Surplus;
-        var yScore = y.Distance - y.Surplus;
-        return xScore.CompareTo(yScore);
-    }
-
-    private static void GenerateActionList(ScoreMatrix scoreMatrix, out List<(string, string, float)> actionList)
+    private static void GenerateActionList(ScoreMatrix scoreMatrix, out List<(string Origin, string Target, float Cost)> actionList)
     {
         actionList = new List<(string, string, float)>();
-        foreach (var nNTupleList in scoreMatrix.Values)
+        foreach (var scoreMatrixElementList in scoreMatrix.MatrixElements.Values)
         {
-            nNTupleList.Sort(CompareScoreNTuples);
+            scoreMatrixElementList.Sort(ScoreMatrix.ScoreMatrixElementCompare);
         }
-        var minimumDistanceList = new List<(string Target, float Distance, float Surplus)>();
-        while (scoreMatrix.Count > 0 && scoreMatrix.Values.First().Count > 0)
+        var minimumDistanceList = new ScoreMatrixElementList();
+        while (scoreMatrix.MatrixElements.Count > 0 && scoreMatrix.MatrixElements.Values.First().Count > 0)
         {
-
-            foreach (var key in scoreMatrix.Keys)
+            foreach (var key in scoreMatrix.MatrixElements.Keys)
             {
-                if (scoreMatrix[key].Count <= 0)
+                if (scoreMatrix.MatrixElements[key].Count <= 0)
                     continue;
-                minimumDistanceList.Add((key, scoreMatrix[key][0].Item2, scoreMatrix[key][0].Item3));
+                minimumDistanceList.Add(new ScoreMatrix.ScoreMatrixElement
+                {
+                    Target = key,
+                    Cost = scoreMatrix.MatrixElements[key].First().Cost,
+                    Surplus = scoreMatrix.MatrixElements[key].First().Surplus,
+                    Shortage = scoreMatrix.MatrixElements[key].First().Shortage,
+                });
             }
 
-            minimumDistanceList.Sort(CompareScoreNTuples);
-            string closestTargetName =  scoreMatrix[minimumDistanceList[0].Item1][0].Item1;
-            actionList.Add(( minimumDistanceList[0].Item1, closestTargetName, minimumDistanceList[0].Item2));
+            minimumDistanceList.Sort(ScoreMatrix.ScoreMatrixElementCompare);
+            var closestTargetName =  scoreMatrix.MatrixElements[minimumDistanceList[0].Target][0].Target;
+            actionList.Add(( minimumDistanceList[0].Target, closestTargetName, minimumDistanceList[0].Cost));
 
-            scoreMatrix.Remove(minimumDistanceList[0].Item1);
-            foreach (var nNTupleList in scoreMatrix.Values)
+            scoreMatrix.MatrixElements.Remove(minimumDistanceList[0].Target);
+            foreach (var nNTupleList in scoreMatrix.MatrixElements.Values)
             {
-                nNTupleList.RemoveAll(x => x.Item1 == closestTargetName);
+                nNTupleList.RemoveAll(x => x.Target == closestTargetName);
             }
-            
             minimumDistanceList.Clear();
         }
     }
@@ -207,16 +203,22 @@ public class GameAI : MonoBehaviour
         var scoreMatrix = new ScoreMatrix();
         foreach (var surplusProducer in surplusResults)
         {
-            var validMatrixEntries = new ScoreMatricElementList();
+            var validMatrixEntries = new ScoreMatrixElementList();
             var surplusPathMap = GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
             foreach (var shortageResult in shortageResults)
             {
                 if(surplusPathMap[shortageResult.Name].NumNodes <= GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
-                    validMatrixEntries.Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost, (float)surplusProducer.Data));
+                    validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
+                    {
+                        Surplus = (float)surplusProducer.Data,
+                        Target = shortageResult.Name,
+                        Cost = surplusPathMap[shortageResult.Name].Cost,
+                        Shortage = (float)shortageResult.Data
+                    });
             }
             if (validMatrixEntries.Count <= 0)
                 continue;
-            scoreMatrix.Add(surplusProducer.Name,validMatrixEntries);
+            scoreMatrix.MatrixElements.Add(surplusProducer.Name,validMatrixEntries);
         }
         
         ShipGrotsits(scoreMatrix, playerID, orders, surplusResults);
@@ -224,22 +226,22 @@ public class GameAI : MonoBehaviour
 
     private void ShipGrotsits(ScoreMatrix scoreMatrix, int playerID, List<GameAIOrder> orders, List<Planet.PlanetUpdateResult> surplusResults)
     {
-        List<(string, string, float)> actionList;
+        List<(string Origin, string Target, float Cost)> actionList;
         
         GenerateActionList(scoreMatrix, out actionList);
 
         foreach (var actionNTuple in actionList)
         {
-            float changeAmount = Convert.ToSingle(surplusResults.Find(x => x.Name == actionNTuple.Item1).Data);
+            float changeAmount = Convert.ToSingle(surplusResults.Find(x => x.Name == actionNTuple.Origin).Data);
             orders.Add(new GameAIOrder
             {
                 Type = GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
-                TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
+                TimingDelay = Convert.ToInt32(actionNTuple.Cost / GameAIMap.GameAIConstants.defaultTravelSpeed),
+                TotalDelay = Convert.ToInt32(actionNTuple.Cost / GameAIMap.GameAIConstants.defaultTravelSpeed),
                 Data = changeAmount,
-                Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item2,
+                Origin = actionNTuple.Origin,
+                Target = actionNTuple.Target,
                 PlayerId = playerID
             });
             orders.Add(new GameAIOrder
@@ -249,8 +251,8 @@ public class GameAI : MonoBehaviour
                 TimingDelay = 0,
                 TotalDelay = 0,
                 Data =  changeAmount * -1.0f,
-                Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item1,
+                Origin = actionNTuple.Origin,
+                Target = actionNTuple.Origin,
                 PlayerId = playerID
 
             });
@@ -273,17 +275,23 @@ public class GameAI : MonoBehaviour
         var scoreMatrix = new ScoreMatrix();
         foreach (var surplusProducer in surplusResults)
         {
-            var validMatrixEntries = new ScoreMatricElementList();
+            var validMatrixEntries = new ScoreMatrixElementList();
             var surplusPathMap = GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
             foreach (var shortageResult in shortageResults)
             {
-                if(surplusPathMap[shortageResult.Name].NumNodes <= GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
-                    validMatrixEntries.Add((shortageResult.Name, surplusPathMap[shortageResult.Name].Cost,  (float)surplusProducer.Data));
+                if (surplusPathMap[shortageResult.Name].NumNodes <=
+                    GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                    validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement {
+                        Surplus = (float)surplusProducer.Data,
+                        Target = shortageResult.Name,
+                        Cost = surplusPathMap[shortageResult.Name].Cost,
+                        Shortage = (float)shortageResult.Data
+            });
             }
 
             if (validMatrixEntries.Count <= 0)
                 continue;
-            scoreMatrix.Add(surplusProducer.Name, validMatrixEntries);
+            scoreMatrix.MatrixElements.Add(surplusProducer.Name, validMatrixEntries);
         }
         
         ShipFood(scoreMatrix, playerID, orders, surplusResults);
@@ -333,7 +341,7 @@ public class GameAI : MonoBehaviour
             return;
         // find all planets with no population
         var possibleColonizerTargets = GameAIMap.PlanetList.FindAll(
-            x => x.Population == 0 && !x.ColonizationInProgress);
+            x => x.Population == 0 && !x.PopulationTransferInProgress);
         if (possibleColonizerTargets.Count > 0)
         {
             // create a score matrix for each potential colonizer's distance to each possible target
@@ -341,17 +349,24 @@ public class GameAI : MonoBehaviour
 
             foreach (var colonizer in possibleColonizers)
             {
-                var validMatrixEntries = new ScoreMatricElementList();
+                var validMatrixEntries = new ScoreMatrixElementList();
                 var colonizerPathMap = GetPlanet(colonizer.Name).DistanceMapToPathingList;
                 foreach (var colonizerTarget in possibleColonizerTargets)
                 {
-                    if(colonizerPathMap[colonizerTarget.PlanetName].NumNodes <= GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
-                        validMatrixEntries.Add((colonizerTarget.PlanetName, colonizerPathMap[colonizerTarget.PlanetName].Cost, 1.0f));
+                    if (colonizerPathMap[colonizerTarget.PlanetName].NumNodes <=
+                        GameAIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                        validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
+                        {
+                            Surplus = 1.0f,
+                            Target = colonizerTarget.PlanetName,
+                            Cost = colonizerPathMap[colonizerTarget.PlanetName].Cost,
+                            Shortage = 1.0f
+                        });
                 }
 
                 if (validMatrixEntries.Count <= 0)
                     continue;
-                scoreMatrix.Add(colonizer.Name, validMatrixEntries);
+                scoreMatrix.MatrixElements.Add(colonizer.Name, validMatrixEntries);
             }
             SendColonizers(scoreMatrix, orders, PlayerID, possibleColonizers);
         }
@@ -359,7 +374,7 @@ public class GameAI : MonoBehaviour
 
     private void SendColonizers(ScoreMatrix scoreMatrix, List<GameAIOrder> orders, int PlayerID, List<Planet.PlanetUpdateResult> possibleColonizers)
     {
-        List<(string, string, float)> actionList;
+        List<(string Origin, string Target, float Cost)> actionList;
         
         GenerateActionList(scoreMatrix, out actionList);
         foreach (var actionNTuple in actionList)
@@ -372,8 +387,8 @@ public class GameAI : MonoBehaviour
                 TimingDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
                 TotalDelay = Convert.ToInt32(actionNTuple.Item3 / GameAIMap.GameAIConstants.defaultTravelSpeed),
                 Data = changeAmount,
-                Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item2,
+                Origin = actionNTuple.Origin,
+                Target = actionNTuple.Target,
                 PlayerId = PlayerID
             });
             orders.Add(new GameAIOrder
@@ -383,20 +398,20 @@ public class GameAI : MonoBehaviour
                 TimingDelay = 0,
                 TotalDelay = 0,
                 Data = changeAmount * -1.0f,
-                Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item1,
+                Origin = actionNTuple.Origin,
+                Target = actionNTuple.Origin,
                 PlayerId = PlayerID
             });
 
             orders.Add(new GameAIOrder
             {
-                Type = GameAIOrder.OrderType.OrderTypeColonizationInProgress,
+                Type = GameAIOrder.OrderType.OrderTypePopulationTransferInProgress,
                 TimingType = GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                 TimingDelay = 0,
                 TotalDelay = 0,
                 Data = changeAmount,
-                Origin = actionNTuple.Item1,
-                Target = actionNTuple.Item2
+                Origin = actionNTuple.Origin,
+                Target = actionNTuple.Target
 
             });
         }

@@ -93,7 +93,7 @@ public class Planet : MonoBehaviour
     
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
-    public bool ColonizationInProgress {get; set;}
+    public bool PopulationTransferInProgress {get; set;}
     
     private PlanetResourceData _resourceData = null;
     public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
