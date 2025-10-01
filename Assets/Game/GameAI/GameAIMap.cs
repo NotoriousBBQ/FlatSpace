@@ -141,6 +141,7 @@ public class GameAIMap : MonoBehaviour
             planet.Morale = planetStatus.morale;
             planet.Grotsits = planetStatus.grotsits;
             planet.Owner = planetStatus.owner;
+            planet.ColonizationInProgress = planetStatus.colonizationInProgress;
         }
     }
     
