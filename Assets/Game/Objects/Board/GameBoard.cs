@@ -98,7 +98,7 @@ namespace FlatSpace
                 return true;
                 
             }
-            public bool InitGameFromSaveConfig(SaveLoadSystem.GameSave gameSave)
+            public bool InitGameFromGaveSave(SaveLoadSystem.GameSave gameSave)
             {
                 if (gameSave == null || (string.IsNullOrEmpty(gameSave.initialBoardStatePath) && string.IsNullOrEmpty(gameSave.boardDesignDataPath)))
                     return false;

@@ -7,6 +7,7 @@ using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.SceneManagement;
 using SimpleFileBrowser;
+using UnityEditor.Build.Content;
 using UnityEngine.Events;
 
 public class SaveLoadSystem : MonoBehaviour
@@ -125,14 +126,26 @@ public class SaveLoadSystem : MonoBehaviour
         File.WriteAllText(filePath, temp);
     }
 
-    private static bool LoadSaveGame(GameAI gameAI, string filePath)
+    private static bool LoadSavedGame(string filePath)
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
         var saveConfig = JsonUtility.FromJson<GameSave>(readText);
         if (saveConfig == null)
             return false;
-        return Gameboard.Instance.InitGameFromSaveConfig(saveConfig);
+        var gameScene = SceneManager.GetSceneByName("Flatspace");
+        if (!gameScene.isLoaded)
+        {
+            var bSaveGameInialized = false;
+            LoadGameScene("flatspace", (scene, sceneMode) =>
+            {
+                bSaveGameInialized = Gameboard.Instance.InitGameFromGaveSave(saveConfig);
+                SceneManager.SetActiveScene(scene);
+            });   
+            return bSaveGameInialized;
+        }
+       
+        return Gameboard.Instance.InitGameFromGaveSave(saveConfig);
     }
 
     public void LoadBoardConfigAddressable(string address, Action<AsyncOperationHandle<BoardConfiguration>> loadCompleteDelegate)
@@ -192,7 +205,24 @@ public class SaveLoadSystem : MonoBehaviour
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
         var saveConfig = JsonUtility.FromJson<BoardDesignerSave>(readText);
-        return (saveConfig != null && Gameboard.Instance.InitGameFromDesignerConfig(filePath, saveConfig));
+        if (saveConfig == null) return false;
+
+        var gameScene = SceneManager.GetSceneByName("Flatspace");
+        if (!gameScene.isLoaded)
+        {
+            LoadGameScene("Flatspace", (scene, sceneMode) =>
+            {
+                Gameboard.Instance.InitGameFromDesignerConfig(filePath, saveConfig);
+                SceneManager.SetActiveScene(scene);
+            });
+        }
+        else
+        {
+            Gameboard.Instance.InitGameFromDesignerConfig(filePath, saveConfig);
+            SceneManager.SetActiveScene(gameScene);
+        }
+
+        return true;
     }
     
     public void LoadAIConstantsAddressable(string address, Action<AsyncOperationHandle<GameAIConstants>> loadCompleteDelegate)
@@ -217,14 +247,7 @@ public class SaveLoadSystem : MonoBehaviour
 
     public static void LoadGame()
     {
-        var gameScene = SceneManager.GetSceneByName("Flatspace");
-        if (!gameScene.isLoaded)
-        {
-            LoadGameScene("Flatspace", SceneManagerOnGameLoadingSceneLoaded);   
-            return;
-        }
-
-        SceneManagerOnGameLoadingSceneLoaded(gameScene, LoadSceneMode.Single);
+        ShowLoadGameFileBrowserAndStartGame();
     }
 
     public static void SaveGame()
@@ -237,34 +260,24 @@ public class SaveLoadSystem : MonoBehaviour
         var scene = SceneManager.GetSceneByName("MapDesigner");
         if (!scene.isLoaded)
         {
-            LoadGameScene("MapDesigner", SceneManagerOnDesignerLoadingSceneLoaded);   
+            LoadGameScene("MapDesigner", SceneManagerOnDesignerSceneLoaded);   
             return;
         }
 
-        SceneManagerOnDesignerLoadingSceneLoaded(scene, LoadSceneMode.Single);        
+        SceneManagerOnDesignerSceneLoaded(scene, LoadSceneMode.Single);        
     }
 
     public static void StartNewGame()
-    {
-        LoadGameScene("Flatspace",SceneManagerOnNewGameSceneLoaded);
+    {        
+        ShowConfigFileBrowserAndStartNewGame();
     }
     private static void LoadGameScene(string sceneName, UnityAction<Scene, LoadSceneMode> loadedCallback)
     {
         SceneManager.LoadScene(sceneName);
         SceneManager.sceneLoaded += loadedCallback;
     }
-    private static void SceneManagerOnNewGameSceneLoaded(Scene scene, LoadSceneMode sceneMode)
-    {
-        SceneManager.SetActiveScene(scene);
-        ShowLoadGameConfigFileBrowser();
-    }
 
-    private static void SceneManagerOnGameLoadingSceneLoaded(Scene scene, LoadSceneMode sceneMode)
-    {
-        SceneManager.SetActiveScene(scene);
-        ShowLoadGameFileBrowser();
-    }
-    private static void SceneManagerOnDesignerLoadingSceneLoaded(Scene scene, LoadSceneMode sceneMode)
+    private static void SceneManagerOnDesignerSceneLoaded(Scene scene, LoadSceneMode sceneMode)
     {
         SceneManager.SetActiveScene(scene);
     }
@@ -276,9 +289,9 @@ public class SaveLoadSystem : MonoBehaviour
     {
         FileBrowser.SetFilters(false, ".json");
     }
-    private static void ShowLoadGameFileBrowser()
+    private static void ShowLoadGameFileBrowserAndStartGame()
     {
-        FileBrowser.ShowLoadDialog((paths) => LoadSaveGame(Gameboard.Instance.GameAI, paths[0]), 
+        FileBrowser.ShowLoadDialog((paths) => LoadSavedGame(paths[0]), 
             ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
     }
     
@@ -305,10 +318,13 @@ public class SaveLoadSystem : MonoBehaviour
 
     }
    
-    private static void ShowLoadGameConfigFileBrowser()
+    private static void ShowConfigFileBrowserAndStartNewGame()
     {
         FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
-            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\BoardConfig\");
+            ()=> LoadGameScene("Flatspace",(scene, sceneMode) =>
+            {
+                SceneManager.SetActiveScene(scene);
+            }), FileBrowser.PickMode.Files, false, @"C:\BoardConfig\");
     }
     
     private static void ShowSaveGameConfigFileBrowser(BoardDesignerSave saveData)
