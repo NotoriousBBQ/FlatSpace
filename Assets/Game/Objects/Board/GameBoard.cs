@@ -36,7 +36,7 @@ namespace FlatSpace
             private MapInputActions _mapInputActions;
             private Camera _camera;
 
-            private int _numPlayers = 2;
+            static public int NumPlayers = 2;
             public List<Player> players = new List<Player>();
 
             private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
@@ -72,7 +72,7 @@ namespace FlatSpace
 
             private void CreatePlayerData()
             {
-                for(var i = 0; i < _numPlayers; i++)
+                for(var i = 0; i < NumPlayers; i++)
                     players.Add(this.AddComponent<Player>());
 
             }

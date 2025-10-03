@@ -11,6 +11,10 @@ using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
 using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
 public class Planet : MonoBehaviour
 {
+    public struct Inhabitant
+    {
+        public int Player;
+    }
     public struct PlanetUpdateResult
     {
         public enum PlanetUpdateResultType
@@ -74,7 +78,7 @@ public class Planet : MonoBehaviour
         public readonly object Data;
     }
     public PlanetType Type { get; private set; } = PlanetType.PlanetTypeNormal;
-    public int Population { get; set; }= 0;
+    public List<Inhabitant> Population  = new List<Inhabitant>();
     public int FoodWorkers = 0;
     public int ProjectedFoodWorkers { get; private set; }
     public int GrotsitsWorkers = 0;
@@ -124,7 +128,12 @@ public class Planet : MonoBehaviour
         _gameAIConstants = gameAIConstants;
         _resourceData = spawnData._resourceData;
         PlanetName = spawnData._planetName;
-        Population = _resourceData._initialPopulation;
+
+        for (var i = 0; i < _resourceData._initialPopulation; i++)
+        {
+            Population.Add(new Inhabitant());            
+        }
+        
         Food = ProjectedFood = _resourceData._initialFood;
         Grotsits = ProjectedGrotsits = _resourceData._initialGrotsits;
         Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
@@ -142,7 +151,7 @@ public class Planet : MonoBehaviour
         var modifierData = _gameAIConstants.foodWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.modifier;
-        var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
+        var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
         return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out foodWorkers);
@@ -155,7 +164,7 @@ public class Planet : MonoBehaviour
         var modifierData = _gameAIConstants.grotsitWorkerAdjustment.Find(x => x.planetStrategy == CurrentStrategy);
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.modifier;
-        var populationAdjustedForPlanetType = Population * strategyPopulaitonModifer;
+        var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
         return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out grotsitsWorkers);
@@ -170,7 +179,7 @@ public class Planet : MonoBehaviour
         var actualProductionRate = productionRate * moraleModifier;
         requiredWorkers = Convert.ToInt32(Math.Ceiling(population / actualProductionRate));
         // note this clamp is for the planets population, not the param 'population'
-        Math.Clamp(requiredWorkers, 0, Population);
+        Math.Clamp(requiredWorkers, 0, Population.Count);
         return true;
     }
     
@@ -186,14 +195,14 @@ public class Planet : MonoBehaviour
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
                 // fopr grotsits, use the existing first
                 GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population - FoodWorkers, 0));
+                Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population.Count - FoodWorkers, 0));
                 // the even out the rest
-                remainingWorkers = Population - (FoodWorkers + GrotsitsWorkers);
+                remainingWorkers = Population.Count - (FoodWorkers + GrotsitsWorkers);
                 if (remainingWorkers > 0)
                 {
                     FoodWorkers += remainingWorkers / 2;
                     GrotsitsWorkers += remainingWorkers / 2;
-                    remainingWorkers = Population -(FoodWorkers + GrotsitsWorkers);
+                    remainingWorkers = Population.Count -(FoodWorkers + GrotsitsWorkers);
                     if (remainingWorkers > 0)
                         FoodWorkers += remainingWorkers;
                 }
@@ -202,30 +211,30 @@ public class Planet : MonoBehaviour
             case PlanetStrategy.PlanetStrategyGrowth:
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
                 GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population - FoodWorkers, 0));
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population.Count - FoodWorkers, 0));
                 break;
             case PlanetStrategy.PlanetStrategyFood:
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
-                GrotsitsWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
+                GrotsitsWorkers = Math.Clamp(Population.Count - FoodWorkers, 0, Population.Count);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
                 FoodWorkerRequirementForPopulation(out FoodWorkers);
-                GrotsitsWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
+                GrotsitsWorkers = Math.Clamp(Population.Count - FoodWorkers, 0, Population.Count);
                 break;
             case PlanetStrategy.PlanetStrategyGrotsits:
                 GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                FoodWorkers = Math.Clamp(Population - GrotsitsWorkers, 0, Population);
+                FoodWorkers = Math.Clamp(Population.Count - GrotsitsWorkers, 0, Population.Count);
                 break;
             case PlanetStrategy.PlanetStrategyFocusedGrotsits:
                 GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                FoodWorkers = Math.Clamp(Population - GrotsitsWorkers, 0, Population);
+                FoodWorkers = Math.Clamp(Population.Count - GrotsitsWorkers, 0, Population.Count);
                 break;
         }
     }
 
     public void PlanetProductionUpdate(List<PlanetUpdateResult> resultList)
     {
-        if (Population == 0)
+        if (Population.Count == 0)
             return;
         AssignWorkForStrategy();
         // grow food
@@ -240,25 +249,25 @@ public class Planet : MonoBehaviour
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
     {
-        if (Population <= 0 && Food <= _resourceData._initialFood)
+        if (Population.Count <= 0 && Food <= _resourceData._initialFood)
             return;
         bool DEBUG_HAD_SURPLUS = false;
         float foodShortage = 0.0f;
-        if (Food < Population) 
+        if (Food < Population.Count) 
         { 
             // cant feed everyong
-            foodShortage = Food - Population;
+            foodShortage = Food - Population.Count;
             //hinky code to prevent mass dieoffs
              Food--;
              if (Food <= 0.0f)
              {
                  // lose a pop
-                 Population--;
+                 ChangePopulation(-1, Owner);
                  // start the food countdown again
-                 Food = Population;
+                 Food = Population.Count;
                  resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationLoss,
                      1));
-                 if (Population <= 0)
+                 if (Population.Count <= 0)
                  {
                      // planet id dead
                      resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
@@ -268,19 +277,18 @@ public class Planet : MonoBehaviour
         else
         {
             // feed everybody
-            Food -= Population;
+            Food -= Population.Count;
             // enough to grow?
-            if (Food >= _foodNeededForNewPop && Population < MaxPopulation)
+            if (Food >= _foodNeededForNewPop && Population.Count < MaxPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
                 Food -= _foodNeededForNewPop;
-                Population++;
-
-                if (Population >= MaxPopulation)
+                ChangePopulation(1, Owner);
+                if (Population.Count >= MaxPopulation)
                     resultList.Add(new PlanetUpdateResult(PlanetName,
-                        ResultType.PlanetUpdateResultTypePopulationSurplus, Population - _resourceData._maxPopulation));
+                        ResultType.PlanetUpdateResultTypePopulationSurplus, Population.Count - _resourceData._maxPopulation));
             }
-            else if (Population >= MaxPopulation)
+            else if (Population.Count >= MaxPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypePopulationMax, 1));
@@ -288,7 +296,7 @@ public class Planet : MonoBehaviour
         }
 
         // add 1 to population here to allow for growth if possible
-        var projectedPopulation = Population + (Population < MaxPopulation ? 1 : 0);
+        var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         SetProjectedWorkers(projectedPopulation);
         ProjectedFood = ProjectedFoodWorkers *_resourceData._foodProduction;
 
@@ -330,33 +338,33 @@ public class Planet : MonoBehaviour
             var projectedFoodWorkersFloat =  _resourceData._foodProduction > 0.0f ? 
                 Math.Ceiling((projectedFoodGap / _resourceData._foodProduction))
                 : 0;
-            ProjectedFoodWorkers = Math.Clamp(Convert.ToInt32(projectedFoodWorkersFloat), 0, Population); 
-            ProjectedFoodWorkers = Math.Clamp(Population - FoodWorkers, 0, Population);
+            ProjectedFoodWorkers = Math.Clamp(Convert.ToInt32(projectedFoodWorkersFloat), 0, Population.Count); 
+            ProjectedFoodWorkers = Math.Clamp(Population.Count - FoodWorkers, 0, Population.Count);
         }
     }
 
     private void ConsumeGrotsits(List<PlanetUpdateResult> resultList)
     {
-        if (Population <= 0 && Grotsits <= _resourceData._initialGrotsits)
+        if (Population.Count <= 0 && Grotsits <= _resourceData._initialGrotsits)
             return;
 
         var grotsitsShort = 0.0f;
-        if (Grotsits < Population) 
+        if (Grotsits < Population.Count) 
         { 
             // Can't give everyone goods
-            grotsitsShort += Grotsits - Population;
+            grotsitsShort += Grotsits - Population.Count;
             Grotsits = 0.0f;
             Morale = Math.Clamp(Morale - _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
         else
         {
             // Grotsits for everyone
-            Grotsits -= Population;
+            Grotsits -= Population.Count;
             Morale = Math.Clamp(Morale + _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
 
         // add 1 to population here to allow for growth if possible
-        var projectedPopulation = Population + (Population < MaxPopulation ? 1 : 0);
+        var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
         ProjectedGrotsits = Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction);
         if (ProjectedGrotsits >= projectedPopulation)
@@ -380,6 +388,25 @@ public class Planet : MonoBehaviour
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage,
                 grotsitsShort));
         }
+    }
+
+    public void ChangePopulation(int changeAmount, int playerId)
+    {
+        if (changeAmount >= 0)
+        {
+            for (var i = 0; i < changeAmount; i++)
+            {
+                Population.Add(new Planet.Inhabitant { Player = playerId });
+            }
+        }
+        else
+        {
+            for (var i = 0; i < -changeAmount; i++)
+            {
+                Population.Remove(Population.Find(x => x.Player == playerId));
+            }
+        }
+        
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

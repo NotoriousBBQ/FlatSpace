@@ -28,14 +28,13 @@ public class PlanetUIObject : MonoBehaviour
     public void UIUpdate()
     {
         var planet = Gameboard.Instance.GetPlanet(_planetName);
-        if (planet)
-        {
-            _populationTextField.text = planet.Population.ToString();
-            _foodTextField.text = Math.Floor(planet.Food).ToString();
-            _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
-            _moraleTextField.text = Math.Floor(planet.Morale).ToString();
-            SetOwnerColor(planet.Owner);
-        }
+        if (!planet)
+            return;
+        _populationTextField.text = planet.Population.Count.ToString();
+        _foodTextField.text = Math.Floor(planet.Food).ToString();
+        _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
+        _moraleTextField.text = Math.Floor(planet.Morale).ToString();
+        SetOwnerColor(planet.Owner);
     }
 
     public void SetPlanetColor(Planet.PlanetType planetType)

@@ -9,6 +9,7 @@ using UnityEngine.SceneManagement;
 using SimpleFileBrowser;
 using UnityEditor.Build.Content;
 using UnityEngine.Events;
+using UnityEngine.TextCore.Text;
 
 public class SaveLoadSystem : MonoBehaviour
 {
@@ -32,7 +33,7 @@ public class SaveLoadSystem : MonoBehaviour
             public Planet.PlanetType planetType;
             public Planet.PlanetStrategy planetStrategy;
             public float food;
-            public int population;
+            public int[] population;
             public float grotsits;
             public float morale;
             public int owner;
@@ -71,6 +72,7 @@ public class SaveLoadSystem : MonoBehaviour
             turnNumber = Gameboard.Instance.TurnNumber;
             initialBoardStatePath = Gameboard.Instance.IntialBoardState != null ? Gameboard.Instance.IntialBoardState.name : null;
             boardDesignDataPath = Gameboard.Instance._boardDesignPath;
+
             for(var i = 0; i < Gameboard.Instance.players.Count; i++)
             {
                 players.Add(
@@ -80,22 +82,28 @@ public class SaveLoadSystem : MonoBehaviour
                         strategy = Gameboard.Instance.players[i].Strategy    
                     });
             }
-                
+            
             foreach (var planet in gameAI.GameAIMap.PlanetList)
             {
-                planetStatuses.Add(
-                    new PlanetSave
-                    {         
-                        name = planet.PlanetName,
-                        planetType = planet.Type,
-                        planetStrategy = planet.CurrentStrategy,
-                        food = planet.Food,
-                        population = planet.Population,
-                        grotsits = planet.Grotsits,
-                        morale = planet.Morale,
-                        owner = planet.Owner,
-                        populationTransferInProgress = planet.PopulationTransferInProgress,
-                    });
+                var planetSave = new PlanetSave
+                {         
+                    name = planet.PlanetName,
+                    planetType = planet.Type,
+                    planetStrategy = planet.CurrentStrategy,
+                    food = planet.Food,
+                    grotsits = planet.Grotsits,
+                    morale = planet.Morale,
+                    owner = planet.Owner,
+                    populationTransferInProgress = planet.PopulationTransferInProgress,
+                    population = new int[Gameboard.Instance.players.Count]
+                };
+                for (var i = 0; i < Gameboard.Instance.players.Count; i++)
+                {
+                    var popByPlayer = planet.Population.FindAll(x => x.Player == i).Count;
+                    planetSave.population[i] = popByPlayer;
+                }
+                planetStatuses.Add(planetSave);
+                   
             }
 
             foreach (var order in gameAI.CurrentAIOrders)

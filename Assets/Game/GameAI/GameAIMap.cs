@@ -87,7 +87,14 @@ public class GameAIMap : MonoBehaviour
         var playerID = 0;
         foreach (var planet in PlanetList.FindAll(x => x.Type == Planet.PlanetType.PlanetTypePrime))
         {
+            
             planet.Owner = playerID;
+            for (var i = 0; i < planet.Population.Count; i++)
+            {
+                var inhabitant = planet.Population[i];
+                inhabitant.Player = playerID;
+                planet.Population[i] = inhabitant;
+            }
             playerID++;
         }
     }
@@ -142,6 +149,13 @@ public class GameAIMap : MonoBehaviour
             planet.Grotsits = planetStatus.grotsits;
             planet.Owner = planetStatus.owner;
             planet.PopulationTransferInProgress = planetStatus.populationTransferInProgress;
+            for (var i = 0; i < planetStatus.population.Length; i++)
+            {
+                if (planetStatus.population[i] <= 0)
+                    continue;
+                for(var j = 0; j < planetStatus.population[i]; j++)
+                    planet.Population.Add(new Planet.Inhabitant{Player = i});
+            }
         }
     }
     

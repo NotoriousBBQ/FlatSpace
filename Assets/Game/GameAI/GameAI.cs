@@ -91,7 +91,8 @@ public class GameAI : MonoBehaviour
         switch (executableOrder.Type)
         {
             case GameAIOrder.OrderType.OrderTypePopulationTransport:
-                targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
+                targetPlanet.ChangePopulation(Convert.ToInt32(executableOrder.Data), targetPlanet.Owner);
+
                 if (targetPlanet.PopulationTransferInProgress == true)
                 {
                     targetPlanet.Owner = executableOrder.PlayerId;
@@ -99,7 +100,8 @@ public class GameAI : MonoBehaviour
                 }
                 break;
             case GameAIOrder.OrderType.OrderTypePopulationChange:
-                targetPlanet.Population += Convert.ToInt32(executableOrder.Data);
+                var changeAmount = Convert.ToInt32(executableOrder.Data);
+                targetPlanet.ChangePopulation(changeAmount, targetPlanet.Owner);
                 break;
             case GameAIOrder.OrderType.OrderTypePopulationTransferInProgress:
                 targetPlanet.PopulationTransferInProgress = true;
@@ -336,12 +338,12 @@ public class GameAI : MonoBehaviour
         var possibleColonizers = results.FindAll(x =>
             (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain 
                 or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax) 
-            && GetPlanet(x.Name).Population >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.expandPopulationTrigger);
+            && GetPlanet(x.Name).Population.Count >= GetPlanet(x.Name).MaxPopulation * GameAIMap.GameAIConstants.expandPopulationTrigger);
         if (possibleColonizers.Count <= 0)
             return;
         // find all planets with no population
         var possibleColonizerTargets = GameAIMap.PlanetList.FindAll(
-            x => x.Population == 0 && !x.PopulationTransferInProgress);
+            x => x.Population.Count == 0 && !x.PopulationTransferInProgress);
         if (possibleColonizerTargets.Count > 0)
         {
             // create a score matrix for each potential colonizer's distance to each possible target
