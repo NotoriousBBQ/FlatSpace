@@ -121,9 +121,9 @@ public class GameAIMap : MonoBehaviour
             };
     }
 
-    public void PlanetaryProductionUpdate(List<Planet.PlanetUpdateResult> resultList, int playerID)
+    public void PlanetaryProductionUpdate(List<Planet.PlanetUpdateResult> resultList)
     {
-        foreach (var planet in PlanetList.FindAll(x => x.Owner == playerID))
+        foreach (var planet in PlanetList)
         {
             planet.PlanetProductionUpdate(resultList);
         }

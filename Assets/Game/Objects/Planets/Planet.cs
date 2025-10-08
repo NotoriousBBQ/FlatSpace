@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using FlatSpace;
 using FlatSpace.Game;
-using TMPro;
-using Unity.VisualScripting;
-using UnityEditor;
 using UnityEngine;
-using UnityEngine.Rendering;
+
 
 using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
 using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
@@ -40,11 +39,12 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultPriorityUrgent
         }
 
-        public PlanetUpdateResult(string planetName, ResultType type, object data)
+        public PlanetUpdateResult(string planetName, ResultType type, object data, int playerID = -1)
         {
             Name = planetName;
             Result = type;
             Data = data;
+            PlayerID = playerID;
             switch (Result)
             {
                 case ResultType.PlanetUpdateResultTypeNone:
@@ -76,6 +76,7 @@ public class Planet : MonoBehaviour
         public readonly ResultType Result;
         public ResultPriority Priority;
         public readonly object Data;
+        public readonly int PlayerID;
     }
     public PlanetType Type { get; private set; } = PlanetType.PlanetTypeNormal;
     public List<Inhabitant> Population  = new List<Inhabitant>();
@@ -86,6 +87,8 @@ public class Planet : MonoBehaviour
     public PlanetStrategy CurrentStrategy { get; set; }
     public float Morale { get; set; }
     public static int NoOwner = -1;
+    public static float MaxFoodStorage = 600f;
+    public static float MaxGrotsitsStorage = 600f;
     public int Owner = NoOwner;
     public int MaxPopulation => _resourceData._maxPopulation;
     
@@ -239,9 +242,10 @@ public class Planet : MonoBehaviour
         AssignWorkForStrategy();
         // grow food
         Food += FoodWorkers * _resourceData._foodProduction * (Morale/100.0f);
+        Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
         // produce grosits
         Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction * (Morale/100.0f);
-        
+        Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         ConsumeFood(resultList);
         ConsumeGrotsits(resultList);
      
@@ -251,7 +255,7 @@ public class Planet : MonoBehaviour
     {
         if (Population.Count <= 0 && Food <= _resourceData._initialFood)
             return;
-        bool DEBUG_HAD_SURPLUS = false;
+
         float foodShortage = 0.0f;
         if (Food < Population.Count) 
         { 
@@ -262,15 +266,16 @@ public class Planet : MonoBehaviour
              if (Food <= 0.0f)
              {
                  // lose a pop
-                 ChangePopulation(-1, Owner);
+                 var playerID = ChangePopulation(-1);
                  // start the food countdown again
                  Food = Population.Count;
                  resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationLoss,
-                     1));
+                     1, playerID));
                  if (Population.Count <= 0)
                  {
                      // planet id dead
                      resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
+                     SetPlanetOwnership();
                  }
              }
         }
@@ -281,9 +286,9 @@ public class Planet : MonoBehaviour
             // enough to grow?
             if (Food >= _foodNeededForNewPop && Population.Count < MaxPopulation)
             {
-                resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1));
                 Food -= _foodNeededForNewPop;
-                ChangePopulation(1, Owner);
+                var playerID = ChangePopulation(1);
+                resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1, playerID));
                 if (Population.Count >= MaxPopulation)
                     resultList.Add(new PlanetUpdateResult(PlanetName,
                         ResultType.PlanetUpdateResultTypePopulationSurplus, Population.Count - _resourceData._maxPopulation));
@@ -306,7 +311,6 @@ public class Planet : MonoBehaviour
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypeFoodSurplus, Food - projectedPopulation));
-                DEBUG_HAD_SURPLUS = true;
             }
         }
         else if (ProjectedFood < projectedPopulation)
@@ -319,8 +323,6 @@ public class Planet : MonoBehaviour
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeFoodShortage,
                 foodShortage));
-            if(DEBUG_HAD_SURPLUS)
-                Debug.LogError($"Planet {PlanetName} had food surplus and shortage");
         }
     }
 
@@ -366,7 +368,7 @@ public class Planet : MonoBehaviour
         // add 1 to population here to allow for growth if possible
         var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
-        ProjectedGrotsits = Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction);
+        ProjectedGrotsits = Math.Clamp(Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction), 0.0f, MaxGrotsitsStorage);
         if (ProjectedGrotsits >= projectedPopulation)
         {
             grotsitsShort += ProjectedGrotsits - projectedPopulation;
@@ -390,8 +392,43 @@ public class Planet : MonoBehaviour
         }
     }
 
+    // returns the player id of the population change
+    private int ChangePopulation(int changeAmount)
+    {
+        int playerID = NoOwner;
+        // first determine which randomly based on pop distribution
+        GetPopulationDistribution(out var popDistribution);
+        if (popDistribution.Count == 1)
+            playerID = popDistribution.First().Key;
+        else
+        {
+            var stack = new int[popDistribution.Count];
+            var stackTotal = 0;
+            for (var i = 0; i < popDistribution.Count; i++)
+            {
+                stack[i] = popDistribution[i];
+                stackTotal += popDistribution[i];
+            }
+
+            var stackPick = GameAI.Rand.Next(stackTotal);
+            for (var i = 0; i < popDistribution.Count; i++)
+            {
+                if (stackPick < stack[i])
+                {
+                    playerID = i;
+                    break;
+                }
+            }
+        }
+        // then change that owner's population
+        ChangePopulation(changeAmount, playerID);
+        return playerID;
+    }
+
     public void ChangePopulation(int changeAmount, int playerId)
     {
+        if (playerId == NoOwner)
+            return;
         if (changeAmount >= 0)
         {
             for (var i = 0; i < changeAmount; i++)
@@ -406,7 +443,46 @@ public class Planet : MonoBehaviour
                 Population.Remove(Population.Find(x => x.Player == playerId));
             }
         }
+
+        SetPlanetOwnership();
+
+    }
+    
+    private void SetPlanetOwnership()
+    {
+        Owner = PlayerWithMostPopulation();
+    }
+
+    private void GetPopulationDistribution(out Dictionary<int, int> popDistribution)
+    {
+        popDistribution = new Dictionary<int, int>();
+        for (var i = 0; i < Gameboard.Instance.players.Count; i++)
+        {
+            var popByPlayer = Population.FindAll(x => x.Player == i).Count;
+            if(popByPlayer > 0)
+                popDistribution.Add(i, popByPlayer);
+        }
+    }
+
+    public float GetPopulationFraction(int playerID)
+    {
+        GetPopulationDistribution(out var popDistribution);
+        if (popDistribution.ContainsKey(playerID))
+            return (float)popDistribution[playerID]/ (float)popDistribution.Count;
+        return 0.0f;
+    }
+
+    public int PlayerWithMostPopulation()
+    {
+        GetPopulationDistribution(out var popDistribution);
         
+        if (popDistribution.Count == 0)
+            return NoOwner;
+        if (popDistribution.Count == 1)
+            return popDistribution.First().Key;
+        
+        var sortedPopDict = popDistribution.OrderByDescending(pair => pair.Value);
+        return sortedPopDict.ElementAt(0).Value > sortedPopDict.ElementAt(1).Value ? sortedPopDict.ElementAt(0).Key : NoOwner;
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

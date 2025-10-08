@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using FlatSpace;
 using FlatSpace.Game;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -145,7 +146,7 @@ public class SaveLoadSystem : MonoBehaviour
         if (!gameScene.isLoaded)
         {
             var bSaveGameInialized = false;
-            LoadGameScene("flatspace", (scene, sceneMode) =>
+            LoadGameScene("Flatspace", (scene, sceneMode) =>
             {
                 bSaveGameInialized = Gameboard.Instance.InitGameFromGaveSave(saveConfig);
                 SceneManager.SetActiveScene(scene);

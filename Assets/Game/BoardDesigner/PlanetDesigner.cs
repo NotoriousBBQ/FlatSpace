@@ -33,7 +33,7 @@ public class PlanetDesigner : MonoBehaviour
     [SerializeField] public TextMeshProUGUI nameTextField;
     [SerializeField] public TextMeshProUGUI typeTextField;
 
-    private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
+    private readonly Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
     {
         { Planet.PlanetType.PlanetTypeDesolate,  new Color32(196, 65,19, 255 )},
         { Planet.PlanetType.PlanetTypeFarm,  new Color32(91, 188,93, 255 )},
