@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using FlatSpace;
+using FlatSpace.AI;
 using FlatSpace.Game;
 using UnityEngine;
 
@@ -100,7 +100,23 @@ public class Planet : MonoBehaviour
     
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
-    public bool PopulationTransferInProgress {get; set;}
+    public List<int> IncomingPopulationSource = new List<int>();
+    public bool IsPopulationTransferInProgress(int playerID) {return IncomingPopulationSource.Contains(playerID);}
+
+    public void SetPopulationTransferInProgress(int playerID, bool inProgress = true)
+    {
+        if (inProgress)
+        {
+            if (!IncomingPopulationSource.Contains(playerID))
+            {
+                IncomingPopulationSource.Add(playerID);
+            }
+        }
+        else
+        {
+            IncomingPopulationSource.Remove(playerID);
+        }
+    }
     
     private PlanetResourceData _resourceData = null;
     public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
@@ -291,7 +307,8 @@ public class Planet : MonoBehaviour
                 resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1, playerID));
                 if (Population.Count >= MaxPopulation)
                     resultList.Add(new PlanetUpdateResult(PlanetName,
-                        ResultType.PlanetUpdateResultTypePopulationSurplus, Population.Count - _resourceData._maxPopulation));
+                        ResultType.PlanetUpdateResultTypePopulationSurplus,
+                        Population.Count - _resourceData._maxPopulation));
             }
             else if (Population.Count >= MaxPopulation)
             {
@@ -395,7 +412,7 @@ public class Planet : MonoBehaviour
     // returns the player id of the population change
     private int ChangePopulation(int changeAmount)
     {
-        int playerID = NoOwner;
+        var playerID = NoOwner;
         // first determine which randomly based on pop distribution
         GetPopulationDistribution(out var popDistribution);
         if (popDistribution.Count == 1)
@@ -467,8 +484,8 @@ public class Planet : MonoBehaviour
     public float GetPopulationFraction(int playerID)
     {
         GetPopulationDistribution(out var popDistribution);
-        if (popDistribution.ContainsKey(playerID))
-            return (float)popDistribution[playerID]/ (float)popDistribution.Count;
+        if (popDistribution.TryGetValue(playerID, out var playerPop))
+            return (float)popDistribution[playerID]/ (float)Population.Count;
         return 0.0f;
     }
 

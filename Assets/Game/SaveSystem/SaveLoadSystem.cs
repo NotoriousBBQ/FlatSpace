@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using FlatSpace;
+using FlatSpace.AI;
 using FlatSpace.Game;
+using FlatSpace.Tools;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.SceneManagement;
 using SimpleFileBrowser;
-using UnityEditor.Build.Content;
 using UnityEngine.Events;
-using UnityEngine.TextCore.Text;
+
 
 public class SaveLoadSystem : MonoBehaviour
 {
@@ -38,7 +38,7 @@ public class SaveLoadSystem : MonoBehaviour
             public float grotsits;
             public float morale;
             public int owner;
-            public bool populationTransferInProgress;
+            public List<int> populationTransferInProgress;
         }
 
         [Serializable]
@@ -59,7 +59,7 @@ public class SaveLoadSystem : MonoBehaviour
         public struct PlayerSave
         {
             public int playerId;
-            public Player.AIStrategy strategy;
+            public PlayerAI.AIStrategy strategy;
         }
         
         public int turnNumber;
@@ -80,7 +80,7 @@ public class SaveLoadSystem : MonoBehaviour
                     new PlayerSave
                     { 
                         playerId = i,
-                        strategy = Gameboard.Instance.players[i].Strategy    
+                        strategy = Gameboard.Instance.players[i].GetStrategy()    
                     });
             }
             
@@ -95,7 +95,7 @@ public class SaveLoadSystem : MonoBehaviour
                     grotsits = planet.Grotsits,
                     morale = planet.Morale,
                     owner = planet.Owner,
-                    populationTransferInProgress = planet.PopulationTransferInProgress,
+                    populationTransferInProgress = planet.IncomingPopulationSource,
                     population = new int[Gameboard.Instance.players.Count]
                 };
                 for (var i = 0; i < Gameboard.Instance.players.Count; i++)

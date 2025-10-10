@@ -1,161 +1,175 @@
 using UnityEngine;
 using System.Collections.Generic;
-public class BoardDesigner : MonoBehaviour
+
+namespace FlatSpace
 {
-    [SerializeField] private LineDrawObject lineDrawObjectPrefab;
-    private List<LineDrawObject> _lineDrawObjects = new List<LineDrawObject>();
-
-    public void ClearConnections()
-    {
-        for (var i = _lineDrawObjects.Count - 1; i >= 0; i--)
-        {
-            if (!_lineDrawObjects[i]) continue;
-            _lineDrawObjects[i].transform.SetParent(null);
-            _lineDrawObjects[i].gameObject.SetActive(false);
-            Destroy(_lineDrawObjects[i].gameObject);
-        }
-        _lineDrawObjects.Clear();
-    }
-    [ContextMenu("Generate Connections")]
-    public void GenerateStarConnections()
+    namespace Tools
     {
 
-        var planetList = new List<PlanetDesigner>();
-        foreach (Transform child in transform)
+        public class BoardDesigner : MonoBehaviour
         {
-            if (child.GetComponent<PlanetDesigner>()) 
-                planetList.Add(child.GetComponent<PlanetDesigner>());
-        }
+            [SerializeField] private LineDrawObject lineDrawObjectPrefab;
+            private List<LineDrawObject> _lineDrawObjects = new List<LineDrawObject>();
 
-        foreach (var planet in planetList)
-        {
-            var planetPosition = planet.transform.position;
-            foreach (var possibleNeighbor in planetList )
+            public void ClearConnections()
             {
-                if (possibleNeighbor == planet)
-                    continue;
-                
-                var distance = Vector2.Distance(new Vector2(possibleNeighbor.transform.localPosition.x,possibleNeighbor.transform.localPosition.y), 
-                    new Vector2(planet.transform.localPosition.x,planet.transform.localPosition.y));
-                if (distance <= MaxConnectionSize)
+                for (var i = _lineDrawObjects.Count - 1; i >= 0; i--)
                 {
-                    planet.Connections.Add(new PlanetDesigner.DesignerConnection(possibleNeighbor, distance));
+                    if (!_lineDrawObjects[i]) continue;
+                    _lineDrawObjects[i].transform.SetParent(null);
+                    _lineDrawObjects[i].gameObject.SetActive(false);
+                    Destroy(_lineDrawObjects[i].gameObject);
+                }
+
+                _lineDrawObjects.Clear();
+            }
+
+            [ContextMenu("Generate Connections")]
+            public void GenerateStarConnections()
+            {
+
+                var planetList = new List<PlanetDesigner>();
+                foreach (Transform child in transform)
+                {
+                    if (child.GetComponent<PlanetDesigner>())
+                        planetList.Add(child.GetComponent<PlanetDesigner>());
+                }
+
+                foreach (var planet in planetList)
+                {
+                    var planetPosition = planet.transform.position;
+                    foreach (var possibleNeighbor in planetList)
+                    {
+                        if (possibleNeighbor == planet)
+                            continue;
+
+                        var distance = Vector2.Distance(
+                            new Vector2(possibleNeighbor.transform.localPosition.x,
+                                possibleNeighbor.transform.localPosition.y),
+                            new Vector2(planet.transform.localPosition.x, planet.transform.localPosition.y));
+                        if (distance <= MaxConnectionSize)
+                        {
+                            planet.Connections.Add(new PlanetDesigner.DesignerConnection(possibleNeighbor, distance));
+                        }
+                    }
+                }
+
+                DrawConnections(planetList);
+            }
+
+            [ContextMenu("Generate Names")]
+            public void GenerateNames()
+            {
+                var planetList = new List<PlanetDesigner>();
+                foreach (Transform child in transform)
+                {
+                    if (child.GetComponent<PlanetDesigner>())
+                        planetList.Add(child.GetComponent<PlanetDesigner>());
+                }
+
+                var count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesolate))
+                {
+                    planet.name = "Desolate " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.UpdateGraphic();
+                    count++;
+                }
+
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeFarm))
+                {
+                    planet.name = "Farm " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.UpdateGraphic();
+                    count++;
+                }
+
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeIndustrial))
+                {
+                    planet.name = "Industrial " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.UpdateGraphic();
+                    count++;
+                }
+
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeNormal))
+                {
+                    planet.name = "Normal " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.UpdateGraphic();
+                    count++;
+                }
+
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypePrime))
+                {
+                    planet.name = "Prime " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.UpdateGraphic();
+                    count++;
+                }
+
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeVerdant))
+                {
+                    planet.name = "Verdant " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.UpdateGraphic();
+                    count++;
                 }
             }
-        }
-        DrawConnections(planetList);
-    }
 
-    [ContextMenu("Generate Names")]
-    public void GenerateNames()
-    {
-        var planetList = new List<PlanetDesigner>();
-        foreach (Transform child in transform)
-        {
-            if (child.GetComponent<PlanetDesigner>()) 
-                planetList.Add(child.GetComponent<PlanetDesigner>());
-        }
 
-        var count = 0;
-        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesolate))
-        {
-            planet.name = "Desolate " + count.ToString();
-            planet.planetName = planet.name;
-            planet.UpdateGraphic();
-            count++;
-        }
-
-        count = 0;
-        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeFarm))
-        {
-            planet.name = "Farm " + count.ToString();
-            planet.planetName = planet.name;
-            planet.UpdateGraphic();
-            count++;
-        }
-
-        count = 0;
-        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeIndustrial))
-        {
-            planet.name = "Industrial " + count.ToString();
-            planet.planetName = planet.name;
-            planet.UpdateGraphic();
-            count++;
-        }
-
-        count = 0;
-        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeNormal))
-        {
-            planet.name = "Normal " + count.ToString();
-            planet.planetName = planet.name;
-            planet.UpdateGraphic();
-            count++;
-        }
-
-        count = 0;
-        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypePrime))
-        {
-            planet.name = "Prime " + count.ToString();
-            planet.planetName = planet.name;
-            planet.UpdateGraphic();
-            count++;
-        }
-
-        count = 0;
-        foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeVerdant))
-        {
-            planet.name = "Verdant " + count.ToString();
-            planet.planetName = planet.name;
-            planet.UpdateGraphic();
-            count++;
-        }
-    }
-    
-
-    private void DrawConnections(List<PlanetDesigner> planetList)
-    {
-        ClearConnections();
-        var connectionPoints = new List<(Vector3, Vector3)>();
-        GetConnectionVectors(planetList,connectionPoints);
-
-        var prefab = lineDrawObjectPrefab;
-        if (!prefab)
-            return;
-
-        foreach (var linePoints in connectionPoints)
-        {
-            var lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
-
-            if (lineDrawObject)
+            private void DrawConnections(List<PlanetDesigner> planetList)
             {
-                lineDrawObject.SetPoints(linePoints);
-                _lineDrawObjects.Add(lineDrawObject);
-            }
-        }
-    }
+                ClearConnections();
+                var connectionPoints = new List<(Vector3, Vector3)>();
+                GetConnectionVectors(planetList, connectionPoints);
 
-    private void GetConnectionVectors(List<PlanetDesigner> planets, List<(Vector3, Vector3)>  connectionPoints)
-    {
-        var alreadySeen = new List<PlanetDesigner>();
-        foreach (var planet in planets)
-        {
-            alreadySeen.Add(planet);
-            foreach (var connection in planet.Connections)
+                var prefab = lineDrawObjectPrefab;
+                if (!prefab)
+                    return;
+
+                foreach (var linePoints in connectionPoints)
+                {
+                    var lineDrawObject = Instantiate<LineDrawObject>(prefab, transform) as LineDrawObject;
+
+                    if (lineDrawObject)
+                    {
+                        lineDrawObject.SetPoints(linePoints);
+                        _lineDrawObjects.Add(lineDrawObject);
+                    }
+                }
+            }
+
+            private void GetConnectionVectors(List<PlanetDesigner> planets, List<(Vector3, Vector3)> connectionPoints)
             {
-                if (alreadySeen.Contains(connection.Target))
-                    continue;
-                var p1 = new Vector3(planet.transform.localPosition.x, planet.transform.localPosition.y, 0.0f);
-                var p2 = new Vector3(connection.Target.transform.localPosition.x, connection.Target.transform.localPosition.y, 0.0f);
-                connectionPoints.Add((p1, p2));
+                var alreadySeen = new List<PlanetDesigner>();
+                foreach (var planet in planets)
+                {
+                    alreadySeen.Add(planet);
+                    foreach (var connection in planet.Connections)
+                    {
+                        if (alreadySeen.Contains(connection.Target))
+                            continue;
+                        var p1 = new Vector3(planet.transform.localPosition.x, planet.transform.localPosition.y, 0.0f);
+                        var p2 = new Vector3(connection.Target.transform.localPosition.x,
+                            connection.Target.transform.localPosition.y, 0.0f);
+                        connectionPoints.Add((p1, p2));
+                    }
+                }
+
             }
+
+            public void SaveBoardConfig()
+            {
+                SaveLoadSystem.SaveBoardDesign(this);
+            }
+
+            public float MaxConnectionSize { get; set; } = 400.0f;
         }
-        
     }
-
-    public void SaveBoardConfig()
-    {
-        SaveLoadSystem.SaveBoardDesign(this);
-    }
-
-    public float MaxConnectionSize { get; set; } = 400.0f;
 }

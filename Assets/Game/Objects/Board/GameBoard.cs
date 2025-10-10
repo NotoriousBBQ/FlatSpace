@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
+using FlatSpace.AI;
 
 namespace FlatSpace
 {
@@ -72,8 +73,11 @@ namespace FlatSpace
 
             private void CreatePlayerData()
             {
-                for(var i = 0; i < NumPlayers; i++)
+                for (var i = 0; i < NumPlayers; i++)
+                {
                     players.Add(this.AddComponent<Player>());
+                    players[i].playerID = i;
+                }
 
             }
 
@@ -136,7 +140,7 @@ namespace FlatSpace
                 TurnNumber = gameSave.turnNumber;
                 foreach (var playerSave in gameSave.players)
                 {
-                    players[playerSave.playerId].Strategy = playerSave.strategy;
+                    players[playerSave.playerId].SetStrategy(playerSave.strategy);
                 }
                 GameAI.SetSimulationStats(gameSave);
             }
