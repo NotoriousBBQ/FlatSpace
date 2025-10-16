@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UIElements;
 using FlatSpace.Game;
 public class GameButtonHandler : MonoBehaviour
@@ -8,10 +7,12 @@ public class GameButtonHandler : MonoBehaviour
     
     private Button _nextTurnButton;
     private Button _startRunButton;
+    private Button _showNotificationsButton;
     private Button _stopRunButton;
     private Button _saveButton;
     private Button _loadButton;
-   
+
+    public UIDocument notificationList;
     void OnEnable()
     {
         var root = uiDocument.rootVisualElement;
@@ -20,6 +21,20 @@ public class GameButtonHandler : MonoBehaviour
         if (_nextTurnButton != null)
         {
             _nextTurnButton.clicked += OnNextTurnButtonClicked;
+        }
+        
+        _showNotificationsButton = root.Q<Button>("ShowNotificationsButton"); 
+        if (_showNotificationsButton != null)
+        {
+            if (notificationList == null)
+            {
+                _showNotificationsButton.SetEnabled(false);
+            }
+            else
+            {
+                SetShowNotificationButtonText();
+                _showNotificationsButton.clicked += OnShowNotificationsButtonClicked;
+            }
         }
 
         _startRunButton = root.Q<Button>("StartRunButton"); 
@@ -58,6 +73,11 @@ public class GameButtonHandler : MonoBehaviour
             _nextTurnButton.clicked -= OnNextTurnButtonClicked;
         }
         
+        if (_showNotificationsButton != null)
+        {
+            _showNotificationsButton.clicked -= OnShowNotificationsButtonClicked;
+        }
+        
         if (_startRunButton != null)
         {
             _startRunButton.clicked -= OnStartRunButtonClicked;
@@ -82,6 +102,19 @@ public class GameButtonHandler : MonoBehaviour
     private void OnNextTurnButtonClicked()
     {
         Gameboard.Instance.SingleUpdate();
+    }
+
+    private void SetShowNotificationButtonText()
+    {
+        _showNotificationsButton.text = notificationList.enabled ? "Hide Notifications" : "Show Notifications";
+    }
+    
+    private void OnShowNotificationsButtonClicked()
+    {
+        if (!notificationList)
+            return;
+        notificationList.enabled = !notificationList.enabled;
+        SetShowNotificationButtonText();
     }
 
     private void OnStartRunButtonClicked()

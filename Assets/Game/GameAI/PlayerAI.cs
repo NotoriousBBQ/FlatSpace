@@ -102,6 +102,8 @@ namespace FlatSpace
                     var surplusPathMap = AIMap.GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
                     foreach (var shortageResult in shortageResults)
                     {
+                        if(AIMap.GetPlanet(shortageResult.Name).GrotsitsShipmentIncoming == true)
+                            continue;
                         if (surplusPathMap[shortageResult.Name].NumNodes <=
                             AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
                             validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
@@ -157,7 +159,17 @@ namespace FlatSpace
                         Origin = actionNTuple.Origin,
                         Target = actionNTuple.Origin,
                         PlayerId = Player.playerID
-
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
                     });
                 }
             }
@@ -181,6 +193,8 @@ namespace FlatSpace
                     var surplusPathMap = AIMap.GetPlanet(surplusProducer.Name).DistanceMapToPathingList;
                     foreach (var shortageResult in shortageResults)
                     {
+                        if(AIMap.GetPlanet(shortageResult.Name).FoodShipmentIncoming == true)
+                            continue;
                         if (surplusPathMap[shortageResult.Name].NumNodes <=
                             AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
                             validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
@@ -235,6 +249,17 @@ namespace FlatSpace
                         Data = changeAmount * -1.0f,
                         Origin = actionNTuple.Origin,
                         Target = actionNTuple.Origin,
+                        PlayerId = Player.playerID
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransportInProgress,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
                         PlayerId = Player.playerID
                     });
                 }

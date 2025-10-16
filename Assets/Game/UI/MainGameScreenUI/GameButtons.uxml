@@ -1,0 +1,10 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:VisualElement enabled="true" picking-mode="Ignore" style="flex-grow: 1; width: 200px; flex-basis: 0; align-items: flex-end; top: auto; align-self: flex-end; align-content: auto; justify-content: flex-start;">
+        <ui:Button text="Next Turn" name="NextTurnButton" style="width: 180px; height: 30px;" />
+        <ui:Button text="Show Notifications" name="ShowNotificationsButton" style="width: 180px; height: 30px;" />
+        <ui:Button text="Start Run" name="StartRunButton" style="width: 180px; height: 30px;" />
+        <ui:Button text="Stop Run" name="StopRunButton" style="width: 180px; height: 30px;" />
+        <ui:Button text="Save" name="TestSaveButton" double-click-selects-word="false" style="width: 180px; height: 30px;" />
+        <ui:Button text="Load" name="TestLoadButton" parse-escape-sequences="true" style="width: 180px; height: 30px;" />
+    </ui:VisualElement>
+</ui:UXML>

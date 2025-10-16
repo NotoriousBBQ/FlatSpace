@@ -1,0 +1,5 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:VisualElement name="VisualElement" style="flex-grow: 0; color: rgba(27, 27, 27, 0.51); width: 300px; height: 100%;">
+        <ui:ListView name="NotificationList" header-title="Notifications" allow-remove="false" allow-add="false" show-add-remove-footer="false" item-template="project://database/Assets/Game/UI/MainGameScreenUI/NotificationItem.uxml?fileID=9197481963319205126&amp;guid=012c0874063c75843810526edb418500&amp;type=3#NotificationItem" style="height: 450px; background-color: rgb(102, 102, 102); left: 0%; top: 0; align-items: center; justify-content: center;" />
+    </ui:VisualElement>
+</ui:UXML>

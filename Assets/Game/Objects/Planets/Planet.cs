@@ -102,6 +102,8 @@ public class Planet : MonoBehaviour
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
     public List<int> IncomingPopulationSource = new List<int>();
     public bool IsPopulationTransferInProgress(int playerID) {return IncomingPopulationSource.Contains(playerID);}
+    public bool FoodShipmentIncoming = false;
+    public bool GrotsitsShipmentIncoming = false;
 
     public void SetPopulationTransferInProgress(int playerID, bool inProgress = true)
     {
@@ -291,7 +293,6 @@ public class Planet : MonoBehaviour
                  {
                      // planet id dead
                      resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
-                     SetPlanetOwnership();
                  }
              }
         }
@@ -343,9 +344,9 @@ public class Planet : MonoBehaviour
         }
     }
 
-    private void SetProjectedWorkers(float ProjectedPopulation)
+    private void SetProjectedWorkers(float projectedPopulation)
     {
-        var projectedFoodGap = Food + (FoodWorkers * _resourceData._foodProduction) - ProjectedPopulation;
+        var projectedFoodGap = Food + (FoodWorkers * _resourceData._foodProduction) - projectedPopulation;
         if (projectedFoodGap >= 0.0f)
         {
             // enough food projected, keep worker allocations
@@ -441,6 +442,8 @@ public class Planet : MonoBehaviour
         ChangePopulation(changeAmount, playerID);
         return playerID;
     }
+    
+    
 
     public void ChangePopulation(int changeAmount, int playerId)
     {
@@ -460,11 +463,9 @@ public class Planet : MonoBehaviour
                 Population.Remove(Population.Find(x => x.Player == playerId));
             }
         }
-
         SetPlanetOwnership();
-
     }
-    
+
     private void SetPlanetOwnership()
     {
         Owner = PlayerWithMostPopulation();

@@ -23,8 +23,10 @@ namespace FlatSpace
                     OrderTypePopulationTransferInProgress,
                     OrderTypeFoodTransport,
                     OrderTypeFoodChange,
+                    OrderTypeFoodTransportInProgress,
                     OrderTypeGrotsitsTransport,
                     OrderTypeGrotsitsChange,
+                    OrderTypeGrotsitsTransportInProgress,
                 }
 
                 public enum OrderTimingType
@@ -109,10 +111,16 @@ namespace FlatSpace
                         targetPlanet.SetPopulationTransferInProgress(executableOrder.PlayerId);
                         break;
                     case GameAIOrder.OrderType.OrderTypeFoodTransport:
+                        targetPlanet.Food += Convert.ToSingle(executableOrder.Data);
+                        targetPlanet.FoodShipmentIncoming = false;
+                        break;
                     case GameAIOrder.OrderType.OrderTypeFoodChange:
                         targetPlanet.Food += Convert.ToSingle(executableOrder.Data);
                         break;
                     case GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
+                        targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
+                        targetPlanet.GrotsitsShipmentIncoming = false;
+                        break;
                     case GameAIOrder.OrderType.OrderTypeGrotsitsChange:
                         targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
                         break;

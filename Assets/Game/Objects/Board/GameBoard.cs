@@ -347,6 +347,14 @@ namespace FlatSpace
                 return GameAI.GetPlayerCapitol(playerID);
             }
 
+            public void ViewPlanet(string planetName)
+            {
+                var planet = GetPlanet(planetName);
+                if (planet == null)
+                    return;
+                ViewPlanet(planet);
+            }
+
             private void ViewPlanet(Planet planet)
             {
                 if (_scrollRect)

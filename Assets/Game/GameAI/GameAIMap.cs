@@ -157,6 +157,8 @@ namespace FlatSpace
                     planet.Morale = planetStatus.morale;
                     planet.Grotsits = planetStatus.grotsits;
                     planet.Owner = planetStatus.owner;
+                    planet.FoodShipmentIncoming = planetStatus.foodTransferInProgress;
+                    planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;
                     foreach(var playerID in planetStatus.populationTransferInProgress)
                         planet.SetPopulationTransferInProgress(playerID);
                     for (var i = 0; i < planetStatus.population.Length; i++)

@@ -39,6 +39,8 @@ public class SaveLoadSystem : MonoBehaviour
             public float morale;
             public int owner;
             public List<int> populationTransferInProgress;
+            public bool foodTransferInProgress;
+            public bool grotsitsTransferInProgress;
         }
 
         [Serializable]
@@ -96,6 +98,8 @@ public class SaveLoadSystem : MonoBehaviour
                     morale = planet.Morale,
                     owner = planet.Owner,
                     populationTransferInProgress = planet.IncomingPopulationSource,
+                    foodTransferInProgress = planet.FoodShipmentIncoming,
+                    grotsitsTransferInProgress = planet.GrotsitsShipmentIncoming,
                     population = new int[Gameboard.Instance.players.Count]
                 };
                 for (var i = 0; i < Gameboard.Instance.players.Count; i++)
