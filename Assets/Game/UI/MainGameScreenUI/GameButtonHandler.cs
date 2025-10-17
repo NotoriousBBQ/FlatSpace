@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using FlatSpace.Game;
+using Game.UI.MainGameScreenUI;
+
 public class GameButtonHandler : MonoBehaviour
 { 
     public UIDocument uiDocument;
@@ -32,7 +34,6 @@ public class GameButtonHandler : MonoBehaviour
             }
             else
             {
-                SetShowNotificationButtonText();
                 _showNotificationsButton.clicked += OnShowNotificationsButtonClicked;
             }
         }
@@ -115,6 +116,11 @@ public class GameButtonHandler : MonoBehaviour
             return;
         notificationList.enabled = !notificationList.enabled;
         SetShowNotificationButtonText();
+        if (!notificationList.enabled)
+            return;
+
+        var controller = notificationList.GetComponent<NotificationListController>();
+        controller?.Setup();
     }
 
     private void OnStartRunButtonClicked()

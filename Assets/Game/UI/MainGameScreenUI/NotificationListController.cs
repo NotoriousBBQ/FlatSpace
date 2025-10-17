@@ -12,24 +12,29 @@ namespace Game.UI.MainGameScreenUI
 
         private ListView _listView;
         private VisualTreeAsset _listEntryTemplate;
-        private List<PlayerNotification> _notifications;
+        private List<PlayerNotification> _notifications= new List<PlayerNotification>();
+        private List<PlayerNotification> _storedNotifications = new List<PlayerNotification>();
 
         public void OnEnable()
         {
-            _notifications = new List<PlayerNotification>();
+
+
+            DEBUG_NotificationsTest();
+
+            uiDocument.enabled = false;
             
+        }
+
+        public void Setup()
+        {
             _listView = uiDocument.rootVisualElement.Q<ListView>("NotificationList");
+            _listEntryTemplate = _listView.itemTemplate;
             _listView.makeItem = MakeItem;
             _listView.bindItem = BindItem;
             _listView.fixedItemHeight = 24;
             _listView.itemsSource = _notifications;
-            _listView.selectionChanged += OnNotificationSelected;
-            
-            _listEntryTemplate = _listView.itemTemplate;
-
-            DEBUG_NotificationsTest();
- //           uiDocument.enabled = false;
-            
+            _listView.selectionChanged += OnNotificationSelected;   
+            ShowNotifications();
         }
 
         private void DEBUG_NotificationsTest()
@@ -48,7 +53,7 @@ namespace Game.UI.MainGameScreenUI
                 ViewTarget = "Prime 1"
             });
             
-            ShowNotifications(notifications);
+            SetNotifications(notifications);
         }
 
         private void OnNotificationSelected(IEnumerable<object> selectedItems)
@@ -73,17 +78,17 @@ namespace Game.UI.MainGameScreenUI
             (item.userData as NotificationItemController)?.SetNotification(_notifications[index]);
         }
 
-        private void ClearNotifications()
+        public void SetNotifications(List<PlayerNotification> notifications)
+        {
+            _storedNotifications.Clear();
+            _storedNotifications.AddRange(notifications);
+        }
+        public void ShowNotifications()
         {
             _notifications.Clear();
-            _listView.ClearBindings();
-        }
+            _notifications.AddRange(_storedNotifications);
 
-        public void ShowNotifications(List<PlayerNotification> notifications)
-        {
-           // ClearNotifications();
-           _notifications.Clear();
-            _notifications.AddRange(notifications);
+            _listView.RefreshItems();
         }
     }
 }

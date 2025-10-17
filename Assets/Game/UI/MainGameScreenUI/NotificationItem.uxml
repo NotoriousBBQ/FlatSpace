@@ -1,5 +1,5 @@
 <ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
-    <ui:VisualElement style="flex-grow: 1;">
-        <ui:Label text="Label" focusable="true" name="DisplayLabel" style="flex-wrap: wrap; -unity-text-align: upper-left; white-space: normal;" />
+    <ui:VisualElement style="flex-grow: 1; opacity: 1; background-color: rgba(0, 0, 0, 0);">
+        <ui:Label text="Label" focusable="true" name="DisplayLabel" style="flex-wrap: wrap; -unity-text-align: upper-left; white-space: normal; -unity-font-style: bold; color: rgb(0, 0, 0);" />
     </ui:VisualElement>
 </ui:UXML>
