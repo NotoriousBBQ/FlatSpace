@@ -10,6 +10,8 @@ public class PlanetResourceData : ScriptableObject
     public float _foodProduction;
     public float _initialGrotsits;
     public float _grotsitProduction;
+    public float _researchProduction;
+    public float _industryProduction;
     public int _maxPopulation;
     public Planet.PlanetStrategy _initialStrategy;
 }

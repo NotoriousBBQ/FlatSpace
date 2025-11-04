@@ -16,3 +16,4 @@ MonoBehaviour:
   _planetPosition: {x: 0, y: 0, z: 0}
   _planetType: 0
   _resourceData: {fileID: 11400000, guid: 2cbb18515bcb137429129ad8b659ae5a, type: 2}
+  _planetUIObject: {fileID: 8146981275839630820, guid: c8fa997062f047d4baad6a91f926c2d2, type: 3}

@@ -17,12 +17,7 @@ namespace Game.UI.MainGameScreenUI
 
         public void OnEnable()
         {
-
-
-            DEBUG_NotificationsTest();
-
             uiDocument.enabled = false;
-            
         }
 
         public void Setup()
@@ -31,29 +26,10 @@ namespace Game.UI.MainGameScreenUI
             _listEntryTemplate = _listView.itemTemplate;
             _listView.makeItem = MakeItem;
             _listView.bindItem = BindItem;
-            _listView.fixedItemHeight = 24;
+            _listView.fixedItemHeight = 48;
             _listView.itemsSource = _notifications;
             _listView.selectionChanged += OnNotificationSelected;   
             ShowNotifications();
-        }
-
-        private void DEBUG_NotificationsTest()
-        {
-            var notifications = new List<PlayerNotification>();
-            notifications.Add(new PlayerNotification
-            {
-                Message = "Capitol One Created",
-                PlayerName = "Player One",
-                ViewTarget = "Prime 0"
-            });
-            notifications.Add(new PlayerNotification
-            {
-                Message = "Capitol Two Created",
-                PlayerName = "Player Two",
-                ViewTarget = "Prime 1"
-            });
-            
-            SetNotifications(notifications);
         }
 
         private void OnNotificationSelected(IEnumerable<object> selectedItems)
@@ -82,13 +58,15 @@ namespace Game.UI.MainGameScreenUI
         {
             _storedNotifications.Clear();
             _storedNotifications.AddRange(notifications);
+            if (enabled)
+                ShowNotifications();
         }
-        public void ShowNotifications()
+        private void ShowNotifications()
         {
             _notifications.Clear();
             _notifications.AddRange(_storedNotifications);
 
-            _listView.RefreshItems();
+            _listView?.RefreshItems();
         }
     }
 }

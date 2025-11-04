@@ -437,6 +437,13 @@ MonoBehaviour:
   _orderLineDrawObjectPrefab: {fileID: 4779870425705875092, guid: 387624431a5c15e428e7d465ff2d0775, type: 3}
   _scrollRect: {fileID: 667686344}
   _PlanetUIPrefab: {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
+  _PlanetUIPrefabs:
+  - {fileID: 8146981275839630820, guid: c8fa997062f047d4baad6a91f926c2d2, type: 3}
+  - {fileID: 7407106090372313207, guid: 584ee759531ec224cb81541afcf69563, type: 3}
+  - {fileID: 3735582483864339332, guid: 38361bc893b97284e8ed8df8bfef2411, type: 3}
+  - {fileID: 3735582483864339332, guid: 127c720af2a283c478da2a11838376dc, type: 3}
+  - {fileID: 3735582483864339332, guid: 7c5dbb939ff84034684812c159d26589, type: 3}
+  - {fileID: 3735582483864339332, guid: 1e16cd2b0fe214c4a998a527cc74424b, type: 3}
   players: []
 --- !u!1 &519420028
 GameObject:

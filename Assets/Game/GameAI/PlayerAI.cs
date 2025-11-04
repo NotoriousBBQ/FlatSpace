@@ -375,8 +375,8 @@ namespace FlatSpace
                         TotalDelay = 0,
                         Data = changeAmount,
                         Origin = actionNTuple.Origin,
-                        Target = actionNTuple.Target
-
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
                     });
                 }
             }

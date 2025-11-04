@@ -738,6 +738,7 @@ MonoBehaviour:
   _grotsitsTextField: {fileID: 908105444069105776}
   _moraleTextField: {fileID: 5126759246689107722}
   _planetName: 
+  _changeColor: 1
 --- !u!212 &2643599698521063528
 SpriteRenderer:
   m_ObjectHideFlags: 0

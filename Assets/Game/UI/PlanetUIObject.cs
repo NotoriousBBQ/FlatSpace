@@ -14,7 +14,7 @@ public class PlanetUIObject : MonoBehaviour
     [SerializeField] public TextMeshProUGUI _moraleTextField;
 
     public string _planetName;
-
+    public bool _changeColor = false;
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
     {
         { Planet.PlanetType.PlanetTypeDesolate,  new Color32(196, 65,19, 255 )},
@@ -39,6 +39,8 @@ public class PlanetUIObject : MonoBehaviour
 
     public void SetPlanetColor(Planet.PlanetType planetType)
     {
+        if (!_changeColor)
+            return;
         var sprintRenderer = GetComponent<SpriteRenderer>();
         sprintRenderer.color = _planetColors[planetType];
 

@@ -69,7 +69,7 @@ namespace FlatSpace
                 planetUpdateResults.Clear();
                 PlanetaryProductionUpdate(planetUpdateResults);
                 ProcessResults(planetUpdateResults, gameAIOrders);
-
+                Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
             }
 
@@ -81,6 +81,7 @@ namespace FlatSpace
                 }
 
                 var executableOrders = CurrentAIOrders.FindAll(x => x.TimingDelay <= 0);
+                Gameboard.Instance.CreateNotificationsForExecutingOrders(executableOrders);
                 foreach (var executableOrder in executableOrders)
                 {
                     ExecuteOrder(executableOrder);

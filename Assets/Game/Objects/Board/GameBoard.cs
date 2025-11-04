@@ -11,6 +11,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 using FlatSpace.AI;
+using Game.UI.MainGameScreenUI;
 
 namespace FlatSpace
 {
@@ -33,6 +34,7 @@ namespace FlatSpace
             [SerializeField] private ScrollRect _scrollRect;
 
             public PlanetUIObject _PlanetUIPrefab;
+            public PlanetUIObject[] _PlanetUIPrefabs;
 
             private MapInputActions _mapInputActions;
             private Camera _camera;
@@ -41,7 +43,9 @@ namespace FlatSpace
             public List<Player> players = new List<Player>();
 
             private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
- 
+            private readonly List<PlayerNotification> _playerNotifications = new List<PlayerNotification>();
+            
+            private NotificationListController _notificationListController;
             public int TurnNumber { get; private set; }= 0;
 
             void Start()
@@ -68,6 +72,7 @@ namespace FlatSpace
                     InitGame(IntialBoardState._planetSpawnData);
                 }
                 InitializeInputActions();
+                _notificationListController = GetComponentInChildren<NotificationListController>();
 
             }
 
@@ -201,7 +206,15 @@ namespace FlatSpace
                         new Vector3(planetDesignData.position.x, planetDesignData.position.y, 0.0f);
                     spawnData._planetType = planetDesignData.planetType;
                     spawnData._resourceData =
-                        gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);                       
+                        gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);
+                    switch (spawnData._planetType)
+                    {
+                        case Planet.PlanetType.PlanetTypePrime:
+                            break;
+                        default:
+                            spawnData._planetUIObject = null;
+                            break;
+                    }
                     planetSpawnData.Add(spawnData);
                 }
                 InitGame(planetSpawnData);
@@ -221,7 +234,8 @@ namespace FlatSpace
                 
             private void InitUIElement(PlanetSpawnData spawnData, Transform parentTransform)
             {
-                var prefab = Gameboard.Instance._PlanetUIPrefab;
+                var prefab = _PlanetUIPrefabs[(int)spawnData._planetType] != null ? 
+                    _PlanetUIPrefabs[(int)spawnData._planetType] : Gameboard.Instance._PlanetUIPrefab;
                 if (!prefab)
                     return;
             
@@ -409,6 +423,7 @@ namespace FlatSpace
             public void SingleUpdate()
             {
                 // add Ai Actions here
+                _playerNotifications.Clear();
                 GameAI.GameAIUpdate();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
@@ -427,6 +442,7 @@ namespace FlatSpace
             private void BoardUIUpdate()
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
+                _notificationListController?.SetNotifications(_playerNotifications);
             }
 
             private bool _timedUpdateRunning = false;
@@ -451,6 +467,80 @@ namespace FlatSpace
             public void StopTimedUpdate()
             {
                 _timedUpdateRunning = false;
+            }
+
+            public void CreateNotificationsForExecutingOrders(List<GameAI.GameAIOrder> gameAIOrders)
+            {
+                foreach (var order in gameAIOrders)
+                {
+                    switch (order.Type)
+                    {
+                        case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
+                            _playerNotifications.Add(new PlayerNotification
+                            {
+                                PlayerName = order.PlayerId.ToString(),
+                                Message = "Receiving " + order.Data + " Food From " + order.Origin + " at " +
+                                          order.Target,
+                                ViewTarget = order.Target,
+                            });
+                            break;
+                        case GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
+                            _playerNotifications.Add(new PlayerNotification
+                            {
+                                PlayerName = order.PlayerId.ToString(),
+                                Message = "Receiving " + order.Data + " Grotsits From " + order.Origin + " at " +
+                                          order.Target,
+                                ViewTarget = order.Target,
+                            });
+                            break;
+                        case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
+                            _playerNotifications.Add(new PlayerNotification
+                            {
+                                PlayerName = order.PlayerId.ToString(),
+                                Message = "Colonizer arrived at " + order.Target + " From " + order.Origin,
+                                ViewTarget = order.Target,
+                            });
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+
+            public void CreateNotificationsForNewOrders(List<GameAI.GameAIOrder> gameAIOrders)
+            {
+                foreach (var order in gameAIOrders)
+                {
+                    switch (order.Type)
+                    {
+                        case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
+                             _playerNotifications.Add(new PlayerNotification 
+                             {
+                                 PlayerName = order.PlayerId.ToString(),
+                                 Message = "Shipping " + order.Data + " Food From " + order.Origin + " to " + order.Target,
+                                 ViewTarget = order.Origin,
+                             });
+                            break;
+                         case GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
+                             _playerNotifications.Add(new PlayerNotification
+                             {
+                                 PlayerName = order.PlayerId.ToString(),
+                                 Message = "Shipping " + order.Data + " Grotsits From " + order.Origin + " to " + order.Target,
+                                 ViewTarget = order.Origin,
+                             });
+                             break;
+                         case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
+                             _playerNotifications.Add(new PlayerNotification
+                             {
+                                 PlayerName = order.PlayerId.ToString(),
+                                 Message = "Colonizing " + order.Target + " From " + order.Origin,
+                                 ViewTarget = order.Origin,
+                             });
+                             break;
+                         default:
+                             break;
+                    }
+                }
             }
 
             #endregion
