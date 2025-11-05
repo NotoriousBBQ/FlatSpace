@@ -12,7 +12,7 @@ public class PlanetUIObject : MonoBehaviour
     [SerializeField] public TextMeshProUGUI _foodTextField;
     [SerializeField] public TextMeshProUGUI _grotsitsTextField;
     [SerializeField] public TextMeshProUGUI _moraleTextField;
-
+    [SerializeField] public Canvas _statsCanvas;
     public string _planetName;
     public bool _changeColor = false;
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
@@ -35,6 +35,12 @@ public class PlanetUIObject : MonoBehaviour
         _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
         _moraleTextField.text = Math.Floor(planet.Morale).ToString();
         SetOwnerColor(planet.Owner);
+    }
+ 
+    public void UIUpdateForScroll(float orthoChange = 0.0f)
+    {
+        var scaleChange = _statsCanvas.transform.localScale.x + (-orthoChange/10.0f);
+        _statsCanvas.transform.localScale = new Vector3(scaleChange, scaleChange, scaleChange);; 
     }
 
     public void SetPlanetColor(Planet.PlanetType planetType)

@@ -47,7 +47,7 @@ namespace FlatSpace
             
             private NotificationListController _notificationListController;
             public int TurnNumber { get; private set; }= 0;
-
+            private float orthoChange;
             void Start()
             {
 
@@ -406,8 +406,15 @@ namespace FlatSpace
                 var scrollValue = context.ReadValue<float>();
                 if (scrollValue != 0)
                 {
-                    float targetSize = _camera.orthographicSize + (scrollValue * -_cameraOrthoStep);
+                    var prevOrthoSize = _camera.orthographicSize;
+                    var targetSize = _camera.orthographicSize + (scrollValue * -_cameraOrthoStep);
                     _camera.orthographicSize = Math.Clamp(targetSize, _minCameraOrtho, _maxCameraOrtho);
+                    orthoChange = prevOrthoSize - _camera.orthographicSize;
+                    foreach (var planetUI in _planetUIObjects)
+                    {
+                        planetUI.UIUpdateForScroll(orthoChange);
+                    }
+
                 }
             }
             private void OnOpenMainMenuButtonPressed(InputAction.CallbackContext context)
