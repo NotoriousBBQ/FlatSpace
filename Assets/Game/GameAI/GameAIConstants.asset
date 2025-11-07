@@ -16,20 +16,17 @@ MonoBehaviour:
   defaultTravelSpeed: 150
   expandPopulationTrigger: 0.75
   maxPathNodesForResourceDistribution: 3
-  foodWorkerAdjustment:
-  - {fileID: 11400000, guid: 86b2ad2ae79e0a040bc450b73479af13, type: 2}
-  - {fileID: 11400000, guid: 3d653c71c26649440b212a9b66fe4d3d, type: 2}
-  - {fileID: 11400000, guid: a01389bc7d99fe44b9a9ef6b11bbe0ab, type: 2}
-  - {fileID: 11400000, guid: f17750b2cd1c2614ea959240d2a238d7, type: 2}
-  - {fileID: 11400000, guid: 9efa2d0d835fef24c9a11c1b133150c6, type: 2}
-  - {fileID: 11400000, guid: 8ee956ebaa102e546b8f91f7e2966b31, type: 2}
-  grotsitWorkerAdjustment:
-  - {fileID: 11400000, guid: d8fd6986b0a8b5042b52ba67a64270e3, type: 2}
-  - {fileID: 11400000, guid: 266f888fbd27505408926e915ace7415, type: 2}
-  - {fileID: 11400000, guid: c81b8a3b59859854881e04fe7d95f5e0, type: 2}
-  - {fileID: 11400000, guid: fbc3d3ed826c68f47b10247717f0c519, type: 2}
-  - {fileID: 11400000, guid: 358f7ddc47fa5d64fb1b6419913f0d57, type: 2}
-  - {fileID: 11400000, guid: 81e4aec27bc732149bca2ee7ca754f5e, type: 2}
+  productionModifierLists:
+  - {fileID: 11400000, guid: 0e0cad7553b73df4d92730768bec6ae0, type: 2}
+  - {fileID: 11400000, guid: 626de8291442f2340ae2706a34f0793d, type: 2}
+  - {fileID: 11400000, guid: a9283b8f4ae5c7444bc59b4f97af032a, type: 2}
+  - {fileID: 11400000, guid: 587a8bdb66f8d4b4da5871828bb60bc6, type: 2}
+  - {fileID: 11400000, guid: 12c71eb073e085744b09dcd4df7dd0fe, type: 2}
+  - {fileID: 11400000, guid: 13d728c7bc1f1bb428f3d0274213bfbf, type: 2}
+  - {fileID: 11400000, guid: 07fc17c044a4ad24bad467eb40f23be6, type: 2}
+  - {fileID: 11400000, guid: 2ba346959a7706d45a1d623b765c1d29, type: 2}
+  - {fileID: 11400000, guid: 1b2e516cbeace9247a5b9cbc346ced3a, type: 2}
+  - {fileID: 11400000, guid: 4632cce8e06477447a1416771ab6046d, type: 2}
   resourceData:
   - {fileID: 11400000, guid: 2ed03b01019d2f347839aa6784bdce1a, type: 2}
   - {fileID: 11400000, guid: d0a201acbf569e04baf53499c6eab426, type: 2}
@@ -37,3 +34,5 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 9a1928cbd5670b5438daa15781329c10, type: 2}
   - {fileID: 11400000, guid: 6f1f1856bae802941bc98d868d1f172f, type: 2}
   - {fileID: 11400000, guid: 36a318dcff54eab4ab7fb6e66ad1aa22, type: 2}
+  - {fileID: 11400000, guid: 4bfaa4edbfc937d4cbd88b16c926395c, type: 2}
+  - {fileID: 11400000, guid: 226c68321455ed34595ae20b3978ffe1, type: 2}

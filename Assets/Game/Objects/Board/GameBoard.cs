@@ -207,14 +207,6 @@ namespace FlatSpace
                     spawnData._planetType = planetDesignData.planetType;
                     spawnData._resourceData =
                         gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);
-                    switch (spawnData._planetType)
-                    {
-                        case Planet.PlanetType.PlanetTypePrime:
-                            break;
-                        default:
-                            spawnData._planetUIObject = null;
-                            break;
-                    }
                     planetSpawnData.Add(spawnData);
                 }
                 InitGame(planetSpawnData);
@@ -234,7 +226,7 @@ namespace FlatSpace
                 
             private void InitUIElement(PlanetSpawnData spawnData, Transform parentTransform)
             {
-                var prefab = _PlanetUIPrefabs[(int)spawnData._planetType] != null ? 
+                var prefab = _PlanetUIPrefabs?[(int)spawnData._planetType] != null ? 
                     _PlanetUIPrefabs[(int)spawnData._planetType] : Gameboard.Instance._PlanetUIPrefab;
                 if (!prefab)
                     return;

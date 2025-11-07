@@ -57,7 +57,7 @@ namespace FlatSpace
                 DrawConnections(planetList);
             }
 
-            [ContextMenu("Generate Names")]
+            [ContextMenu("Generate Names And Strategies")]
             public void GenerateNames()
             {
                 var planetList = new List<PlanetDesigner>();
@@ -72,6 +72,7 @@ namespace FlatSpace
                 {
                     planet.name = "Desolate " + count.ToString();
                     planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedGrotsits;
                     planet.UpdateGraphic();
                     count++;
                 }
@@ -81,6 +82,7 @@ namespace FlatSpace
                 {
                     planet.name = "Farm " + count.ToString();
                     planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFood;
                     planet.UpdateGraphic();
                     count++;
                 }
@@ -90,6 +92,7 @@ namespace FlatSpace
                 {
                     planet.name = "Industrial " + count.ToString();
                     planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedIndustry;
                     planet.UpdateGraphic();
                     count++;
                 }
@@ -99,6 +102,7 @@ namespace FlatSpace
                 {
                     planet.name = "Normal " + count.ToString();
                     planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyBalanced;
                     planet.UpdateGraphic();
                     count++;
                 }
@@ -108,6 +112,7 @@ namespace FlatSpace
                 {
                     planet.name = "Prime " + count.ToString();
                     planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyBalanced;
                     planet.UpdateGraphic();
                     count++;
                 }
@@ -117,9 +122,30 @@ namespace FlatSpace
                 {
                     planet.name = "Verdant " + count.ToString();
                     planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedFood;
                     planet.UpdateGraphic();
                     count++;
                 }
+                
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeOcean))
+                {
+                    planet.name = "Ocean " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedResearch;
+                    planet.UpdateGraphic();
+                    count++;
+                }
+                
+                count = 0;
+                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesert))
+                {
+                    planet.name = "Desert " + count.ToString();
+                    planet.planetName = planet.name;
+                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyIndustry;
+                    planet.UpdateGraphic();
+                    count++;
+                }                
             }
 
 

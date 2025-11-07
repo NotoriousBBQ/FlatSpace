@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 998883b0a83447942b0f5b070b122630, type: 3}
-  m_Name: DesolatePlanetTypeDataNoPop
+  m_Name: OceanPlanetResourceDataNoPop
   m_EditorClassIdentifier: Assembly-CSharp::PlanetResourceData
-  _planetType: 5
+  _planetType: 6
   _initialPopulation: 0
-  _initialFood: 5
-  _foodProduction: 0
-  _initialGrotsits: 5
-  _grotsitProduction: 7
-  _researchProduction: 3
-  _industryProduction: 5
-  _maxPopulation: 7
-  _initialStrategy: 5
+  _initialFood: 4
+  _foodProduction: 5
+  _initialGrotsits: 0
+  _grotsitProduction: 3
+  _researchProduction: 7
+  _industryProduction: 2
+  _maxPopulation: 10
+  _initialStrategy: 7

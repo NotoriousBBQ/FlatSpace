@@ -7,5 +7,4 @@ public class PlanetSpawnData : ScriptableObject
     public Vector3 _planetPosition;
     public Planet.PlanetType _planetType;
     public PlanetResourceData _resourceData;
-    public PlanetUIObject _planetUIObject;
 }

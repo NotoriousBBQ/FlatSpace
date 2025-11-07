@@ -227,6 +227,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -326,23 +330,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 6
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 1
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 1
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 0
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -427,6 +427,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -549,6 +553,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -830,6 +838,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -859,10 +871,6 @@ PrefabInstance:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: position.y
       value: 20.203045
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
-      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
@@ -1082,6 +1090,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeDesolate
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1102,23 +1114,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -1203,6 +1211,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1321,6 +1333,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1444,6 +1460,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1464,10 +1484,6 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
@@ -1565,6 +1581,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1688,6 +1708,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1806,6 +1830,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1826,23 +1854,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -1928,17 +1952,9 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 8942062985794903754, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_LocalScale.x
-      value: 1.0354
-      objectReference: {fileID: 0}
-    - target: {fileID: 8942062985794903754, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_LocalScale.y
-      value: 1.0354
-      objectReference: {fileID: 0}
-    - target: {fileID: 8942062985794903754, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_LocalScale.z
-      value: 1.0354
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -2058,6 +2074,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2078,23 +2098,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 6
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 1
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 1
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 0
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -2179,6 +2195,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -2302,6 +2322,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeDesolate
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2423,6 +2447,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -2679,6 +2707,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2805,6 +2837,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2923,6 +2959,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2943,23 +2983,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -3044,6 +3080,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3149,23 +3189,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -3250,6 +3286,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3551,6 +3591,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -3668,6 +3712,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3791,6 +3839,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -3913,6 +3965,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -4031,6 +4087,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -4051,10 +4111,6 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
@@ -4153,6 +4209,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -4173,23 +4233,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 6
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 1
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 1
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 0
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -4274,6 +4330,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -4392,6 +4452,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -4515,6 +4579,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -4637,6 +4705,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -4657,27 +4729,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 6
-      objectReference: {fileID: 0}
-    - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: strategy
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 1
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 1
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 0
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -4762,6 +4826,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -4880,6 +4948,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -5007,6 +5079,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5125,6 +5201,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5242,6 +5322,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -5369,6 +5453,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5495,6 +5583,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5616,6 +5708,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -5739,6 +5835,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5861,6 +5961,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeDesolate
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5979,6 +6083,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -6096,6 +6204,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -6219,6 +6331,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -6341,6 +6457,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -6459,6 +6579,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -6479,23 +6603,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -6580,6 +6700,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -6698,6 +6822,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -6953,6 +7081,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -7070,6 +7202,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -7193,6 +7329,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -7310,6 +7450,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -7433,6 +7577,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -7555,6 +7703,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -7575,23 +7727,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -7676,6 +7824,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -7795,6 +7947,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -7815,27 +7971,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 6
-      objectReference: {fileID: 0}
-    - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: strategy
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 1
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 1
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 0
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -7920,6 +8068,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -8038,6 +8190,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -8161,6 +8317,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeDesolate
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -8181,19 +8341,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -8278,6 +8438,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -8401,6 +8565,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -8421,23 +8589,19 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 6
-      objectReference: {fileID: 0}
-    - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
-      propertyPath: m_PresetInfoIsWorld
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 1
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 1
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 0
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -8522,6 +8686,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -8640,6 +8808,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -8885,6 +9057,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeIndustrial
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -9002,6 +9178,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -9125,6 +9305,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -9145,7 +9329,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 723867047046002548, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: type
-      value: 7
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1618921912063296492, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_PresetInfoIsWorld
@@ -9153,15 +9337,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.b
-      value: 0
+      value: 0.98039216
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.g
-      value: 0.84313726
+      value: 0.80784315
       objectReference: {fileID: 0}
     - target: {fileID: 2643599698521063528, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Color.r
-      value: 1
+      value: 0.5294118
       objectReference: {fileID: 0}
     - target: {fileID: 4880132024663812303, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_Name
@@ -9246,6 +9430,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -9502,6 +9690,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeDesolate
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -9623,6 +9815,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeFarm
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -9746,6 +9942,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeVerdant
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -9863,6 +10063,10 @@ PrefabInstance:
     - target: {fileID: 5171619969901592877, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8365256585650121412, guid: f01e5f9f8fefd1745a61e6bf2a9ae95d, type: 3}
+      propertyPath: m_text
+      value: PlanetTypeNormal
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

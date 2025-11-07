@@ -22,7 +22,9 @@ public class PlanetUIObject : MonoBehaviour
         { Planet.PlanetType.PlanetTypeIndustrial , new Color32(205, 133,65, 255 )},
         { Planet.PlanetType.PlanetTypeNormal , new Color32(135, 206,250, 255 )},
         { Planet.PlanetType.PlanetTypePrime , new Color32(173,173,22, 255 )},
-        { Planet.PlanetType.PlanetTypeVerdant , new Color32(0,206,0, 255 )}
+        { Planet.PlanetType.PlanetTypeVerdant , new Color32(0,206,0, 255 )},
+        { Planet.PlanetType.PlanetTypeOcean, new Color32(0, 255, 255, 255) },
+        { Planet.PlanetType.PlanetTypeDesert, new Color32(255, 215, 0, 255) },
     };
     
     public void UIUpdate()
@@ -39,7 +41,7 @@ public class PlanetUIObject : MonoBehaviour
  
     public void UIUpdateForScroll(float orthoChange = 0.0f)
     {
-        var scaleChange = _statsCanvas.transform.localScale.x + (-orthoChange/10.0f);
+        var scaleChange = _statsCanvas.transform.localScale.x + (-orthoChange/5.0f);
         _statsCanvas.transform.localScale = new Vector3(scaleChange, scaleChange, scaleChange);; 
     }
 

@@ -22,13 +22,8 @@ namespace FlatSpace
             }
 
             public Planet.PlanetType type = Planet.PlanetType.PlanetTypeNormal;
-            public int population = 0;
+
             public Planet.PlanetStrategy strategy = Planet.PlanetStrategy.PlanetStrategyBalanced;
-            public float morale = 100.0f;
-            public int maxPopulation = 10;
-            public float food = 0.0f;
-            public float foodNeededForNewPop = 10.0f;
-            public float grotsits = 0.0f;
             public string planetName = "";
             public Vector2 position = new Vector2(0.0f, 0.0f);
             public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
@@ -45,7 +40,10 @@ namespace FlatSpace
                     { Planet.PlanetType.PlanetTypeIndustrial, new Color32(205, 133, 65, 255) },
                     { Planet.PlanetType.PlanetTypeNormal, new Color32(135, 206, 250, 255) },
                     { Planet.PlanetType.PlanetTypePrime, new Color32(173, 173, 22, 255) },
-                    { Planet.PlanetType.PlanetTypeVerdant, new Color32(0, 206, 0, 255) }
+                    { Planet.PlanetType.PlanetTypeVerdant, new Color32(0, 206, 0, 255) },
+                    { Planet.PlanetType.PlanetTypeOcean, new Color32(0, 255, 255, 255) },
+                    { Planet.PlanetType.PlanetTypeDesert, new Color32(255, 215, 0, 255) },
+                    
                 };
 
 

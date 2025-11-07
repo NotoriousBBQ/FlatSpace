@@ -444,6 +444,8 @@ MonoBehaviour:
   - {fileID: 3735582483864339332, guid: 127c720af2a283c478da2a11838376dc, type: 3}
   - {fileID: 3735582483864339332, guid: 7c5dbb939ff84034684812c159d26589, type: 3}
   - {fileID: 3735582483864339332, guid: 1e16cd2b0fe214c4a998a527cc74424b, type: 3}
+  - {fileID: 2710091386499365705, guid: be094b4f5fcf94848815cac89d1243e6, type: 3}
+  - {fileID: 8802576304822303094, guid: b28150491e093f84fb6fe691255c3fcb, type: 3}
   players: []
 --- !u!1 &519420028
 GameObject:

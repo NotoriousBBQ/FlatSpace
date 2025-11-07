@@ -10,8 +10,7 @@ public class GameAIConstants : ScriptableObject
     public float defaultTravelSpeed;
     public float expandPopulationTrigger;
     public int maxPathNodesForResourceDistribution;
-    public List<ModifierForPlanetStrategy> foodWorkerAdjustment;
-    public List<ModifierForPlanetStrategy> grotsitWorkerAdjustment;
+    public List<ModifierListForPlanetStrategy> productionModifierLists;
     public List<PlanetResourceData> resourceData;
 
 }
