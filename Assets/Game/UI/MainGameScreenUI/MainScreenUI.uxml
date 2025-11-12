@@ -1,0 +1,10 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:Template name="GameButtons" src="project://database/Assets/Game/UI/MainGameScreenUI/GameButtons.uxml?fileID=9197481963319205126&amp;guid=855b31379ac433a4980870e4a832805b&amp;type=3#GameButtons" />
+    <ui:Template name="NotificationPanel" src="project://database/Assets/Game/UI/MainGameScreenUI/NotificationPanel.uxml?fileID=9197481963319205126&amp;guid=d8b28d2f10fd8824a8b0aa1e7742458e&amp;type=3#NotificationPanel" />
+    <ui:VisualElement enabled="true" name="MainUIVisibleElement" picking-mode="Ignore" style="flex-grow: 1; cursor: url(&quot;project://database/Assets/Plugins/SimpleFileBrowser/Sprites/ResizeCursor.png?fileID=2800000&amp;guid=5edcf29b853ebee47bf2c39ef6b99934&amp;type=3#ResizeCursor&quot;);">
+        <ui:Instance template="GameButtons" name="GameButtons" enabled="true" picking-mode="Ignore" style="cursor: initial;" />
+        <ui:Instance template="NotificationPanel" name="NotificationList" picking-mode="Ignore">
+            <AttributeOverrides element-name="VisualElement" picking-mode="Ignore" />
+        </ui:Instance>
+    </ui:VisualElement>
+</ui:UXML>

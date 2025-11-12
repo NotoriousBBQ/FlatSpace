@@ -8,8 +8,6 @@ namespace Game.UI.MainGameScreenUI
 {
     public class NotificationListController : MonoBehaviour
     {
-        public UIDocument uiDocument;
-
         private ListView _listView;
         private VisualTreeAsset _listEntryTemplate;
         private List<PlayerNotification> _notifications= new List<PlayerNotification>();
@@ -17,12 +15,22 @@ namespace Game.UI.MainGameScreenUI
 
         public void OnEnable()
         {
-            uiDocument.enabled = false;
+            if (_listView == null)
+                return;
+            _listView.visible = true;
         }
 
-        public void Setup()
+        public void OnDisable()
         {
-            _listView = uiDocument.rootVisualElement.Q<ListView>("NotificationList");
+            if (_listView == null)
+                return;
+            _listView.visible = false;
+            
+        }
+
+        public void Setup(VisualElement root)
+        {
+            _listView = root.Q<ListView>("NotificationList");
             _listEntryTemplate = _listView.itemTemplate;
             _listView.makeItem = MakeItem;
             _listView.bindItem = BindItem;
@@ -61,7 +69,7 @@ namespace Game.UI.MainGameScreenUI
             if (enabled)
                 ShowNotifications();
         }
-        private void ShowNotifications()
+        public void ShowNotifications()
         {
             _notifications.Clear();
             _notifications.AddRange(_storedNotifications);

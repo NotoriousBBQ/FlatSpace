@@ -1,5 +1,5 @@
 <ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
-    <ui:VisualElement enabled="true" picking-mode="Ignore" style="flex-grow: 1; width: 200px; flex-basis: 0; align-items: flex-end; top: auto; align-self: flex-end; align-content: auto; justify-content: flex-start;">
+    <ui:VisualElement enabled="true" picking-mode="Ignore" style="flex-grow: 1; width: 200px; flex-basis: 0; align-items: flex-end; top: auto; align-self: flex-end; align-content: auto; justify-content: flex-start; cursor: url(&quot;project://database/Assets/Plugins/SimpleFileBrowser/Sprites/ResizeCursor.png?fileID=2800000&amp;guid=5edcf29b853ebee47bf2c39ef6b99934&amp;type=3#ResizeCursor&quot;);">
         <ui:Button text="Next Turn" name="NextTurnButton" style="width: 180px; height: 30px;" />
         <ui:Button text="Show Notifications" name="ShowNotificationsButton" style="width: 180px; height: 30px;" />
         <ui:Button text="Start Run" name="StartRunButton" style="width: 180px; height: 30px;" />

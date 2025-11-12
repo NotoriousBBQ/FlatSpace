@@ -3,7 +3,7 @@ using UnityEngine.UIElements;
 using FlatSpace.Game;
 using Game.UI.MainGameScreenUI;
 
-public class GameButtonHandler : MonoBehaviour
+public class MainScreenUIController : MonoBehaviour
 { 
     public UIDocument uiDocument;
     
@@ -13,12 +13,17 @@ public class GameButtonHandler : MonoBehaviour
     private Button _stopRunButton;
     private Button _saveButton;
     private Button _loadButton;
+    private NotificationListController _notificationListController;
 
-    public UIDocument notificationList;
     void OnEnable()
     {
         var root = uiDocument.rootVisualElement;
+        _notificationListController = GetComponentInParent<NotificationListController>();
+        if(!_notificationListController)
+            return;
 
+        _notificationListController.Setup(root);
+        _notificationListController.enabled = false;
         _nextTurnButton = root.Q<Button>("NextTurnButton"); 
         if (_nextTurnButton != null)
         {
@@ -28,7 +33,7 @@ public class GameButtonHandler : MonoBehaviour
         _showNotificationsButton = root.Q<Button>("ShowNotificationsButton"); 
         if (_showNotificationsButton != null)
         {
-            if (notificationList == null)
+            if (_notificationListController == null)
             {
                 _showNotificationsButton.SetEnabled(false);
             }
@@ -107,20 +112,14 @@ public class GameButtonHandler : MonoBehaviour
 
     private void SetShowNotificationButtonText()
     {
-        _showNotificationsButton.text = notificationList.enabled ? "Hide Notifications" : "Show Notifications";
+        _showNotificationsButton.text = _notificationListController.enabled ? "Hide Notifications" : "Show Notifications";
     }
     
     private void OnShowNotificationsButtonClicked()
     {
-        if (!notificationList)
+        if (!_notificationListController)
             return;
-        notificationList.enabled = !notificationList.enabled;
-        SetShowNotificationButtonText();
-        if (!notificationList.enabled)
-            return;
-
-     //   var controller = notificationList.GetComponent<NotificationListController>();
-    //    controller?.Setup();
+        _notificationListController.enabled = !_notificationListController.enabled;
     }
 
     private void OnStartRunButtonClicked()
