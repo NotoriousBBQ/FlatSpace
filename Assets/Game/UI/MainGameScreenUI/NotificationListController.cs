@@ -18,6 +18,7 @@ namespace Game.UI.MainGameScreenUI
             if (_listView == null)
                 return;
             _listView.visible = true;
+            ShowNotifications();
         }
 
         public void OnDisable()
@@ -38,6 +39,8 @@ namespace Game.UI.MainGameScreenUI
             _listView.itemsSource = _notifications;
             _listView.selectionChanged += OnNotificationSelected;   
             ShowNotifications();
+            enabled = false;
+            OnDisable();
         }
 
         private void OnNotificationSelected(IEnumerable<object> selectedItems)
@@ -66,14 +69,12 @@ namespace Game.UI.MainGameScreenUI
         {
             _storedNotifications.Clear();
             _storedNotifications.AddRange(notifications);
-            if (enabled)
-                ShowNotifications();
+            ShowNotifications();
         }
         public void ShowNotifications()
         {
             _notifications.Clear();
             _notifications.AddRange(_storedNotifications);
-
             _listView?.RefreshItems();
         }
     }

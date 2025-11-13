@@ -45,7 +45,7 @@ namespace FlatSpace
             private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
             private readonly List<PlayerNotification> _playerNotifications = new List<PlayerNotification>();
             
-            private NotificationListController _notificationListController;
+            private MainScreenUIController _mainScreenUIController;
             public int TurnNumber { get; private set; }= 0;
             private float orthoChange;
             void Start()
@@ -72,7 +72,7 @@ namespace FlatSpace
                     InitGame(IntialBoardState._planetSpawnData);
                 }
                 InitializeInputActions();
-                _notificationListController = GetComponentInChildren<NotificationListController>();
+                _mainScreenUIController = GetComponentInChildren<MainScreenUIController>();
 
             }
 
@@ -442,7 +442,7 @@ namespace FlatSpace
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
                 //START HERE replace _notificationListController with MainScreenUIController
-                _notificationListController?.SetNotifications(_playerNotifications);
+                _mainScreenUIController?.SetNotifications(_playerNotifications);
             }
 
             private bool _timedUpdateRunning = false;

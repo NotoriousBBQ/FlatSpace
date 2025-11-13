@@ -3,155 +3,153 @@ using UnityEngine.UIElements;
 using FlatSpace.Game;
 using Game.UI.MainGameScreenUI;
 
-public class GameButtonHandler : MonoBehaviour
-{ 
-    public UIDocument uiDocument;
-    
-    private Button _nextTurnButton;
-    private Button _startRunButton;
-    private Button _showNotificationsButton;
-    private Button _stopRunButton;
-    private Button _saveButton;
-    private Button _loadButton;
-
-    public UIDocument notificationList;
-    void OnEnable()
+namespace Game.UI.MainGameScreenUI
+{
+    public class GameButtonHandler : MonoBehaviour
     {
-        var root = uiDocument.rootVisualElement;
+        public UIDocument uiDocument;
 
-        _nextTurnButton = root.Q<Button>("NextTurnButton"); 
-        if (_nextTurnButton != null)
+        private Button _nextTurnButton;
+        private Button _startRunButton;
+        private Button _showNotificationsButton;
+        private Button _stopRunButton;
+        private Button _saveButton;
+        private Button _loadButton;
+        private NotificationListController _notificationListController;
+
+        public void Setup(VisualElement root, NotificationListController notificationListController)
         {
-            _nextTurnButton.clicked += OnNextTurnButtonClicked;
-        }
-        
-        _showNotificationsButton = root.Q<Button>("ShowNotificationsButton"); 
-        if (_showNotificationsButton != null)
-        {
-            if (notificationList == null)
+            _notificationListController = notificationListController;
+            _nextTurnButton = root.Q<Button>("NextTurnButton");
+            if (_nextTurnButton != null)
             {
-                _showNotificationsButton.SetEnabled(false);
+                _nextTurnButton.clicked += OnNextTurnButtonClicked;
             }
-            else
+
+            _showNotificationsButton = root.Q<Button>("ShowNotificationsButton");
+            if (_showNotificationsButton != null)
             {
-                _showNotificationsButton.clicked += OnShowNotificationsButtonClicked;
+                if (!_notificationListController)
+                {
+                    _showNotificationsButton.SetEnabled(false);
+                }
+                else
+                {
+                    _showNotificationsButton.clicked += OnShowNotificationsButtonClicked;
+                }
+            }
+
+            _startRunButton = root.Q<Button>("StartRunButton");
+            if (_startRunButton != null)
+            {
+                _startRunButton.clicked += OnStartRunButtonClicked;
+            }
+
+            _stopRunButton = root.Q<Button>("StopRunButton");
+            if (_stopRunButton != null)
+            {
+                _stopRunButton.clicked += OnStopRunButtonClicked;
+                _stopRunButton.SetEnabled(false);
+            }
+
+            _saveButton = root.Q<Button>("TestSaveButton");
+            if (_saveButton != null)
+            {
+                _saveButton.clicked += OnSaveButtonClicked;
+                _saveButton.visible = false;
+            }
+
+            _loadButton = root.Q<Button>("TestLoadButton");
+            if (_loadButton != null)
+            {
+                _loadButton.clicked += OnLoadButtonClicked;
+                _loadButton.visible = false;
+            }
+
+        }
+
+        void OnDisable()
+        {
+            if (_nextTurnButton != null)
+            {
+                _nextTurnButton.clicked -= OnNextTurnButtonClicked;
+            }
+
+            if (_showNotificationsButton != null)
+            {
+                _showNotificationsButton.clicked -= OnShowNotificationsButtonClicked;
+            }
+
+            if (_startRunButton != null)
+            {
+                _startRunButton.clicked -= OnStartRunButtonClicked;
+            }
+
+            if (_stopRunButton != null)
+            {
+                _stopRunButton.clicked -= OnStopRunButtonClicked;
+            }
+
+            if (_saveButton != null)
+            {
+                _saveButton.clicked -= OnSaveButtonClicked;
+            }
+
+            if (_loadButton != null)
+            {
+                _loadButton.clicked -= OnLoadButtonClicked;
             }
         }
 
-        _startRunButton = root.Q<Button>("StartRunButton"); 
-        if (_startRunButton != null)
+        private void OnNextTurnButtonClicked()
         {
-            _startRunButton.clicked += OnStartRunButtonClicked;
+            Gameboard.Instance.SingleUpdate();
         }
-        
-        _stopRunButton = root.Q<Button>("StopRunButton"); 
-        if (_stopRunButton != null)
+
+        private void SetShowNotificationButtonText()
         {
-            _stopRunButton.clicked += OnStopRunButtonClicked;
+            _showNotificationsButton.text =
+                _notificationListController.enabled ? "Hide Notifications" : "Show Notifications";
+        }
+
+        private void OnShowNotificationsButtonClicked()
+        {
+            if (!_notificationListController)
+                return;
+            _notificationListController.enabled = !_notificationListController.enabled;
+            SetShowNotificationButtonText();
+        }
+
+        private void OnStartRunButtonClicked()
+        {
+            _nextTurnButton.SetEnabled(false);
+            _startRunButton.SetEnabled(false);
+            _stopRunButton.SetEnabled(true);
+            Gameboard.Instance.StartTimedUpdate();
+        }
+
+        private void OnStopRunButtonClicked()
+        {
+            _nextTurnButton.SetEnabled(true);
+            _startRunButton.SetEnabled(true);
             _stopRunButton.SetEnabled(false);
+            Gameboard.Instance.StopTimedUpdate();
         }
-        
-        _saveButton = root.Q<Button>("TestSaveButton"); 
-        if (_saveButton != null)
+
+        private static void OnSaveButtonClicked()
         {
-            _saveButton.clicked += OnSaveButtonClicked;
-            _saveButton.visible = false;
+            SaveLoadSystem.SaveGame();
         }
-        
-        _loadButton = root.Q<Button>("TestLoadButton"); 
-        if (_loadButton != null)
+
+        private static void OnLoadButtonClicked()
         {
-            _loadButton.clicked += OnLoadButtonClicked;
-            _loadButton.visible = false;
+            SaveLoadSystem.LoadGame();
         }
 
-    }
-
-    void OnDisable()
-    {
-        if (_nextTurnButton != null)
+        public void EscapeButtonPressed()
         {
-            _nextTurnButton.clicked -= OnNextTurnButtonClicked;
+            _saveButton.visible = !_saveButton.visible;
+            _loadButton.visible = !_loadButton.visible;
         }
-        
-        if (_showNotificationsButton != null)
-        {
-            _showNotificationsButton.clicked -= OnShowNotificationsButtonClicked;
-        }
-        
-        if (_startRunButton != null)
-        {
-            _startRunButton.clicked -= OnStartRunButtonClicked;
-        }
-        
-        if (_stopRunButton != null)
-        {
-            _stopRunButton.clicked -= OnStopRunButtonClicked;
-        }
-        
-        if (_saveButton != null)
-        {
-            _saveButton.clicked -= OnSaveButtonClicked;
-        }
-        
-        if (_loadButton != null)
-        {
-            _loadButton.clicked -= OnLoadButtonClicked;
-        }
-    }
-
-    private void OnNextTurnButtonClicked()
-    {
-        Gameboard.Instance.SingleUpdate();
-    }
-
-    private void SetShowNotificationButtonText()
-    {
-        _showNotificationsButton.text = notificationList.enabled ? "Hide Notifications" : "Show Notifications";
-    }
-    
-    private void OnShowNotificationsButtonClicked()
-    {
-        if (!notificationList)
-            return;
-        notificationList.enabled = !notificationList.enabled;
-        SetShowNotificationButtonText();
-        if (!notificationList.enabled)
-            return;
-
-     //   var controller = notificationList.GetComponent<NotificationListController>();
-    //    controller?.Setup();
-    }
-
-    private void OnStartRunButtonClicked()
-    {
-        _nextTurnButton.SetEnabled(false);
-        _startRunButton.SetEnabled(false);
-        _stopRunButton.SetEnabled(true);
-        Gameboard.Instance.StartTimedUpdate();
-    }
-
-    private void OnStopRunButtonClicked()
-    {
-        _nextTurnButton.SetEnabled(true);
-        _startRunButton.SetEnabled(true);
-        _stopRunButton.SetEnabled(false);
-        Gameboard.Instance.StopTimedUpdate();
-    }
-
-    private static void OnSaveButtonClicked()
-    {
-        SaveLoadSystem.SaveGame();
-    }
-
-    private static  void OnLoadButtonClicked()
-    {
-        SaveLoadSystem.LoadGame();
-    }
-
-    public void EscapeButtonPressed()
-    {
-        _saveButton.visible = !_saveButton.visible;
-        _loadButton.visible = !_loadButton.visible;
     }
 }
