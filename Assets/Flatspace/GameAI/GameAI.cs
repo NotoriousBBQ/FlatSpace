@@ -67,7 +67,7 @@ namespace FlatSpace
                 var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
-                PlanetaryProductionUpdate(planetUpdateResults);
+                UpdateAllPlanets(planetUpdateResults);
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
@@ -140,9 +140,9 @@ namespace FlatSpace
                     ExecuteOrder(executableOrder);
             }
 
-            private void PlanetaryProductionUpdate(List<Planet.PlanetUpdateResult> planetUpdateResults)
+            private void UpdateAllPlanets(List<Planet.PlanetUpdateResult> planetUpdateResults)
             {
-                GameAIMap.PlanetaryProductionUpdate(planetUpdateResults);
+                GameAIMap.UpdateAllPlanets(planetUpdateResults);
             }
 
 
@@ -184,13 +184,13 @@ namespace FlatSpace
                 return GameAIMap.GetPlayerCapitol(playerID);
             }
 
-            // Start is called once before the first execution of Update after the MonoBehaviour is created
+            // Start is called once before the first execution of UpdatePlanet after the MonoBehaviour is created
             void Start()
             {
 
             }
 
-            // Update is called once per frame
+            // UpdatePlanet is called once per frame
             void Update()
             {
 

@@ -71,7 +71,7 @@ public class PlanetUIObject : MonoBehaviour
         
     }
 
-    // Update is called once per frame
+    // UpdatePlanet is called once per frame
     void Update()
     {
         

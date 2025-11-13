@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using FlatSpace.AI;
 using FlatSpace.Game;
+using Flatspace.Objects.Production;
+using UnityEditor;
 using UnityEngine;
-
-
+using UnityEngine.Rendering.Universal;
 using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
 using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
 public class Planet : MonoBehaviour
@@ -14,6 +15,7 @@ public class Planet : MonoBehaviour
     {
         public int Player;
     }
+
     public struct PlanetUpdateResult
     {
         public enum PlanetUpdateResultType
@@ -28,6 +30,9 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeFoodSurplus,
             PlanetUpdateResultTypeGrotsitsShortage,
             PlanetUpdateResultTypeGrotsitsSurplus,
+            PlanetUpdateResultTypeIndustrySurplus,
+            PlanetUpdateResultTypeIndustryProductionComplete,
+            PlanetUpdateResultTypeResearchProduction,
         }
 
         public enum PlanetUpdateResultPriority
@@ -101,7 +106,11 @@ public class Planet : MonoBehaviour
     [SerializeField] private float _foodNeededForNewPop = 10.0f;
     public float Grotsits {get; set;}
     public float ProjectedGrotsits {get; set;}
+    public float Industry {get; set;}
+    public float ProjectedIndustry {get; set;}
     
+    public float Research {get; set;}
+    public float ProjectedResearch {get; set;}
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
     public List<int> IncomingPopulationSource = new List<int>();
@@ -223,9 +232,8 @@ public class Planet : MonoBehaviour
         if (modifierData != null)
             strategyPopulaitonModifer = modifierData.researchModifier;
         var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
-        if(populationAdjustedForPlanetType <= 0.0f)
-            return false;
-        return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out industryWorkers);
+        return populationAdjustedForPlanetType > 0.0f 
+               && ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out industryWorkers);
     }
 
     private bool ResourceWorkerRequirementForPopulation(int population, float productionRate,out int requiredWorkers)
@@ -306,7 +314,7 @@ public class Planet : MonoBehaviour
         }
     }
 
-    public void PlanetProductionUpdate(List<PlanetUpdateResult> resultList)
+    public void UpdatePlanet(List<PlanetUpdateResult> resultList)
     {
         if (Population.Count == 0)
             return;
@@ -317,9 +325,15 @@ public class Planet : MonoBehaviour
         // produce grosits
         Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction * (Morale/100.0f);
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
+        // produce industry
+        Industry += IndustryWorkers * _resourceData._industryProduction * (Morale/100.0f);
+        // produce research
+        Research += ResearchWorkers * _resourceData._researchProduction * (Morale/100.0f);        
         ConsumeFood(resultList);
         ConsumeGrotsits(resultList);
-     
+        ConsumeIndustry(resultList);
+        ConsumeResearch(resultList);
+
     }
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
@@ -463,6 +477,24 @@ public class Planet : MonoBehaviour
         }
     }
 
+    private void ConsumeIndustry(List<PlanetUpdateResult> resultList)
+    {
+        UpdateProduction(resultList);
+
+        if (Industry >= 0.0f)
+        {
+            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeIndustrySurplus,
+                Industry));
+        }
+    }
+
+    private void ConsumeResearch(List<PlanetUpdateResult> resultList)
+    {
+        resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduction,
+            Research));
+        Research = 0.0f;
+    }
+
     // returns the player id of the population change
     private int ChangePopulation(int changeAmount)
     {
@@ -556,15 +588,75 @@ public class Planet : MonoBehaviour
         return sortedPopDict.ElementAt(0).Value > sortedPopDict.ElementAt(1).Value ? sortedPopDict.ElementAt(0).Key : NoOwner;
     }
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    #region ProductionQueue
+    
+    private struct ProductionItem
     {
-        
+        public readonly float Progress;
+        public readonly CatalogItem Item;
+
+        public ProductionItem(CatalogItem item)
+        {
+            Item = item;
+            Progress = 0.0f;
+        }
+
+    }
+    
+    private ProductionItem? _currentProduction = null;
+    List<ProductionItem> _productionQueue = new List<ProductionItem>();
+
+    private bool UpdateProductionQueue()
+    {
+        if (_currentProduction == null)
+        {
+            if(_productionQueue.Count == 0)
+                return false;
+            _currentProduction = _productionQueue.First();
+            _productionQueue.RemoveAt(0);
+        }
+        return true; 
+    }
+    private void UpdateProduction(List<PlanetUpdateResult> resultList)
+    {
+        if (UpdateProductionQueue())
+        {
+            ContinueProduction(resultList);
+        }
+        else
+        {
+            resultList.Add(new PlanetUpdateResult(PlanetName,
+                ResultType.PlanetUpdateResultTypeIndustryProductionComplete, _currentProduction?.Item.itemName));
+        }
     }
 
-    // Update is called once per frame
-    void Update()
+    private void ContinueProduction(List<PlanetUpdateResult> resultList)
     {
-        
+        if(_currentProduction == null)
+            return;
+        var currentProductionProgress = _currentProduction?.Progress + Industry;
+        if (currentProductionProgress >= _currentProduction?.Item.cost)
+        {
+            CompleteProduction(resultList);
+        }
     }
+
+    private void CompleteProduction(List<PlanetUpdateResult> resultList)
+    {
+        StageCompletedProductionItem(resultList);
+        resultList.Add(new PlanetUpdateResult(PlanetName,
+            ResultType.PlanetUpdateResultTypeIndustryProductionComplete, _currentProduction?.Item.itemName));
+        var excessIndustry = _currentProduction?.Item.cost - _currentProduction?.Progress;
+        Industry -= excessIndustry ?? 0.0f;
+        _currentProduction = null;
+        if (UpdateProductionQueue())
+            ContinueProduction(resultList);
+    }
+
+    private void StageCompletedProductionItem(List<PlanetUpdateResult> resultList)
+    {
+        // create game object from current _currentProduction
+    }
+
+    #endregion
 }

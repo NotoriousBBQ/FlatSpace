@@ -11,7 +11,7 @@ namespace FlatSpace
     {
         public class GameAIMap : MonoBehaviour
         {
-            // Start is called once before the first execution of Update after the MonoBehaviour is created
+            // Start is called once before the first execution of UpdatePlanet after the MonoBehaviour is created
             private struct GameAIPlanetPathing
             {
                 public string Planet1Name;
@@ -129,11 +129,11 @@ namespace FlatSpace
                     };
             }
 
-            public void PlanetaryProductionUpdate(List<Planet.PlanetUpdateResult> resultList)
+            public void UpdateAllPlanets(List<Planet.PlanetUpdateResult> resultList)
             {
                 foreach (var planet in PlanetList)
                 {
-                    planet.PlanetProductionUpdate(resultList);
+                    planet.UpdatePlanet(resultList);
                 }
             }
 

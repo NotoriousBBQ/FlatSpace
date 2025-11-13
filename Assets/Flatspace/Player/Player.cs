@@ -27,7 +27,7 @@ public class Player : MonoBehaviour
         score = 0;
         aiDriven = true;
     }
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    // Start is called once before the first execution of UpdatePlanet after the MonoBehaviour is created
     private void Start()
     {
         if (aiDriven == true)
@@ -73,7 +73,7 @@ public class Player : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
+    // UpdatePlanet is called once per frame
     void Update()
     {
         

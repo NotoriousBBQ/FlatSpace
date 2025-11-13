@@ -53,7 +53,7 @@ namespace FlatSpace
 
             }
 
-            // Update is called once per frame
+            // UpdatePlanet is called once per frame
             void Update()
             {
 
@@ -417,7 +417,7 @@ namespace FlatSpace
                     gameButtonHandler.EscapeButtonPressed();
             }
             #endregion
-            #region Update Functions
+            #region UpdatePlanet Functions
 
             public void SingleUpdate()
             {
@@ -458,7 +458,7 @@ namespace FlatSpace
                 while (_timedUpdateRunning)
                 {
                     SingleUpdate();
-                    Debug.Log("Timed Update");
+                    Debug.Log("Timed UpdatePlanet");
                     yield return new WaitForSeconds(waitTime);
                     Debug.Log("Coroutine Looping");
                 }
