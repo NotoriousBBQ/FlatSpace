@@ -335,7 +335,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameButtonHandler
   uiDocument: {fileID: 59041774}
-  notificationList: {fileID: 33404643}
 --- !u!1 &77940340
 GameObject:
   m_ObjectHideFlags: 0
@@ -348,6 +347,7 @@ GameObject:
   - component: {fileID: 77940343}
   - component: {fileID: 77940342}
   - component: {fileID: 77940344}
+  - component: {fileID: 77940345}
   m_Layer: 0
   m_Name: Board
   m_TagString: Untagged
@@ -432,7 +432,7 @@ MonoBehaviour:
   _minCameraOrtho: 1
   _maxCameraOrtho: 15
   _cameraOrthoStep: 0.5
-  gameAIConstants: {fileID: 11400000, guid: 497d1527c2a7ee341a4b31d747a9519d, type: 2}
+  gameAIConstants: {fileID: 11400000, guid: b3338b210c76a744f927a7f819db5095, type: 2}
   _lineDrawObjectPrefab: {fileID: 5226953852233311075, guid: 0e55f099c06447b41b421337a3648791, type: 3}
   _orderLineDrawObjectPrefab: {fileID: 4779870425705875092, guid: 387624431a5c15e428e7d465ff2d0775, type: 3}
   _scrollRect: {fileID: 667686344}
@@ -447,6 +447,25 @@ MonoBehaviour:
   - {fileID: 2710091386499365705, guid: be094b4f5fcf94848815cac89d1243e6, type: 3}
   - {fileID: 8802576304822303094, guid: b28150491e093f84fb6fe691255c3fcb, type: 3}
   players: []
+--- !u!114 &77940345
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 77940340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59eb374df2c006345a00db94e137c2cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Flatspace.Objects.Production.ProductionCatalog
+  catalogItems:
+  - {fileID: 11400000, guid: e82654fb4c7fb6f44bb4b7d923950220, type: 2}
+  - {fileID: 11400000, guid: 59545a813363cb14681c225727356b68, type: 2}
+  - {fileID: 11400000, guid: 3609858411d8b724c9c603bd9df420ed, type: 2}
+  - {fileID: 11400000, guid: feb876e5626be194280d517edf60a8af, type: 2}
+  - {fileID: 11400000, guid: ce58bcd47daf8174c81a6e8b0243b61c, type: 2}
+  - {fileID: 11400000, guid: b24d17cffb454f146b8da0a601d553d7, type: 2}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -857,6 +876,7 @@ GameObject:
   - component: {fileID: 1626315735}
   - component: {fileID: 1626315736}
   - component: {fileID: 1626315737}
+  - component: {fileID: 1626315738}
   m_Layer: 0
   m_Name: MainScreenUIDocument
   m_TagString: Untagged
@@ -927,6 +947,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b4e953f87c3ae774a943e13455db6bab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.MainGameScreenUI.NotificationListController
+--- !u!114 &1626315738
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1626315733}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71ad8193d27e8164b83eb40efc5d9596, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.UI.MainGameScreenUI.GameButtonHandler
+  uiDocument: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

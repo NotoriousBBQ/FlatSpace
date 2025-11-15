@@ -141,7 +141,6 @@ namespace FlatSpace
 
             private void SetSimulationStatus(SaveLoadSystem.GameSave gameSave)
             {
-                
                 TurnNumber = gameSave.turnNumber;
                 foreach (var playerSave in gameSave.players)
                 {

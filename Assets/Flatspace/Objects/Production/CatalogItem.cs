@@ -11,5 +11,6 @@ namespace Flatspace.Objects.Production
         public string type;
         public float cost;
         public string effect;
+        public string requredTech;
     }
 }

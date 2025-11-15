@@ -156,6 +156,15 @@ namespace FlatSpace
                     planet.Food = planetStatus.food;
                     planet.Morale = planetStatus.morale;
                     planet.Grotsits = planetStatus.grotsits;
+                    planet.Research = planetStatus.research;
+                    planet.Industry = planetStatus.industry;
+                    if (planetStatus.currentProduction != null)
+                        planet.CurrentProduction = new Planet.ProductionItem
+                        {
+                            // START HERE
+                            Progress = planetStatus.currentProduction?.Progress ?? 0.0f,
+                       //     Item = ,
+                        };
                     planet.Owner = planetStatus.owner;
                     planet.FoodShipmentIncoming = planetStatus.foodTransferInProgress;
                     planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;

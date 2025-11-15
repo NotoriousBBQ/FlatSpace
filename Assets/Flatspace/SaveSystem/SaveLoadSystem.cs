@@ -4,6 +4,7 @@ using System.IO;
 using FlatSpace.AI;
 using FlatSpace.Game;
 using FlatSpace.Tools;
+using JetBrains.Annotations;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
@@ -28,6 +29,19 @@ public class SaveLoadSystem : MonoBehaviour
     public class GameSave
     {
         [Serializable]
+        public struct ProductionSave
+        {
+            public string Name;
+            public float Progress;
+
+            public ProductionSave(Planet.ProductionItem? productionItem)
+            {
+                Name = productionItem?.Item.itemName;
+                Progress = productionItem?.Progress ?? 0.0f;
+            }
+        }
+    
+        [Serializable]
         public struct PlanetSave
         {
             public string name;
@@ -36,6 +50,10 @@ public class SaveLoadSystem : MonoBehaviour
             public float food;
             public int[] population;
             public float grotsits;
+            public float research;
+            public float industry;
+            public GameSave.ProductionSave? currentProduction;
+            [NotNull] public List<GameSave.ProductionSave> productionQueue;
             public float morale;
             public int owner;
             public List<int> populationTransferInProgress;
@@ -95,6 +113,10 @@ public class SaveLoadSystem : MonoBehaviour
                     planetStrategy = planet.CurrentStrategy,
                     food = planet.Food,
                     grotsits = planet.Grotsits,
+                    research = planet.Research,
+                    industry = planet.Industry,
+                    currentProduction = planet.CurrentProduction == null? null : new GameSave.ProductionSave(planet.CurrentProduction),
+                    productionQueue = new List<GameSave.ProductionSave>(),
                     morale = planet.Morale,
                     owner = planet.Owner,
                     populationTransferInProgress = planet.IncomingPopulationSource,
@@ -102,6 +124,13 @@ public class SaveLoadSystem : MonoBehaviour
                     grotsitsTransferInProgress = planet.GrotsitsShipmentIncoming,
                     population = new int[Gameboard.Instance.players.Count]
                 };
+                
+                planetSave.productionQueue = new List<GameSave.ProductionSave>();
+                foreach (var production in planet.ProductionQueue)
+                {
+                    planetSave.productionQueue.Add(new GameSave.ProductionSave(production));
+                }
+
                 for (var i = 0; i < Gameboard.Instance.players.Count; i++)
                 {
                     var popByPlayer = planet.Population.FindAll(x => x.Player == i).Count;
@@ -123,7 +152,7 @@ public class SaveLoadSystem : MonoBehaviour
                         timingDelay = order.TimingDelay,
                         totalDelay = order.TotalDelay,
                         data = Convert.ToSingle(order.Data),
-                        dataType = order.Data is float ? "float" : "int", 
+                        dataType = order.Data is float ? "float" : "int",
                         playerId = order.PlayerId
                     });
             }
@@ -131,7 +160,7 @@ public class SaveLoadSystem : MonoBehaviour
     }
     private static void SaveGame(GameAI gameAI, string filePath)
     {
-        var gameSave = new GameSave(gameAI);
+        var gameSave = new SaveLoadSystem.GameSave(gameAI);
         if (!File.Exists(filePath)) 
             File.Create(filePath).Dispose();
         
@@ -143,7 +172,7 @@ public class SaveLoadSystem : MonoBehaviour
     {
         if (!File.Exists(filePath)) return false;
         var readText = File.ReadAllText(filePath);
-        var saveConfig = JsonUtility.FromJson<GameSave>(readText);
+        var saveConfig = JsonUtility.FromJson<SaveLoadSystem.GameSave>(readText);
         if (saveConfig == null)
             return false;
         var gameScene = SceneManager.GetSceneByName("Flatspace");

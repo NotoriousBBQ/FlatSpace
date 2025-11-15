@@ -27,6 +27,9 @@ namespace FlatSpace
                     OrderTypeGrotsitsTransport,
                     OrderTypeGrotsitsChange,
                     OrderTypeGrotsitsTransportInProgress,
+                    OrderTypeResearchChange,
+                    OrderTypeIndustryChange,
+                    OrderTypeIndustryTransport,
                 }
 
                 public enum OrderTimingType
@@ -124,6 +127,9 @@ namespace FlatSpace
                         break;
                     case GameAIOrder.OrderType.OrderTypeGrotsitsChange:
                         targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeResearchChange:
+                        targetPlanet.Research += Convert.ToSingle(executableOrder.Data);
                         break;
                     default:
                         break;

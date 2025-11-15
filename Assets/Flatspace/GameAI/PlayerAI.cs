@@ -41,7 +41,8 @@ namespace FlatSpace
                 ProcessColonizers(results, orders);
                 ProcessFoodShortage(results, orders);
                 ProcessGrotsitsShortage(results, orders);
-
+                ProcessResearch(results, orders);
+                ProcessIndustry(results, orders);
             }
             private static void GenerateActionList(ScoreMatrix scoreMatrix,
                 out List<(string Origin, string Target, float Cost)> actionList)
@@ -172,6 +173,48 @@ namespace FlatSpace
                         PlayerId = Player.playerID
                     });
                 }
+            }
+
+            private void ProcessResearch(List<Planet.PlanetUpdateResult> results,
+                List<GameAI.GameAIOrder> orders)
+            {
+                var researchResults = results
+                    .Where(p
+                        => p.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
+                            .PlanetUpdateResultTypeResearchProduced).ToList();
+                if (researchResults.Count <= 0)
+                    return;
+                var totalResearch = researchResults.Sum(p => (float)p.Data); // Sum the Price field
+                if(totalResearch > 0.0f)
+                    UpdateResearch(totalResearch, orders);
+                foreach (var researchResult in researchResults)
+                {
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeResearchChange,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = (float)researchResult.Data * -1.0f,
+                        Origin = researchResult.Name,
+                        Target = researchResult.Name,
+                        PlayerId = Player.playerID
+                    });
+
+                }
+            }
+
+            private void UpdateResearch(float totalResearch, List<GameAI.GameAIOrder> orders)
+            {
+                // check to see if current research is done and choose another
+            }
+
+            private void ProcessIndustry(List<Planet.PlanetUpdateResult> results,
+                List<GameAI.GameAIOrder> orders)
+            {
+                //PlanetUpdateResultTypeIndustryProductionComplete, select new produciton
+
+                //PlanetUpdateResultTypeIndustrySurplus, ship industry
             }
 
             private void ProcessFoodShortage(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)

@@ -32,7 +32,7 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeGrotsitsSurplus,
             PlanetUpdateResultTypeIndustrySurplus,
             PlanetUpdateResultTypeIndustryProductionComplete,
-            PlanetUpdateResultTypeResearchProduction,
+            PlanetUpdateResultTypeResearchProduced,
         }
 
         public enum PlanetUpdateResultPriority
@@ -60,6 +60,8 @@ public class Planet : MonoBehaviour
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationGain:
                 case ResultType.PlanetUpdateResultTypeFoodSurplus:
+                case ResultType.PlanetUpdateResultTypeIndustrySurplus:
+                case ResultType.PlanetUpdateResultTypeResearchProduced:
                     Priority = ResultPriority.PlanetUpdateResultPriorityMedium;
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationLoss:
@@ -69,6 +71,7 @@ public class Planet : MonoBehaviour
                 case ResultType.PlanetUpdateResultTypePopulationSurplus:
                 case ResultType.PlanetUpdateResultTypeFoodShortage:
                 case ResultType.PlanetUpdateResultTypeGrotsitsShortage:
+                case ResultType.PlanetUpdateResultTypeIndustryProductionComplete:
                     Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
                     break;
                 default:
@@ -184,7 +187,7 @@ public class Planet : MonoBehaviour
         Morale = 100.0f;
     }
 
-    private bool FoodWorkerRequirementForPopulation(out int foodWorkers)
+    private bool FoodWorkerRequirement(out int foodWorkers)
     {
         foodWorkers = 0;
 
@@ -195,23 +198,38 @@ public class Planet : MonoBehaviour
         var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
-        return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out foodWorkers);
-    }
-    
-    private bool GrotsitWorkerRequirementForPopulation(out int grotsitsWorkers)
-    {
-        grotsitsWorkers = 0;
-        var strategyPopulaitonModifer = 1;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
-        if (modifierData != null)
-            strategyPopulaitonModifer = modifierData.grotsitsModifier;
-        var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
-        if(populationAdjustedForPlanetType <= 0.0f)
-            return false;
-        return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out grotsitsWorkers);
+        if (Food > 3 * populationAdjustedForPlanetType)
+            populationAdjustedForPlanetType = Population.Count;
+        return ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out foodWorkers);
     }
 
-    private bool ResearchWorkerRequirementForPopulation(out int researchWorkers)
+    private float GetMaintainenceCost()
+    {
+        return Population.Count + GetImprovementMaintainenceCost();
+    }
+
+    private float GetImprovementMaintainenceCost()
+    {
+        return 0;
+    }
+    private bool GrotsitWorkerRequirement(out int grotsitsWorkers)
+    {
+        grotsitsWorkers = 0;
+        var strategyModifier = 1;
+        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        if (modifierData != null)
+            strategyModifier = modifierData.grotsitsModifier;
+        var grotsitsRequirement = GetMaintainenceCost();
+        if(grotsitsRequirement <= 0.0f)
+            return false;
+        var shortfall = Grotsits - grotsitsRequirement;
+        if (shortfall <= 0.0f)
+            grotsitsRequirement += -shortfall * strategyModifier;
+
+        return ResourceWorkerRequirement(grotsitsRequirement, _resourceData._grotsitProduction, out grotsitsWorkers);
+    }
+
+    private bool ResearchWorkerRequirement(out int researchWorkers)
     {
         researchWorkers = 0;
         var strategyPopulaitonModifer = 1;
@@ -221,10 +239,10 @@ public class Planet : MonoBehaviour
         var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
-        return ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._researchProduction, out researchWorkers);
+        return ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._researchProduction, out researchWorkers);
     }
 
-    private bool IndustryWorkerRequirementForPopulation(out int industryWorkers)
+    private bool IndustryWorkerRequirement(out int industryWorkers)
     {
         industryWorkers = 0;
         var strategyPopulaitonModifer = 1;
@@ -233,18 +251,17 @@ public class Planet : MonoBehaviour
             strategyPopulaitonModifer = modifierData.researchModifier;
         var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
         return populationAdjustedForPlanetType > 0.0f 
-               && ResourceWorkerRequirementForPopulation(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out industryWorkers);
+               && ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out industryWorkers);
     }
 
-    private bool ResourceWorkerRequirementForPopulation(int population, float productionRate,out int requiredWorkers)
+    private bool ResourceWorkerRequirement(float requirement, float productionRate,out int requiredWorkers)
     {
         requiredWorkers = 0;
         if (productionRate <= 0.0f || Morale <= 0.0f)
             return false;
         var moraleModifier = Morale / 100.0f;
         var actualProductionRate = productionRate * moraleModifier;
-        requiredWorkers = Convert.ToInt32(Math.Ceiling(population / actualProductionRate));
-        // note this clamp is for the planets population, not the param 'population'
+        requiredWorkers = Convert.ToInt32(Math.Ceiling(requirement / actualProductionRate));
         Math.Clamp(requiredWorkers, 0, Population.Count);
         return true;
     }
@@ -256,60 +273,155 @@ public class Planet : MonoBehaviour
         switch (CurrentStrategy)
         {
             case PlanetStrategy.PlanetStrategyBalanced:
-                // first, make sure the basics are covered
-                // always err on the side of more food
-                FoodWorkerRequirementForPopulation(out FoodWorkers);
-                // fopr grotsits, use the existing first
-                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population.Count - FoodWorkers, 0));
-                // the even out the rest
-                remainingWorkers = Population.Count - (FoodWorkers + GrotsitsWorkers);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);                
+                remainingWorkers = Population.Count - FoodWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= ResearchWorkers;
                 if (remainingWorkers > 0)
                 {
-                    FoodWorkers += remainingWorkers / 2;
-                    GrotsitsWorkers += remainingWorkers / 2;
-                    remainingWorkers = Population.Count -(FoodWorkers + GrotsitsWorkers);
+                    var halfRemainingWorkers = remainingWorkers / 2;
+                    FoodWorkers += halfRemainingWorkers;
+                    IndustryWorkers += halfRemainingWorkers;
+                    remainingWorkers -= 2*halfRemainingWorkers;
                     if (remainingWorkers > 0)
                         FoodWorkers += remainingWorkers;
                 }
 
                 break;
             case PlanetStrategy.PlanetStrategyGrowth:
-                FoodWorkerRequirementForPopulation(out FoodWorkers);
-                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(Population.Count - FoodWorkers, 0));
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    FoodWorkers += remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyFood:
-                FoodWorkerRequirementForPopulation(out FoodWorkers);
-                GrotsitsWorkers = Math.Clamp(Population.Count - FoodWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    FoodWorkers += Population.Count - remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
-                FoodWorkerRequirementForPopulation(out FoodWorkers);
-                GrotsitsWorkers = Math.Clamp(Population.Count - FoodWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    FoodWorkers += Population.Count - remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyGrotsits:
-                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                FoodWorkers = Math.Clamp(Population.Count - GrotsitsWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    GrotsitsWorkers += remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyFocusedGrotsits:
-                GrotsitWorkerRequirementForPopulation(out GrotsitsWorkers);
-                FoodWorkers = Math.Clamp(Population.Count - GrotsitsWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    GrotsitsWorkers += remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyResearch:
-                ResearchWorkerRequirementForPopulation(out ResearchWorkers);
-                FoodWorkers = Math.Clamp(Population.Count - ResearchWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= ResearchWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    ResearchWorkers += remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyFocusedResearch:
-                ResearchWorkerRequirementForPopulation(out ResearchWorkers);
-                FoodWorkers = Math.Clamp(Population.Count - ResearchWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= ResearchWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                if(remainingWorkers > 0)
+                    ResearchWorkers += remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyIndustry:
-                IndustryWorkerRequirementForPopulation(out IndustryWorkers);
-                FoodWorkers = Math.Clamp(Population.Count - IndustryWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= ResearchWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                if(remainingWorkers > 0)
+                    IndustryWorkers += remainingWorkers;
                 break;
             case PlanetStrategy.PlanetStrategyFocusedIndustry:
-                IndustryWorkerRequirementForPopulation(out IndustryWorkers);
-                FoodWorkers = Math.Clamp(Population.Count - IndustryWorkers, 0, Population.Count);
+                FoodWorkerRequirement(out FoodWorkers);
+                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                IndustryWorkerRequirement(out IndustryWorkers);
+                ResearchWorkerRequirement(out ResearchWorkers);
+                remainingWorkers = Population.Count - FoodWorkers;
+                IndustryWorkers = Math.Clamp(IndustryWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= IndustryWorkers;
+                ResearchWorkers = Math.Clamp(ResearchWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= ResearchWorkers;
+                GrotsitsWorkers = Math.Clamp(GrotsitsWorkers, 0, Math.Max(remainingWorkers, 0));
+                remainingWorkers -= GrotsitsWorkers;
+                if(remainingWorkers > 0)
+                    IndustryWorkers += remainingWorkers;
                 break;
         }
     }
@@ -436,7 +548,7 @@ public class Planet : MonoBehaviour
             return;
 
         var grotsitsShort = 0.0f;
-        if (Grotsits < Population.Count) 
+        if (Grotsits < GetMaintainenceCost()) 
         { 
             // Can't give everyone goods
             grotsitsShort += Grotsits - Population.Count;
@@ -446,7 +558,7 @@ public class Planet : MonoBehaviour
         else
         {
             // Grotsits for everyone
-            Grotsits -= Population.Count;
+            Grotsits -= GetMaintainenceCost();
             Morale = Math.Clamp(Morale + _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
 
@@ -454,14 +566,15 @@ public class Planet : MonoBehaviour
         var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
         ProjectedGrotsits = Math.Clamp(Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction), 0.0f, MaxGrotsitsStorage);
-        if (ProjectedGrotsits >= projectedPopulation)
+        var projectedGrotsitsRequirement = GetMaintainenceCost() + projectedPopulation;
+        if (ProjectedGrotsits >= projectedGrotsitsRequirement)
         {
-            grotsitsShort += ProjectedGrotsits - projectedPopulation;
-            if (Grotsits > projectedPopulation)
+            grotsitsShort += ProjectedGrotsits - projectedGrotsitsRequirement;
+            if (Grotsits > projectedGrotsitsRequirement)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypeGrotsitsSurplus,
-                    Math.Clamp(Grotsits - projectedPopulation, 0, Grotsits)));
+                    Math.Clamp(Grotsits - projectedGrotsitsRequirement, 0, Grotsits)));
             }
 
         }
@@ -490,9 +603,8 @@ public class Planet : MonoBehaviour
 
     private void ConsumeResearch(List<PlanetUpdateResult> resultList)
     {
-        resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduction,
+        resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduced,
             Research));
-        Research = 0.0f;
     }
 
     // returns the player id of the population change
@@ -590,10 +702,10 @@ public class Planet : MonoBehaviour
 
     #region ProductionQueue
     
-    private struct ProductionItem
+    public struct ProductionItem
     {
-        public readonly float Progress;
-        public readonly CatalogItem Item;
+        public float Progress;
+        public CatalogItem Item;
 
         public ProductionItem(CatalogItem item)
         {
@@ -603,17 +715,17 @@ public class Planet : MonoBehaviour
 
     }
     
-    private ProductionItem? _currentProduction = null;
-    List<ProductionItem> _productionQueue = new List<ProductionItem>();
+    public ProductionItem? CurrentProduction { get; set; } = null;
+    public List<ProductionItem> ProductionQueue = new List<ProductionItem>();
 
     private bool UpdateProductionQueue()
     {
-        if (_currentProduction == null)
+        if (CurrentProduction == null)
         {
-            if(_productionQueue.Count == 0)
+            if(ProductionQueue.Count == 0)
                 return false;
-            _currentProduction = _productionQueue.First();
-            _productionQueue.RemoveAt(0);
+            CurrentProduction = ProductionQueue.First();
+            ProductionQueue.RemoveAt(0);
         }
         return true; 
     }
@@ -626,16 +738,16 @@ public class Planet : MonoBehaviour
         else
         {
             resultList.Add(new PlanetUpdateResult(PlanetName,
-                ResultType.PlanetUpdateResultTypeIndustryProductionComplete, _currentProduction?.Item.itemName));
+                ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName));
         }
     }
 
     private void ContinueProduction(List<PlanetUpdateResult> resultList)
     {
-        if(_currentProduction == null)
+        if(CurrentProduction == null)
             return;
-        var currentProductionProgress = _currentProduction?.Progress + Industry;
-        if (currentProductionProgress >= _currentProduction?.Item.cost)
+        var currentProductionProgress = CurrentProduction?.Progress + Industry;
+        if (currentProductionProgress >= CurrentProduction?.Item.cost)
         {
             CompleteProduction(resultList);
         }
@@ -645,17 +757,17 @@ public class Planet : MonoBehaviour
     {
         StageCompletedProductionItem(resultList);
         resultList.Add(new PlanetUpdateResult(PlanetName,
-            ResultType.PlanetUpdateResultTypeIndustryProductionComplete, _currentProduction?.Item.itemName));
-        var excessIndustry = _currentProduction?.Item.cost - _currentProduction?.Progress;
+            ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName));
+        var excessIndustry = CurrentProduction?.Item.cost - CurrentProduction?.Progress;
         Industry -= excessIndustry ?? 0.0f;
-        _currentProduction = null;
+        CurrentProduction = null;
         if (UpdateProductionQueue())
             ContinueProduction(resultList);
     }
 
     private void StageCompletedProductionItem(List<PlanetUpdateResult> resultList)
     {
-        // create game object from current _currentProduction
+        // create game object from CurrentProduction
     }
 
     #endregion

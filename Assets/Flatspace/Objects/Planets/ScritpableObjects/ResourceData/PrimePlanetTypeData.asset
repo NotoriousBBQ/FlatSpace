@@ -15,6 +15,10 @@ MonoBehaviour:
   _planetType: 0
   _initialPopulation: 2
   _initialFood: 4
-  _foodProduction: 2
+  _foodProduction: 3
+  _initialGrotsits: 50
   _grotsitProduction: 2
+  _researchProduction: 0
+  _industryProduction: 0
   _maxPopulation: 15
+  _initialStrategy: 1
