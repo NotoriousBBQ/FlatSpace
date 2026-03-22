@@ -440,7 +440,6 @@ namespace FlatSpace
             private void BoardUIUpdate()
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
-                //START HERE replace _notificationListController with MainScreenUIController
                 _mainScreenUIController?.SetNotifications(_playerNotifications);
             }
 

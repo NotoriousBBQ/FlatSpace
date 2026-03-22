@@ -128,6 +128,12 @@ namespace FlatSpace
                     case GameAIOrder.OrderType.OrderTypeGrotsitsChange:
                         targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
                         break;
+                    case GameAIOrder.OrderType.OrderTypeIndustryTransport:
+                        targetPlanet.Industry += Convert.ToSingle(executableOrder.Data);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeIndustryChange:
+                        targetPlanet.Industry += Convert.ToSingle(executableOrder.Data);
+                        break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
                         targetPlanet.Research += Convert.ToSingle(executableOrder.Data);
                         break;

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using FlatSpace.Game;
+using Flatspace.Objects.Production;
 using FlatSpace.Pathing;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -149,6 +150,7 @@ namespace FlatSpace
 
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
+                var catalog = Gameboard.Instance.GetComponent<ProductionCatalog>();
                 foreach (var planetStatus in gameSave.planetStatuses)
                 {
                     var planet = _planets[planetStatus.name];
@@ -161,10 +163,20 @@ namespace FlatSpace
                     if (planetStatus.currentProduction != null)
                         planet.CurrentProduction = new Planet.ProductionItem
                         {
-                            // START HERE
                             Progress = planetStatus.currentProduction?.Progress ?? 0.0f,
-                       //     Item = ,
+                            Item = catalog.catalogItems.Find(x => x.itemName ==  planetStatus.currentProduction?.Name)
                         };
+                    if (planetStatus.productionQueue.Count > 0)
+                    {
+                        foreach (var production in planetStatus.productionQueue)
+                        {
+                            planet.ProductionQueue.Add(new Planet.ProductionItem
+                            {
+                                Progress = 0.0f,
+                                Item = catalog.catalogItems.Find(x => x.itemName ==  production.Name)
+                            });
+                        }
+                    }
                     planet.Owner = planetStatus.owner;
                     planet.FoodShipmentIncoming = planetStatus.foodTransferInProgress;
                     planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;

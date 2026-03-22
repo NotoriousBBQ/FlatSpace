@@ -57,6 +57,203 @@ namespace FlatSpace
             }
 
             // ── Colonization ─────────────────────────────────────────────────
+            //HERE
+/*
+            private void ShipGrotsits(ScoreMatrix scoreMatrix, List<GameAI.GameAIOrder> orders,
+                List<Planet.PlanetUpdateResult> surplusResults)
+            {
+                GenerateActionList(scoreMatrix, out var actionList);
+
+                foreach (var actionNTuple in actionList)
+                {
+                    var changeAmount = Convert.ToSingle(surplusResults.Find(x => x.Name == actionNTuple.Origin).Data);
+                    var originPlanet = AIMap.GetPlanet(actionNTuple.Origin);
+                    var playerPopFraction = originPlanet.GetPopulationFraction(Player.playerID);
+                    changeAmount *= playerPopFraction;
+                    if (changeAmount <= 0.0f)
+                        continue;
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                        TimingDelay = Convert.ToInt32(actionNTuple.Cost / AIMap.GameAIConstants.defaultTravelSpeed),
+                        TotalDelay = Convert.ToInt32(actionNTuple.Cost / AIMap.GameAIConstants.defaultTravelSpeed),
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsChange,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount * -1.0f,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Origin,
+                        PlayerId = Player.playerID
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
+                    });
+                }
+            }
+*/
+            private void ProcessProductionComplete(List<Planet.PlanetUpdateResult> results,
+                List<GameAI.GameAIOrder> orders)
+            {
+                var productionCompleteResults = results.FindAll(x =>
+                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete);
+                if (productionCompleteResults.Count > 0)
+                    return;
+                
+                
+                foreach (var productionCompleteResult in productionCompleteResults)
+                {
+                    
+                }
+
+                
+            }
+
+            // HERE
+            /*
+            private void ProcessIndustrySurplus(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
+            {
+                var industrySurplusResults = results.FindAll(x =>
+                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
+                if (industrySurplusResults.Count <= 0)
+                    return;
+
+                var scoreMatrix = new ScoreMatrix();
+                var productionHubList = AIMap.PlanetList.FindAll(x => x.IsIndustryProductionHub);
+                foreach (var surplusProducer in industrySurplusResults)
+                {
+                    var validMatrixEntries = new ScoreMatrixElementList();
+                    var sourcePlanet = AIMap.GetPlanet(surplusProducer.Name);
+                    if (sourcePlanet == null || sourcePlanet.IsIndustryProductionHub)
+                        continue;
+                    var surplusPathMap = sourcePlanet.DistanceMapToPathingList;
+                    foreach (var hubPlanet in productionHubList)
+                    {
+
+                        validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
+                        {
+                            Surplus = (float)surplusProducer.Data,
+                            Target = hubPlanet.PlanetName,
+                            Cost = surplusPathMap[hubPlanet.PlanetName].Cost,
+                            Shortage = 0.0f
+                        });
+                    }
+
+                    if (validMatrixEntries.Count <= 0)
+                        continue;
+                    scoreMatrix.MatrixElements.Add(surplusProducer.Name, validMatrixEntries);
+                }
+
+                ShipIndustry(scoreMatrix, orders, industrySurplusResults);
+
+            }
+            
+
+            private void ShipIndustry(ScoreMatrix scoreMatrix, List<GameAI.GameAIOrder> orders, 
+                List<Planet.PlanetUpdateResult> surplusResults)
+            {
+                GenerateActionList(scoreMatrix, out var actionList, true);
+
+                foreach (var actionNTuple in actionList)
+                {
+                    var changeAmount = Convert.ToSingle(surplusResults.Find(x => x.Name == actionNTuple.Origin).Data);
+                    var originPlanet = AIMap.GetPlanet(actionNTuple.Origin);
+                    var playerPopFraction = originPlanet.GetPopulationFraction(Player.playerID);
+                    changeAmount *= playerPopFraction;
+                    if (changeAmount <= 0.0f)
+                        continue;
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeIndustryTransport,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                        TimingDelay = Convert.ToInt32(actionNTuple.Cost / AIMap.GameAIConstants.defaultTravelSpeed),
+                        TotalDelay = Convert.ToInt32(actionNTuple.Cost / AIMap.GameAIConstants.defaultTravelSpeed),
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeIndustryChange,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount * -1.0f,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Origin,
+                        PlayerId = Player.playerID
+                    });
+                }                
+            }
+
+            private void ShipFood(ScoreMatrix scoreMatrix, List<GameAI.GameAIOrder> orders,
+                List<Planet.PlanetUpdateResult> surplusResults)
+            {
+                GenerateActionList(scoreMatrix, out var actionList);
+
+                foreach (var actionNTuple in actionList)
+                {
+                    float changeAmount = Convert.ToSingle(surplusResults.Find(x => x.Name == actionNTuple.Item1).Data);
+                    var originPlanet = AIMap.GetPlanet(actionNTuple.Origin);
+
+                    var playerPopFraction = originPlanet.GetPopulationFraction(Player.playerID);
+                    changeAmount *= playerPopFraction;
+                    if (changeAmount <= 0.0f)
+                        continue;
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                        TimingDelay =
+                            Convert.ToInt32(actionNTuple.Cost / AIMap.GameAIConstants.defaultTravelSpeed),
+                        TotalDelay = Convert.ToInt32(actionNTuple.Cost / AIMap.GameAIConstants.defaultTravelSpeed),
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount * -1.0f,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Origin,
+                        PlayerId = Player.playerID
+                    });
+                    orders.Add(new GameAI.GameAIOrder
+                    {
+                        Type = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransportInProgress,
+                        TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        TimingDelay = 0,
+                        TotalDelay = 0,
+                        Data = changeAmount,
+                        Origin = actionNTuple.Origin,
+                        Target = actionNTuple.Target,
+                        PlayerId = Player.playerID
+                    });
+                }
+            }
+            */
 
             private bool IsValidColonizerForResult(Planet.PlanetUpdateResult result)
             {
