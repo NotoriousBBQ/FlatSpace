@@ -150,7 +150,7 @@ namespace FlatSpace
 
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
-                var catalog = Gameboard.Instance.GetComponent<ProductionCatalog>();
+                var catalog = Gameboard.Instance.GetComponent<Catalog>();
                 foreach (var planetStatus in gameSave.planetStatuses)
                 {
                     var planet = _planets[planetStatus.name];

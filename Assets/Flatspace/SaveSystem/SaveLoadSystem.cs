@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using FlatSpace.AI;
 using FlatSpace.Game;
+using Flatspace.Objects.Production;
 using FlatSpace.Tools;
 using JetBrains.Annotations;
 using UnityEngine;
@@ -285,6 +286,53 @@ public class SaveLoadSystem : MonoBehaviour
 
     #endregion
 
+    #region GeneralDataSave
+
+    public static bool SaveJsonDataToChosenFile(string jsonData, string saveDir)
+    {
+        bool bDataSaved = false;
+        var fullSavePath = Path.Combine(Application.persistentDataPath, saveDir); 
+        FileBrowser.ShowSaveDialog((paths) => bDataSaved= SaveJsonData(jsonData, paths[0]), 
+            () => Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @fullSavePath.ToString()
+            );
+        
+        return bDataSaved;
+    }
+
+    public static bool SaveJsonData(string data, string saveName)
+    {
+        if (!File.Exists(saveName)) 
+            File.Create(saveName).Dispose();
+ 
+        File.WriteAllText(saveName, data);
+        return true;
+    }
+
+    public static bool LoadJsonDataFromChosenFile(out string jsonData, string saveDir)
+    {
+        jsonData = "";
+        bool bDataLoaded = false;
+        var fullLoadPath = Path.Combine(Application.persistentDataPath, saveDir); 
+        string loadedData = null;
+        FileBrowser.ShowLoadDialog((paths) => bDataLoaded= LoadJsonData(out loadedData, paths[0]), 
+            () => Debug.Log("load Cancelled"), FileBrowser.PickMode.Files, false, @fullLoadPath.ToString()
+        );
+        if(bDataLoaded)
+            jsonData = loadedData;
+        return bDataLoaded;
+    }
+
+    public static bool LoadJsonData(out string data, string loadName)
+    {
+        if (!File.Exists(loadName))
+        {
+            data = null;            
+            return false;
+        }
+        data = File.ReadAllText(loadName);
+        return true;
+    }
+    #endregion
     #region MenuFunctions
 
     public static void LoadGame()

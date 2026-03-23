@@ -4,6 +4,7 @@ using UnityEngine;
 namespace Flatspace.Objects.Production
 {
     [CreateAssetMenu(fileName = "CatalogItem", menuName = "Scriptable Objects/Production/CatalogItem")]
+    [Serializable]
     public class CatalogItem : ScriptableObject
     {
         public string itemName;
@@ -11,6 +12,7 @@ namespace Flatspace.Objects.Production
         public string type;
         public float cost;
         public string effect;
-        public string requredTech;
+        public string requiredTech;
+        public bool researched;
     }
 }
