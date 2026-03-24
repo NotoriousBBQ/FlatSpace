@@ -12,9 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8867ef808772c914a828c90146dcae54, type: 3}
   m_Name: Farm1Production
   m_EditorClassIdentifier: Assembly-CSharp::Flatspace.Objects.Production.CatalogItem
-  itemName: Farm 1 production
+  itemName: Food Production 1
   description: Base food improvement
   type: Improvement
   cost: 20
   effect: Create Farm 1 Improvement
-  requredTech: None
+  requiredTech: Farm Improvement 1
+  researched: 0

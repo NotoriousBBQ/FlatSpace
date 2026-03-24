@@ -10,11 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8867ef808772c914a828c90146dcae54, type: 3}
-  m_Name: Research1Production
+  m_Name: Food Improvement 1
   m_EditorClassIdentifier: Assembly-CSharp::Flatspace.Objects.Production.CatalogItem
-  itemName: Research 1 production
+  itemName: Research Production 1
   description: Base Research improvement
   type: Improvement
   cost: 20
-  effect: Create Farm 1 Improvement
-  requredTech: None
+  effect: Allow Research 1 Improvement
+  requiredTech: Research1Production
+  researched: 0

@@ -12,9 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8867ef808772c914a828c90146dcae54, type: 3}
   m_Name: Grotsits1Production
   m_EditorClassIdentifier: Assembly-CSharp::Flatspace.Objects.Production.CatalogItem
-  itemName: Grotsits 1 production
+  itemName: Grotsits Production 1
   description: Base Grotsits improvement
   type: Improvement
   cost: 20
   effect: Create Grotists 1 Improvement
-  requredTech: None
+  requiredTech: Grotsist Improvement 1
+  researched: 0

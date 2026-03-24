@@ -17,4 +17,5 @@ MonoBehaviour:
   type: Ship
   cost: 20
   effect: Create Colony Ship
-  requredTech: None
+  requiredTech: None
+  researched: 1
