@@ -10,12 +10,23 @@ namespace Game.UI.MainGameScreenUI
     {
         public UIDocument uiDocument;
 
-        private GameButtonHandler _gameButtonHandler;
-        private NotificationListController _notificationListController;
+        private GameButtonHandler            _gameButtonHandler;
+        private NotificationListController   _notificationListController;
+
+        // Status bar labels
+        private Label _turnLabel;
+        private Label _researchLabel;
+        private Label _grotsitsLabel;
 
         void OnEnable()
         {
             var root = uiDocument.rootVisualElement;
+
+            // Bind status bar labels
+            _turnLabel     = root.Q<Label>("TurnLabel");
+            _researchLabel = root.Q<Label>("ResearchLabel");
+            _grotsitsLabel = root.Q<Label>("GrotsitsLabel");
+
             _notificationListController = GetComponent<NotificationListController>();
             if (!_notificationListController)
                 return;
@@ -33,6 +44,16 @@ namespace Game.UI.MainGameScreenUI
         public void SetNotifications(List<PlayerNotification> notifications)
         {
             _notificationListController?.SetNotifications(notifications);
+        }
+
+        /// <summary>
+        /// Call this each turn to update the status bar display.
+        /// </summary>
+        public void SetStatus(int turn, float research, float grotsits)
+        {
+            if (_turnLabel     != null) _turnLabel.text     = $"Turn: {turn}";
+            if (_researchLabel != null) _researchLabel.text = $"Research: {research:0.#}";
+            if (_grotsitsLabel != null) _grotsitsLabel.text = $"Grotsits: {grotsits:0.#}";
         }
     }
 }

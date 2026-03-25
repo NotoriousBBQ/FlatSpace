@@ -441,6 +441,7 @@ namespace FlatSpace
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
                 _mainScreenUIController?.SetNotifications(_playerNotifications);
+                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, 0, 0 );
             }
 
             private bool _timedUpdateRunning = false;
