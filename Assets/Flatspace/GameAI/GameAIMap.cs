@@ -140,7 +140,9 @@ namespace FlatSpace
 
             public Planet GetPlanet(string planetName)
             {
-                return _planets[planetName];
+                Planet planet = null;
+                _planets.TryGetValue(planetName, out planet);
+                return planet;
             }
 
             public Planet GetPlayerCapitol(int playerID)

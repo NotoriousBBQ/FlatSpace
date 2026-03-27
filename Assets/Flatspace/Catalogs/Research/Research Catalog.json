@@ -1,0 +1,105 @@
+{
+    "catalogName": "ResearchCatalog",
+    "catalogType": "Research",
+    "items": [
+        {
+            "itemName": "Food Improvement 1",
+            "description": "Food Production Improvement 1",
+            "type": "Planetary Improvement",
+            "cost": 20.0,
+            "effect": "Allow Food 1 Improvement",
+            "requiredTech": "",
+            "researched": false
+        },
+        {
+          "itemName": "Food Improvement 2",
+          "description": "Food Production Improvement 2",
+          "type": "Planetary Improvement",
+          "cost": 20.0,
+          "effect": "Allow Food 2 Improvement",
+          "requiredTech": "Food Improvement 1",
+          "researched": false
+        },
+        {
+            "itemName": "Grotsits Improvement 1",
+            "description": "Grotsits Production Improvement",
+            "type": "Planetary Improvement",
+            "cost": 20.0,
+            "effect": "Allow Grotsits 1 Improvement",
+            "requiredTech": "",
+            "researched": false
+        },
+        {
+          "itemName": "Grotsits Improvement 2",
+          "description": "Grotsits Production Improvement 2",
+          "type": "Planetary Improvement",
+          "cost": 20.0,
+          "effect": "Allow Grotsits 2 Improvement",
+          "requiredTech": "Grotsits Improvement 1",
+          "researched": false
+        },
+        {
+            "itemName": "Industry Improvement 1",
+            "description": "Allow Industry Improvement 1",
+            "type": "Planetary Improvement",
+            "cost": 20.0,
+            "effect": "Allow Industry 1 Improvement",
+            "requiredTech": "",
+            "researched": false
+        },
+        {
+          "itemName": "Industry Improvement 2",
+          "description": "Allow Industry Improvement 2",
+          "type": "Planetary Improvement",
+          "cost": 20.0,
+          "effect": "Allow Industry 2 Improvement",
+          "requiredTech": "Industry Improvement 2",
+          "researched": false
+        },
+        {
+            "itemName": "Research Improvement 1",
+            "description": "Allow Research Improvement 1",
+            "type": "Planetary Improvement",
+            "cost": 20.0,
+            "effect": "Allow Research 1 Improvement",
+            "requiredTech": "",
+            "researched": false
+        },
+        {
+          "itemName": "Research Improvement 2",
+          "description": "Allow Research Improvement 2",
+          "type": "Planetary Improvement",
+          "cost": 20.0,
+          "effect": "Allow Research 2 Improvement",
+          "requiredTech": "Research Improvement 1",
+          "researched": false
+        },
+        {
+            "itemName": "Warship 1",
+            "description": "Allows base warship construction",
+            "type": "Ship Type",
+            "cost": 20.0,
+            "effect": "Allow warship construction",
+            "requiredTech": "",
+            "researched": false
+        },
+        {
+          "itemName": "Warship Weapons Upgrade 1",
+          "description": "Increases Warship 1 Combat",
+          "type": "Ship Improvement",
+          "cost": 20.0,
+          "effect": "Improve warship stats",
+          "requiredTech": "Warship 1",
+          "researched": false
+        },
+        {
+          "itemName": "Colony Ship Improvement 1",
+          "description": "Improve Colony Ship",
+          "type": "Ship Improvement",
+          "cost": 20.0,
+          "effect": "Increases Colony Ship Speed",
+          "requiredTech": "Research Improvement 1",
+          "researched": false
+        }
+    ]
+}

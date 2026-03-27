@@ -28,6 +28,7 @@ namespace FlatSpace
                     OrderTypeGrotsitsChange,
                     OrderTypeGrotsitsTransportInProgress,
                     OrderTypeResearchChange,
+                    OrderTypeResearchSet,
                     OrderTypeIndustryChange,
                     OrderTypeIndustryTransport,
                 }

@@ -41,6 +41,7 @@ namespace FlatSpace
 
             static public int NumPlayers = 2;
             public List<Player> players = new List<Player>();
+            public int owningPlayerId = 0;
 
             private readonly List<PlanetUIObject> _planetUIObjects = new List<PlanetUIObject>();
             private readonly List<PlayerNotification> _playerNotifications = new List<PlayerNotification>();
@@ -441,7 +442,7 @@ namespace FlatSpace
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
                 _mainScreenUIController?.SetNotifications(_playerNotifications);
-                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, 0, 0 );
+                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, 0 );
             }
 
             private bool _timedUpdateRunning = false;
@@ -466,6 +467,26 @@ namespace FlatSpace
             public void StopTimedUpdate()
             {
                 _timedUpdateRunning = false;
+            }
+
+            public void CreateNotificationsForResearch(string completedResearch, string newResearch, int playerId)
+            {
+                if (!string.IsNullOrEmpty(completedResearch))
+                {
+                    _playerNotifications.Add(new PlayerNotification{
+                        PlayerName = playerId.ToString(),
+                        Message = "Completed research:  " + completedResearch,
+                        ViewTarget = GetPlayerCapitol(playerId).PlanetName,
+                    });
+                }
+                if (!string.IsNullOrEmpty(newResearch))
+                {
+                    _playerNotifications.Add(new PlayerNotification{
+                        PlayerName = playerId.ToString(),
+                        Message = "Starting research:  " + newResearch,
+                        ViewTarget = GetPlayerCapitol(playerId).PlanetName,
+                    });
+                }
             }
 
             public void CreateNotificationsForExecutingOrders(List<GameAI.GameAIOrder> gameAIOrders)

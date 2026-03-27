@@ -7,11 +7,33 @@ namespace Flatspace.Objects.Production
 {
     public class Catalog : MonoBehaviour
     {
-        public const string CATALOG_SAVE_DIR = "Catalogs/"; 
-        public string catalogName;
+#if UNITY_EDITOR
+        private static string CATALOG_SAVE_DIR = "Flatspace/Catalogs/";
+#else
+        private static string CATALOG_SAVE_DIR = "Catalogs/";
+#endif
+        private string catalogName = "";
+        public string CatalogName
+        {
+            get {return catalogName;}
+            set
+            {
+                if (value == null)
+                    return;
+                if(value == catalogName)
+                    return;
+                catalogName = value;
+                catalogType = catalogName[..catalogName.IndexOf(' ')];
+                Load();
+            }
+        }
         public string catalogType;
         
         public List<CatalogItem> catalogItems = new List<CatalogItem>();
+        public CatalogItem GetItem(string catalogItemName)
+        {
+            return catalogItems.Find(x => x.itemName == catalogItemName);
+        }
 
         #region SaveLoad
         [Serializable]
@@ -60,7 +82,11 @@ namespace Flatspace.Objects.Production
             var catalogSaveData = new CatalogSaveData(this);
             var jsonData  = JsonUtility.ToJson(catalogSaveData,true);
             var savePath = Path.Combine(CATALOG_SAVE_DIR, catalogType);
+#if UNITY_EDITOR
+            savePath = Path.Combine(Application.dataPath, savePath);
+#else
             savePath = Path.Combine(Application.persistentDataPath, savePath);
+#endif
             savePath = Path.Combine(savePath, catalogName);
             savePath = Path.ChangeExtension(savePath, "json");
             SaveLoadSystem.SaveJsonData(jsonData, savePath );
@@ -69,8 +95,12 @@ namespace Flatspace.Objects.Production
         public void Load()
         {
             string jsonData;
-            var loadPath = Path.Combine(CATALOG_SAVE_DIR, catalogType);
+            var loadPath = Path.Combine(CATALOG_SAVE_DIR, catalogType);            
+#if UNITY_EDITOR
+            loadPath = Path.Combine(Application.dataPath, loadPath);
+#else       
             loadPath = Path.Combine(Application.persistentDataPath, loadPath);
+#endif
             loadPath = Path.Combine(loadPath, catalogName);
             loadPath = Path.ChangeExtension(loadPath, "json");
             if (SaveLoadSystem.LoadJsonData(out jsonData, loadPath))
@@ -89,6 +119,7 @@ namespace Flatspace.Objects.Production
             {
                 var catalogItem = ScriptableObject.CreateInstance<CatalogItem>();
                 catalogItem.name = itemData.itemName;
+                catalogItem.itemName = itemData.itemName;
                 catalogItem.description = itemData.description;
                 catalogItem.type = itemData.type;
                 catalogItem.cost = itemData.cost;

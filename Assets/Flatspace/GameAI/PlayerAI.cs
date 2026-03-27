@@ -2,7 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FlatSpace.Game;
 using Flatspace.Objects.Production;
+using Unity.VisualScripting;
 using UnityEngine;
 
 namespace FlatSpace
@@ -24,9 +26,9 @@ namespace FlatSpace
             public AIStrategy Strategy { get; set; } = AIStrategy.AIStrategyExpand;
             public Player      Player  { get; set; }
             public GameAIMap   AIMap   { get; set; }
-            
+
             public Catalog ProductionCatalog { get; set; }
-            public Catalog ResearcgCatalog { get; set; }
+            public Catalog ResearchCatalog   { get; set; }
 
             // ── Entry point ──────────────────────────────────────────────────
 
@@ -60,23 +62,26 @@ namespace FlatSpace
                 ProcessIndustry(results, orders);
             }
 
-            // ── Colonization ─────────────────────────────────────────────────
-            private void ProcessProductionComplete(List<Planet.PlanetUpdateResult> results,
-                List<GameAI.GameAIOrder> orders)
+            // ── Production complete ───────────────────────────────────────────
+
+            private void ProcessProductionComplete(
+                List<Planet.PlanetUpdateResult> results,
+                List<GameAI.GameAIOrder>        orders)
             {
                 var productionCompleteResults = results.FindAll(x =>
-                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete);
+                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
+                        .PlanetUpdateResultTypeIndustryProductionComplete);
                 if (productionCompleteResults.Count > 0)
                     return;
-                
-                
+
                 foreach (var productionCompleteResult in productionCompleteResults)
                 {
-                    
+                    // TODO
                 }
-
-                
             }
+
+            // ── Colonization ─────────────────────────────────────────────────
+
             private bool IsValidColonizerForResult(Planet.PlanetUpdateResult result)
             {
                 if (result.Result is
@@ -195,17 +200,17 @@ namespace FlatSpace
                         GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress,
                         orders);
             }
-            
+
             /// <summary>
             /// Shared matrix-building logic for any surplus→shortage resource.
             /// Returns null if there is nothing to do.
             /// </summary>
             private ScoreMatrix BuildResourceMatrix(
-                List<Planet.PlanetUpdateResult>                              results,
-                Planet.PlanetUpdateResult.PlanetUpdateResultType             shortageType,
-                Planet.PlanetUpdateResult.PlanetUpdateResultType             surplusType,
-                Func<string, bool>                                           incomingCheck,
-                out List<Planet.PlanetUpdateResult>                          surplusResults)
+                List<Planet.PlanetUpdateResult>                  results,
+                Planet.PlanetUpdateResult.PlanetUpdateResultType shortageType,
+                Planet.PlanetUpdateResult.PlanetUpdateResultType surplusType,
+                Func<string, bool>                               incomingCheck,
+                out List<Planet.PlanetUpdateResult>              surplusResults)
             {
                 surplusResults = null;
 
@@ -244,12 +249,12 @@ namespace FlatSpace
             /// for a resource shipment action.
             /// </summary>
             private void EmitResourceOrders(
-                ScoreMatrix.Action               action,
-                List<Planet.PlanetUpdateResult>  surplusResults,
-                GameAI.GameAIOrder.OrderType     transportType,
-                GameAI.GameAIOrder.OrderType     changeType,
-                GameAI.GameAIOrder.OrderType     inProgressType,
-                List<GameAI.GameAIOrder>         orders)
+                ScoreMatrix.Action              action,
+                List<Planet.PlanetUpdateResult> surplusResults,
+                GameAI.GameAIOrder.OrderType    transportType,
+                GameAI.GameAIOrder.OrderType    changeType,
+                GameAI.GameAIOrder.OrderType    inProgressType,
+                List<GameAI.GameAIOrder>        orders)
             {
                 var originPlanet = AIMap.GetPlanet(action.Origin);
                 var amount       = Convert.ToSingle(
@@ -275,6 +280,26 @@ namespace FlatSpace
 
             // ── Research ─────────────────────────────────────────────────────
 
+            public float       researchTotal   = 0.0f;
+            private CatalogItem currentResearch = null;
+
+            // Lower multiplier = higher preference. 1.0f = neutral (cost only).
+            // Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
+            private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchPriorityTable =
+                new Dictionary<AIStrategy, Dictionary<string, float>>
+                {
+                    {
+                        AIStrategy.AIStrategyExpand, new Dictionary<string, float>
+                        {
+                            { "Planetary Improvement", 0.5f },  // expansion favours planet upgrades
+                            { "Ship Type",             0.8f },  // ships useful but secondary
+                            { "Ship Improvement",      1.2f },  // least useful while expanding
+                        }
+                    },
+                    // AIStrategyConsolidate — add when needed
+                    // AIStrategyAmass       — add when needed
+                };
+
             private void ProcessResearch(
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
@@ -286,8 +311,8 @@ namespace FlatSpace
 
                 if (researchResults.Count == 0) return;
 
-                var total = researchResults.Sum(p => (float)p.Data);
-                if (total > 0.0f) UpdateResearch(total, orders);
+                var researchThisTurn = researchResults.Sum(p => (float)p.Data);
+                if (researchThisTurn > 0.0f) UpdateResearch(researchThisTurn, orders);
 
                 foreach (var r in researchResults)
                     orders.Add(MakeOrder(
@@ -296,11 +321,100 @@ namespace FlatSpace
                         0, 0, (float)r.Data * -1.0f, r.Name, r.Name));
             }
 
-            private void UpdateResearch(float totalResearch, List<GameAI.GameAIOrder> orders)
+            private void UpdateResearch(float researchThisTurn, List<GameAI.GameAIOrder> orders)
             {
-                // TODO: check if current research is done and choose another
-                
+                var completedResearchName = currentResearch?.name; 
+                researchTotal += researchThisTurn;
+                if (currentResearch == null)
+                {
+                    ChooseNewResearch(orders);
+                }
+                else if (researchTotal >= currentResearch.cost)
+                {
+                    researchTotal -= currentResearch?.cost ?? 0.0f;
+                    CompleteReserch(orders);
+                    ChooseNewResearch(orders);
+                }
+                Gameboard.Instance.CreateNotificationsForResearch(completedResearchName, currentResearch?.itemName, Player.playerID);
             }
+
+            private void CompleteReserch(List<GameAI.GameAIOrder> orders)
+            {
+                if (currentResearch == null)
+                    return;
+                currentResearch.researched = true;
+                foreach( var dependantItem in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == currentResearch.itemName))
+                {
+                    dependantItem.researched  = true;
+                }
+
+            }
+            private void ChooseNewResearch(List<GameAI.GameAIOrder> orders)
+            {
+                var researchChoices = ResearchCatalog.catalogItems.FindAll(x => !x.researched).ToList();
+                researchChoices = researchChoices.FindAll(x =>
+                    (string.IsNullOrEmpty(x.requiredTech) || ResearchCatalog.GetItem(x.requiredTech).researched)).ToList();   
+  
+                var matrix = BuildChoiceMatrix(researchChoices, Strategy);
+                if (matrix == null) return;
+
+                var actions = matrix.GenerateActionList(
+                    actionFactory: (origin, element) => new ResearchAction { ChosenItem = element.Item },
+                    compare:       ResearchCompare);
+
+                if (actions.Count == 0) return;
+
+                currentResearch = actions[0].ChosenItem;
+
+                orders.Add(MakeOrder(
+                    GameAI.GameAIOrder.OrderType.OrderTypeResearchSet,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, 0f, currentResearch.itemName, currentResearch.itemName));
+            }
+
+            /// <summary>
+            /// Builds a one-row choice matrix: a single "AI" origin mapped to all
+            /// available research choices, scored by cost and strategy priority.
+            /// </summary>
+            private ScoreMatrix<ResearchElement, ResearchAction> BuildChoiceMatrix(
+                List<CatalogItem> choices,
+                AIStrategy        strategy)
+            {
+                if (choices.Count == 0) return null;
+
+                var matrix  = new ScoreMatrix<ResearchElement, ResearchAction>();
+                var entries = choices.Select(item => new ResearchElement
+                {
+                    Item     = item,
+                    Priority = GetResearchPriority(item, strategy),
+                }).ToList();
+
+                matrix.MatrixElements.Add("AI", entries);
+                return matrix;
+            }
+
+            /// <summary>
+            /// Returns a priority score for a research item given the current strategy.
+            /// Lower = more preferred. Multiplier comes from the priority table;
+            /// falls back to cost-only if the strategy or type has no entry.
+            /// </summary>
+            private static float  GetResearchPriority(CatalogItem item, AIStrategy strategy)
+            {
+                if (ResearchPriorityTable.TryGetValue(strategy, out var typeWeights) &&
+                    typeWeights.TryGetValue(item.type, out var multiplier))
+                {
+                    return item.cost * multiplier;
+                }
+
+                return item.cost;  // fallback: cost only, no strategy preference
+            }
+
+            /// <summary>
+            /// Compare for research elements: lowest Priority score wins.
+            /// Priority already folds in cost and strategy weighting.
+            /// </summary>
+            private static int ResearchCompare(ResearchElement x, ResearchElement y)
+                => x.Priority.CompareTo(y.Priority);
 
             // ── Industry ─────────────────────────────────────────────────────
 
@@ -311,7 +425,7 @@ namespace FlatSpace
                 // TODO: PlanetUpdateResultTypeIndustryProductionComplete — select new production
                 // TODO: PlanetUpdateResultTypeIndustrySurplus — ship industry
             }
-            // HERE
+
             /*
             private void ProcessIndustrySurplus(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
             {
@@ -331,7 +445,6 @@ namespace FlatSpace
                     var surplusPathMap = sourcePlanet.DistanceMapToPathingList;
                     foreach (var hubPlanet in productionHubList)
                     {
-
                         validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
                         {
                             Surplus = (float)surplusProducer.Data,
@@ -347,11 +460,8 @@ namespace FlatSpace
                 }
 
                 ShipIndustry(scoreMatrix, orders, industrySurplusResults);
-
             }
-
             */
-            
 
             // ── Order factory ────────────────────────────────────────────────
 
@@ -377,7 +487,14 @@ namespace FlatSpace
 
             // ── MonoBehaviour ────────────────────────────────────────────────
 
-            void Start()  { }
+            void Start()
+            {
+                ProductionCatalog = this.AddComponent<Catalog>();
+                ProductionCatalog.CatalogName = "Production Catalog";
+                ResearchCatalog = this.AddComponent<Catalog>();
+                ResearchCatalog.CatalogName = "Research Catalog";
+            }
+
             void Update() { }
         }
     }

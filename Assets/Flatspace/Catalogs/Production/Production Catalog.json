@@ -1,0 +1,132 @@
+{
+    "catalogName": "ProductionCatalog",
+    "catalogType": "Production",
+    "items": [
+        {
+            "itemName": "ColonyShipProduction",
+            "description": "Creat a ship to transport a single inhabitant to a new planet",
+            "type": "Ship",
+            "cost": 20.0,
+            "effect": "Create Colony Ship",
+            "requiredTech": "",
+            "researched": true
+        },
+        {
+          "itemName": "BaseFoodImprovement",
+          "description": "Initial Food Improvement",
+          "type": "Ship",
+          "cost": 20.0,
+          "effect": "3% Food Increase",
+          "requiredTech": "",
+          "researched": true
+        },
+        {
+          "itemName": "Food1Production",
+          "description": "Tier 1 food improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "7% Food Increase",
+          "requiredTech": "Food Improvement 1",
+          "researched": false
+        },
+        {
+          "itemName": "Food2Production",
+          "description": "Tier 2 food improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "12% Food Increase",
+          "requiredTech": "Food Improvement 2",
+          "researched": false
+        },
+        {
+            "itemName": "WarShipProduction",
+            "description": "Create a war ship",
+            "type": "Ship",
+            "cost": 20.0,
+            "effect": "Create War Ship",
+            "requiredTech": "Warship 1",
+            "researched": false
+        },
+        {
+          "itemName": "BaseGrotsitsProduction",
+          "description": "Base Grotsits improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "3% Grotsits Increase",
+          "requiredTech": "",
+          "researched": true
+        },      
+        {
+            "itemName": "Grotsits1Production",
+            "description": "Tier 1 Grotsits improvement",
+            "type": "Improvement",
+            "cost": 20.0,
+            "effect": "7% Grotsits",
+            "requiredTech": "Grotsits Improvement 1",
+            "researched": false
+        },
+        {
+          "itemName": "Grotsits2Production",
+          "description": "Tier 1 Grotsits improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "12% Grotsits",
+          "requiredTech": "Grotsits Improvement 2",
+          "researched": false
+        },
+        {
+          "itemName": "BaseIndustryProduction",
+          "description": "Base Industry improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "3% Industry",
+          "requiredTech": "",
+          "researched": true
+        },        
+        {
+          "itemName": "Industry1Production",
+          "description": "Tier 1 Base Improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "7% Industry",
+          "requiredTech": "Industry Improvement 1",
+          "researched": false
+        },
+        {
+          "itemName": "Industry2Production",
+          "description": "Tier 2 Base Improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "12% Industry",
+          "requiredTech": "Industry Improvement 2",
+          "researched": false
+        },
+        {
+          "itemName": "BaseResearchImprovement",
+          "description": "Base Research improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "3% Research",
+          "requiredTech": "",
+          "researched": true
+        },
+        {
+            "itemName": "ResearchImprovement1",
+            "description": "Tier 1 Research improvement",
+            "type": "Improvement",
+            "cost": 20.0,
+            "effect": "7%",
+            "requiredTech": "Research Improvement 1",
+            "researched": false
+        },
+        {
+          "itemName": "ResearchImprovement2",
+          "description": "Tier 2 Research improvement",
+          "type": "Improvement",
+          "cost": 20.0,
+          "effect": "12%",
+          "requiredTech": "Research Improvement 2",
+          "researched": false
+        }
+    ]
+}

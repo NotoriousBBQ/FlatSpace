@@ -232,11 +232,11 @@ public class Planet : MonoBehaviour
     private bool ResearchWorkerRequirement(out int researchWorkers)
     {
         researchWorkers = 0;
-        var strategyPopulaitonModifer = 1;
+        var strategyPopulationModifier = 1;
         var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
-            strategyPopulaitonModifer = modifierData.researchModifier;
-        var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
+            strategyPopulationModifier = modifierData.researchModifier;
+        var populationAdjustedForPlanetType = Population.Count * strategyPopulationModifier;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._researchProduction, out researchWorkers);
@@ -267,7 +267,7 @@ public class Planet : MonoBehaviour
     }
     
 
-    private void AssignWorkForStrategy()
+    private void AssignWorkForStrategy() 
     {
         int remainingWorkers;
         switch (CurrentStrategy)
@@ -603,8 +603,9 @@ public class Planet : MonoBehaviour
 
     private void ConsumeResearch(List<PlanetUpdateResult> resultList)
     {
-        resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduced,
-            Research));
+        if (Research > 0)
+            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduced,
+                Research));
     }
 
     // returns the player id of the population change
