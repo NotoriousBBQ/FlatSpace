@@ -47,7 +47,7 @@ namespace FlatSpace
             private readonly List<PlayerNotification> _playerNotifications = new List<PlayerNotification>();
             
             private MainScreenUIController _mainScreenUIController;
-            public int TurnNumber { get; private set; }= 0;
+            public int TurnNumber { get; private set; }= 1;
             private float orthoChange;
             void Start()
             {
@@ -146,6 +146,9 @@ namespace FlatSpace
                 foreach (var playerSave in gameSave.players)
                 {
                     players[playerSave.playerId].SetStrategy(playerSave.strategy);
+                    players[playerSave.playerId].SetCatalog(playerSave.researchCatalogSave);
+                    players[playerSave.playerId].SetCatalog(playerSave.researchCatalogSave);
+                    
                 }
                 GameAI.SetSimulationStats(gameSave);
             }
@@ -424,9 +427,9 @@ namespace FlatSpace
                 // add Ai Actions here
                 _playerNotifications.Clear();
                 GameAI.GameAIUpdate();
+                TurnNumber++;
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
-                TurnNumber++;
 
             }
 
@@ -469,7 +472,7 @@ namespace FlatSpace
                 _timedUpdateRunning = false;
             }
 
-            public void CreateNotificationsForResearch(string completedResearch, string newResearch, int playerId)
+            public void CreateNotificationsForCompletedResearch(string completedResearch, int playerId)
             {
                 if (!string.IsNullOrEmpty(completedResearch))
                 {
@@ -479,6 +482,9 @@ namespace FlatSpace
                         ViewTarget = GetPlayerCapitol(playerId).PlanetName,
                     });
                 }
+            }
+            public void CreateNotificationsForNewResearch(string newResearch, int playerId)
+            {
                 if (!string.IsNullOrEmpty(newResearch))
                 {
                     _playerNotifications.Add(new PlayerNotification{

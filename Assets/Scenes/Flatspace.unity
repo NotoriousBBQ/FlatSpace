@@ -210,8 +210,6 @@ GameObject:
   - component: {fileID: 77940343}
   - component: {fileID: 77940342}
   - component: {fileID: 77940344}
-  - component: {fileID: 77940345}
-  - component: {fileID: 77940346}
   m_Layer: 0
   m_Name: Board
   m_TagString: Untagged
@@ -309,47 +307,7 @@ MonoBehaviour:
   - {fileID: 2710091386499365705, guid: be094b4f5fcf94848815cac89d1243e6, type: 3}
   - {fileID: 8802576304822303094, guid: b28150491e093f84fb6fe691255c3fcb, type: 3}
   players: []
---- !u!114 &77940345
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 77940340}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 59eb374df2c006345a00db94e137c2cb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Flatspace.Objects.Production.ProductionCatalog
-  catalogName: Production Catalog
-  catalogType: Production
-  catalogItems:
-  - {fileID: 11400000, guid: e82654fb4c7fb6f44bb4b7d923950220, type: 2}
-  - {fileID: 11400000, guid: 59545a813363cb14681c225727356b68, type: 2}
-  - {fileID: 11400000, guid: 3609858411d8b724c9c603bd9df420ed, type: 2}
-  - {fileID: 11400000, guid: feb876e5626be194280d517edf60a8af, type: 2}
-  - {fileID: 11400000, guid: ce58bcd47daf8174c81a6e8b0243b61c, type: 2}
-  - {fileID: 11400000, guid: b24d17cffb454f146b8da0a601d553d7, type: 2}
---- !u!114 &77940346
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 77940340}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 59eb374df2c006345a00db94e137c2cb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Flatspace.Objects.Production.Catalog
-  catalogName: Research Catalog
-  catalogType: Research
-  catalogItems:
-  - {fileID: 11400000, guid: c1e38c6d6a8e5ca48bd3f50641c42c84, type: 2}
-  - {fileID: 11400000, guid: f7a84d2126c726e44be36cc5e9088af6, type: 2}
-  - {fileID: 11400000, guid: 4ffe493a2f0b9fa4c97ae6949b2e6f16, type: 2}
-  - {fileID: 11400000, guid: b24d17cffb454f146b8da0a601d553d7, type: 2}
-  - {fileID: 11400000, guid: a244febb14ea09346bdd2f168924089c, type: 2}
+  owningPlayerId: 0
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0

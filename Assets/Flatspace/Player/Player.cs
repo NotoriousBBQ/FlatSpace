@@ -3,6 +3,7 @@ using Unity.VisualScripting;
 using UnityEngine;
 using FlatSpace.AI;
 using FlatSpace.Game;
+using Flatspace.Objects.Production;
 
 public class Player : MonoBehaviour
 {
@@ -65,6 +66,11 @@ public class Player : MonoBehaviour
 
     }
 
+    public void SetCatalog(SaveLoadSystem.GameSave.CatalogSave catalogSave)
+    {
+        var catalogName = catalogSave.CatalogName;
+        var catalogs = playerAI.GetComponents<Catalog>();
+    }
     public void ProcessResults(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
     {
         if (playerAI && aiDriven)

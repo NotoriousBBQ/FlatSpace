@@ -178,8 +178,8 @@ public class Planet : MonoBehaviour
             Population.Add(new Inhabitant());            
         }
         
-        Food = ProjectedFood = _resourceData._initialFood;
-        Grotsits = ProjectedGrotsits = _resourceData._initialGrotsits;
+        Food = ProjectedFood = _resourceData._baseFoodProduction;
+        Grotsits = ProjectedGrotsits = _resourceData._baseGrotsitsProduction;
         Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
         Type = spawnData._planetType;
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
@@ -432,15 +432,15 @@ public class Planet : MonoBehaviour
             return;
         AssignWorkForStrategy();
         // grow food
-        Food += FoodWorkers * _resourceData._foodProduction * (Morale/100.0f);
+        Food += (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction)) * (Morale/100.0f);
         Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
         // produce grosits
-        Grotsits += GrotsitsWorkers * _resourceData._grotsitProduction * (Morale/100.0f);
+        Grotsits += (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction)) * (Morale/100.0f);
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         // produce industry
-        Industry += IndustryWorkers * _resourceData._industryProduction * (Morale/100.0f);
+        Industry += (_resourceData._industryProduction + (IndustryWorkers * _resourceData._industryProduction)) * (Morale/100.0f);
         // produce research
-        Research += ResearchWorkers * _resourceData._researchProduction * (Morale/100.0f);        
+        Research += (_resourceData._baseResearchProduction + (ResearchWorkers * _resourceData._researchProduction)) * (Morale/100.0f);        
         ConsumeFood(resultList);
         ConsumeGrotsits(resultList);
         ConsumeIndustry(resultList);
@@ -450,7 +450,7 @@ public class Planet : MonoBehaviour
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
     {
-        if (Population.Count <= 0 && Food <= _resourceData._initialFood)
+        if (Population.Count <= 0 && Food <= _resourceData._baseFoodProduction)
             return;
 
         float foodShortage = 0.0f;
@@ -525,7 +525,7 @@ public class Planet : MonoBehaviour
 
     private void SetProjectedWorkers(float projectedPopulation)
     {
-        var projectedFoodGap = Food + (FoodWorkers * _resourceData._foodProduction) - projectedPopulation;
+        var projectedFoodGap = Food + _resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction) - projectedPopulation;
         if (projectedFoodGap >= 0.0f)
         {
             // enough food projected, keep worker allocations
@@ -534,7 +534,7 @@ public class Planet : MonoBehaviour
         }
         else
         {
-            var projectedFoodWorkersFloat =  _resourceData._foodProduction > 0.0f ? 
+            var projectedFoodWorkersFloat =  _resourceData._baseFoodProduction + _resourceData._foodProduction > 0.0f ? 
                 Math.Ceiling((projectedFoodGap / _resourceData._foodProduction))
                 : 0;
             ProjectedFoodWorkers = Math.Clamp(Convert.ToInt32(projectedFoodWorkersFloat), 0, Population.Count); 
@@ -544,7 +544,7 @@ public class Planet : MonoBehaviour
 
     private void ConsumeGrotsits(List<PlanetUpdateResult> resultList)
     {
-        if (Population.Count <= 0 && Grotsits <= _resourceData._initialGrotsits)
+        if (Population.Count <= 0 && Grotsits <= _resourceData._baseGrotsitsProduction)
             return;
 
         var grotsitsShort = 0.0f;
@@ -565,7 +565,7 @@ public class Planet : MonoBehaviour
         // add 1 to population here to allow for growth if possible
         var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
-        ProjectedGrotsits = Math.Clamp(Grotsits + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction), 0.0f, MaxGrotsitsStorage);
+        ProjectedGrotsits = Math.Clamp(Grotsits + _resourceData._baseGrotsitsProduction + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction), 0.0f, MaxGrotsitsStorage);
         var projectedGrotsitsRequirement = GetMaintainenceCost() + projectedPopulation;
         if (ProjectedGrotsits >= projectedGrotsitsRequirement)
         {

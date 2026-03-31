@@ -335,18 +335,19 @@ namespace FlatSpace
                     CompleteReserch(orders);
                     ChooseNewResearch(orders);
                 }
-                Gameboard.Instance.CreateNotificationsForResearch(completedResearchName, currentResearch?.itemName, Player.playerID);
             }
 
             private void CompleteReserch(List<GameAI.GameAIOrder> orders)
             {
                 if (currentResearch == null)
                     return;
+                var completedResearchName = currentResearch.name;
                 currentResearch.researched = true;
                 foreach( var dependantItem in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == currentResearch.itemName))
                 {
                     dependantItem.researched  = true;
                 }
+                Gameboard.Instance.CreateNotificationsForCompletedResearch(completedResearchName, Player.playerID);
 
             }
             private void ChooseNewResearch(List<GameAI.GameAIOrder> orders)
@@ -370,6 +371,7 @@ namespace FlatSpace
                     GameAI.GameAIOrder.OrderType.OrderTypeResearchSet,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                     0, 0, 0f, currentResearch.itemName, currentResearch.itemName));
+                Gameboard.Instance.CreateNotificationsForNewResearch(currentResearch?.itemName, Player.playerID);
             }
 
             /// <summary>

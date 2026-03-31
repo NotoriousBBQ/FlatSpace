@@ -14,11 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlanetResourceData
   _planetType: 0
   _initialPopulation: 2
-  _initialFood: 4
+  _baseFoodProduction: 2
   _foodProduction: 3
-  _initialGrotsits: 50
-  _grotsitProduction: 2
+  _baseGrotsitsProduction: 2
+  _grotsitProduction: 3
+  _baseResearchProduction: 2
   _researchProduction: 3
+  _baseIndustrialProduction: 2
   _industryProduction: 3
   _maxPopulation: 15
   _initialStrategy: 1

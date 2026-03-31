@@ -81,6 +81,25 @@ public class SaveLoadSystem : MonoBehaviour
         {
             public int playerId;
             public PlayerAI.AIStrategy strategy;
+            public CatalogSave researchCatalogSave;
+            public CatalogSave productionCatalogSave;        
+        }
+
+        [Serializable]
+        public struct CatalogSave
+        {
+            public string CatalogName;
+            public List<string> Completed;
+
+            public CatalogSave(Catalog catalog)
+            {
+                CatalogName = catalog.CatalogName;
+                Completed = new List<string>();   
+                foreach(var catalogItem in catalog.catalogItems.FindAll(x => x.researched))
+                {
+                    Completed.Add(catalogItem.itemName);
+                }
+            }
         }
         
         public int turnNumber;
@@ -101,7 +120,9 @@ public class SaveLoadSystem : MonoBehaviour
                     new PlayerSave
                     { 
                         playerId = i,
-                        strategy = Gameboard.Instance.players[i].GetStrategy()    
+                        strategy = Gameboard.Instance.players[i].GetStrategy(),
+                        researchCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
+                        productionCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
                     });
             }
             
@@ -157,6 +178,7 @@ public class SaveLoadSystem : MonoBehaviour
                         playerId = order.PlayerId
                     });
             }
+
         }
     }
     private static void SaveGame(GameAI gameAI, string filePath)
