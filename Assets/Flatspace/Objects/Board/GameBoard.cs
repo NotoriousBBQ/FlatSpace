@@ -445,7 +445,7 @@ namespace FlatSpace
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
                 _mainScreenUIController?.SetNotifications(_playerNotifications);
-                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, 0 );
+                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, players[owningPlayerId].playerAI?.currentResearch.itemName ?? "", 0 );
             }
 
             private bool _timedUpdateRunning = false;

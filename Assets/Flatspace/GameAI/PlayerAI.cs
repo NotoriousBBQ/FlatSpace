@@ -6,6 +6,7 @@ using FlatSpace.Game;
 using Flatspace.Objects.Production;
 using Unity.VisualScripting;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 namespace FlatSpace
 {
@@ -281,7 +282,7 @@ namespace FlatSpace
             // ── Research ─────────────────────────────────────────────────────
 
             public float       researchTotal   = 0.0f;
-            private CatalogItem currentResearch = null;
+            public CatalogItem currentResearch = null;
 
             // Lower multiplier = higher preference. 1.0f = neutral (cost only).
             // Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
@@ -291,9 +292,12 @@ namespace FlatSpace
                     {
                         AIStrategy.AIStrategyExpand, new Dictionary<string, float>
                         {
-                            { "Planetary Improvement", 0.5f },  // expansion favours planet upgrades
-                            { "Ship Type",             0.8f },  // ships useful but secondary
-                            { "Ship Improvement",      1.2f },  // least useful while expanding
+                            { "Food",          0.7f },  // food upgrades biggest boost
+                            { "Industry",      0.8f },  // least useful while expanding
+                            { "Grotsits",      1.1f },  // least useful while expanding
+                            { "Research",      1.1f },  // least useful while expanding
+                            { "Colony Ship",   0.8f },  // ships useful but secondary
+                            { "Warship",       1.3f },  // least useful while expanding
                         }
                     },
                     // AIStrategyConsolidate — add when needed
@@ -323,7 +327,6 @@ namespace FlatSpace
 
             private void UpdateResearch(float researchThisTurn, List<GameAI.GameAIOrder> orders)
             {
-                var completedResearchName = currentResearch?.name; 
                 researchTotal += researchThisTurn;
                 if (currentResearch == null)
                 {
@@ -366,6 +369,10 @@ namespace FlatSpace
                 if (actions.Count == 0) return;
 
                 currentResearch = actions[0].ChosenItem;
+                if (Player.playerID == 0)
+                {
+                    Debug.Log("Turn: " + Gameboard.Instance.TurnNumber + "New Research: " + currentResearch.name);
+                }
 
                 orders.Add(MakeOrder(
                     GameAI.GameAIOrder.OrderType.OrderTypeResearchSet,
@@ -403,9 +410,9 @@ namespace FlatSpace
             private static float  GetResearchPriority(CatalogItem item, AIStrategy strategy)
             {
                 if (ResearchPriorityTable.TryGetValue(strategy, out var typeWeights) &&
-                    typeWeights.TryGetValue(item.type, out var multiplier))
+                    typeWeights.TryGetValue(item.subType, out var multiplier))
                 {
-                    return item.cost * multiplier;
+                    return item.cost * multiplier * Random.Range(0.9f, 1.1f);
                 }
 
                 return item.cost;  // fallback: cost only, no strategy preference

@@ -16,6 +16,7 @@ namespace Game.UI.MainGameScreenUI
         // Status bar labels
         private Label _turnLabel;
         private Label _researchLabel;
+        private Label _currentResearchLabel;
         private Label _grotsitsLabel;
 
         void OnEnable()
@@ -25,6 +26,7 @@ namespace Game.UI.MainGameScreenUI
             // Bind status bar labels
             _turnLabel     = root.Q<Label>("TurnLabel");
             _researchLabel = root.Q<Label>("ResearchLabel");
+            _currentResearchLabel = root.Q<Label>("CurrentResearchLabel");
             _grotsitsLabel = root.Q<Label>("GrotsitsLabel");
 
             _notificationListController = GetComponent<NotificationListController>();
@@ -49,10 +51,11 @@ namespace Game.UI.MainGameScreenUI
         /// <summary>
         /// Call this each turn to update the status bar display.
         /// </summary>
-        public void SetStatus(int turn, float research, float grotsits)
+        public void SetStatus(int turn, float research, string currentResearch, float grotsits)
         {
             if (_turnLabel     != null) _turnLabel.text     = $"Turn: {turn}";
             if (_researchLabel != null) _researchLabel.text = $"Research: {research:0.#}";
+            if (_currentResearchLabel != null) _currentResearchLabel.text = string.IsNullOrEmpty(currentResearch) ? "None" : currentResearch;  
             if (_grotsitsLabel != null) _grotsitsLabel.text = $"Grotsits: {grotsits:0.#}";
         }
     }

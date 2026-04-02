@@ -112,9 +112,6 @@ public class ScoreMatrix : ScoreMatrix<ScoreMatrix.ScoreMatrixElement, ScoreMatr
         float  IScoreMatrixAction.Cost   => Cost;
     }
 
-    public static int DefaultCompare(ScoreMatrixElement x, ScoreMatrixElement y)
-        => (x.Cost - x.Surplus).CompareTo(y.Cost - y.Surplus);
-
     /// <summary>
     /// Convenience overload — preserves the original call signature.
     /// </summary>

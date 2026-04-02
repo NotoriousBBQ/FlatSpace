@@ -45,6 +45,7 @@ namespace Flatspace.Objects.Production
                 public string itemName;
                 public string description;
                 public string type;
+                public string subType;
                 public float cost;
                 public string effect;
                 public string requiredTech;
@@ -55,6 +56,7 @@ namespace Flatspace.Objects.Production
                     itemName = item.name;
                     description = item.description;
                     type = item.type;
+                    subType = item.subType;
                     cost = item.cost;
                     effect = item.effect;
                     requiredTech = item.requiredTech;
@@ -122,6 +124,7 @@ namespace Flatspace.Objects.Production
                 catalogItem.itemName = itemData.itemName;
                 catalogItem.description = itemData.description;
                 catalogItem.type = itemData.type;
+                catalogItem.subType = itemData.subType;
                 catalogItem.cost = itemData.cost;
                 catalogItem.effect = itemData.effect;
                 catalogItem.requiredTech = itemData.requiredTech;

@@ -10,6 +10,8 @@ namespace Flatspace.Objects.Production
         public string itemName;
         public string description;
         public string type;
+        public string subType;
+        public int tier;
         public float cost;
         public string effect;
         public string requiredTech;
