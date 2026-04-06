@@ -7,7 +7,7 @@ namespace Flatspace.Objects.Resource
 // ── Resource element ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ScoreMatrixChoiceElement for Resource choices.
+    /// ResourceChoiceElement for Resource choices.
     /// Cost comes from the 
     /// 
     /// </summary>
@@ -22,6 +22,17 @@ namespace Flatspace.Objects.Resource
         public float Cost { get; set; }    
         public float Surplus => Convert.ToSingle(SurplusResult.Data);
         public float Shortage => Convert.ToSingle(ShortageResult.Data);
+
+        // IEquatable
+        
+        // Resource distribution only cares about source
+        public bool Equals(IScoreMatrixChoiceElement other)
+            => other is ResourceChoiceElement s
+               && s.Source == Source;
+        public static bool operator ==(ResourceChoiceElement a, ResourceChoiceElement b) => a.Equals(b);
+        public static bool operator !=(ResourceChoiceElement a, ResourceChoiceElement b) => !a.Equals(b);
+        public override bool Equals(object obj) => obj is IScoreMatrixChoiceElement s && Equals(s);
+        public override int GetHashCode() => Source.GetHashCode();
     }
 
 // ── Research action ───────────────────────────────────────────────────────────
