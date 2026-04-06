@@ -88,14 +88,12 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
         Comparison<TScoreMatrixChoiceElement>            ChoiceCompare = null)
     {
         ChoiceCompare = ChoiceCompare ?? DefaultChoiceCompare;
-        
-        var remaining = MatrixElements;
-/*            .ToDictionary(
+
+        var remaining = MatrixElements
+            .ToDictionary(
             kvp => kvp.Key,
             kvp => new List<TScoreMatrixChoiceElement>(kvp.Value));
-  */      
-        // specify sort value here for specific TElement
-    //    remaining.OrderBy(x =>);
+        
 
         var actionList = new List<TAction>();
         if (remaining.Count <= 0)
@@ -119,7 +117,9 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
             var (bestOrigin, bestElement) = roundBest[0];
             actionList.Add(actionFactory(bestOrigin, bestElement));
 
-            remaining.Remove(bestOrigin);
+            var removed = remaining.Remove(bestOrigin);
+            if(!removed)
+                Debug.Log("Not Removed remaining key is " + bestOrigin);
             foreach (var list in remaining.Values)
                 list.RemoveAll(e => e.Target == bestElement.Target);
 
