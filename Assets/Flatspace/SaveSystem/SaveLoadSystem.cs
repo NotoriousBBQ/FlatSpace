@@ -82,7 +82,9 @@ public class SaveLoadSystem : MonoBehaviour
             public int playerId;
             public PlayerAI.AIStrategy strategy;
             public CatalogSave researchCatalogSave;
-            public CatalogSave productionCatalogSave;        
+            public CatalogSave productionCatalogSave;
+            public string currentResearchItem;
+            public float currentResearch;
         }
 
         [Serializable]
@@ -123,6 +125,8 @@ public class SaveLoadSystem : MonoBehaviour
                         strategy = Gameboard.Instance.players[i].GetStrategy(),
                         researchCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
                         productionCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
+                        currentResearchItem = Gameboard.Instance.players[i].playerAI.currentResearch.itemName,
+                        currentResearch = Gameboard.Instance.players[i].playerAI.researchTotal
                     });
             }
             
@@ -403,14 +407,25 @@ public class SaveLoadSystem : MonoBehaviour
     }
     private static void ShowLoadGameFileBrowserAndStartGame()
     {
+#if UNITY_EDITOR
+        var savePath = Path.Combine(Application.dataPath, "Flatspace/GameSaves");
+#else
+        var savePath = Path.Combine(Application.persistentDataPath, "GameSaves");
+#endif
+
         FileBrowser.ShowLoadDialog((paths) => LoadSavedGame(paths[0]), 
-            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+            ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, savePath);
     }
     
     private static void ShowSaveGameFileBrowser()
     {
+#if UNITY_EDITOR
+        var savePath = Path.Combine(Application.dataPath, "Flatspace/GameSaves");
+#else
+        var savePath = Path.Combine(Application.persistentDataPath, "GameSaves");
+#endif
         FileBrowser.ShowSaveDialog((paths) => SaveGame(Gameboard.Instance.GameAI, paths[0]), 
-            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\Temp\");
+            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, savePath.ToString());
     }
 
     public static void SaveBoardDesign(BoardDesigner designer)
@@ -432,17 +447,28 @@ public class SaveLoadSystem : MonoBehaviour
    
     private static void ShowConfigFileBrowserAndStartNewGame()
     {
+#if UNITY_EDITOR
+        var configPath = Path.Combine(Application.dataPath, "Flatspace/BoardConfigs");
+#else
+        var configPath = Path.Combine(Application.persistentDataPath, "BoardConfigs");
+#endif
+
         FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
             ()=> LoadGameScene("Flatspace",(scene, sceneMode) =>
             {
                 SceneManager.SetActiveScene(scene);
-            }), FileBrowser.PickMode.Files, false, @"C:\BoardConfig\");
+            }), FileBrowser.PickMode.Files, false, configPath);
     }
     
     private static void ShowSaveGameConfigFileBrowser(BoardDesignerSave saveData)
     {
+#if UNITY_EDITOR
+        var configPath = Path.Combine(Application.dataPath, "Flatspace/BoardConfigs");
+#else
+        var configPath = Path.Combine(Application.persistentDataPath, "BoardConfigs");
+#endif
         FileBrowser.ShowSaveDialog((paths) => SaveDesignerConfig(saveData, paths[0]), 
-            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @"C:\BoardConfig\");
+            ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, configPath);
     }
     #endregion
 }

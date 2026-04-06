@@ -147,8 +147,12 @@ namespace FlatSpace
                 {
                     players[playerSave.playerId].SetStrategy(playerSave.strategy);
                     players[playerSave.playerId].SetCatalog(playerSave.researchCatalogSave);
-                    players[playerSave.playerId].SetCatalog(playerSave.researchCatalogSave);
-                    
+                    players[playerSave.playerId].SetCatalog(playerSave.productionCatalogSave);
+                    players[playerSave.playerId].playerAI.researchTotal = playerSave.currentResearch;
+                    players[playerSave.playerId].playerAI.currentResearch =
+                        players[playerSave.playerId].playerAI.ResearchCatalog.catalogItems
+                            .Find(x => x.itemName == playerSave.currentResearchItem);
+
                 }
                 GameAI.SetSimulationStats(gameSave);
             }
