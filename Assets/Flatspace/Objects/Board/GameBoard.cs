@@ -146,8 +146,8 @@ namespace FlatSpace
                 foreach (var playerSave in gameSave.players)
                 {
                     players[playerSave.playerId].SetStrategy(playerSave.strategy);
-                    players[playerSave.playerId].SetCatalog(playerSave.researchCatalogSave);
-                    players[playerSave.playerId].SetCatalog(playerSave.productionCatalogSave);
+                    players[playerSave.playerId].SetSavedCatalogCompleted(playerSave.researchCatalogSave);
+                    players[playerSave.playerId].SetSavedCatalogCompleted(playerSave.productionCatalogSave);
                     players[playerSave.playerId].playerAI.researchTotal = playerSave.currentResearch;
                     players[playerSave.playerId].playerAI.currentResearch =
                         players[playerSave.playerId].playerAI.ResearchCatalog.catalogItems

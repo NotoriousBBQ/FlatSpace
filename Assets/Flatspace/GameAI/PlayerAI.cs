@@ -529,7 +529,7 @@ namespace FlatSpace
 
             // ── MonoBehaviour ────────────────────────────────────────────────
 
-            void Start()
+            void Awake()
             {
                 ProductionCatalog = this.AddComponent<Catalog>();
                 ProductionCatalog.CatalogName = "Production Catalog";

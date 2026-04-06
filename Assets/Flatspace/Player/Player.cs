@@ -66,10 +66,13 @@ public class Player : MonoBehaviour
 
     }
 
-    public void SetCatalog(SaveLoadSystem.GameSave.CatalogSave catalogSave)
+    public void SetSavedCatalogCompleted(SaveLoadSystem.GameSave.CatalogSave catalogSave)
     {
-        var catalogName = catalogSave.CatalogName;
-        var catalogs = playerAI.GetComponents<Catalog>();
+        var catalog = catalogSave.CatalogName == "ResearchCatalog" ? playerAI.ResearchCatalog : playerAI.ProductionCatalog;
+        foreach (var item in catalog.catalogItems.FindAll(x => catalogSave.Completed.Contains(x.itemName)))
+        {
+            item.researched = true;
+        }
     }
     public void ProcessResults(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
     {

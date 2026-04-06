@@ -124,7 +124,7 @@ public class SaveLoadSystem : MonoBehaviour
                         playerId = i,
                         strategy = Gameboard.Instance.players[i].GetStrategy(),
                         researchCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
-                        productionCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
+                        productionCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ProductionCatalog),
                         currentResearchItem = Gameboard.Instance.players[i].playerAI.currentResearch.itemName,
                         currentResearch = Gameboard.Instance.players[i].playerAI.researchTotal
                     });
