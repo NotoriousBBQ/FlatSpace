@@ -488,12 +488,12 @@ public class Planet : MonoBehaviour
                 if (Population.Count >= MaxPopulation)
                     resultList.Add(new PlanetUpdateResult(PlanetName,
                         ResultType.PlanetUpdateResultTypePopulationSurplus,
-                        Population.Count - _resourceData._maxPopulation));
+                        Population.Count - _resourceData._maxPopulation, playerID));
             }
             else if (Population.Count >= MaxPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypePopulationMax, 1));
+                    ResultType.PlanetUpdateResultTypePopulationMax, 1, Owner));
             }
         }
 
@@ -507,7 +507,7 @@ public class Planet : MonoBehaviour
             if (Food > projectedPopulation)
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypeFoodSurplus, Food - projectedPopulation));
+                    ResultType.PlanetUpdateResultTypeFoodSurplus, Food - projectedPopulation, Owner));
             }
         }
         else if (ProjectedFood < projectedPopulation)
@@ -519,7 +519,7 @@ public class Planet : MonoBehaviour
         if (foodShortage < 0.0f)
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeFoodShortage,
-                foodShortage));
+                foodShortage, Owner));
         }
     }
 
@@ -574,7 +574,7 @@ public class Planet : MonoBehaviour
             {
                 resultList.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypeGrotsitsSurplus,
-                    Math.Clamp(Grotsits - projectedGrotsitsRequirement, 0, Grotsits)));
+                    Math.Clamp(Grotsits - projectedGrotsitsRequirement, 0, Grotsits), Owner));
             }
 
         }
@@ -586,7 +586,7 @@ public class Planet : MonoBehaviour
         if (grotsitsShort < 0.0f)
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage,
-                grotsitsShort));
+                grotsitsShort, Owner));
         }
     }
 
@@ -597,7 +597,7 @@ public class Planet : MonoBehaviour
         if (Industry >= 0.0f)
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeIndustrySurplus,
-                Industry));
+                Industry, Owner));
         }
     }
 
@@ -605,7 +605,7 @@ public class Planet : MonoBehaviour
     {
         if (Research > 0)
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduced,
-                Research));
+                Research, Owner));
     }
 
     // returns the player id of the population change
@@ -739,7 +739,7 @@ public class Planet : MonoBehaviour
         else
         {
             resultList.Add(new PlanetUpdateResult(PlanetName,
-                ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName));
+                ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
         }
     }
 
@@ -758,7 +758,7 @@ public class Planet : MonoBehaviour
     {
         StageCompletedProductionItem(resultList);
         resultList.Add(new PlanetUpdateResult(PlanetName,
-            ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName));
+            ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
         var excessIndustry = CurrentProduction?.Item.cost - CurrentProduction?.Progress;
         Industry -= excessIndustry ?? 0.0f;
         CurrentProduction = null;

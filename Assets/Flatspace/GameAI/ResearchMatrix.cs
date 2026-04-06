@@ -4,16 +4,16 @@ using Flatspace.Objects.Production;
 // ── Research element ─────────────────────────────────────────────────────────
 
 /// <summary>
-/// ScoreMatrixElement for research choices.
+/// ScoreMatrixChoiceElement for research choices.
 /// Cost comes from the CatalogItem; Priority is set by the caller
 /// based on AIStrategy and item type — lower = more preferred.
 /// </summary>
-public struct ResearchElement : IScoreMatrixElement
+public struct ResearchChoiceElement : IScoreMatrixChoiceElement
 {
     public CatalogItem Item     { get; set; }
     public float       Priority { get; set; }
 
-    // IScoreMatrixElement
+    // IScoreMatrixChoiceElement
     public string Target   => Item.itemName;
     public float  Cost     => Item.cost;
     public float  Surplus  => 0f;   // not used for research

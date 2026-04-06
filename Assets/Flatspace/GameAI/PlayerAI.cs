@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FlatSpace.Game;
 using Flatspace.Objects.Production;
+using Flatspace.Objects.Resource;
 using Unity.VisualScripting;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -105,7 +106,6 @@ namespace FlatSpace
                 if (planet.Population.Count >= planet.MaxPopulation)        return false;
                 return planet.PlayerWithMostPopulation() != Player.playerID;
             }
-
             private void ProcessColonizers(
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
@@ -116,7 +116,9 @@ namespace FlatSpace
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
                 if (targets.Count == 0) return;
 
-                var matrix = new ScoreMatrix();
+                var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
+                    (new ScoreMatrixDecisionComparer());
+                int colonizerIndex = 0;
                 foreach (var colonizer in colonizers)
                 {
                     var pathMap = AIMap.GetPlanet(colonizer.Name).DistanceMapToPathingList;
@@ -124,7 +126,7 @@ namespace FlatSpace
                         .Where(t => pathMap.ContainsKey(t.PlanetName)
                                  && pathMap[t.PlanetName].NumNodes
                                         <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
-                        .Select(t => new ScoreMatrix.ScoreMatrixElement
+                        .Select(t => new ScoreMatrixChoiceElement
                         {
                             Surplus  = 1.0f,
                             Target   = t.PlanetName,
@@ -134,10 +136,25 @@ namespace FlatSpace
                         .ToList();
 
                     if (entries.Count > 0)
-                        matrix.MatrixElements.Add(colonizer.Name, entries);
+                    {
+                        
+                            matrix.MatrixElements.Add(
+                                new ScoreMatrixDecisionElement
+                                {
+                                    Target = colonizer.Name,
+                                    Priority = 0f
+                                }, entries);
+                        colonizerIndex++;
+                    }
                 }
 
-                foreach (var action in matrix.GenerateActionList())
+                foreach (var action in matrix.GenerateActionList(
+                             actionFactory: (origin, element) => new ScoreMatrixAction
+                             {
+                                 Origin = origin.Target,
+                                 Target = element.Target,
+                                 Cost = element.Cost
+                             }, null))
                 {
                     var amount = Convert.ToInt32(
                         colonizers.Find(x => x.Name == action.Origin).Data);
@@ -172,8 +189,11 @@ namespace FlatSpace
 
                 if (matrix == null) return;
 
-                foreach (var action in matrix.GenerateActionList())
-                    EmitResourceOrders(action, surplusResults,
+                foreach (var action in matrix.GenerateActionList(
+                             actionFactory: (origin, element) => new ResourceAction {ChosenChoiceElement = element},
+                             ChoiceCompare:       null)
+                             )
+                EmitResourceOrders(action, surplusResults,
                         GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
                         GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
                         GameAI.GameAIOrder.OrderType.OrderTypeFoodTransportInProgress,
@@ -194,7 +214,9 @@ namespace FlatSpace
 
                 if (matrix == null) return;
 
-                foreach (var action in matrix.GenerateActionList())
+                foreach (var action in matrix.GenerateActionList(
+                             actionFactory: (origin, element) => new ResourceAction {ChosenChoiceElement = element},
+                             ChoiceCompare:       null))
                     EmitResourceOrders(action, surplusResults,
                         GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
                         GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsChange,
@@ -206,7 +228,7 @@ namespace FlatSpace
             /// Shared matrix-building logic for any surplus→shortage resource.
             /// Returns null if there is nothing to do.
             /// </summary>
-            private ScoreMatrix BuildResourceMatrix(
+            private ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction> BuildResourceMatrix(
                 List<Planet.PlanetUpdateResult>                  results,
                 Planet.PlanetUpdateResult.PlanetUpdateResultType shortageType,
                 Planet.PlanetUpdateResult.PlanetUpdateResultType surplusType,
@@ -215,31 +237,37 @@ namespace FlatSpace
             {
                 surplusResults = null;
 
-                var shortages = results.FindAll(x => x.Result == shortageType);
+                var shortages = results.FindAll(x => x.Result == shortageType && !incomingCheck(x.Name));
                 if (shortages.Count == 0) return null;
 
                 surplusResults = results.FindAll(x => x.Result == surplusType);
                 if (surplusResults.Count == 0) return null;
 
-                var matrix = new ScoreMatrix();
-                foreach (var surplus in surplusResults)
+                var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
+                    (new ScoreMatrixDecisionComparer());
+
+                foreach (var shortage in shortages)
                 {
-                    var pathMap = AIMap.GetPlanet(surplus.Name).DistanceMapToPathingList;
-                    var entries = shortages
-                        .Where(s => !incomingCheck(s.Name)
-                                 && pathMap[s.Name].NumNodes
-                                        <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
-                        .Select(s => new ScoreMatrix.ScoreMatrixElement
+                    var pathMap = AIMap.GetPlanet(shortage.Name).DistanceMapToPathingList;
+                    var entries = surplusResults
+                        .Where(s => pathMap[s.Name].NumNodes
+                                    <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                        .Select(s => new ResourceChoiceElement
                         {
-                            Surplus  = (float)surplus.Data,
-                            Target   = s.Name,
-                            Cost     = pathMap[s.Name].Cost,
-                            Shortage = (float)s.Data,
+                            SurplusResult = s,
+                            ShortageResult = shortage,
+                            Cost =  pathMap[s.Name].Cost
                         })
                         .ToList();
 
                     if (entries.Count > 0)
-                        matrix.MatrixElements.Add(surplus.Name, entries);
+                        matrix.MatrixElements.Add( 
+                            new ScoreMatrixDecisionElement
+                            {
+                                Target =  shortage.Name,
+                                Priority = Convert.ToSingle(shortage.Data),
+                            },
+                            entries);
                 }
 
                 return matrix;
@@ -250,7 +278,7 @@ namespace FlatSpace
             /// for a resource shipment action.
             /// </summary>
             private void EmitResourceOrders(
-                ScoreMatrix.Action              action,
+                ResourceAction              action,
                 List<Planet.PlanetUpdateResult> surplusResults,
                 GameAI.GameAIOrder.OrderType    transportType,
                 GameAI.GameAIOrder.OrderType    changeType,
@@ -364,7 +392,7 @@ namespace FlatSpace
 
                 var actions = matrix.GenerateActionList(
                     actionFactory: (origin, element) => new ResearchAction { ChosenItem = element.Item },
-                    compare:       ResearchCompare);
+                    ChoiceCompare:       ResearchCompare);
 
                 if (actions.Count == 0) return;
 
@@ -385,20 +413,25 @@ namespace FlatSpace
             /// Builds a one-row choice matrix: a single "AI" origin mapped to all
             /// available research choices, scored by cost and strategy priority.
             /// </summary>
-            private ScoreMatrix<ResearchElement, ResearchAction> BuildChoiceMatrix(
+            private ScoreMatrix<ScoreMatrixDecisionElement, ResearchChoiceElement, ResearchAction> BuildChoiceMatrix(
                 List<CatalogItem> choices,
                 AIStrategy        strategy)
             {
                 if (choices.Count == 0) return null;
 
-                var matrix  = new ScoreMatrix<ResearchElement, ResearchAction>();
-                var entries = choices.Select(item => new ResearchElement
+                var matrix  = new ScoreMatrix<ScoreMatrixDecisionElement, ResearchChoiceElement, ResearchAction>
+                    (new ScoreMatrixDecisionComparer());
+                var entries = choices.Select(item => new ResearchChoiceElement
                 {
                     Item     = item,
                     Priority = GetResearchPriority(item, strategy),
                 }).ToList();
 
-                matrix.MatrixElements.Add("AI", entries);
+                matrix.MatrixElements.Add(new ScoreMatrixDecisionElement
+                {
+                    Target = "Research",
+                    Priority = 0f
+                }, entries);
                 return matrix;
             }
 
@@ -422,7 +455,7 @@ namespace FlatSpace
             /// Compare for research elements: lowest Priority score wins.
             /// Priority already folds in cost and strategy weighting.
             /// </summary>
-            private static int ResearchCompare(ResearchElement x, ResearchElement y)
+            private static int ResearchCompare(ResearchChoiceElement x, ResearchChoiceElement y)
                 => x.Priority.CompareTo(y.Priority);
 
             // ── Industry ─────────────────────────────────────────────────────
@@ -454,7 +487,7 @@ namespace FlatSpace
                     var surplusPathMap = sourcePlanet.DistanceMapToPathingList;
                     foreach (var hubPlanet in productionHubList)
                     {
-                        validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixElement
+                        validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixChoiceElement
                         {
                             Surplus = (float)surplusProducer.Data,
                             Target = hubPlanet.PlanetName,

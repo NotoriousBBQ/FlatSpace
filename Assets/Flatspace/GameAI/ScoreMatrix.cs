@@ -6,7 +6,12 @@ using UnityEngine;
 
 // ── Interfaces ───────────────────────────────────────────────────────────────
 
-public interface IScoreMatrixElement
+public interface IScoreMatrixDecisionElement
+{
+    string Target { get; }
+    float Priority { get; }
+}
+public interface IScoreMatrixChoiceElement
 {
     string Target   { get; }
     float  Cost     { get; }
@@ -22,35 +27,84 @@ public interface IScoreMatrixAction
 }
 
 // ── Generic ScoreMatrix ──────────────────────────────────────────────────────
+public class ScoreMatrixDecisionComparer : IComparer<ScoreMatrixDecisionElement>
+{
+    public int Compare(ScoreMatrixDecisionElement x, ScoreMatrixDecisionElement y)
+    {
+        return (x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority).CompareTo(x.Priority);
+    }
+                
+}
 
-public class ScoreMatrix<TElement, TAction>
-    where TElement : IScoreMatrixElement
+public struct ScoreMatrixDecisionElement : IScoreMatrixDecisionElement
+{
+    public string Target { get; set; }
+    public float Priority { get; set; }
+    
+    string IScoreMatrixDecisionElement.Target => Target;
+    float IScoreMatrixDecisionElement.Priority => Priority;
+}
+public struct ScoreMatrixChoiceElement : IScoreMatrixChoiceElement
+{
+    public float  Surplus;
+    public string Target;
+    public float  Shortage;
+    public float  Cost;
+
+    // Interface implementation — fields exposed as properties
+    string IScoreMatrixChoiceElement.Target   => Target;
+    float  IScoreMatrixChoiceElement.Cost     => Cost;
+    float  IScoreMatrixChoiceElement.Surplus  => Surplus;
+    float  IScoreMatrixChoiceElement.Shortage => Shortage;
+}
+
+public struct ScoreMatrixAction : IScoreMatrixAction
+{
+    public string Origin {get; set;}
+    public string Target {get; set;}
+    public float Cost {get; set;}
+
+    string IScoreMatrixAction.Origin => Origin;
+    string IScoreMatrixAction.Target => Target;
+    float IScoreMatrixAction.Cost => Cost;
+}
+
+public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement, TAction>
+    where  TScoreMatrixDecisionElement : IScoreMatrixDecisionElement
+    where TScoreMatrixChoiceElement : IScoreMatrixChoiceElement
     where TAction  : IScoreMatrixAction
 {
-    public Dictionary<string, List<TElement>> MatrixElements
-        = new Dictionary<string, List<TElement>>();
+    public ScoreMatrix(IComparer<TScoreMatrixDecisionElement> comparer )
+    {
+        MatrixElements = new SortedDictionary<TScoreMatrixDecisionElement, List<TScoreMatrixChoiceElement>>(comparer);
+    }
+    public SortedDictionary<TScoreMatrixDecisionElement, List<TScoreMatrixChoiceElement>> MatrixElements;
 
-    public static int DefaultCompare(TElement x, TElement y)
+    private static int DefaultChoiceCompare(TScoreMatrixChoiceElement x, TScoreMatrixChoiceElement y)
         => (x.Cost - x.Surplus).CompareTo(y.Cost - y.Surplus);
 
-    public List<TAction> GenerateActionList(
-        Func<string, TElement, TAction> actionFactory,
-        Comparison<TElement>            compare = null)
+    public List<TAction>  GenerateActionList(
+        Func<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement, TAction> actionFactory,
+        Comparison<TScoreMatrixChoiceElement>            ChoiceCompare = null)
     {
-        compare = compare ?? DefaultCompare;
-
-        var remaining = MatrixElements.ToDictionary(
+        ChoiceCompare = ChoiceCompare ?? DefaultChoiceCompare;
+        
+        var remaining = MatrixElements;
+/*            .ToDictionary(
             kvp => kvp.Key,
-            kvp => new List<TElement>(kvp.Value));
+            kvp => new List<TScoreMatrixChoiceElement>(kvp.Value));
+  */      
+        // specify sort value here for specific TElement
+    //    remaining.OrderBy(x =>);
 
         var actionList = new List<TAction>();
         if (remaining.Count <= 0)
             return actionList;
 
         foreach (var list in remaining.Values)
-            list.Sort(compare);
+            list.Sort(ChoiceCompare);
 
-        var roundBest = new List<(string OriginKey, TElement Element)>();
+        var roundBest = new List<(TScoreMatrixDecisionElement OriginKey, TScoreMatrixChoiceElement Element)>();
 
         while (remaining.Count > 0 && remaining.Values.First().Count > 0)
         {
@@ -60,7 +114,7 @@ public class ScoreMatrix<TElement, TAction>
                 roundBest.Add((kvp.Key, kvp.Value[0]));
             }
 
-            roundBest.Sort((a, b) => compare(a.Element, b.Element));
+            roundBest.Sort((a, b) => ChoiceCompare(a.Element, b.Element));
 
             var (bestOrigin, bestElement) = roundBest[0];
             actionList.Add(actionFactory(bestOrigin, bestElement));
@@ -72,56 +126,21 @@ public class ScoreMatrix<TElement, TAction>
             // Prune origins that have no remaining candidates — matches your version
             var keyList = remaining.Keys.ToList();
             foreach (var key in keyList)
-                if (remaining[key].Count <= 0)
-                    remaining.Remove(key);
+            {
+                if (remaining.TryGetValue(key, out var keyValueList))
+                {
+                    if (keyValueList.Count <= 0)
+                        remaining.Remove(key);
+                }
+                else
+                {
+                    remaining.Remove(key);                    
+                }
+            }
 
             roundBest.Clear();
         }
 
         return actionList;
     }
-}
-
-// ── Concrete resource matrix (existing callers unchanged) ────────────────────
-
-public class ScoreMatrix : ScoreMatrix<ScoreMatrix.ScoreMatrixElement, ScoreMatrix.Action>
-{
-    public struct ScoreMatrixElement : IScoreMatrixElement
-    {
-        public float  Surplus;
-        public string Target;
-        public float  Shortage;
-        public float  Cost;
-
-        // Interface implementation — fields exposed as properties
-        string IScoreMatrixElement.Target   => Target;
-        float  IScoreMatrixElement.Cost     => Cost;
-        float  IScoreMatrixElement.Surplus  => Surplus;
-        float  IScoreMatrixElement.Shortage => Shortage;
-    }
-
-    public struct Action : IScoreMatrixAction
-    {
-        public string Origin;
-        public string Target;
-        public float  Cost;
-
-        // Interface implementation
-        string IScoreMatrixAction.Origin => Origin;
-        string IScoreMatrixAction.Target => Target;
-        float  IScoreMatrixAction.Cost   => Cost;
-    }
-
-    /// <summary>
-    /// Convenience overload — preserves the original call signature.
-    /// </summary>
-    public List<Action> GenerateActionList(Comparison<ScoreMatrixElement> compare = null)
-        => GenerateActionList(
-            (origin, element) => new Action
-            {
-                Origin = origin,
-                Target = element.Target,
-                Cost   = element.Cost,
-            },
-            compare);
 }

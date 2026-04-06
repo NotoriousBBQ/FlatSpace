@@ -14,6 +14,13 @@ public class LineDrawObject : MonoBehaviour
         lineRenderer.SetPosition(1, points.Item2);
         if (spriteRenderer)
         {
+        var position = points.Item1 + ((points.Item2 - points.Item1) * progressAmount);
+            if (float.IsNaN(position.x) || float.IsNaN(position.y) || float.IsNaN(position.z)
+                || float.IsInfinity(position.x) || float.IsInfinity(position.y))
+            {
+                Console.WriteLine("Caught");
+                
+            }
             spriteRenderer.transform.localPosition = points.Item1 + ((points.Item2 - points.Item1) * progressAmount);
             float angle = Vector2.SignedAngle(Vector2.up, points.Item2 - points.Item1);
             spriteRenderer.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
