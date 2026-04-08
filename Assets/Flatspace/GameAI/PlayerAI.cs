@@ -64,24 +64,6 @@ namespace FlatSpace
                 ProcessIndustry(results, orders);
             }
 
-            // ── Production complete ───────────────────────────────────────────
-
-            private void ProcessProductionComplete(
-                List<Planet.PlanetUpdateResult> results,
-                List<GameAI.GameAIOrder>        orders)
-            {
-                var productionCompleteResults = results.FindAll(x =>
-                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
-                        .PlanetUpdateResultTypeIndustryProductionComplete);
-                if (productionCompleteResults.Count > 0)
-                    return;
-
-                foreach (var productionCompleteResult in productionCompleteResults)
-                {
-                    // TODO
-                }
-            }
-
             // ── Colonization ─────────────────────────────────────────────────
 
             private bool IsValidColonizerForResult(Planet.PlanetUpdateResult result)
@@ -464,8 +446,28 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                // TODO: PlanetUpdateResultTypeIndustryProductionComplete — select new production
+                UpdatePlanetaryProduction(results, orders);
                 // TODO: PlanetUpdateResultTypeIndustrySurplus — ship industry
+            }
+
+            /// <summary>
+            /// Chooses new production item if production is complete, 
+            /// or if the production queue is empty
+            /// </summary>
+            private void UpdatePlanetaryProduction(
+                List<Planet.PlanetUpdateResult> results,
+                List<GameAI.GameAIOrder>        orders)
+            {
+                var productionCompleteResults = results.FindAll(x =>
+                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
+                        .PlanetUpdateResultTypeIndustryProductionComplete);
+                if (productionCompleteResults.Count > 0)
+                    return;
+
+                foreach (var productionCompleteResult in productionCompleteResults)
+                {
+                    // TODO
+                }
             }
 
             /*

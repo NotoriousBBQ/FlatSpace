@@ -12,6 +12,7 @@ namespace Flatspace.Objects.Production
         public string type;
         public string subType;
         public int tier;
+        public float maintenanceCost = 0f;
         public float cost;
         public string effect;
         public string requiredTech;

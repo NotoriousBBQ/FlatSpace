@@ -9,9 +9,10 @@
             "subType" : "Colony Ship",
             "tier" : 0,
             "cost": 20.0,
-            "effect": "Create Colony Ship",
+            "effect": "ColonyShip",
             "requiredTech": "",
-            "researched": true
+            "researched": true,
+            "maintenanceCost": 10.0
         },
         {
           "itemName": "BaseFoodImprovement",
@@ -20,9 +21,10 @@
           "subType" : "Food",
           "tier" : 0,
           "cost": 20.0,
-          "effect": "3% Food Increase",
+          "effect": "3",
           "requiredTech": "",
-          "researched": true
+          "researched": true,
+          "maintenanceCost": 3.0
         },
         {
           "itemName": "Food1Production",
@@ -31,9 +33,10 @@
           "subType" : "Food",
           "tier" : 1,
           "cost": 20.0,
-          "effect": "7% Food Increase",
+          "effect": "7",
           "requiredTech": "Food Improvement 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 7.0
         },
         {
           "itemName": "Food2Production",
@@ -42,9 +45,10 @@
           "subType" : "Food",
           "tier" : 2,
           "cost": 20.0,
-          "effect": "12% Food Increase",
+          "effect": "12",
           "requiredTech": "Food Improvement 2",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 12.0
         },
         {
             "itemName": "WarShipProduction",
@@ -53,9 +57,10 @@
             "subType" : "Warship",
             "tier" : 1,
             "cost": 20.0,
-            "effect": "Create War Ship",
+            "effect": "WarShip",
             "requiredTech": "Warship 1",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 5.0
         },
         {
           "itemName": "BaseGrotsitsProduction",
@@ -64,9 +69,10 @@
           "subType" : "Grotsits",
           "tier" : 0,
           "cost": 20.0,
-          "effect": "3% Grotsits Increase",
+          "effect": "3",
           "requiredTech": "",
-          "researched": true
+          "researched": true,
+          "maintenanceCost": 3.0
         },      
         {
             "itemName": "Grotsits1Production",
@@ -75,9 +81,10 @@
             "subType" : "Grotsits",
             "tier" : 1,
             "cost": 20.0,
-            "effect": "7% Grotsits",
+            "effect": "7",
             "requiredTech": "Grotsits Improvement 1",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 7.0
         },
         {
           "itemName": "Grotsits2Production",
@@ -86,9 +93,10 @@
           "subType" : "Grotsits",
           "tier" : 2,
           "cost": 20.0,
-          "effect": "12% Grotsits",
+          "effect": "12",
           "requiredTech": "Grotsits Improvement 2",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 12.0
         },
         {
           "itemName": "BaseIndustryProduction",
@@ -97,9 +105,10 @@
           "subType" : "Industry",
           "tier" : 0,
           "cost": 20.0,
-          "effect": "3% Industry",
+          "effect": "3",
           "requiredTech": "",
-          "researched": true
+          "researched": true,
+          "maintenanceCost": 3.0
         },        
         {
           "itemName": "Industry1Production",
@@ -108,9 +117,10 @@
           "subType" : "Industry",
           "tier" : 1,
           "cost": 20.0,
-          "effect": "7% Industry",
+          "effect": "7",
           "requiredTech": "Industry Improvement 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 7.0
         },
         {
           "itemName": "Industry2Production",
@@ -119,9 +129,10 @@
           "subType" : "Industry",
           "tier" : 2,
           "cost": 20.0,
-          "effect": "12% Industry",
+          "effect": "12",
           "requiredTech": "Industry Improvement 2",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 12.0
         },
         {
           "itemName": "BaseResearchImprovement",
@@ -130,9 +141,10 @@
           "subType" : "Research",
           "tier" : 0,
           "cost": 20.0,
-          "effect": "3% Research",
+          "effect": "3",
           "requiredTech": "",
-          "researched": true
+          "researched": true,
+          "maintenanceCost": 3.0
         },
         {
             "itemName": "ResearchImprovement1",
@@ -141,9 +153,10 @@
             "subType" : "Research",
             "tier" : 1,
             "cost": 20.0,
-            "effect": "7%",
+            "effect": "7",
             "requiredTech": "Research Improvement 1",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 7.0
         },
         {
           "itemName": "ResearchImprovement2",
@@ -152,9 +165,10 @@
           "tier" : 2,
           "type": "Improvement",
           "cost": 20.0,
-          "effect": "12%",
+          "effect": "12",
           "requiredTech": "Research Improvement 2",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 12.0
         }
     ]
 }

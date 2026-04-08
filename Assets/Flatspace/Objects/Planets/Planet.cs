@@ -32,6 +32,7 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeGrotsitsSurplus,
             PlanetUpdateResultTypeIndustrySurplus,
             PlanetUpdateResultTypeIndustryProductionComplete,
+            PlanetUpdateResultTypeIndustryProductionQueueEmpty,
             PlanetUpdateResultTypeResearchProduced,
         }
 
@@ -62,6 +63,7 @@ public class Planet : MonoBehaviour
                 case ResultType.PlanetUpdateResultTypeFoodSurplus:
                 case ResultType.PlanetUpdateResultTypeIndustrySurplus:
                 case ResultType.PlanetUpdateResultTypeResearchProduced:
+                case ResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty:
                     Priority = ResultPriority.PlanetUpdateResultPriorityMedium;
                     break;
                 case ResultType.PlanetUpdateResultTypePopulationLoss:
@@ -113,7 +115,6 @@ public class Planet : MonoBehaviour
     public float ProjectedIndustry {get; set;}
     
     public float Research {get; set;}
-    public float ProjectedResearch {get; set;}
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
     public List<int> IncomingPopulationSource = new List<int>();
@@ -121,6 +122,15 @@ public class Planet : MonoBehaviour
     public bool FoodShipmentIncoming = false;
     public bool GrotsitsShipmentIncoming = false;
 
+    private List<(string, float)> CompletedImprovements = new List<(string, float)>();
+    private Dictionary<string, float> ImprovementYieldModifier = new Dictionary<string, float>
+    {
+        {"Food", 1f},
+        {"Industry", 1f},
+        {"Research", 1f},
+        {"Grotsits", 1f}
+    };
+    
     public void SetPopulationTransferInProgress(int playerID, bool inProgress = true)
     {
         if (inProgress)
@@ -200,7 +210,8 @@ public class Planet : MonoBehaviour
             return false;
         if (Food > 3 * populationAdjustedForPlanetType)
             populationAdjustedForPlanetType = Population.Count;
-        return ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out foodWorkers);
+        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Food"];
+        return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out foodWorkers);
     }
 
     private float GetMaintainenceCost()
@@ -210,7 +221,12 @@ public class Planet : MonoBehaviour
 
     private float GetImprovementMaintainenceCost()
     {
-        return 0;
+        var totalImprovementCost = 0f;
+        foreach (var improvement in CompletedImprovements)
+        {
+            totalImprovementCost += improvement.Item2;
+        }
+        return totalImprovementCost;
     }
     private bool GrotsitWorkerRequirement(out int grotsitsWorkers)
     {
@@ -225,8 +241,8 @@ public class Planet : MonoBehaviour
         var shortfall = Grotsits - grotsitsRequirement;
         if (shortfall <= 0.0f)
             grotsitsRequirement += -shortfall * strategyModifier;
-
-        return ResourceWorkerRequirement(grotsitsRequirement, _resourceData._grotsitProduction, out grotsitsWorkers);
+        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"];
+        return ResourceWorkerRequirement(grotsitsRequirement, productionRate, out grotsitsWorkers);
     }
 
     private bool ResearchWorkerRequirement(out int researchWorkers)
@@ -239,19 +255,21 @@ public class Planet : MonoBehaviour
         var populationAdjustedForPlanetType = Population.Count * strategyPopulationModifier;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
-        return ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._researchProduction, out researchWorkers);
+        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Research"];
+        return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out researchWorkers);
     }
 
     private bool IndustryWorkerRequirement(out int industryWorkers)
     {
         industryWorkers = 0;
-        var strategyPopulaitonModifer = 1;
+        var strategyPopulationModifer = 1;
         var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
-            strategyPopulaitonModifer = modifierData.researchModifier;
-        var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
+            strategyPopulationModifer = modifierData.researchModifier;
+        var populationAdjustedForPlanetType = Population.Count * strategyPopulationModifer;
+        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Industry"];
         return populationAdjustedForPlanetType > 0.0f 
-               && ResourceWorkerRequirement(populationAdjustedForPlanetType, _resourceData._grotsitProduction, out industryWorkers);
+               && ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out industryWorkers);
     }
 
     private bool ResourceWorkerRequirement(float requirement, float productionRate,out int requiredWorkers)
@@ -432,15 +450,15 @@ public class Planet : MonoBehaviour
             return;
         AssignWorkForStrategy();
         // grow food
-        Food += (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction)) * (Morale/100.0f);
+        Food += (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction * ImprovementYieldModifier["Food"])) * (Morale/100.0f);
         Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
         // produce grosits
-        Grotsits += (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction)) * (Morale/100.0f);
+        Grotsits += (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         // produce industry
-        Industry += (_resourceData._industryProduction + (IndustryWorkers * _resourceData._industryProduction)) * (Morale/100.0f);
+        Industry += (_resourceData._industryProduction + (IndustryWorkers * _resourceData._industryProduction * ImprovementYieldModifier["Industry"])) * (Morale/100.0f);
         // produce research
-        Research += (_resourceData._baseResearchProduction + (ResearchWorkers * _resourceData._researchProduction)) * (Morale/100.0f);        
+        Research += (_resourceData._baseResearchProduction + (ResearchWorkers * _resourceData._researchProduction * ImprovementYieldModifier["Research"])) * (Morale/100.0f);        
         ConsumeFood(resultList);
         ConsumeGrotsits(resultList);
         ConsumeIndustry(resultList);
@@ -719,27 +737,30 @@ public class Planet : MonoBehaviour
     public ProductionItem? CurrentProduction { get; set; } = null;
     public List<ProductionItem> ProductionQueue = new List<ProductionItem>();
 
-    private bool UpdateProductionQueue()
+    private bool UpdateProductionQueue(List<PlanetUpdateResult> resultList)
     {
         if (CurrentProduction == null)
         {
+            if (ProductionQueue.Count > 0)
+            {
+                CurrentProduction = ProductionQueue.First();
+                ProductionQueue.RemoveAt(0);
+            }
+
             if(ProductionQueue.Count == 0)
+            {
+                resultList.Add(new PlanetUpdateResult(PlanetName,
+                    ResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty, CurrentProduction?.Item.itemName, Owner));
                 return false;
-            CurrentProduction = ProductionQueue.First();
-            ProductionQueue.RemoveAt(0);
+            }
         }
         return true; 
     }
     private void UpdateProduction(List<PlanetUpdateResult> resultList)
     {
-        if (UpdateProductionQueue())
+        if (UpdateProductionQueue(resultList))
         {
             ContinueProduction(resultList);
-        }
-        else
-        {
-            resultList.Add(new PlanetUpdateResult(PlanetName,
-                ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
         }
     }
 
@@ -762,13 +783,26 @@ public class Planet : MonoBehaviour
         var excessIndustry = CurrentProduction?.Item.cost - CurrentProduction?.Progress;
         Industry -= excessIndustry ?? 0.0f;
         CurrentProduction = null;
-        if (UpdateProductionQueue())
+        if (UpdateProductionQueue(resultList))
             ContinueProduction(resultList);
     }
 
     private void StageCompletedProductionItem(List<PlanetUpdateResult> resultList)
     {
+        if (CurrentProduction == null) return;
+        if (CurrentProduction?.Item.type == "Improvement")
+        {
+            AddActiveImprovement(CurrentProduction);
+        }
         // create game object from CurrentProduction
+    }
+
+    private void AddActiveImprovement(ProductionItem? production)
+    {
+        if (production == null) return;
+        CompletedImprovements.Add((production?.Item.itemName, production?.Item.maintenanceCost ?? 0f));
+        var yieldImprovement = 1f + Convert.ToSingle(production?.Item.effect) / 100f;
+        ImprovementYieldModifier[production?.Item.subType] = yieldImprovement;
     }
 
     #endregion

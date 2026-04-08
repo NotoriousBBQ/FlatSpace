@@ -11,7 +11,8 @@
             "cost": 150.0,
             "effect": "Allow Food 1 Improvement",
             "requiredTech": "",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 0.0
         },
         {
           "itemName": "Food Improvement 2",
@@ -22,7 +23,8 @@
           "cost": 1500.0,
           "effect": "Allow Food 2 Improvement",
           "requiredTech": "Food Improvement 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 0.0
         },
         {
             "itemName": "Grotsits Improvement 1",
@@ -33,7 +35,8 @@
             "cost": 150.0,
             "effect": "Allow Grotsits 1 Improvement",
             "requiredTech": "",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 0.0
         },
         {
           "itemName": "Grotsits Improvement 2",
@@ -44,7 +47,8 @@
           "cost": 1500.0,
           "effect": "Allow Grotsits 2 Improvement",
           "requiredTech": "Grotsits Improvement 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 0.0
         },
         {
             "itemName": "Industry Improvement 1",
@@ -55,7 +59,8 @@
             "cost": 150.0,
             "effect": "Allow Industry 1 Improvement",
             "requiredTech": "",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 0.0
         },
         {
           "itemName": "Industry Improvement 2",
@@ -66,7 +71,8 @@
           "cost": 1500.0,
           "effect": "Allow Industry 2 Improvement",
           "requiredTech": "Industry Improvement 2",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 0.0
         },
         {
             "itemName": "Research Improvement 1",
@@ -77,7 +83,8 @@
             "cost": 150.0,
             "effect": "Allow Research 1 Improvement",
             "requiredTech": "",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 0.0
         },
         {
           "itemName": "Research Improvement 2",
@@ -88,7 +95,8 @@
           "cost": 1500.0,
           "effect": "Allow Research 2 Improvement",
           "requiredTech": "Research Improvement 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 0.0
         },
         {
             "itemName": "Warship 1",
@@ -99,7 +107,8 @@
             "cost": 300.0,
             "effect": "Allow warship construction",
             "requiredTech": "",
-            "researched": false
+            "researched": false,
+            "maintenanceCost": 0.0
         },
         {
           "itemName": "Warship Weapons Upgrade 1",
@@ -110,7 +119,8 @@
           "cost": 3000.0,
           "effect": "Improve warship stats",
           "requiredTech": "Warship 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 0.0
         },
         {
           "itemName": "Colony Ship Improvement 1",
@@ -121,7 +131,8 @@
           "cost": 3000.0,
           "effect": "Increases Colony Ship Speed",
           "requiredTech": "Research Improvement 1",
-          "researched": false
+          "researched": false,
+          "maintenanceCost": 0.0
         }
     ]
 }
