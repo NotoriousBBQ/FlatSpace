@@ -30,6 +30,7 @@ namespace FlatSpace
                     OrderTypeResearchChange,
                     OrderTypeResearchSet,
                     OrderTypeIndustryChange,
+                    OrderTypeIndustrySetProduction,
                     OrderTypeIndustryTransport,
                 }
 
@@ -134,6 +135,12 @@ namespace FlatSpace
                         break;
                     case GameAIOrder.OrderType.OrderTypeIndustryChange:
                         targetPlanet.Industry += Convert.ToSingle(executableOrder.Data);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeIndustrySetProduction:
+                        var newProductionItem = 
+                            Gameboard.Instance.players[executableOrder.PlayerId].playerAI.ProductionCatalog.catalogItems
+                                .Find(x => x.itemName == executableOrder.Data.ToString());
+                        targetPlanet.ScheduleProductionItem(newProductionItem);
                         break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
                         targetPlanet.Research += Convert.ToSingle(executableOrder.Data);

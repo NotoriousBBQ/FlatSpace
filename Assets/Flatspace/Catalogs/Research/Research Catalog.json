@@ -123,13 +123,13 @@
           "maintenanceCost": 0.0
         },
         {
-          "itemName": "Colony Ship Improvement 1",
-          "description": "Improve Colony Ship",
+          "itemName": "ColonyShip Improvement 1",
+          "description": "Improve ColonyShip",
           "type": "Ship Improvement",
-          "subType" : "Colony Ship",
+          "subType" : "ColonyShip",
           "tier" : 1,
           "cost": 3000.0,
-          "effect": "Increases Colony Ship Speed",
+          "effect": "Increases ColonyShip Speed",
           "requiredTech": "Research Improvement 1",
           "researched": false,
           "maintenanceCost": 0.0

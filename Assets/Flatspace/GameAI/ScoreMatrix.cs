@@ -10,6 +10,7 @@ public interface IScoreMatrixDecisionElement
 {
     string Target { get; }
     float Priority { get; }
+    int NumChoices { get; }
 }
 public interface IScoreMatrixChoiceElement : IEquatable<IScoreMatrixChoiceElement>
 {
@@ -33,16 +34,38 @@ public class ScoreMatrixDecisionComparer : IComparer<ScoreMatrixDecisionElement>
     {
         return (x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority).CompareTo(x.Priority);
     }
-                
 }
+
+public class ScoreMatrixMultipleDecisionComparer : IComparer<ScoreMatrixMultipleDecisionElement>
+{
+    public int Compare(ScoreMatrixMultipleDecisionElement x, ScoreMatrixMultipleDecisionElement y)
+    {
+        return (x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority).CompareTo(x.Priority);
+    }
+}
+
 
 public struct ScoreMatrixDecisionElement : IScoreMatrixDecisionElement
 {
     public string Target { get; set; }
     public float Priority { get; set; }
     
+    
     string IScoreMatrixDecisionElement.Target => Target;
     float IScoreMatrixDecisionElement.Priority => Priority;
+    int IScoreMatrixDecisionElement.NumChoices => 1;
+}
+
+public struct ScoreMatrixMultipleDecisionElement : IScoreMatrixDecisionElement
+{
+    public string Target { get; set; }
+    public float Priority { get; set; }
+
+    public int NumChoices { get; set; }
+    
+    string IScoreMatrixDecisionElement.Target => Target;
+    float IScoreMatrixDecisionElement.Priority => Priority;
+    int IScoreMatrixDecisionElement.NumChoices => NumChoices;
 }
 public struct ScoreMatrixChoiceElement : IScoreMatrixChoiceElement
 {
@@ -100,12 +123,6 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
         Comparison<TScoreMatrixChoiceElement>            ChoiceCompare = null)
     {
         ChoiceCompare = ChoiceCompare ?? DefaultChoiceCompare;
-/*
-        var remaining = MatrixElements
-            .ToDictionary(
-            kvp => kvp.Key,
-            kvp => new List<TScoreMatrixChoiceElement>(kvp.Value));
-  */      
 
         var actionList = new List<TAction>();
         if (MatrixElements.Count <= 0)
@@ -114,58 +131,26 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
         foreach (var list in MatrixElements.Values)
             list.Sort(ChoiceCompare);
 
-        foreach (var choice in MatrixElements)
+        foreach (var decision in MatrixElements)
         {
-            if(choice.Value.Count <= 0) continue;
+            if(decision.Value.Count <= 0) continue;
+            var numChoices = decision.Key.NumChoices;
 
-            var bestChoice = choice.Value[0];
-            actionList.Add(actionFactory(choice.Key, bestChoice));
-            foreach (var remaining in MatrixElements)
+            var choiceIndex = 0;
+
+            while (choiceIndex < numChoices)
             {
-                if (remaining.Value.Count > 0)
-                    remaining.Value.RemoveAll(v => v.Equals(bestChoice));
+                var bestChoice = decision.Value[choiceIndex++];
+                actionList.Add(actionFactory(decision.Key, bestChoice));
+                foreach (var remaining in MatrixElements)
+                {
+                    if (remaining.Value.Count > 0)
+                        remaining.Value.RemoveAll(v => v.Equals(bestChoice));
+                }
+                
             }
         }
-#if REMOVE_THIS        
-        var roundBest = new List<(TScoreMatrixDecisionElement OriginKey, TScoreMatrixChoiceElement Element)>();
 
-        while (MatrixElements.Count > 0 && MatrixElements.Values.First().Count > 0)
-        {
-            foreach (var kvp in MatrixElements)
-            {
-                if (kvp.Value.Count == 0) continue;
-                roundBest.Add((kvp.Key, kvp.Value[0]));
-            }
-
-            roundBest.Sort((a, b) => ChoiceCompare(a.Element, b.Element));
-
-            var (bestOrigin, bestElement) = roundBest[0];
-            actionList.Add(actionFactory(bestOrigin, bestElement));
-
-            var removed = MatrixElements.Remove(bestOrigin);
-            if(!removed)
-                Debug.Log("Not Removed remaining key is " + bestOrigin);
-            foreach (var list in MatrixElements.Values)
-                list.RemoveAll(e => e.Target == bestElement.Target);
-
-            // Prune origins that have no remaining candidates — matches your version
-            var keyList = MatrixElements.Keys.ToList();
-            foreach (var key in keyList)
-            {
-                if (MatrixElements.TryGetValue(key, out var keyValueList))
-                {
-                    if (keyValueList.Count <= 0)
-                        MatrixElements.Remove(key);
-                }
-                else
-                {
-                    MatrixElements.Remove(key);                    
-                }
-            }
-
-            roundBest.Clear();
-        }
-#endif
         return actionList;
     }
 }

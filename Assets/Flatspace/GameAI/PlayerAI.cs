@@ -65,18 +65,48 @@ namespace FlatSpace
             }
 
             // ── Colonization ─────────────────────────────────────────────────
+            private bool PlanetHasColonyShip(string planetName)
+            {
+                var planet = AIMap.GetPlanet(planetName);
+                if (planet != null)
+                {
+                    return planet.HasColonyShip;
+                }
+                return false;
+            }
 
+            private bool PlanetCanColonize(string planetName)
+            {
+                if (IsValidColonizer(planetName))
+                { 
+                    var pathMap = AIMap.GetPlanet(planetName).DistanceMapToPathingList;
+                    var validColonizationTargets = pathMap
+                        .Where(t => (
+                            t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
+                            && IsValidColonizationTarget(AIMap.GetPlanet(t.Key)))).ToList();
+                    return validColonizationTargets.Any();
+
+                }
+                return false;
+            }
+
+            private bool IsValidColonizer(string planetName)
+            {
+                var planet = AIMap.GetPlanet(planetName);
+                if (planet.Owner == Player.playerID &&
+                    planet.Population.Count >= planet.MaxPopulation
+                    * AIMap.GameAIConstants.expandPopulationTrigger)
+                    return true;
+                
+                return false;
+            }
             private bool IsValidColonizerForResult(Planet.PlanetUpdateResult result)
             {
                 if (result.Result is
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain
                     or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax)
                 {
-                    var planet = AIMap.GetPlanet(result.Name);
-                    if (planet.Owner == Player.playerID &&
-                        planet.Population.Count >= planet.MaxPopulation
-                            * AIMap.GameAIConstants.expandPopulationTrigger)
-                        return true;
+                    return IsValidColonizer(result.Name);
                 }
                 return false;
             }
@@ -306,7 +336,7 @@ namespace FlatSpace
                             { "Industry",      0.8f },  // least useful while expanding
                             { "Grotsits",      1.1f },  // least useful while expanding
                             { "Research",      1.1f },  // least useful while expanding
-                            { "Colony Ship",   0.8f },  // ships useful but secondary
+                            { "ColonyShip",   0.8f },  // ships useful but secondary
                             { "Warship",       1.3f },  // least useful while expanding
                         }
                     },
@@ -441,12 +471,61 @@ namespace FlatSpace
                 => x.Priority.CompareTo(y.Priority);
 
             // ── Industry ─────────────────────────────────────────────────────
+            // Lower multiplier = higher preference. 1.0f = neutral (cost only).
+            // Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
+            private static int ProductionCompare(IndustryChoiceElement x, IndustryChoiceElement y)
+                => x.Priority.CompareTo(y.Priority);
+            
+            private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryPriorityTable =
+                new Dictionary<AIStrategy, Dictionary<string, float>>
+                {
+                    {
+                        AIStrategy.AIStrategyExpand, new Dictionary<string, float>
+                        {
+                            { "Food",          0.8f },  // food needed for pop growth
+                            { "Industry",      1.0f },  // slightly useful while expanding
+                            { "Grotsits",      1.1f },  // build the base
+                            { "Research",      1.1f },  // build the base
+                            { "ColonyShip",    0.8f },  // ships colony ships needed
+                            { "Warship",       1.3f },  // least useful while expanding
+                        }
+                    },
+                    // AIStrategyConsolidate — add when needed
+                    // AIStrategyAmass       — add when needed
+                };
+            private float  GetIndustryPriority(CatalogItem item, AIStrategy strategy, string planetName)
+            {
+                var cost = item.cost;
+                var costMultiplier = 1f;
+                if (ResearchPriorityTable.TryGetValue(strategy, out var typeWeights) &&
+                    typeWeights.TryGetValue(item.subType, out var strategyMultiplier))
+                {
+                    costMultiplier = strategyMultiplier * Random.Range(0.9f, 1.1f);
+                }
+                costMultiplier *= GetIndustrySituationalCostMultiplier(item, planetName);
+                cost *= costMultiplier;
+                return cost;  // fallback: cost only, no strategy preference
+            }
+
+            private float GetIndustrySituationalCostMultiplier(CatalogItem item, string planetName)
+            {
+                var multiplier = 1f;
+                if (item.subType == "ColonyShip")
+                {
+                    if (PlanetHasColonyShip(planetName))
+                        multiplier = float.MaxValue;
+                    else if (PlanetCanColonize(planetName))
+                        multiplier = -1f;
+                }
+                return multiplier;
+            }
 
             private void ProcessIndustry(
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 UpdatePlanetaryProduction(results, orders);
+                
                 // TODO: PlanetUpdateResultTypeIndustrySurplus — ship industry
             }
 
@@ -458,63 +537,96 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                var productionCompleteResults = results.FindAll(x =>
-                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
-                        .PlanetUpdateResultTypeIndustryProductionComplete);
-                if (productionCompleteResults.Count > 0)
-                    return;
+                var matrix = BuildIndustryMatrix(results, Strategy);
+                if (matrix == null) return;
 
-                foreach (var productionCompleteResult in productionCompleteResults)
-                {
-                    // TODO
-                }
+                foreach (var action in matrix.GenerateActionList(
+                             actionFactory: (origin, element) => 
+                                 new IndustryAction {ChosenItem = element.Item, PlanetName = origin.Target},
+                             ChoiceCompare:       ProductionCompare)
+                        )
+                    EmitProductionOrders(action, orders);
             }
-
-            /*
-            private void ProcessIndustrySurplus(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
+            /// <summary>
+            /// Emits the three standard orders (transport, deduct, in-progress)
+            /// for a resource shipment action.
+            /// </summary>
+            private void EmitProductionOrders(
+                IndustryAction              action,
+                List<GameAI.GameAIOrder>        orders)
             {
-                var industrySurplusResults = results.FindAll(x =>
-                    x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
-                if (industrySurplusResults.Count <= 0)
-                    return;
+                var originPlanet = AIMap.GetPlanet(action.Origin);
+                var productionName = action.Target;
 
-                var scoreMatrix = new ScoreMatrix();
-                var productionHubList = AIMap.PlanetList.FindAll(x => x.IsIndustryProductionHub);
-                foreach (var surplusProducer in industrySurplusResults)
-                {
-                    var validMatrixEntries = new ScoreMatrixElementList();
-                    var sourcePlanet = AIMap.GetPlanet(surplusProducer.Name);
-                    if (sourcePlanet == null || sourcePlanet.IsIndustryProductionHub)
-                        continue;
-                    var surplusPathMap = sourcePlanet.DistanceMapToPathingList;
-                    foreach (var hubPlanet in productionHubList)
-                    {
-                        validMatrixEntries.Add(new ScoreMatrix.ScoreMatrixChoiceElement
-                        {
-                            Surplus = (float)surplusProducer.Data,
-                            Target = hubPlanet.PlanetName,
-                            Cost = surplusPathMap[hubPlanet.PlanetName].Cost,
-                            Shortage = 0.0f
-                        });
-                    }
-
-                    if (validMatrixEntries.Count <= 0)
-                        continue;
-                    scoreMatrix.MatrixElements.Add(surplusProducer.Name, validMatrixEntries);
-                }
-
-                ShipIndustry(scoreMatrix, orders, industrySurplusResults);
+                orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeIndustrySetProduction,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, action.Target, action.Origin, action.Origin));
             }
-            */
 
-            // ── Order factory ────────────────────────────────────────────────
+              /// <summary>
+            /// Matrix-building logic for any production decisions.
+            /// Returns null if there is nothing to do.
+            /// </summary>
+            private ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction> BuildIndustryMatrix(
+                List<Planet.PlanetUpdateResult>                  results,
+                AIStrategy        strategy)
+            {
+
+                var productionCompleteResults = results.FindAll(x =>
+                    x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete 
+                        or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty)
+                    .OrderBy(x => x.Name).ThenBy(x => x.GetType()).ToList();
+                var surplusResults = productionCompleteResults.FindAll(x =>
+                    x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
+                
+                if (productionCompleteResults.Count == 0)
+                    return null;
+
+                var matrix = new ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction  >
+                    (new ScoreMatrixMultipleDecisionComparer());
+
+                var decisionIndex = 0;
+                foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
+                {
+                    
+                    var planetResults = productionCompleteResults.FindAll(x => x.Name == planetName);
+                    var planet = AIMap.GetPlanet(planetName);
+                    var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true 
+                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name)) );
+
+                    var planetSurplus = surplusResults.FindIndex(x => x.Name == planetName) == -1
+                        ? 0f
+                        : Convert.ToSingle(surplusResults.Find(x => x.Name == planetName).Data); 
+                    var entries = potentialProduction.Select(item => new IndustryChoiceElement
+                    {
+                        Item     = item,
+                        Priority = GetIndustryPriority(item, strategy, planetName),
+                        Surplus = planetSurplus,
+                    }).ToList();
+
+                    if(entries.Count == 0) continue;
+                    
+                    matrix.MatrixElements.Add( 
+                        new ScoreMatrixMultipleDecisionElement
+                        {
+                            Target =  planetName,
+                            Priority = decisionIndex++,
+                            NumChoices = planetResults.Count,
+                        },
+                        entries);
+
+                }
+                return matrix;
+            }
+
+              // ── Order factory ────────────────────────────────────────────────
 
             private GameAI.GameAIOrder MakeOrder(
                 GameAI.GameAIOrder.OrderType       type,
                 GameAI.GameAIOrder.OrderTimingType timing,
                 int                                timingDelay,
                 int                                totalDelay,
-                float                              data,
+                object                              data,
                 string                             origin,
                 string                             target)
             => new GameAI.GameAIOrder

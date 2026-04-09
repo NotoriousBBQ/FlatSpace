@@ -567,6 +567,14 @@ namespace FlatSpace
                                  ViewTarget = order.Origin,
                              });
                              break;
+                         case GameAI.GameAIOrder.OrderType.OrderTypeIndustryChange:
+                            _playerNotifications.Add(new PlayerNotification
+                            {
+                                PlayerName = order.PlayerId.ToString(),
+                                Message = "Starting New Production " + order.Target + " At " + order.Origin,
+                                ViewTarget = order.Origin,
+                            });
+                            break;
                          default:
                              break;
                     }

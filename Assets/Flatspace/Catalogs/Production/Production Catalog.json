@@ -6,7 +6,7 @@
             "itemName": "ColonyShipProduction",
             "description": "Creat a ship to transport a single inhabitant to a new planet",
             "type": "Ship",
-            "subType" : "Colony Ship",
+            "subType" : "ColonyShip",
             "tier" : 0,
             "cost": 20.0,
             "effect": "ColonyShip",
@@ -147,16 +147,16 @@
           "maintenanceCost": 3.0
         },
         {
-            "itemName": "ResearchImprovement1",
-            "description": "Tier 1 Research improvement",
-            "type": "Improvement",
-            "subType" : "Research",
-            "tier" : 1,
-            "cost": 20.0,
-            "effect": "7",
-            "requiredTech": "Research Improvement 1",
-            "researched": false,
-            "maintenanceCost": 7.0
+          "itemName": "ResearchImprovement1",
+          "description": "Tier 1 Research improvement",
+          "type": "Improvement",
+          "subType" : "Research",
+          "tier" : 1,
+          "cost": 20.0,
+          "effect": "7",
+          "requiredTech": "Research Improvement 1",
+          "researched": false,
+          "maintenanceCost": 7.0
         },
         {
           "itemName": "ResearchImprovement2",

@@ -122,7 +122,7 @@ public class Planet : MonoBehaviour
     public bool FoodShipmentIncoming = false;
     public bool GrotsitsShipmentIncoming = false;
 
-    private List<(string, float)> CompletedImprovements = new List<(string, float)>();
+    public List<(string, float)> CompletedImprovements = new List<(string, float)>();
     private Dictionary<string, float> ImprovementYieldModifier = new Dictionary<string, float>
     {
         {"Food", 1f},
@@ -130,6 +130,7 @@ public class Planet : MonoBehaviour
         {"Research", 1f},
         {"Grotsits", 1f}
     };
+    public bool HasColonyShip {get; set;} = false;
     
     public void SetPopulationTransferInProgress(int playerID, bool inProgress = true)
     {
@@ -737,7 +738,15 @@ public class Planet : MonoBehaviour
     public ProductionItem? CurrentProduction { get; set; } = null;
     public List<ProductionItem> ProductionQueue = new List<ProductionItem>();
 
-    private bool UpdateProductionQueue(List<PlanetUpdateResult> resultList)
+    public void ScheduleProductionItem(CatalogItem productionItem)
+    {
+        ProductionQueue.Add(new ProductionItem(productionItem));
+        if (CurrentProduction == null)
+        {
+            UpdateProduction();
+        }
+    }
+    private bool UpdateProductionQueue(List<PlanetUpdateResult> resultList = null)
     {
         if (CurrentProduction == null)
         {
@@ -749,14 +758,14 @@ public class Planet : MonoBehaviour
 
             if(ProductionQueue.Count == 0)
             {
-                resultList.Add(new PlanetUpdateResult(PlanetName,
+                resultList?.Add(new PlanetUpdateResult(PlanetName,
                     ResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty, CurrentProduction?.Item.itemName, Owner));
                 return false;
             }
         }
         return true; 
     }
-    private void UpdateProduction(List<PlanetUpdateResult> resultList)
+    private void UpdateProduction(List<PlanetUpdateResult> resultList = null)
     {
         if (UpdateProductionQueue(resultList))
         {
@@ -764,7 +773,7 @@ public class Planet : MonoBehaviour
         }
     }
 
-    private void ContinueProduction(List<PlanetUpdateResult> resultList)
+    private void ContinueProduction(List<PlanetUpdateResult> resultList = null)
     {
         if(CurrentProduction == null)
             return;
@@ -775,13 +784,13 @@ public class Planet : MonoBehaviour
         }
     }
 
-    private void CompleteProduction(List<PlanetUpdateResult> resultList)
+    private void CompleteProduction(List<PlanetUpdateResult> resultList = null)
     {
         StageCompletedProductionItem(resultList);
-        resultList.Add(new PlanetUpdateResult(PlanetName,
+        resultList?.Add(new PlanetUpdateResult(PlanetName,
             ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
-        var excessIndustry = CurrentProduction?.Item.cost - CurrentProduction?.Progress;
-        Industry -= excessIndustry ?? 0.0f;
+        var excessIndustry = CurrentProduction?.Progress - CurrentProduction?.Item.cost;
+        Industry = excessIndustry ?? 0.0f;
         CurrentProduction = null;
         if (UpdateProductionQueue(resultList))
             ContinueProduction(resultList);
@@ -794,6 +803,11 @@ public class Planet : MonoBehaviour
         {
             AddActiveImprovement(CurrentProduction);
         }
+        else if (CurrentProduction?.Item.subType == "ColonyShip")
+        {
+            HasColonyShip = true;
+        }
+        
         // create game object from CurrentProduction
     }
 
