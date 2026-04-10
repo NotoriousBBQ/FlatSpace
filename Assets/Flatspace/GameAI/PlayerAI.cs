@@ -100,17 +100,6 @@ namespace FlatSpace
                 
                 return false;
             }
-            private bool IsValidColonizerForResult(Planet.PlanetUpdateResult result)
-            {
-                if (result.Result is
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationGain
-                    or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationMax)
-                {
-                    return IsValidColonizer(result.Name);
-                }
-                return false;
-            }
-
             private bool IsValidColonizationTarget(Planet planet)
             {
                 if (planet.IsPopulationTransferInProgress(Player.playerID)) return false;
@@ -122,7 +111,8 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                var colonizers = results.FindAll(IsValidColonizerForResult);
+                var colonizers = results.FindAll(
+                    x => x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
                 if (colonizers.Count == 0) return;
 
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
@@ -184,6 +174,11 @@ namespace FlatSpace
                     orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransferInProgress,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                         0, 0, amount, action.Origin, action.Target));
+                                    
+                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeRemoveShip,
+                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        0, 0, 1, action.Origin, action.Origin));
+                    
                 }
             }
 

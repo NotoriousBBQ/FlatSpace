@@ -32,6 +32,7 @@ namespace FlatSpace
                     OrderTypeIndustryChange,
                     OrderTypeIndustrySetProduction,
                     OrderTypeIndustryTransport,
+                    OrderTypeRemoveShip
                 }
 
                 public enum OrderTimingType
@@ -144,6 +145,9 @@ namespace FlatSpace
                         break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
                         targetPlanet.Research += Convert.ToSingle(executableOrder.Data);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeRemoveShip:
+                        targetPlanet.HasColonyShip = false;
                         break;
                     default:
                         break;

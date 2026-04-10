@@ -34,6 +34,7 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeIndustryProductionComplete,
             PlanetUpdateResultTypeIndustryProductionQueueEmpty,
             PlanetUpdateResultTypeResearchProduced,
+            PlanetUpdateResultTypeColonizerReady
         }
 
         public enum PlanetUpdateResultPriority
@@ -464,7 +465,21 @@ public class Planet : MonoBehaviour
         ConsumeGrotsits(resultList);
         ConsumeIndustry(resultList);
         ConsumeResearch(resultList);
-
+        CheckColonizationReady(resultList);
+    }
+    
+    private void CheckColonizationReady(List<PlanetUpdateResult> resultList,bool populationDecrease = false)
+    {
+        if (resultList.Any(x =>
+                x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
+            return;
+        
+        if (HasColonyShip && (populationDecrease ||
+                              Population.Count > MaxPopulation * _gameAIConstants.expandPopulationTrigger))
+        {
+            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
+                1, Owner));
+        }
     }
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
@@ -491,6 +506,10 @@ public class Planet : MonoBehaviour
                  {
                      // planet id dead
                      resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
+                 }
+                 else
+                 {
+                     CheckColonizationReady(resultList, true);
                  }
              }
         }
@@ -806,6 +825,7 @@ public class Planet : MonoBehaviour
         else if (CurrentProduction?.Item.subType == "ColonyShip")
         {
             HasColonyShip = true;
+            CheckColonizationReady(resultList);
         }
         
         // create game object from CurrentProduction
