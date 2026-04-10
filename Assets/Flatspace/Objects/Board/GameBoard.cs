@@ -27,6 +27,7 @@ namespace FlatSpace
             [SerializeField] private float _minCameraOrtho = 1;
             [SerializeField] private float _maxCameraOrtho = 15;
             [SerializeField] private float _cameraOrthoStep = 0.1f;
+            [SerializeField] private float _cameraInitialOrtho = 5f;
             public GameAI GameAI {get; private set;}
             [SerializeField] private GameAIConstants gameAIConstants;
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
@@ -38,6 +39,8 @@ namespace FlatSpace
 
             private MapInputActions _mapInputActions;
             private Camera _camera;
+            public float CameraOrtho =>  _camera.orthographicSize;
+            public Vector2 ScrollRectPosition => _scrollRect.normalizedPosition;
 
             static public int NumPlayers = 2;
             public List<Player> players = new List<Player>();
@@ -117,6 +120,7 @@ namespace FlatSpace
                 {
                     SaveLoadSystem.LoadDesignerContent(gameSave.boardDesignDataPath);   
                     SetSimulationStatus(gameSave);
+                    InitCameraFromSave(gameSave);
                     PlanetaryUIUpdate();
                     BoardUIUpdate();
                     return true;
@@ -131,6 +135,7 @@ namespace FlatSpace
                             ClearExistingGameState();
                             InitGame(IntialBoardState._planetSpawnData);
                             SetSimulationStatus(gameSave);
+                            InitCameraFromSave(gameSave);
                             PlanetaryUIUpdate();
                             BoardUIUpdate();
                         }                     
@@ -138,6 +143,22 @@ namespace FlatSpace
                     return true;
                 }
                 return false;
+            }
+
+            private void InitCameraFromSave(SaveLoadSystem.GameSave gameSave)
+            {
+                if (_camera)
+                {
+                    var prevOrthoSize = _camera.orthographicSize;
+                    _camera.orthographicSize = gameSave.cameraOrtho;
+                    orthoChange = prevOrthoSize - _camera.orthographicSize;
+                    _scrollRect.normalizedPosition = gameSave.scrollRectPosition;
+                    foreach (var planetUI in _planetUIObjects)
+                    {
+                        planetUI.UIUpdateForScroll(orthoChange);
+
+                    }
+                }
             }
 
             private void SetSimulationStatus(SaveLoadSystem.GameSave gameSave)
@@ -172,6 +193,10 @@ namespace FlatSpace
                 var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
                 foreach (var linedrawObject in lineDrawObjects)
                     Destroy(linedrawObject.gameObject);
+                if (_camera)
+                {
+                    _camera.orthographicSize = _cameraInitialOrtho;
+                }
             }
 
             private void InitGame(List<PlanetSpawnData> planetSpawnData)
@@ -449,7 +474,7 @@ namespace FlatSpace
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
                 _mainScreenUIController?.SetNotifications(_playerNotifications);
-                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, players[owningPlayerId].playerAI?.currentResearch.itemName ?? "", 0 );
+                _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, players[owningPlayerId].playerAI?.currentResearch?.itemName ?? "", 0 );
             }
 
             private bool _timedUpdateRunning = false;

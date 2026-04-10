@@ -12,6 +12,7 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.SceneManagement;
 using SimpleFileBrowser;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 
 
 public class SaveLoadSystem : MonoBehaviour
@@ -22,7 +23,6 @@ public class SaveLoadSystem : MonoBehaviour
     {
         if (Instance == null)
             Instance = this;
-        SetFileBrowserFilters();
     }
     
     #region SaveLoadGame
@@ -107,6 +107,8 @@ public class SaveLoadSystem : MonoBehaviour
         public int turnNumber;
         public string initialBoardStatePath;
         public string boardDesignDataPath;
+        public float cameraOrtho = 5f;
+        public Vector2 scrollRectPosition;
         public List<PlayerSave> players = new List<PlayerSave>();
         public List<OrderSave> orders = new List<OrderSave>();
         public List<PlanetSave> planetStatuses = new List<PlanetSave>();
@@ -115,6 +117,8 @@ public class SaveLoadSystem : MonoBehaviour
             turnNumber = Gameboard.Instance.TurnNumber;
             initialBoardStatePath = Gameboard.Instance.IntialBoardState != null ? Gameboard.Instance.IntialBoardState.name : null;
             boardDesignDataPath = Gameboard.Instance._boardDesignPath;
+            cameraOrtho = Gameboard.Instance.CameraOrtho;
+            scrollRectPosition = Gameboard.Instance.ScrollRectPosition;
 
             for(var i = 0; i < Gameboard.Instance.players.Count; i++)
             {
@@ -125,7 +129,7 @@ public class SaveLoadSystem : MonoBehaviour
                         strategy = Gameboard.Instance.players[i].GetStrategy(),
                         researchCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
                         productionCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ProductionCatalog),
-                        currentResearchItem = Gameboard.Instance.players[i].playerAI.currentResearch.itemName,
+                        currentResearchItem = Gameboard.Instance.players[i].playerAI.currentResearch?.itemName ?? string.Empty,
                         currentResearch = Gameboard.Instance.players[i].playerAI.researchTotal
                     });
             }
@@ -317,6 +321,7 @@ public class SaveLoadSystem : MonoBehaviour
     public static bool SaveJsonDataToChosenFile(string jsonData, string saveDir)
     {
         bool bDataSaved = false;
+        SetFileBrowserFilters();
         var fullSavePath = Path.Combine(Application.persistentDataPath, saveDir); 
         FileBrowser.ShowSaveDialog((paths) => bDataSaved= SaveJsonData(jsonData, paths[0]), 
             () => Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, @fullSavePath.ToString()
@@ -340,6 +345,7 @@ public class SaveLoadSystem : MonoBehaviour
         bool bDataLoaded = false;
         var fullLoadPath = Path.Combine(Application.persistentDataPath, saveDir); 
         string loadedData = null;
+        SetFileBrowserFilters();
         FileBrowser.ShowLoadDialog((paths) => bDataLoaded= LoadJsonData(out loadedData, paths[0]), 
             () => Debug.Log("load Cancelled"), FileBrowser.PickMode.Files, false, @fullLoadPath.ToString()
         );
@@ -412,7 +418,7 @@ public class SaveLoadSystem : MonoBehaviour
 #else
         var savePath = Path.Combine(Application.persistentDataPath, "GameSaves");
 #endif
-
+        SetFileBrowserFilters();
         FileBrowser.ShowLoadDialog((paths) => LoadSavedGame(paths[0]), 
             ()=> Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, savePath);
     }
@@ -424,6 +430,7 @@ public class SaveLoadSystem : MonoBehaviour
 #else
         var savePath = Path.Combine(Application.persistentDataPath, "GameSaves");
 #endif
+        SetFileBrowserFilters();
         FileBrowser.ShowSaveDialog((paths) => SaveGame(Gameboard.Instance.GameAI, paths[0]), 
             ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, savePath.ToString());
     }
@@ -452,7 +459,7 @@ public class SaveLoadSystem : MonoBehaviour
 #else
         var configPath = Path.Combine(Application.persistentDataPath, "BoardConfigs");
 #endif
-
+        SetFileBrowserFilters();
         FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
             ()=> LoadGameScene("Flatspace",(scene, sceneMode) =>
             {
@@ -462,11 +469,13 @@ public class SaveLoadSystem : MonoBehaviour
     
     private static void ShowSaveGameConfigFileBrowser(BoardDesignerSave saveData)
     {
+
 #if UNITY_EDITOR
         var configPath = Path.Combine(Application.dataPath, "Flatspace/BoardConfigs");
 #else
         var configPath = Path.Combine(Application.persistentDataPath, "BoardConfigs");
 #endif
+        SetFileBrowserFilters();
         FileBrowser.ShowSaveDialog((paths) => SaveDesignerConfig(saveData, paths[0]), 
             ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, configPath);
     }
