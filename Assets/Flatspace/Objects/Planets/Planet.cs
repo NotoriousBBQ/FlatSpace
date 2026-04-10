@@ -474,8 +474,7 @@ public class Planet : MonoBehaviour
                 x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
             return;
         
-        if (HasColonyShip && (populationDecrease ||
-                              Population.Count > MaxPopulation * _gameAIConstants.expandPopulationTrigger))
+        if (HasColonyShip && (Population.Count >= MaxPopulation * _gameAIConstants.expandPopulationTrigger))
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
                 1, Owner));
@@ -506,10 +505,6 @@ public class Planet : MonoBehaviour
                  {
                      // planet id dead
                      resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
-                 }
-                 else
-                 {
-                     CheckColonizationReady(resultList, true);
                  }
              }
         }
@@ -825,7 +820,6 @@ public class Planet : MonoBehaviour
         else if (CurrentProduction?.Item.subType == "ColonyShip")
         {
             HasColonyShip = true;
-            CheckColonizationReady(resultList);
         }
         
         // create game object from CurrentProduction

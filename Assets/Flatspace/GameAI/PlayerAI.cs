@@ -112,7 +112,8 @@ namespace FlatSpace
                 List<GameAI.GameAIOrder>        orders)
             {
                 var colonizers = results.FindAll(
-                    x => x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
+                    x => x.PlayerID == Player.playerID 
+                         && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
                 if (colonizers.Count == 0) return;
 
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
@@ -247,7 +248,7 @@ namespace FlatSpace
                 var shortages = results.FindAll(x => x.Result == shortageType && !incomingCheck(x.Name));
                 if (shortages.Count == 0) return null;
 
-                surplusResults = results.FindAll(x => x.Result == surplusType);
+                surplusResults = results.FindAll(x => x.PlayerID == Player.playerID && x.Result == surplusType);
                 if (surplusResults.Count == 0) return null;
 
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
@@ -344,7 +345,8 @@ namespace FlatSpace
                 List<GameAI.GameAIOrder>        orders)
             {
                 var researchResults = results
-                    .Where(p => p.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
+                    .Where(p => p.PlayerID == Player.playerID 
+                                && p.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
                         .PlanetUpdateResultTypeResearchProduced)
                     .ToList();
 
@@ -571,8 +573,8 @@ namespace FlatSpace
                     && (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete 
                         or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty))
                     .OrderBy(x => x.Name).ThenBy(x => x.GetType()).ToList();
-                var surplusResults = productionCompleteResults.FindAll(x =>
-                    x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
+                var surplusResults = productionCompleteResults.FindAll(x => x.PlayerID == Player.playerID
+                    && x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
                 
                 if (productionCompleteResults.Count == 0)
                     return null;
