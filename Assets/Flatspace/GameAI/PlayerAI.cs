@@ -572,9 +572,9 @@ namespace FlatSpace
                 AIStrategy        strategy)
             {
 
-                var productionCompleteResults = results.FindAll(x =>
-                    x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete 
-                        or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty)
+                var productionCompleteResults = results.FindAll(x => x.PlayerID == Player.playerID
+                    && (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete 
+                        or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty))
                     .OrderBy(x => x.Name).ThenBy(x => x.GetType()).ToList();
                 var surplusResults = productionCompleteResults.FindAll(x =>
                     x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
@@ -602,6 +602,7 @@ namespace FlatSpace
                         Item     = item,
                         Priority = GetIndustryPriority(item, strategy, planetName),
                         Surplus = planetSurplus,
+                        PlanetName = planetName,
                     }).ToList();
 
                     if(entries.Count == 0) continue;

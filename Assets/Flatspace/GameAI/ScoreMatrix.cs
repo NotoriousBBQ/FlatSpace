@@ -140,13 +140,14 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
 
             while (choiceIndex < numChoices)
             {
-                var bestChoice = decision.Value[choiceIndex++];
+                var bestChoice = decision.Value[0];
                 actionList.Add(actionFactory(decision.Key, bestChoice));
                 foreach (var remaining in MatrixElements)
                 {
                     if (remaining.Value.Count > 0)
                         remaining.Value.RemoveAll(v => v.Equals(bestChoice));
                 }
+                choiceIndex++;
                 
             }
         }
