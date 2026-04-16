@@ -124,12 +124,18 @@ namespace FlatSpace
                     case GameAIOrder.OrderType.OrderTypeFoodChange:
                         targetPlanet.Food += Convert.ToSingle(executableOrder.Data);
                         break;
+                    case GameAIOrder.OrderType.OrderTypeFoodTransportInProgress:
+                        targetPlanet.FoodShipmentIncoming = true;
+                        break;
                     case GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
                         targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
                         targetPlanet.GrotsitsShipmentIncoming = false;
                         break;
                     case GameAIOrder.OrderType.OrderTypeGrotsitsChange:
                         targetPlanet.Grotsits += Convert.ToSingle(executableOrder.Data);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress:
+                        targetPlanet.GrotsitsShipmentIncoming = true;
                         break;
                     case GameAIOrder.OrderType.OrderTypeIndustryTransport:
                         targetPlanet.Industry += Convert.ToSingle(executableOrder.Data);

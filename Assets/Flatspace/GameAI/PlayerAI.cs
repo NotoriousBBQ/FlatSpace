@@ -269,13 +269,25 @@ namespace FlatSpace
                         .ToList();
 
                     if (entries.Count > 0)
-                        matrix.MatrixElements.Add( 
-                            new ScoreMatrixDecisionElement
-                            {
-                                Target =  shortage.Name,
-                                Priority = Convert.ToSingle(shortage.Data),
-                            },
-                            entries);
+                    {
+                        var decision = new ScoreMatrixDecisionElement
+                        {
+                            Target = shortage.Name,
+                            Priority = Convert.ToSingle(shortage.Data),
+                        };
+
+                        if (matrix.MatrixElements.ContainsKey(decision))
+                        {
+                            Debug.LogError("Duplicate Key n Build Resource Matrix");
+                        }
+                        else
+                        {
+                            matrix.MatrixElements.Add(
+                                decision,
+                                entries);
+
+                        }
+                    }
                 }
 
                 return matrix;

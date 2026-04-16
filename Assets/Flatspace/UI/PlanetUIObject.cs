@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using FlatSpace.Game;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class PlanetUIObject : MonoBehaviour
+public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
 {
     [SerializeField] public TextMeshProUGUI _nameTextField;
     [SerializeField] public TextMeshProUGUI _populationTextField;
@@ -49,7 +50,7 @@ public class PlanetUIObject : MonoBehaviour
     {
         if (!_changeColor)
             return;
-        var sprintRenderer = GetComponent<SpriteRenderer>();
+        var sprintRenderer = GetComponentInChildren<SpriteRenderer>();
         sprintRenderer.color = _planetColors[planetType];
 
     }
@@ -64,6 +65,11 @@ public class PlanetUIObject : MonoBehaviour
             else
                 statsPanelImage.color = Player.PlayerColors[owner];
         }
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        Debug.Log("OnPointerClick");
     }
 
     void Start()

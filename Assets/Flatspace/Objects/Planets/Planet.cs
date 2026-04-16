@@ -203,11 +203,11 @@ public class Planet : MonoBehaviour
     {
         foodWorkers = 0;
 
-        var strategyPopulaitonModifer = 1;
+        var strategyPopulationModifier = 0;
         var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
-            strategyPopulaitonModifer = modifierData.foodModifier;
-        var populationAdjustedForPlanetType = Population.Count * strategyPopulaitonModifer;
+            strategyPopulationModifier = modifierData.foodModifier;
+        var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
         if (Food > 3 * populationAdjustedForPlanetType)
@@ -233,16 +233,16 @@ public class Planet : MonoBehaviour
     private bool GrotsitWorkerRequirement(out int grotsitsWorkers)
     {
         grotsitsWorkers = 0;
-        var strategyModifier = 1;
+        var strategyPopulationModifier = 0;
         var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
-            strategyModifier = modifierData.grotsitsModifier;
+            strategyPopulationModifier = modifierData.grotsitsModifier;
         var grotsitsRequirement = GetMaintainenceCost();
         if(grotsitsRequirement <= 0.0f)
             return false;
         var shortfall = Grotsits - grotsitsRequirement;
         if (shortfall <= 0.0f)
-            grotsitsRequirement += -shortfall * strategyModifier;
+            grotsitsRequirement += -shortfall + strategyPopulationModifier;
         var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"];
         return ResourceWorkerRequirement(grotsitsRequirement, productionRate, out grotsitsWorkers);
     }
@@ -250,11 +250,11 @@ public class Planet : MonoBehaviour
     private bool ResearchWorkerRequirement(out int researchWorkers)
     {
         researchWorkers = 0;
-        var strategyPopulationModifier = 1;
+        var strategyPopulationModifier = 0;
         var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.researchModifier;
-        var populationAdjustedForPlanetType = Population.Count * strategyPopulationModifier;
+        var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
         var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Research"];
@@ -264,11 +264,11 @@ public class Planet : MonoBehaviour
     private bool IndustryWorkerRequirement(out int industryWorkers)
     {
         industryWorkers = 0;
-        var strategyPopulationModifer = 1;
+        var strategyPopulationModifier = 0;
         var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
-            strategyPopulationModifer = modifierData.researchModifier;
-        var populationAdjustedForPlanetType = Population.Count * strategyPopulationModifer;
+            strategyPopulationModifier = modifierData.industryModifier;
+        var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
         var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Industry"];
         return populationAdjustedForPlanetType > 0.0f 
                && ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out industryWorkers);
@@ -581,17 +581,18 @@ public class Planet : MonoBehaviour
             return;
 
         var grotsitsShort = 0.0f;
-        if (Grotsits < GetMaintainenceCost()) 
+        var grotsitsRequired = GetMaintainenceCost();
+        if (Grotsits < grotsitsRequired) 
         { 
             // Can't give everyone goods
-            grotsitsShort += Grotsits - Population.Count;
+            grotsitsShort += Grotsits - grotsitsRequired;
             Grotsits = 0.0f;
             Morale = Math.Clamp(Morale - _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
         else
         {
             // Grotsits for everyone
-            Grotsits -= GetMaintainenceCost();
+            Grotsits -= grotsitsRequired;
             Morale = Math.Clamp(Morale + _gameAIConstants.moraleStep, 0.0f, 200.0f);
         }
 
@@ -599,7 +600,7 @@ public class Planet : MonoBehaviour
         var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
         ProjectedGrotsits = Math.Clamp(Grotsits + _resourceData._baseGrotsitsProduction + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction), 0.0f, MaxGrotsitsStorage);
-        var projectedGrotsitsRequirement = GetMaintainenceCost() + projectedPopulation;
+        var projectedGrotsitsRequirement = grotsitsRequired + projectedPopulation;
         if (ProjectedGrotsits >= projectedGrotsitsRequirement)
         {
             grotsitsShort += ProjectedGrotsits - projectedGrotsitsRequirement;

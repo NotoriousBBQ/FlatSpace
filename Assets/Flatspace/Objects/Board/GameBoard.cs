@@ -482,7 +482,7 @@ namespace FlatSpace
             public void StartTimedUpdate()
             {
                 _timedUpdateRunning = true;
-                StartCoroutine(TimedUpdate(0.5f));
+                StartCoroutine(TimedUpdate(.25f));
             }
 
             IEnumerator TimedUpdate(float waitTime)
@@ -490,9 +490,7 @@ namespace FlatSpace
                 while (_timedUpdateRunning)
                 {
                     SingleUpdate();
-                    Debug.Log("Timed UpdatePlanet");
                     yield return new WaitForSeconds(waitTime);
-                    Debug.Log("Coroutine Looping");
                 }
             }
 
