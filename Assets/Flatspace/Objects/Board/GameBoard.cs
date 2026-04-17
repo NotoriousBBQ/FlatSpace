@@ -50,6 +50,7 @@ namespace FlatSpace
             private readonly List<PlayerNotification> _playerNotifications = new List<PlayerNotification>();
             
             private MainScreenUIController _mainScreenUIController;
+            private PlanetDetailUIController _planetDetailUIController;
             public int TurnNumber { get; private set; }= 1;
             private float orthoChange;
             void Start()
@@ -77,6 +78,7 @@ namespace FlatSpace
                 }
                 InitializeInputActions();
                 _mainScreenUIController = GetComponentInChildren<MainScreenUIController>();
+                _planetDetailUIController = GetComponentInChildren<PlanetDetailUIController>();
 
             }
 
@@ -403,6 +405,12 @@ namespace FlatSpace
                     normalizedHeight /= _scrollRect.content.sizeDelta.y;
                     _scrollRect.normalizedPosition = new Vector2(normalizedWidth, normalizedHeight);
                 }
+            }
+
+            public void ShowPlanetDetail(string planetName)
+            {
+                _planetDetailUIController.SetPlanet(GetPlanet(planetName));
+                _planetDetailUIController.enabled = true;
             }
             private void InitializeInputActions()
             {

@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 8391d9b5cb2b97a4fa41d25a27e12ce3
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - desertIcon: {fileID: 21300000, guid: 4a868e28be12a6349a2742aa1909ed42, type: 3}
+  - desolateIcon: {fileID: 21300000, guid: ddc556a241acd514ba8409f6e064201c, type: 3}
+  - farmIcon: {fileID: 21300000, guid: 8ff5851d96e353540b1e6d34f6dafe7b, type: 3}
+  - industrialIcon: {fileID: 21300000, guid: 765aab9d7d5f75f478521312f0b8a3dd, type: 3}
+  - normalIcon: {fileID: 21300000, guid: 1eebe61fa30929248bdcda4d7c3c51ec, type: 3}
+  - oceanIcon: {fileID: 21300000, guid: 0a73328190b6a1b4787cc6921bbe0f94, type: 3}
+  - primeIcon: {fileID: 21300000, guid: 8d93f8b646fad08429a3686590a61bf7, type: 3}
+  - verdantIcon: {fileID: 21300000, guid: 0aab17f474ae0434eb7aff4a29cc0123, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="PlanetDetailElement" picking-mode="Ignore" enabled="true" style="flex-grow: initial; flex-direction: column; background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); -unity-text-outline-color: rgb(0, 0, 0); border-left-color: rgb(255, 0, 0); border-right-color: rgb(255, 0, 0); border-top-color: rgb(255, 0, 0); border-bottom-color: rgb(255, 0, 0); border-top-width: 2px; border-right-width: 2px; border-bottom-width: 2px; border-left-width: 2px; border-top-left-radius: 2px; border-top-right-radius: 2px; border-bottom-right-radius: 2px; border-bottom-left-radius: 2px; top: 25%; left: 0%; align-items: stretch; align-self: center;">
+        <ui:VisualElement name="TitleElement" picking-mode="Ignore" style="flex-grow: 1; flex-direction: row; height: 60px; max-height: 60px;">
+            <ui:Image name="PlanetIcon" picking-mode="Ignore" style="height: 60px; width: 60px;"/>
+            <ui:Label text="Label" name="PlanetName" picking-mode="Ignore" style="height: 60px; width: 499px; -unity-text-align: upper-center;"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="PopulationElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: stretch; justify-content: space-between;">
+            <ui:Label text="Population" name="PopultionName" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="PopulationValue" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="PopulationProgress" picking-mode="Ignore"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

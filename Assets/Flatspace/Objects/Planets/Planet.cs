@@ -109,7 +109,7 @@ public class Planet : MonoBehaviour
     
     public float Food { get; set; } = 0.0f;
     public float ProjectedFood { get; set; } = 0.0f;
-    [SerializeField] private float _foodNeededForNewPop = 10.0f;
+    [SerializeField] public float FoodNeededForNewPop = 10.0f;
     public float Grotsits {get; set;}
     public float ProjectedGrotsits {get; set;}
     public float Industry {get; set;}
@@ -513,9 +513,9 @@ public class Planet : MonoBehaviour
             // feed everybody
             Food -= Population.Count;
             // enough to grow?
-            if (Food >= _foodNeededForNewPop && Population.Count < MaxPopulation)
+            if (Food >= FoodNeededForNewPop && Population.Count < MaxPopulation)
             {
-                Food -= _foodNeededForNewPop;
+                Food -= FoodNeededForNewPop;
                 var playerID = ChangePopulation(1);
                 resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1, playerID));
                 if (Population.Count >= MaxPopulation)

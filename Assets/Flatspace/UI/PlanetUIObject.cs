@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlatSpace.Game;
+using Game.UI.MainGameScreenUI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -69,7 +70,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        Debug.Log("OnPointerClick");
+       Gameboard.Instance.ShowPlanetDetail(_planetName);
     }
 
     void Start()

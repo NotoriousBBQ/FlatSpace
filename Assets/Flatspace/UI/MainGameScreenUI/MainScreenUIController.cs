@@ -35,12 +35,13 @@ namespace Game.UI.MainGameScreenUI
 
             _notificationListController.Setup(root);
             _notificationListController.enabled = false;
-
+            
             _gameButtonHandler = GetComponent<GameButtonHandler>();
             if (!_gameButtonHandler)
                 return;
             _gameButtonHandler.Setup(root, _notificationListController);
             _gameButtonHandler.enabled = true;
+            
         }
 
         public void SetNotifications(List<PlayerNotification> notifications)
@@ -58,5 +59,6 @@ namespace Game.UI.MainGameScreenUI
             if (_currentResearchLabel != null) _currentResearchLabel.text = string.IsNullOrEmpty(currentResearch) ? "None" : currentResearch;  
             if (_grotsitsLabel != null) _grotsitsLabel.text = $"Grotsits: {grotsits:0.#}";
         }
+
     }
 }
