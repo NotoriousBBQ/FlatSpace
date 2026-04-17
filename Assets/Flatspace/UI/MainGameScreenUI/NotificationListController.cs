@@ -12,12 +12,15 @@ namespace Game.UI.MainGameScreenUI
         private VisualTreeAsset _listEntryTemplate;
         private List<PlayerNotification> _notifications= new List<PlayerNotification>();
         private List<PlayerNotification> _storedNotifications = new List<PlayerNotification>();
+        private VisualElement _element;
 
         public void OnEnable()
         {
             if (_listView == null)
                 return;
-            _listView.visible = true;
+            _element.SetEnabled(true);
+            _element.pickingMode = PickingMode.Position;
+            _element.visible = true;
             ShowNotifications();
         }
 
@@ -25,12 +28,14 @@ namespace Game.UI.MainGameScreenUI
         {
             if (_listView == null)
                 return;
-            _listView.visible = false;
-            
+            _element.SetEnabled(false);
+            _element.pickingMode = PickingMode.Ignore;
+            _element.visible = false;
         }
 
         public void Setup(VisualElement root)
         {
+            _element = root.Q<VisualElement>("NotificationElement");
             _listView = root.Q<ListView>("NotificationList");
             _listEntryTemplate = _listView.itemTemplate;
             _listView.makeItem = MakeItem;
