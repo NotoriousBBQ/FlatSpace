@@ -148,6 +148,12 @@ namespace Game.UI.MainGameScreenUI
 
         public void EscapeButtonPressed()
         {
+            if (Gameboard.Instance.PlanetDetailShowing())
+            {
+                Gameboard.Instance.HidePlanetDetail();
+                return;
+            }
+
             _saveButton.visible = !_saveButton.visible;
             _loadButton.visible = !_loadButton.visible;
         }

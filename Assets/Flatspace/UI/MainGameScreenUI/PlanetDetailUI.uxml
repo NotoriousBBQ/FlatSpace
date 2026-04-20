@@ -1,13 +1,34 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
-    <ui:VisualElement name="PlanetDetailElement" picking-mode="Ignore" enabled="true" style="flex-grow: initial; flex-direction: column; background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); -unity-text-outline-color: rgb(0, 0, 0); border-left-color: rgb(255, 0, 0); border-right-color: rgb(255, 0, 0); border-top-color: rgb(255, 0, 0); border-bottom-color: rgb(255, 0, 0); border-top-width: 2px; border-right-width: 2px; border-bottom-width: 2px; border-left-width: 2px; border-top-left-radius: 2px; border-top-right-radius: 2px; border-bottom-right-radius: 2px; border-bottom-left-radius: 2px; top: 25%; left: 0%; align-items: stretch; align-self: center;">
+    <ui:VisualElement name="PlanetDetailElement" picking-mode="Ignore" enabled="true" style="flex-grow: initial; flex-direction: column; background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); -unity-text-outline-color: rgb(0, 0, 0); border-left-color: rgb(255, 0, 0); border-right-color: rgb(255, 0, 0); border-top-color: rgb(255, 0, 0); border-bottom-color: rgb(255, 0, 0); border-top-width: 2px; border-right-width: 2px; border-bottom-width: 2px; border-left-width: 2px; border-top-left-radius: 2px; border-top-right-radius: 2px; border-bottom-right-radius: 2px; border-bottom-left-radius: 2px; top: 25%; left: 0%; align-items: stretch; align-self: center; height: 230px;">
         <ui:VisualElement name="TitleElement" picking-mode="Ignore" style="flex-grow: 1; flex-direction: row; height: 60px; max-height: 60px;">
             <ui:Image name="PlanetIcon" picking-mode="Ignore" style="height: 60px; width: 60px;"/>
             <ui:Label text="Label" name="PlanetName" picking-mode="Ignore" style="height: 60px; width: 499px; -unity-text-align: upper-center;"/>
         </ui:VisualElement>
-        <ui:VisualElement name="PopulationElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: stretch; justify-content: space-between;">
-            <ui:Label text="Population" name="PopultionName" picking-mode="Ignore"/>
+        <ui:VisualElement name="PopulationElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: flex-start; justify-content: space-between;">
+            <ui:Label text="Population" name="PopulationName" picking-mode="Ignore"/>
             <ui:Label text="Label" name="PopulationValue" picking-mode="Ignore"/>
             <ui:Label text="Label" name="PopulationProgress" picking-mode="Ignore"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="FoodElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: stretch; justify-content: space-between;">
+            <ui:Label text="Food" name="FoodName" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="FoodProduction" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="FoodStored" picking-mode="Ignore"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="GrotsitsElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: stretch; justify-content: space-between;">
+            <ui:Label text="Grotsits" name="GrotsitsName" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="GrotsitsProduction" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="GrotsitsStored" picking-mode="Ignore"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="IndustryResearchElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: stretch; justify-content: space-between;">
+            <ui:Label text="Industry" name="IndustryName" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="IndustryProduction" picking-mode="Ignore"/>
+            <ui:Label text="Research" name="ResearchName" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="ResearchProduction"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="ProductionElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: stretch; justify-content: space-between;">
+            <ui:Label text="Producing" name="ProductionName" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="ProductionItem" picking-mode="Ignore"/>
+            <ui:Label text="Label" name="ProductionProgress" picking-mode="Ignore"/>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

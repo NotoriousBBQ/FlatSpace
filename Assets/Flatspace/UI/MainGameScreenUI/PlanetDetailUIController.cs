@@ -10,7 +10,15 @@ public class PlanetDetailUIController : MonoBehaviour
     private Label _planetName;
     private Label _populationValue;
     private Label _populationProgress;
+    private Label _foodProduction;
+    private Label _foodStorage;
+    private Label _grotsitsProduction;
+    private Label _grotsitsStorage;
     private Image _planetIcon;
+    private Label _industryProduction;
+    private Label _researchProduction;
+    private Label _productionItem;
+    private Label _productionProgress;
     public Sprite desertIcon;
     public Sprite desolateIcon;
     public Sprite farmIcon;
@@ -74,6 +82,14 @@ public class PlanetDetailUIController : MonoBehaviour
         _planetIcon = _element.Q<Image>("PlanetIcon");
         _populationValue = _element.Q<Label>("PopulationValue");
         _populationProgress = _element.Q<Label>("PopulationProgress");
+        _foodProduction = _element.Q<Label>("FoodProduction");
+        _foodStorage = _element.Q<Label>("FoodStored");
+        _grotsitsProduction = _element.Q<Label>("GrotsitsProduction");
+        _grotsitsStorage = _element.Q<Label>("GrotsitsStored");
+        _industryProduction = _element.Q<Label>("IndustryProduction");
+        _researchProduction = _element.Q<Label>("ResearchProduction");
+        _productionItem = _element.Q<Label>("ProductionItem");
+        _productionProgress = _element.Q<Label>("ProductionProgress");
         enabled = false;
         
     }
@@ -82,10 +98,26 @@ public class PlanetDetailUIController : MonoBehaviour
     {
         if (planet == null) return; // || _element == null) return;
         _planet = planet;
-        _planetName.text = planet.PlanetName;
-        _populationValue.text = planet.Population.Count.ToString() + '/' + planet.MaxPopulation.ToString();
-        _populationProgress.text = planet.Food.ToString() + '/' + planet.FoodNeededForNewPop.ToString();
+        _planetName.text = _planet.PlanetName;
         SetIconForPlanetType();
+        UpdatePlanetDetail();
+    }
+
+    public void UpdatePlanetDetail()
+    {
+        _populationValue.text =
+            string.Format("{0}/{1}", _planet.Population.Count.ToString(), _planet.MaxPopulation.ToString());
+        _populationProgress.text = 
+            string.Format("{0}/{1}", _planet.Food.ToString(), _planet.FoodNeededForNewPop.ToString());
+        _foodProduction.text = _planet.FoodProduced.ToString();
+        _foodStorage.text = _planet.Food.ToString();
+        _grotsitsProduction.text = _planet.GrotsitsProduced.ToString();
+        _grotsitsStorage.text = _planet.Grotsits.ToString();
+        _industryProduction.text = _planet.IndustryProduced.ToString();
+        _researchProduction.text = _planet.ResearchProduced.ToString();
+        _productionItem.text = _planet.CurrentProduction?.Item.itemName ?? "None";
+        _productionProgress.text = string.Format("{0}/{1}", _planet.CurrentProduction?.Progress.ToString() ?? "0",
+            _planet.CurrentProduction?.Item.cost.ToString() ?? "X");
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

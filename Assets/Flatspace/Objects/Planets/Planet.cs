@@ -108,14 +108,18 @@ public class Planet : MonoBehaviour
     public int MaxPopulation => _resourceData._maxPopulation;
     
     public float Food { get; set; } = 0.0f;
+    public float FoodProduced { get; set; } = 0.0f;
     public float ProjectedFood { get; set; } = 0.0f;
     [SerializeField] public float FoodNeededForNewPop = 10.0f;
     public float Grotsits {get; set;}
+    public float GrotsitsProduced {get; set;}
     public float ProjectedGrotsits {get; set;}
     public float Industry {get; set;}
+    public float IndustryProduced {get; set;}
     public float ProjectedIndustry {get; set;}
     
     public float Research {get; set;}
+    public float ResearchProduced {get; set;}
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
     public List<int> IncomingPopulationSource = new List<int>();
@@ -452,15 +456,19 @@ public class Planet : MonoBehaviour
             return;
         AssignWorkForStrategy();
         // grow food
-        Food += (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction * ImprovementYieldModifier["Food"])) * (Morale/100.0f);
+        FoodProduced = (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction * ImprovementYieldModifier["Food"])) * (Morale/100.0f);
+        Food += FoodProduced;
         Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
         // produce grosits
-        Grotsits += (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
+        GrotsitsProduced = (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
+        Grotsits += GrotsitsProduced;
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         // produce industry
-        Industry += (_resourceData._industryProduction + (IndustryWorkers * _resourceData._industryProduction * ImprovementYieldModifier["Industry"])) * (Morale/100.0f);
+        IndustryProduced =  (_resourceData._industryProduction + (IndustryWorkers * _resourceData._industryProduction * ImprovementYieldModifier["Industry"])) * (Morale/100.0f);
+        Industry += IndustryProduced;
         // produce research
-        Research += (_resourceData._baseResearchProduction + (ResearchWorkers * _resourceData._researchProduction * ImprovementYieldModifier["Research"])) * (Morale/100.0f);        
+        ResearchProduced = (_resourceData._baseResearchProduction + (ResearchWorkers * _resourceData._researchProduction * ImprovementYieldModifier["Research"])) * (Morale/100.0f);
+        Research += ResearchProduced;         
         ConsumeFood(resultList);
         ConsumeGrotsits(resultList);
         ConsumeIndustry(resultList);
@@ -790,10 +798,13 @@ public class Planet : MonoBehaviour
 
     private void ContinueProduction(List<PlanetUpdateResult> resultList = null)
     {
-        if(CurrentProduction == null)
+        if(!CurrentProduction.HasValue)
             return;
-        var currentProductionProgress = CurrentProduction?.Progress + Industry;
-        if (currentProductionProgress >= CurrentProduction?.Item.cost)
+        var currentProduction =  CurrentProduction.Value;
+        currentProduction.Progress += Industry;
+        Industry = 0f;
+        CurrentProduction = currentProduction;
+        if (CurrentProduction?.Progress >= CurrentProduction?.Item.cost)
         {
             CompleteProduction(resultList);
         }

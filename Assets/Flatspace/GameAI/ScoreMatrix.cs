@@ -138,7 +138,7 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
 
             var choiceIndex = 0;
 
-            while (choiceIndex < numChoices)
+            while (choiceIndex < numChoices && decision.Value.Count > 0)
             {
                 var bestChoice = decision.Value[0];
                 actionList.Add(actionFactory(decision.Key, bestChoice));
