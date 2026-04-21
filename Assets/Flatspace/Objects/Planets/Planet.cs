@@ -775,7 +775,10 @@ public class Planet : MonoBehaviour
         {
             if (ProductionQueue.Count > 0)
             {
-                CurrentProduction = ProductionQueue.First();
+                var nextProduction = ProductionQueue.First();
+                nextProduction.Progress = Industry;
+                Industry = 0f;
+                CurrentProduction = nextProduction;
                 ProductionQueue.RemoveAt(0);
             }
 
