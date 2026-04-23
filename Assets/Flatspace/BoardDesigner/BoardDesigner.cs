@@ -18,7 +18,7 @@ namespace FlatSpace
                     if (!_lineDrawObjects[i]) continue;
                     _lineDrawObjects[i].transform.SetParent(null);
                     _lineDrawObjects[i].gameObject.SetActive(false);
-                    Destroy(_lineDrawObjects[i].gameObject);
+                    DestroyImmediate(_lineDrawObjects[i].gameObject);
                 }
 
                 _lineDrawObjects.Clear();
@@ -33,6 +33,11 @@ namespace FlatSpace
                 {
                     if (child.GetComponent<PlanetDesigner>())
                         planetList.Add(child.GetComponent<PlanetDesigner>());
+                }
+
+                foreach (var planet in planetList)
+                {
+                    planet.Connections.Clear();
                 }
 
                 foreach (var planet in planetList)
@@ -66,7 +71,8 @@ namespace FlatSpace
                     if (child.GetComponent<PlanetDesigner>())
                         planetList.Add(child.GetComponent<PlanetDesigner>());
                 }
-
+                
+                Debug.Log($"Total Num Planets {planetList.Count}");
                 var count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesolate))
                 {
@@ -76,6 +82,7 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
+                Debug.Log($"{count} Desolate");
 
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeFarm))
@@ -86,7 +93,8 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
-
+                Debug.Log($"{count} Farm");
+                
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeIndustrial))
                 {
@@ -96,7 +104,8 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
-
+                Debug.Log($"{count} Industrial");
+                
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeNormal))
                 {
@@ -106,6 +115,7 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
+                Debug.Log($"{count} Normal");                
 
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypePrime))
@@ -116,7 +126,8 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
-
+                Debug.Log($"{count} Prime");
+                
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeVerdant))
                 {
@@ -126,6 +137,7 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
+                Debug.Log($"{count} Verdant");                
                 
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeOcean))
@@ -136,6 +148,7 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }
+                Debug.Log($"{count} Ocean");                
                 
                 count = 0;
                 foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesert))
@@ -146,6 +159,7 @@ namespace FlatSpace
                     planet.UpdateGraphic();
                     count++;
                 }                
+                Debug.Log($"{count} Desert");
             }
 
 

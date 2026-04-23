@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using FlatSpace.Pathing;
 using Unity.VisualScripting;
 using UnityEditor;
@@ -42,7 +43,7 @@ namespace FlatSpace
             public float CameraOrtho =>  _camera.orthographicSize;
             public Vector2 ScrollRectPosition => _scrollRect.normalizedPosition;
 
-            static public int NumPlayers = 2;
+            public int NumPlayers = 2;
             public List<Player> players = new List<Player>();
             public int owningPlayerId = 0;
 
@@ -71,7 +72,6 @@ namespace FlatSpace
 
                 _camera = Camera.main;
                 _planetUIObjects.Clear();
-                CreatePlayerData();
                 if (IntialBoardState)
                 {
                     InitGame(IntialBoardState._planetSpawnData);
@@ -205,6 +205,10 @@ namespace FlatSpace
             {
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
+
+                NumPlayers = planetSpawnData.Count(x => x._planetType == Planet.PlanetType.PlanetTypePrime);
+                CreatePlayerData();
+
                 ClearPlayerData();
                 GameAI.InitGameAI(planetSpawnData, gameAIConstants);
                 InitPlanetGraphics(planetSpawnData);

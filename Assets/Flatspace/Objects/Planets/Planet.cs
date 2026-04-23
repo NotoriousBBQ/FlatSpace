@@ -660,12 +660,13 @@ public class Planet : MonoBehaviour
             playerID = popDistribution.First().Key;
         else
         {
-            var stack = new int[popDistribution.Count];
+            var stack = new int[Gameboard.Instance.NumPlayers];
             var stackTotal = 0;
-            for (var i = 0; i < popDistribution.Count; i++)
+            foreach (var key in popDistribution.Keys)
             {
-                stack[i] = popDistribution[i];
-                stackTotal += popDistribution[i];
+                stack[key] = popDistribution[key];
+                stackTotal += popDistribution[key];
+                    
             }
 
             var stackPick = GameAI.Rand.Next(stackTotal);

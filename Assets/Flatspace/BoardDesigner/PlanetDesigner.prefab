@@ -49,6 +49,7 @@ CanvasRenderer:
   m_CullTransparentMesh: 1
 --- !u!212 &2643599698521063528
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -94,6 +95,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 2
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -6065432454453164697, guid: 9ffaa2e8a20355c4e972d8dedf140aeb, type: 3}
   m_Color: {r: 0.6784314, g: 0.6784314, b: 0.08627451, a: 1}
   m_FlipX: 0
@@ -103,7 +105,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &723867047046002548
 MonoBehaviour:
@@ -118,13 +119,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlanetDesigner
   type: 0
-  population: 0
   strategy: 0
-  morale: 100
-  maxPopulation: 10
-  food: 0
-  foodNeededForNewPop: 10
-  grotsits: 0
   planetName: Planet
   position: {x: 408, y: 204.5}
   nameTextField: {fileID: 1810204264512034258}
@@ -233,6 +228,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -390,6 +386,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -501,6 +498,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
