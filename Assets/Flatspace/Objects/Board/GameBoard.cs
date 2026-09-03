@@ -84,6 +84,15 @@ namespace FlatSpace
 
             private void CreatePlayerData()
             {
+                // InitGame can run more than once for a single match (Awake seeds from
+                // IntialBoardState, then a designer/save load re-inits). Rebuild the list
+                // from scratch each time — otherwise the new Player components are appended
+                // and keep their default playerID of 0, so ProcessResults runs player 0
+                // again for every stale entry.
+                foreach (var player in players)
+                    if (player) Destroy(player);
+                players.Clear();
+
                 for (var i = 0; i < NumPlayers; i++)
                 {
                     players.Add(this.AddComponent<Player>());
@@ -530,7 +539,7 @@ namespace FlatSpace
                 {
                     _playerNotifications.Add(new PlayerNotification{
                         PlayerName = playerId.ToString(),
-                        Message = "Completed research:  " + completedResearch,
+                        Message = "Player: " + playerId + " Completed research:  " + completedResearch,
                         ViewTarget = GetPlayerCapitol(playerId).PlanetName,
                     });
                 }
@@ -541,7 +550,7 @@ namespace FlatSpace
                 {
                     _playerNotifications.Add(new PlayerNotification{
                         PlayerName = playerId.ToString(),
-                        Message = "Starting research:  " + newResearch,
+                        Message = "Player: " + playerId + " Starting research:  " + newResearch,
                         ViewTarget = GetPlayerCapitol(playerId).PlanetName,
                     });
                 }

@@ -7,7 +7,6 @@ using Flatspace.Objects.Production;
 using Flatspace.Objects.Resource;
 using Unity.VisualScripting;
 using UnityEngine;
-using Random = UnityEngine.Random;
 
 namespace FlatSpace
 {
@@ -332,20 +331,25 @@ namespace FlatSpace
             public float       researchTotal   = 0.0f;
             public CatalogItem currentResearch = null;
 
-            // Lower multiplier = higher preference. 1.0f = neutral (cost only).
-            // Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
-            private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchPriorityTable =
+            // Weight for a choice whose subType is not in the strategy table.
+            private const float DefaultChoiceWeight = 1f;
+            // Weight multiplier applied to a ColonyShip on a planet that is ready to colonize.
+            private const float ColonyShipUrgentBoost = 8f;
+
+            // Roulette-wheel weight per item subType. Higher = more likely to be picked.
+            // 1.0f = neutral. Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
+            private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     {
                         AIStrategy.AIStrategyExpand, new Dictionary<string, float>
                         {
-                            { "Food",          0.7f },  // food upgrades biggest boost
-                            { "Industry",      0.8f },  // least useful while expanding
-                            { "Grotsits",      1.1f },  // least useful while expanding
-                            { "Research",      1.1f },  // least useful while expanding
-                            { "ColonyShip",   0.8f },  // ships useful but secondary
-                            { "Warship",       1.3f },  // least useful while expanding
+                            { "Food",          3.0f },  // food upgrades biggest boost
+                            { "Industry",      2.0f },  // useful but secondary
+                            { "Grotsits",      1.0f },  // least useful while expanding
+                            { "Research",      1.0f },  // least useful while expanding
+                            { "ColonyShip",    2.5f },  // ships useful but secondary
+                            { "Warship",       0.5f },  // least useful while expanding
                         }
                     },
                     // AIStrategyConsolidate — add when needed
@@ -413,7 +417,7 @@ namespace FlatSpace
 
                 var actions = matrix.GenerateActionList(
                     actionFactory: (origin, element) => new ResearchAction { ChosenItem = element.Item },
-                    ChoiceCompare:       ResearchCompare);
+                    weightSelector:      element => element.Weight);
 
                 if (actions.Count == 0) return;
 
@@ -432,7 +436,7 @@ namespace FlatSpace
 
             /// <summary>
             /// Builds a one-row choice matrix: a single "AI" origin mapped to all
-            /// available research choices, scored by cost and strategy priority.
+            /// available research choices, weighted by strategy preference.
             /// </summary>
             private ScoreMatrix<ScoreMatrixDecisionElement, ResearchChoiceElement, ResearchAction> BuildChoiceMatrix(
                 List<CatalogItem> choices,
@@ -444,8 +448,8 @@ namespace FlatSpace
                     (new ScoreMatrixDecisionComparer());
                 var entries = choices.Select(item => new ResearchChoiceElement
                 {
-                    Item     = item,
-                    Priority = GetResearchPriority(item, strategy),
+                    Item   = item,
+                    Weight = GetResearchWeight(item, strategy),
                 }).ToList();
 
                 matrix.MatrixElements.Add(new ScoreMatrixDecisionElement
@@ -457,76 +461,62 @@ namespace FlatSpace
             }
 
             /// <summary>
-            /// Returns a priority score for a research item given the current strategy.
-            /// Lower = more preferred. Multiplier comes from the priority table;
-            /// falls back to cost-only if the strategy or type has no entry.
+            /// Roulette-wheel weight for a research item given the current strategy.
+            /// Higher = more likely to be picked. Falls back to a neutral weight if the
+            /// strategy or subType has no table entry.
             /// </summary>
-            private static float  GetResearchPriority(CatalogItem item, AIStrategy strategy)
+            private static float GetResearchWeight(CatalogItem item, AIStrategy strategy)
             {
-                if (ResearchPriorityTable.TryGetValue(strategy, out var typeWeights) &&
-                    typeWeights.TryGetValue(item.subType, out var multiplier))
+                if (ResearchWeightTable.TryGetValue(strategy, out var typeWeights) &&
+                    typeWeights.TryGetValue(item.subType, out var weight))
                 {
-                    return item.cost * multiplier * Random.Range(0.9f, 1.1f);
+                    return weight;
                 }
 
-                return item.cost;  // fallback: cost only, no strategy preference
+                return DefaultChoiceWeight;
             }
 
-            /// <summary>
-            /// Compare for research elements: lowest Priority score wins.
-            /// Priority already folds in cost and strategy weighting.
-            /// </summary>
-            private static int ResearchCompare(ResearchChoiceElement x, ResearchChoiceElement y)
-                => x.Priority.CompareTo(y.Priority);
-
             // ── Industry ─────────────────────────────────────────────────────
-            // Lower multiplier = higher preference. 1.0f = neutral (cost only).
-            // Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
-            private static int ProductionCompare(IndustryChoiceElement x, IndustryChoiceElement y)
-                => x.Priority.CompareTo(y.Priority);
-            
-            private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryPriorityTable =
+            // Roulette-wheel weight per item subType. Higher = more likely to be picked.
+            // 1.0f = neutral. Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
+            private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     {
                         AIStrategy.AIStrategyExpand, new Dictionary<string, float>
                         {
-                            { "Food",          0.8f },  // food needed for pop growth
-                            { "Industry",      1.0f },  // slightly useful while expanding
-                            { "Grotsits",      1.1f },  // build the base
-                            { "Research",      1.1f },  // build the base
-                            { "ColonyShip",    0.8f },  // ships colony ships needed
-                            { "Warship",       1.3f },  // least useful while expanding
+                            { "Food",          2.5f },  // food needed for pop growth
+                            { "Industry",      1.5f },  // slightly useful while expanding
+                            { "Grotsits",      1.0f },  // build the base
+                            { "Research",      1.0f },  // build the base
+                            { "ColonyShip",    2.5f },  // colony ships needed
+                            { "Warship",       0.5f },  // least useful while expanding
                         }
                     },
                     // AIStrategyConsolidate — add when needed
                     // AIStrategyAmass       — add when needed
                 };
-            private float  GetIndustryPriority(CatalogItem item, AIStrategy strategy, string planetName)
+            private float  GetIndustryWeight(CatalogItem item, AIStrategy strategy, string planetName)
             {
-                var cost = item.cost;
-                var costMultiplier = 1f;
-                if (ResearchPriorityTable.TryGetValue(strategy, out var typeWeights) &&
-                    typeWeights.TryGetValue(item.subType, out var strategyMultiplier))
+                var weight = DefaultChoiceWeight;
+                if (IndustryWeightTable.TryGetValue(strategy, out var typeWeights) &&
+                    typeWeights.TryGetValue(item.subType, out var strategyWeight))
                 {
-                    costMultiplier = strategyMultiplier * Random.Range(0.9f, 1.1f);
+                    weight = strategyWeight;
                 }
-                costMultiplier *= GetIndustrySituationalCostMultiplier(item, planetName);
-                cost *= costMultiplier;
-                return cost;  // fallback: cost only, no strategy preference
+                return weight * GetIndustrySituationalWeightMultiplier(item, planetName);
             }
 
-            private float GetIndustrySituationalCostMultiplier(CatalogItem item, string planetName)
+            private float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
             {
-                var multiplier = 1f;
                 if (item.subType == "ColonyShip")
                 {
                     if (PlanetHasColonyShip(planetName))
-                        multiplier = float.MaxValue;
-                    else if (PlanetCanColonize(planetName))
-                        multiplier = -1f;
+                        return 0f;                       // already have one — exclude
+                    if (PlanetCanColonize(planetName))
+                        return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
                 }
-                return multiplier;
+                return 1f;
             }
 
             private void ProcessIndustry(
@@ -550,9 +540,9 @@ namespace FlatSpace
                 if (matrix == null) return;
 
                 foreach (var action in matrix.GenerateActionList(
-                             actionFactory: (origin, element) => 
+                             actionFactory: (origin, element) =>
                                  new IndustryAction {ChosenItem = element.Item, PlanetName = origin.Target},
-                             ChoiceCompare:       ProductionCompare)
+                             weightSelector:      element => element.Weight)
                         )
                     EmitProductionOrders(action, orders);
             }
@@ -597,8 +587,6 @@ namespace FlatSpace
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
                 {
-                    
-                    var planetResults = productionCompleteResults.FindAll(x => x.Name == planetName);
                     var planet = AIMap.GetPlanet(planetName);
                     var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true 
                         && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name)) );
@@ -609,19 +597,23 @@ namespace FlatSpace
                     var entries = potentialProduction.Select(item => new IndustryChoiceElement
                     {
                         Item     = item,
-                        Priority = GetIndustryPriority(item, strategy, planetName),
+                        Weight = GetIndustryWeight(item, strategy, planetName),
                         Surplus = planetSurplus,
                         PlanetName = planetName,
                     }).ToList();
 
                     if(entries.Count == 0) continue;
                     
-                    matrix.MatrixElements.Add( 
+                    // A planet has one production slot, so it gets exactly one new
+                    // item per turn — even when it emitted several production signals
+                    // this turn (e.g. ProductionComplete + ProductionQueueEmpty both
+                    // fire when the last queued item finishes).
+                    matrix.MatrixElements.Add(
                         new ScoreMatrixMultipleDecisionElement
                         {
                             Target =  planetName,
                             Priority = decisionIndex++,
-                            NumChoices = planetResults.Count,
+                            NumChoices = 1,
                         },
                         entries);
 

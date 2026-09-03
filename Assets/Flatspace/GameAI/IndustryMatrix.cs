@@ -6,14 +6,14 @@ using Flatspace.Objects.Production;
 // ── Industry element ─────────────────────────────────────────────────────────
 
 /// <summary>
-/// IndustryChoiceElement for research choices.
-/// Cost comes from the CatalogItem; Priority is set by the caller
-/// based on AIStrategy and item type — lower = more preferred.
+/// IndustryChoiceElement for production choices.
+/// Cost comes from the CatalogItem; Weight is set by the caller
+/// based on AIStrategy and item type — higher = more likely to be picked.
 /// </summary>
 public struct IndustryChoiceElement : IScoreMatrixChoiceElement
 {
-    public CatalogItem Item     { get; set; }
-    public float       Priority { get; set; }
+    public CatalogItem Item   { get; set; }
+    public float       Weight { get; set; }
     public string PlanetName {get; set;}
     public float Surplus;
 

@@ -7,13 +7,13 @@ using Flatspace.Objects.Production;
 
 /// <summary>
 /// ResearchChoiceElement for research choices.
-/// Cost comes from the CatalogItem; Priority is set by the caller
-/// based on AIStrategy and item type — lower = more preferred.
+/// Cost comes from the CatalogItem; Weight is set by the caller
+/// based on AIStrategy and item type — higher = more likely to be picked.
 /// </summary>
 public struct ResearchChoiceElement : IScoreMatrixChoiceElement
 {
-    public CatalogItem Item     { get; set; }
-    public float       Priority { get; set; }
+    public CatalogItem Item   { get; set; }
+    public float       Weight { get; set; }
 
     // IScoreMatrixChoiceElement
     public string Target   => Item.itemName;

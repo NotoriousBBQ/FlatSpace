@@ -120,16 +120,21 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
 
     public List<TAction>  GenerateActionList(
         Func<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement, TAction> actionFactory,
-        Comparison<TScoreMatrixChoiceElement>            ChoiceCompare = null)
+        Comparison<TScoreMatrixChoiceElement>            ChoiceCompare  = null,
+        Func<TScoreMatrixChoiceElement, float>           weightSelector = null)
     {
-        ChoiceCompare = ChoiceCompare ?? DefaultChoiceCompare;
-
         var actionList = new List<TAction>();
         if (MatrixElements.Count <= 0)
             return actionList;
 
-        foreach (var list in MatrixElements.Values)
-            list.Sort(ChoiceCompare);
+        // weightSelector: roulette-wheel pick (higher weight = more likely).
+        // otherwise: sort each row by ChoiceCompare and take the best.
+        if (weightSelector == null)
+        {
+            ChoiceCompare = ChoiceCompare ?? DefaultChoiceCompare;
+            foreach (var list in MatrixElements.Values)
+                list.Sort(ChoiceCompare);
+        }
 
         foreach (var decision in MatrixElements)
         {
@@ -140,18 +145,50 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
 
             while (choiceIndex < numChoices && decision.Value.Count > 0)
             {
-                var bestChoice = decision.Value[0];
-                actionList.Add(actionFactory(decision.Key, bestChoice));
+                var chosenChoice = weightSelector != null
+                    ? WeightedPick(decision.Value, weightSelector)
+                    : decision.Value[0];
+                actionList.Add(actionFactory(decision.Key, chosenChoice));
                 foreach (var remaining in MatrixElements)
                 {
                     if (remaining.Value.Count > 0)
-                        remaining.Value.RemoveAll(v => v.Equals(bestChoice));
+                        remaining.Value.RemoveAll(v => v.Equals(chosenChoice));
                 }
                 choiceIndex++;
-                
+
             }
         }
 
         return actionList;
+    }
+
+    // Roulette-wheel selection. A weight that is negative, NaN or infinite is
+    // treated as 0 (excluded); if every weight is 0 the pick is uniform.
+    private static TScoreMatrixChoiceElement WeightedPick(
+        List<TScoreMatrixChoiceElement>       choices,
+        Func<TScoreMatrixChoiceElement, float> weightSelector)
+    {
+        var weights = new float[choices.Count];
+        var total   = 0f;
+        for (var i = 0; i < choices.Count; i++)
+        {
+            var w = weightSelector(choices[i]);
+            if (float.IsNaN(w) || float.IsInfinity(w) || w < 0f) w = 0f;
+            weights[i] = w;
+            total += w;
+        }
+
+        if (total <= 0f)
+            return choices[FlatSpace.AI.GameAI.Rand.Next(choices.Count)];
+
+        var roll       = FlatSpace.AI.GameAI.Rand.NextDouble() * total;
+        var cumulative = 0.0;
+        for (var i = 0; i < choices.Count; i++)
+        {
+            cumulative += weights[i];
+            if (roll < cumulative)
+                return choices[i];
+        }
+        return choices[choices.Count - 1];   // float-rounding guard
     }
 }
