@@ -7,6 +7,7 @@ public class PlanetDetailUIController : MonoBehaviour
 
     private Planet _planet;
     private VisualElement _element;
+    private VisualElement _panelElement;
     private Label _planetName;
     private Label _populationValue;
     private Label _populationProgress;
@@ -59,11 +60,22 @@ public class PlanetDetailUIController : MonoBehaviour
         }
     }
     private void OnEnable()
-    {     
+    {
         if(_planet == null || _element == null) return;
         _element.SetEnabled(true);
         _element.visible = true;
         _element.pickingMode = PickingMode.Ignore;
+    }
+
+    // Used by Gameboard to detect clicks outside this panel so it can be dismissed without
+    // swallowing clicks meant for controls inside the panel itself. Bounds-test against
+    // _panelElement (the "PlanetDetailElement" box), not _element (uiDocument.rootVisualElement),
+    // which stretches to fill the whole screen and would make every point match.
+    public bool ContainsScreenPoint(Vector2 screenPosition)
+    {
+        if (_panelElement == null || _panelElement.panel == null) return false;
+        var panelPosition = RuntimePanelUtils.ScreenToPanel(_panelElement.panel, screenPosition);
+        return _panelElement.worldBound.Contains(panelPosition);
     }
 
     private void OnDisable()
@@ -77,6 +89,7 @@ public class PlanetDetailUIController : MonoBehaviour
     public void Awake()
     {
         _element = uiDocument.rootVisualElement;
+        _panelElement = _element.Q<VisualElement>("PlanetDetailElement");
 
         _planetName = _element.Q<Label>("PlanetName");
         _planetIcon = _element.Q<Image>("PlanetIcon");
