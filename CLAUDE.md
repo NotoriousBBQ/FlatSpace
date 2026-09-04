@@ -51,7 +51,10 @@ The simulation is deliberately separated from the visuals:
   keyed by planet name. Planet names are the universal identifier throughout orders, pathing, and saves.
 - **Presentation:** `PlanetUIObject` (world-space planet markers), `LineDrawObject` (connection / order
   lines), and the UI Toolkit HUD (`MainScreenUIController`, `NotificationListController`,
-  `PlanetDetailUIController`, `GameButtonHandler`).
+  `PlanetDetailUIController`, `GameButtonHandler`). `Gameboard.Update()` closes the planet detail
+  panel on any click that lands neither on the panel itself (`PlanetDetailUIController.ContainsScreenPoint`)
+  nor on a planet (an `EventSystem.RaycastAll` check, mirroring the raycast that drives
+  `PlanetUIObject.OnPointerClick`) — the same effect as pressing Escape.
 
 `Gameboard` (class name is `Gameboard`, **not** `GameBoard`; namespace `FlatSpace.Game`; file
 `GameBoard.cs`) is the central singleton (`Gameboard.Instance`) that owns both sides and drives the turn.
@@ -146,5 +149,10 @@ from the `.inputactions` asset rather than editing it by hand.
   pure. The AI reads planet state back out during `ProcessResults` in the same turn.
 - "Grotsits" is the game's consumer-goods resource; low grotsits lowers `Morale`, which scales all
   production.
+- **`UIDocument.rootVisualElement` is not the visible panel.** It's Unity's auto-generated root
+  container for the whole document and stretches to fill the entire screen regardless of how the
+  panel is positioned/sized in the `.uxml`. Bounds-testing against it (e.g. "is this click inside
+  the panel?") always matches — query the actual named child element (e.g.
+  `rootVisualElement.Q<VisualElement>("PlanetDetailElement")`) and test its `worldBound` instead.
 - Generated / large directories are git-ignored: `Library/`, `Temp/`, `obj/`, `Logs/`, `UserSettings/`,
   `Recordings/`, and all `*.csproj` / `*.sln` files.
