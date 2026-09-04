@@ -8,6 +8,7 @@ using UnityEditor;
 //using UnityEditor.SceneManagement;
 //using UnityEditorInternal;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
@@ -62,7 +63,29 @@ namespace FlatSpace
             // UpdatePlanet is called once per frame
             void Update()
             {
+                if (PlanetDetailShowing() && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                {
+                    var mousePosition = Mouse.current.position.ReadValue();
+                    // A click on a planet is handled by PlanetUIObject.OnPointerClick (which shows
+                    // that planet's detail), so only close here for a click that lands neither on
+                    // the detail panel nor on a planet -- same as pressing Escape.
+                    if (!_planetDetailUIController.ContainsScreenPoint(mousePosition) && !IsPointerOverPlanet(mousePosition))
+                        HidePlanetDetail();
+                }
+            }
 
+            private static bool IsPointerOverPlanet(Vector2 screenPosition)
+            {
+                if (EventSystem.current == null) return false;
+                var pointerData = new PointerEventData(EventSystem.current) { position = screenPosition };
+                var results = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, results);
+                foreach (var result in results)
+                {
+                    if (result.gameObject.GetComponentInParent<PlanetUIObject>() != null)
+                        return true;
+                }
+                return false;
             }
 
             private void Awake()
