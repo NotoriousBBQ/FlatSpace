@@ -587,6 +587,7 @@ namespace FlatSpace
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
                 {
+                    var planetResults = productionCompleteResults.FindAll(x => x.Name == planetName);
                     var planet = AIMap.GetPlanet(planetName);
                     var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true 
                         && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name)) );
@@ -613,7 +614,7 @@ namespace FlatSpace
                         {
                             Target =  planetName,
                             Priority = decisionIndex++,
-                            NumChoices = 1,
+                            NumChoices = planetResults.Count,
                         },
                         entries);
 

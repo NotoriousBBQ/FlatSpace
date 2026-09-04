@@ -1,0 +1,755 @@
+{
+    "turnNumber": 1,
+    "initialBoardStatePath": "",
+    "boardDesignDataPath": "C:\\Projects\\FlatSpace\\Assets\\Flatspace\\BoardConfigs\\3PlayerMed.json",
+    "cameraOrtho": 5.0,
+    "scrollRectPosition": {
+        "x": 0.7744886875152588,
+        "y": 0.6600000858306885
+    },
+    "players": [
+        {
+            "playerId": 0,
+            "strategy": 1,
+            "researchCatalogSave": {
+                "CatalogName": "ResearchCatalog",
+                "Completed": []
+            },
+            "productionCatalogSave": {
+                "CatalogName": "ProductionCatalog",
+                "Completed": [
+                    "ColonyShipProduction",
+                    "BaseFoodImprovement",
+                    "BaseGrotsitsProduction",
+                    "BaseIndustryProduction",
+                    "BaseResearchImprovement"
+                ]
+            },
+            "currentResearchItem": "",
+            "currentResearch": 0.0
+        },
+        {
+            "playerId": 1,
+            "strategy": 1,
+            "researchCatalogSave": {
+                "CatalogName": "ResearchCatalog",
+                "Completed": []
+            },
+            "productionCatalogSave": {
+                "CatalogName": "ProductionCatalog",
+                "Completed": [
+                    "ColonyShipProduction",
+                    "BaseFoodImprovement",
+                    "BaseGrotsitsProduction",
+                    "BaseIndustryProduction",
+                    "BaseResearchImprovement"
+                ]
+            },
+            "currentResearchItem": "",
+            "currentResearch": 0.0
+        },
+        {
+            "playerId": 2,
+            "strategy": 1,
+            "researchCatalogSave": {
+                "CatalogName": "ResearchCatalog",
+                "Completed": []
+            },
+            "productionCatalogSave": {
+                "CatalogName": "ProductionCatalog",
+                "Completed": [
+                    "ColonyShipProduction",
+                    "BaseFoodImprovement",
+                    "BaseGrotsitsProduction",
+                    "BaseIndustryProduction",
+                    "BaseResearchImprovement"
+                ]
+            },
+            "currentResearchItem": "",
+            "currentResearch": 0.0
+        }
+    ],
+    "orders": [],
+    "planetStatuses": [
+        {
+            "name": "Prime 0",
+            "planetType": 0,
+            "planetStrategy": 1,
+            "food": 2.0,
+            "population": [
+                2,
+                0,
+                0
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": 0,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Industrial 0",
+            "planetType": 4,
+            "planetStrategy": 9,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Verdant 0",
+            "planetType": 3,
+            "planetStrategy": 3,
+            "food": 3.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desert 0",
+            "planetType": 7,
+            "planetStrategy": 8,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Farm 0",
+            "planetType": 2,
+            "planetStrategy": 2,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 0",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desolate 0",
+            "planetType": 5,
+            "planetStrategy": 5,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 3.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Farm 1",
+            "planetType": 2,
+            "planetStrategy": 2,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desert 1",
+            "planetType": 7,
+            "planetStrategy": 8,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 1",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Ocean 0",
+            "planetType": 6,
+            "planetStrategy": 7,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Industrial 1",
+            "planetType": 4,
+            "planetStrategy": 9,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 2",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Ocean 1",
+            "planetType": 6,
+            "planetStrategy": 7,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Industrial 2",
+            "planetType": 4,
+            "planetStrategy": 9,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Ocean 2",
+            "planetType": 6,
+            "planetStrategy": 7,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Farm 2",
+            "planetType": 2,
+            "planetStrategy": 2,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 3",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Prime 1",
+            "planetType": 0,
+            "planetStrategy": 1,
+            "food": 2.0,
+            "population": [
+                0,
+                2,
+                0
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": 1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Ocean 3",
+            "planetType": 6,
+            "planetStrategy": 7,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desert 2",
+            "planetType": 7,
+            "planetStrategy": 8,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 4",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 5",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Verdant 1",
+            "planetType": 3,
+            "planetStrategy": 3,
+            "food": 3.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Farm 3",
+            "planetType": 2,
+            "planetStrategy": 2,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Industrial 3",
+            "planetType": 4,
+            "planetStrategy": 9,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Prime 2",
+            "planetType": 0,
+            "planetStrategy": 1,
+            "food": 2.0,
+            "population": [
+                0,
+                0,
+                2
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": 2,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Verdant 2",
+            "planetType": 3,
+            "planetStrategy": 3,
+            "food": 3.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 0.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 6",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 7",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desert 3",
+            "planetType": 7,
+            "planetStrategy": 8,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 2.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desolate 1",
+            "planetType": 5,
+            "planetStrategy": 5,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 3.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Desolate 2",
+            "planetType": 5,
+            "planetStrategy": 5,
+            "food": 0.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 3.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        },
+        {
+            "name": "Normal 8",
+            "planetType": 1,
+            "planetStrategy": 0,
+            "food": 1.0,
+            "population": [
+                0,
+                0,
+                0
+            ],
+            "grotsits": 1.0,
+            "research": 0.0,
+            "industry": 0.0,
+            "productionQueue": [],
+            "morale": 100.0,
+            "owner": -1,
+            "populationTransferInProgress": [],
+            "foodTransferInProgress": false,
+            "grotsitsTransferInProgress": false
+        }
+    ]
+}

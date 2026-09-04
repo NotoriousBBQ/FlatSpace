@@ -651,7 +651,7 @@ namespace FlatSpace
                             _playerNotifications.Add(new PlayerNotification
                             {
                                 PlayerName = order.PlayerId.ToString(),
-                                Message = "Starting New Production " + order.Data.ToString() + " At " + order.Origin,
+                                Message = "Add Production " + order.Data.ToString() + " At " + order.Origin,
                                 ViewTarget = order.Origin,
                             });
                             break;
