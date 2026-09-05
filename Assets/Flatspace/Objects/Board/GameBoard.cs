@@ -56,6 +56,11 @@ namespace FlatSpace
             private FleetUIController _fleetUIController;
             public int TurnNumber { get; private set; }= 1;
             private float orthoChange;
+            // Frame on which a UI panel handled a click (e.g. the Planet Detail fleet icon opening
+            // the Fleet UI). Update() polls the raw mouse independently of the EventSystem, so
+            // without this the same click would immediately be treated as an "outside" click and
+            // close the panel that just opened.
+            private int _panelClickFrame = -1;
             void Start()
             {
 
@@ -67,13 +72,12 @@ namespace FlatSpace
                 if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
                     return;
 
-                var mousePosition = Mouse.current.position.ReadValue();
-
-                if (PlanetDetailShowing() && _planetDetailUIController.ContainsFleetIconScreenPoint(mousePosition))
-                {
-                    ShowFleetUI(_planetDetailUIController.CurrentPlanetName);
+                // A panel already consumed this click (the Planet Detail fleet icon opening the
+                // Fleet UI). Don't also process it as an outside-click this frame.
+                if (Time.frameCount == _panelClickFrame)
                     return;
-                }
+
+                var mousePosition = Mouse.current.position.ReadValue();
 
                 if (FleetUIShowing())
                 {
@@ -492,6 +496,7 @@ namespace FlatSpace
             public void ShowFleetUI(string planetName)
             {
                 if (!_fleetUIController) return;
+                _panelClickFrame = Time.frameCount;
                 HidePlanetDetail();
                 _fleetUIController.SetPlanet(GetPlanet(planetName));
                 _fleetUIController.enabled = true;

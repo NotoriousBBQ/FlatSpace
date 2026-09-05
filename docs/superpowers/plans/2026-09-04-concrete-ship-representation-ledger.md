@@ -41,3 +41,34 @@ real issues in one fix round (null-safety, save compat, owner-index guard, Fleet
      show it.
    - Confirm a multi-hop shipment line bends through intermediate planets along the real A* path.
    - Confirm save/reload round-trips docked ships (kind, owner, research snapshot).
+
+## Post-verification fixes (2026-09-05)
+
+Play-mode testing surfaced four fleet-UI issues; fixed together:
+
+1. **Fleet UI panel off-centre / offscreen.** `FleetUI.uxml` combined `align-self: center` with a
+   `left: 30%` relative offset, shoving the panel 30% of the panel width to the right. Changed to
+   `left: 0` (matching `PlanetDetailUI.uxml`) and `top: 20%`.
+2. **Planet Detail fleet-icon click never registered (Y always outside `worldBound`).** The manual
+   `RuntimePanelUtils.ScreenToPanel` + `worldBound.Contains` test in
+   `PlanetDetailUIController.ContainsFleetIconScreenPoint` (polled from `Gameboard.Update`) was too
+   fragile for a 20px target. Replaced with a real `ClickEvent` on the `FleetIcon` element
+   (`pickingMode = Position`, callback registered in `Awake`), which uses UI Toolkit's own picking
+   against the resolved layout. `ContainsFleetIconScreenPoint` / `CurrentPlanetName` and the
+   `Gameboard.Update` branch that called them are gone.
+3. **Same-frame close race.** `Gameboard.Update` polls the raw mouse independently of the EventSystem,
+   so the click that opened the Fleet UI could be re-processed as an outside-click and close it the
+   same frame. Added a `_panelClickFrame` guard set by `ShowFleetUI`.
+4. **Gameboard fleet icon not clickable at some positions / ignoring zoom.** The world-space icon is a
+   child graphic on the same canvas as the planet, so whether the click is picked up by the planet
+   collider (`Physics2DRaycaster`, sprite sorting order 2) or the icon's `Image` (world
+   `GraphicRaycaster`, canvas sorting order 0) depends on overlap. Removed `FleetIconClickHandler`
+   entirely; `PlanetUIObject.OnPointerClick` (which the click bubbles to either way) now disambiguates
+   against the icon's live screen rect via `RectTransformUtility.RectangleContainsScreenPoint`, so it
+   works regardless of zoom or which raycaster won. The icon also now gets explicit centre
+   anchors/pivot so its `anchoredPosition` is predictable.
+
+Rider's solution build reports pre-existing errors in Unity package cache files
+(`com.unity.ugui/MenuOptions.cs`, `com.unity.render-pipelines.core/PassesData.cs`) unrelated to this
+work; per-file analysis of the three edited game scripts is clean. Unity Editor recompile is the real
+check.

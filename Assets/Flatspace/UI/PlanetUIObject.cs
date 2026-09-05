@@ -73,7 +73,22 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
-       Gameboard.Instance.ShowPlanetDetail(_planetName);
+        // The fleet icon is a child graphic on the same world-space canvas, so whether the raw
+        // click is picked up by the planet's collider (Physics2DRaycaster) or by the icon's
+        // Image (GraphicRaycaster) depends on sorting order -- the bubbled click ends here
+        // either way. Disambiguate against the icon's live screen rect so it works regardless
+        // of zoom level or which raycaster won.
+        if (_fleetIconImage && _fleetIconImage.gameObject.activeSelf)
+        {
+            var iconCamera = _statsCanvas.worldCamera ? _statsCanvas.worldCamera : Camera.main;
+            if (RectTransformUtility.RectangleContainsScreenPoint(
+                    _fleetIconImage.rectTransform, eventData.position, iconCamera))
+            {
+                Gameboard.Instance.ShowFleetUI(_planetName);
+                return;
+            }
+        }
+        Gameboard.Instance.ShowPlanetDetail(_planetName);
     }
 
     private void CreateFleetIcon()
@@ -81,11 +96,12 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         var iconObject = new GameObject("FleetIcon");
         iconObject.transform.SetParent(_statsCanvas.transform, false);
         var rect = iconObject.AddComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
         rect.sizeDelta = new Vector2(16, 16);
-        rect.anchoredPosition = new Vector2(20, 20);
+        rect.anchoredPosition = new Vector2(20, -20);
         _fleetIconImage = iconObject.AddComponent<Image>();
         _fleetIconImage.color = new Color32(255, 215, 0, 255); // placeholder gold badge -- swap for real art later
-        iconObject.AddComponent<FleetIconClickHandler>().Init(this);
+        _fleetIconImage.raycastTarget = true;
         _fleetIconImage.gameObject.SetActive(false);
     }
 

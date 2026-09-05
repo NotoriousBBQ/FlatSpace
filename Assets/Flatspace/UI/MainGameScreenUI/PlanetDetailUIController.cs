@@ -1,3 +1,4 @@
+using FlatSpace.Game;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -79,14 +80,15 @@ public class PlanetDetailUIController : MonoBehaviour
         return _panelElement.worldBound.Contains(panelPosition);
     }
 
-    public string CurrentPlanetName => _planet?.PlanetName;
-
-    public bool ContainsFleetIconScreenPoint(Vector2 screenPosition)
+    // The fleet icon is a real pickable element with its own ClickEvent (registered in Awake),
+    // rather than a screen-point bounds test polled from Gameboard: a 20px target is too small
+    // to hit reliably through the ScreenToPanel / worldBound round-trip, and UI Toolkit's own
+    // picking uses the resolved layout at event time.
+    private void OnFleetIconClicked(ClickEvent evt)
     {
-        if (_fleetIcon == null || _fleetIcon.panel == null) return false;
-        if (_fleetIcon.style.display == DisplayStyle.None) return false;
-        var panelPosition = RuntimePanelUtils.ScreenToPanel(_fleetIcon.panel, screenPosition);
-        return _fleetIcon.worldBound.Contains(panelPosition);
+        if (_planet == null) return;
+        Gameboard.Instance.ShowFleetUI(_planet.PlanetName);
+        evt.StopPropagation();
     }
 
     private void OnDisable()
@@ -115,8 +117,13 @@ public class PlanetDetailUIController : MonoBehaviour
         _productionItem = _element.Q<Label>("ProductionItem");
         _productionProgress = _element.Q<Label>("ProductionProgress");
         _fleetIcon = _element.Q<VisualElement>("FleetIcon");
+        if (_fleetIcon != null)
+        {
+            _fleetIcon.pickingMode = PickingMode.Position;
+            _fleetIcon.RegisterCallback<ClickEvent>(OnFleetIconClicked);
+        }
         enabled = false;
-        
+
     }
 
     public void SetPlanet(Planet planet)
