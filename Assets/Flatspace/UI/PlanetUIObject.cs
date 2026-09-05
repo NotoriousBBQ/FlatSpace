@@ -105,8 +105,11 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         _fleetIconImage.gameObject.SetActive(false);
     }
 
-    void Start()
+    void Awake()
     {
+        // Created in Awake (not Start) so the icon Image exists before the synchronous
+        // UIUpdate() call in Gameboard.InitializeUIObject -- otherwise a loaded game shows
+        // no fleet icon until the first turn tick.
         CreateFleetIcon();
     }
 
