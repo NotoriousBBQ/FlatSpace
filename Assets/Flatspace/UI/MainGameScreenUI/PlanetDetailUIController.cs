@@ -8,6 +8,7 @@ public class PlanetDetailUIController : MonoBehaviour
     private Planet _planet;
     private VisualElement _element;
     private VisualElement _panelElement;
+    private VisualElement _fleetIcon;
     private Label _planetName;
     private Label _populationValue;
     private Label _populationProgress;
@@ -78,6 +79,16 @@ public class PlanetDetailUIController : MonoBehaviour
         return _panelElement.worldBound.Contains(panelPosition);
     }
 
+    public string CurrentPlanetName => _planet?.PlanetName;
+
+    public bool ContainsFleetIconScreenPoint(Vector2 screenPosition)
+    {
+        if (_fleetIcon == null || _fleetIcon.panel == null) return false;
+        if (_fleetIcon.style.display == DisplayStyle.None) return false;
+        var panelPosition = RuntimePanelUtils.ScreenToPanel(_fleetIcon.panel, screenPosition);
+        return _fleetIcon.worldBound.Contains(panelPosition);
+    }
+
     private void OnDisable()
     {
         if(_element == null) return;
@@ -103,6 +114,7 @@ public class PlanetDetailUIController : MonoBehaviour
         _researchProduction = _element.Q<Label>("ResearchProduction");
         _productionItem = _element.Q<Label>("ProductionItem");
         _productionProgress = _element.Q<Label>("ProductionProgress");
+        _fleetIcon = _element.Q<VisualElement>("FleetIcon");
         enabled = false;
         
     }
@@ -131,6 +143,8 @@ public class PlanetDetailUIController : MonoBehaviour
         _productionItem.text = _planet.CurrentProduction?.Item.itemName ?? "None";
         _productionProgress.text = string.Format("{0}/{1}", _planet.CurrentProduction?.Progress.ToString() ?? "0",
             _planet.CurrentProduction?.Item.cost.ToString() ?? "X");
+        if (_fleetIcon != null)
+            _fleetIcon.style.display = _planet.DockedShips.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
