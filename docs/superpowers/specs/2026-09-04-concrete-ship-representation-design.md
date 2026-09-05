@@ -57,6 +57,25 @@ Explicitly out of scope (deferred to a later task):
   This mirrors `Planet`'s own convention: one `MonoBehaviour` class, a kind-enum distinguishing
   flavor (like `Planet.PlanetType`), not a subclass hierarchy.
 
+- `Ship` also gets `public List<string> ResearchSnapshot;` — the item names of every *currently
+  researched* item in the owning player's Research catalog where `type == "Ship Improvement"` and
+  `subType` matches the ship's kind (`"Warship"` or `"ColonyShip"`), captured once at construction
+  time and never updated afterward. This mirrors `GameSave.CatalogSave.Completed`, which already
+  captures "which items are researched" the same way (`catalog.catalogItems.FindAll(x =>
+  x.researched)` → a `List<string>` of `itemName`s) — just filtered further by type/subType and
+  taken at ship-construction time instead of save time. Concretely, at construction:
+  ```csharp
+  var researchCatalog = Gameboard.Instance.players[Owner].playerAI.ResearchCatalog;
+  ship.ResearchSnapshot = researchCatalog.catalogItems
+      .Where(x => x.researched && x.type == "Ship Improvement" && x.subType == subTypeString)
+      .Select(x => x.itemName)
+      .ToList();
+  ```
+  Reaching from `Planet` into `Gameboard.Instance.players[...]` for a player's catalog is the same
+  cross-layer call `GameAI.ExecuteOrder` already makes for `OrderTypeIndustrySetProduction`.
+  Applying the *effects* of these snapshotted items to a ship's concrete stats is explicitly out
+  of scope for this task — only the snapshot mechanism is built now.
+
 - `GameAIConstants` (already the ScriptableObject holding per-type template references, e.g.
   `resourceData`) gets two new fields:
   ```csharp
@@ -183,9 +202,11 @@ logic, only where the line and marker are drawn.
 
 ## E. Save/load
 
-- `SaveLoadSystem.GameSave.PlanetSave` gets a new list of ship saves, each just `Kind` + `Owner` —
-  stats live on the static `ShipData` template and are re-resolved via `GameAIConstants` on load,
-  so nothing else needs duplicating.
+- `SaveLoadSystem.GameSave.PlanetSave` gets a new list of ship saves, each with `Kind`, `Owner`,
+  and `ResearchSnapshot` — stats live on the static `ShipData` template and are re-resolved via
+  `GameAIConstants` on load, so nothing else needs duplicating, but `ResearchSnapshot` is a
+  point-in-time record with no other source of truth to re-derive it from, so it must be saved
+  explicitly (same reasoning as `GameSave.CatalogSave.Completed`).
 - `OrderTypeShipTransport` needs no `OrderSave` schema change — `OrderSave` already stores any
   order as an enum + an int/float `data` + `dataType`, the same shape every other transport order
   already uses.
