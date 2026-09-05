@@ -231,6 +231,7 @@ RectTransform:
   m_Children:
   - {fileID: 1626315734}
   - {fileID: 1058348907}
+  - {fileID: 1253346303}
   m_Father: {fileID: 667686348}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -308,6 +309,7 @@ MonoBehaviour:
   - {fileID: 3735582483864339332, guid: 1e16cd2b0fe214c4a998a527cc74424b, type: 3}
   - {fileID: 2710091386499365705, guid: be094b4f5fcf94848815cac89d1243e6, type: 3}
   - {fileID: 8802576304822303094, guid: b28150491e093f84fb6fe691255c3fcb, type: 3}
+  NumPlayers: 2
   players: []
   owningPlayerId: 0
 --- !u!1 &519420028
@@ -796,6 +798,75 @@ MonoBehaviour:
   m_ParentUI: {fileID: 0}
   sourceAsset: {fileID: 9197481963319205126, guid: 527ba6cb7a2f3a94bb70a043126ae8ea, type: 3}
   m_SortingOrder: 2
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!1 &1253346302
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1253346303}
+  - component: {fileID: 1253346305}
+  - component: {fileID: 1253346304}
+  m_Layer: 5
+  m_Name: FleetUIDocument
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1253346303
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1253346302}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -3546.0002}
+  m_LocalScale: {x: 39.4, y: 39.4, z: 39.4}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 77940341}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1253346304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1253346302}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00f4f0f4c48d45178bd90c4c9ef07a05, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FleetUIController
+  uiDocument: {fileID: 1253346305}
+--- !u!114 &1253346305
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1253346302}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 1076588f40c3bd844bad78a2946dbc9d, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: 6a28a8a2ac50fd541a7589a10dfc91cb, type: 3}
+  m_SortingOrder: 3
   m_Position: 0
   m_WorldSpaceSizeMode: 1
   m_WorldSpaceWidth: 1920
