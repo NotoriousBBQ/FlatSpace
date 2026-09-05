@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -19,11 +20,48 @@ public class LineDrawObject : MonoBehaviour
                 || float.IsInfinity(position.x) || float.IsInfinity(position.y))
             {
                 Console.WriteLine("Caught");
-                
+
             }
             spriteRenderer.transform.localPosition = points.Item1 + ((points.Item2 - points.Item1) * progressAmount);
             float angle = Vector2.SignedAngle(Vector2.up, points.Item2 - points.Item1);
             spriteRenderer.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+        }
+    }
+
+    public virtual void SetPath(List<Vector3> pathPoints, float progressAmount = 0.0f)
+    {
+        if (pathPoints == null || pathPoints.Count < 2) return;
+
+        lineRenderer.positionCount = pathPoints.Count;
+        lineRenderer.SetPositions(pathPoints.ToArray());
+
+        if (!spriteRenderer) return;
+
+        var totalLength = 0.0f;
+        for (var i = 1; i < pathPoints.Count; i++)
+            totalLength += Vector3.Distance(pathPoints[i - 1], pathPoints[i]);
+
+        var targetDistance = totalLength * progressAmount;
+        var traveled = 0.0f;
+        for (var i = 1; i < pathPoints.Count; i++)
+        {
+            var segmentStart = pathPoints[i - 1];
+            var segmentEnd = pathPoints[i];
+            var segmentLength = Vector3.Distance(segmentStart, segmentEnd);
+            var reachedTarget = traveled + segmentLength >= targetDistance;
+            var isLastSegment = i == pathPoints.Count - 1;
+            if (reachedTarget || isLastSegment)
+            {
+                var segmentProgress = segmentLength > 0.0f
+                    ? Math.Clamp((targetDistance - traveled) / segmentLength, 0.0f, 1.0f)
+                    : 0.0f;
+                var position = segmentStart + (segmentEnd - segmentStart) * segmentProgress;
+                spriteRenderer.transform.localPosition = position;
+                var angle = Vector2.SignedAngle(Vector2.up, segmentEnd - segmentStart);
+                spriteRenderer.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+                break;
+            }
+            traveled += segmentLength;
         }
     }
 
