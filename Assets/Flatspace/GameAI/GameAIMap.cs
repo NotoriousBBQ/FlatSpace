@@ -43,6 +43,18 @@ namespace FlatSpace
                 return _planets[planetName].Position;
             }
 
+            public Path GetPath(string origin, string destination)
+            {
+                var entry = _planets[origin].DistanceMapToPathingList[destination];
+                var path = _planetPathings[entry.PathingIndex].Path1To2;
+                if (!entry.PathReversed) return path;
+
+                var reversed = new Path { Cost = path.Cost, NumNodes = path.NumNodes };
+                reversed.PathNodes.AddRange(path.PathNodes);
+                reversed.PathNodes.Reverse();
+                return reversed;
+            }
+
             public void ClearGameAIMap()
             {
                 _planets.Clear();
