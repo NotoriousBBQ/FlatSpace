@@ -153,7 +153,7 @@ namespace FlatSpace
                         targetPlanet.Research += Convert.ToSingle(executableOrder.Data);
                         break;
                     case GameAIOrder.OrderType.OrderTypeRemoveShip:
-                        targetPlanet.HasColonyShip = false;
+                        targetPlanet.UndockShip(Ship.ShipKind.ColonyShip);
                         break;
                     default:
                         break;

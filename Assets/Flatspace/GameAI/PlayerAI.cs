@@ -69,7 +69,7 @@ namespace FlatSpace
                 var planet = AIMap.GetPlanet(planetName);
                 if (planet != null)
                 {
-                    return planet.HasColonyShip;
+                    return planet.HasDockedShip(Ship.ShipKind.ColonyShip);
                 }
                 return false;
             }
