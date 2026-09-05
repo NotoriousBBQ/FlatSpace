@@ -32,7 +32,8 @@ namespace FlatSpace
                     OrderTypeIndustryChange,
                     OrderTypeIndustrySetProduction,
                     OrderTypeIndustryTransport,
-                    OrderTypeRemoveShip
+                    OrderTypeRemoveShip,
+                    OrderTypeShipTransport
                 }
 
                 public enum OrderTimingType
@@ -154,6 +155,19 @@ namespace FlatSpace
                         break;
                     case GameAIOrder.OrderType.OrderTypeRemoveShip:
                         targetPlanet.UndockShip(Ship.ShipKind.ColonyShip);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeShipTransport:
+                        var shipDelta = Convert.ToInt32(executableOrder.Data);
+                        if (shipDelta < 0)
+                        {
+                            for (var i = 0; i < -shipDelta; i++)
+                                targetPlanet.UndockShip(Ship.ShipKind.WarShip);
+                        }
+                        else
+                        {
+                            for (var i = 0; i < shipDelta; i++)
+                                targetPlanet.DockNewShip(Ship.ShipKind.WarShip);
+                        }
                         break;
                     default:
                         break;
