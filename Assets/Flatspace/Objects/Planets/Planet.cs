@@ -135,7 +135,7 @@ public class Planet : MonoBehaviour
         {"Research", 1f},
         {"Grotsits", 1f}
     };
-    public bool HasColonyShip {get; set;} = false;
+    public List<Ship> DockedShips = new List<Ship>();
     
     public void SetPopulationTransferInProgress(int playerID, bool inProgress = true)
     {
@@ -482,7 +482,7 @@ public class Planet : MonoBehaviour
                 x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
             return;
         
-        if (HasColonyShip && (Population.Count >= MaxPopulation * _gameAIConstants.expandPopulationTrigger))
+        if (HasDockedShip(Ship.ShipKind.ColonyShip) && (Population.Count >= MaxPopulation * _gameAIConstants.expandPopulationTrigger))
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
                 1, Owner));
@@ -835,10 +835,62 @@ public class Planet : MonoBehaviour
         }
         else if (CurrentProduction?.Item.subType == "ColonyShip")
         {
-            HasColonyShip = true;
+            DockNewShip(Ship.ShipKind.ColonyShip);
         }
-        
-        // create game object from CurrentProduction
+        else if (CurrentProduction?.Item.subType == "Warship")
+        {
+            DockNewShip(Ship.ShipKind.WarShip);
+        }
+    }
+
+    public bool HasDockedShip(Ship.ShipKind kind)
+    {
+        return DockedShips.Exists(s => s.Kind == kind);
+    }
+
+    private Ship CreateShip(Ship.ShipKind kind, int owner)
+    {
+        var template = kind == Ship.ShipKind.ColonyShip
+            ? _gameAIConstants.colonyShipData
+            : _gameAIConstants.warShipData;
+        var ship = this.AddComponent<Ship>();
+        ship.Kind = kind;
+        ship.Owner = owner;
+        ship.Template = template;
+        return ship;
+    }
+
+    public void DockNewShip(Ship.ShipKind kind)
+    {
+        var ship = CreateShip(kind, Owner);
+        ship.ResearchSnapshot = BuildResearchSnapshot(kind);
+        DockedShips.Add(ship);
+    }
+
+    public void DockShipFromSave(Ship.ShipKind kind, int owner, List<string> researchSnapshot)
+    {
+        var ship = CreateShip(kind, owner);
+        ship.ResearchSnapshot = new List<string>(researchSnapshot);
+        DockedShips.Add(ship);
+    }
+
+    public bool UndockShip(Ship.ShipKind kind)
+    {
+        var ship = DockedShips.Find(s => s.Kind == kind);
+        if (ship == null) return false;
+        DockedShips.Remove(ship);
+        Destroy(ship);
+        return true;
+    }
+
+    private List<string> BuildResearchSnapshot(Ship.ShipKind kind)
+    {
+        var subType = kind == Ship.ShipKind.ColonyShip ? "ColonyShip" : "Warship";
+        var researchCatalog = Gameboard.Instance.players[Owner].playerAI.ResearchCatalog;
+        return researchCatalog.catalogItems
+            .Where(x => x.researched && x.type == "Ship Improvement" && x.subType == subType)
+            .Select(x => x.itemName)
+            .ToList();
     }
 
     private void AddActiveImprovement(ProductionItem? production)
