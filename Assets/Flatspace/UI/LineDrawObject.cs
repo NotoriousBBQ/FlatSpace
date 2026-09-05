@@ -20,7 +20,7 @@ public class LineDrawObject : MonoBehaviour
                 || float.IsInfinity(position.x) || float.IsInfinity(position.y))
             {
                 Console.WriteLine("Caught");
-
+                
             }
             spriteRenderer.transform.localPosition = points.Item1 + ((points.Item2 - points.Item1) * progressAmount);
             float angle = Vector2.SignedAngle(Vector2.up, points.Item2 - points.Item1);
