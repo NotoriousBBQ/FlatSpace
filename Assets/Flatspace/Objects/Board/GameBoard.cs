@@ -77,7 +77,7 @@ namespace FlatSpace
 
                 if (FleetUIShowing())
                 {
-                    if (!_fleetUIController.ContainsScreenPoint(mousePosition))
+                    if (!_fleetUIController.ContainsScreenPoint(mousePosition) && !IsPointerOverPlanet(mousePosition))
                         HideFleetUI();
                     return;
                 }
@@ -491,6 +491,7 @@ namespace FlatSpace
 
             public void ShowFleetUI(string planetName)
             {
+                if (!_fleetUIController) return;
                 HidePlanetDetail();
                 _fleetUIController.SetPlanet(GetPlanet(planetName));
                 _fleetUIController.enabled = true;
@@ -498,12 +499,13 @@ namespace FlatSpace
 
             public void HideFleetUI()
             {
+                if (!_fleetUIController) return;
                 _fleetUIController.enabled = false;
             }
 
             public bool FleetUIShowing()
             {
-                return _fleetUIController.enabled;
+                return _fleetUIController && _fleetUIController.enabled;
             }
             
             private void InitializeInputActions()
@@ -579,6 +581,8 @@ namespace FlatSpace
                 _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, players[owningPlayerId].playerAI?.currentResearch?.itemName ?? "", 0 );
                 if(PlanetDetailShowing())
                     _planetDetailUIController.UpdatePlanetDetail();
+                if (FleetUIShowing())
+                    _fleetUIController.RefreshShipList();
             }
 
             private bool _timedUpdateRunning = false;

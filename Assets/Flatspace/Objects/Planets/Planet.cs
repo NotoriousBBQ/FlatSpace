@@ -4,6 +4,7 @@ using System.Linq;
 using FlatSpace.AI;
 using FlatSpace.Game;
 using Flatspace.Objects.Production;
+using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -885,6 +886,7 @@ public class Planet : MonoBehaviour
 
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind)
     {
+        if (Owner < 0 || Owner >= Gameboard.Instance.players.Count) return new List<string>();
         var subType = kind == Ship.ShipKind.ColonyShip ? "ColonyShip" : "Warship";
         var researchCatalog = Gameboard.Instance.players[Owner].playerAI.ResearchCatalog;
         return researchCatalog.catalogItems
