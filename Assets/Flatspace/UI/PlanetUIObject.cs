@@ -15,6 +15,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     [SerializeField] public TextMeshProUGUI _grotsitsTextField;
     [SerializeField] public TextMeshProUGUI _moraleTextField;
     [SerializeField] public Canvas _statsCanvas;
+    private Image _fleetIconImage;
     public string _planetName;
     public bool _changeColor = false;
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
@@ -39,8 +40,10 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
         _moraleTextField.text = Math.Floor(planet.Morale).ToString();
         SetOwnerColor(planet.Owner);
+        if (_fleetIconImage)
+            _fleetIconImage.gameObject.SetActive(planet.DockedShips.Count > 0);
     }
- 
+
     public void UIUpdateForScroll(float orthoChange = 0.0f)
     {
         var scaleChange = _statsCanvas.transform.localScale.x + (-orthoChange/5.0f);
@@ -73,9 +76,22 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
        Gameboard.Instance.ShowPlanetDetail(_planetName);
     }
 
+    private void CreateFleetIcon()
+    {
+        var iconObject = new GameObject("FleetIcon");
+        iconObject.transform.SetParent(_statsCanvas.transform, false);
+        var rect = iconObject.AddComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(16, 16);
+        rect.anchoredPosition = new Vector2(20, 20);
+        _fleetIconImage = iconObject.AddComponent<Image>();
+        _fleetIconImage.color = new Color32(255, 215, 0, 255); // placeholder gold badge -- swap for real art later
+        iconObject.AddComponent<FleetIconClickHandler>().Init(this);
+        _fleetIconImage.gameObject.SetActive(false);
+    }
+
     void Start()
     {
-        
+        CreateFleetIcon();
     }
 
     // UpdatePlanet is called once per frame
