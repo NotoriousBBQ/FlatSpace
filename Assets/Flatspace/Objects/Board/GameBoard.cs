@@ -53,6 +53,7 @@ namespace FlatSpace
             
             private MainScreenUIController _mainScreenUIController;
             private PlanetDetailUIController _planetDetailUIController;
+            private FleetUIController _fleetUIController;
             public int TurnNumber { get; private set; }= 1;
             private float orthoChange;
             void Start()
@@ -63,14 +64,32 @@ namespace FlatSpace
             // UpdatePlanet is called once per frame
             void Update()
             {
-                if (PlanetDetailShowing() && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
+                    return;
+
+                var mousePosition = Mouse.current.position.ReadValue();
+
+                if (PlanetDetailShowing() && _planetDetailUIController.ContainsFleetIconScreenPoint(mousePosition))
                 {
-                    var mousePosition = Mouse.current.position.ReadValue();
-                    // A click on a planet is handled by PlanetUIObject.OnPointerClick (which shows
-                    // that planet's detail), so only close here for a click that lands neither on
-                    // the detail panel nor on a planet -- same as pressing Escape.
-                    if (!_planetDetailUIController.ContainsScreenPoint(mousePosition) && !IsPointerOverPlanet(mousePosition))
-                        HidePlanetDetail();
+                    ShowFleetUI(_planetDetailUIController.CurrentPlanetName);
+                    return;
+                }
+
+                if (FleetUIShowing())
+                {
+                    if (!_fleetUIController.ContainsScreenPoint(mousePosition))
+                        HideFleetUI();
+                    return;
+                }
+
+                // A click on a planet is handled by PlanetUIObject.OnPointerClick (which shows
+                // that planet's detail), so only close here for a click that lands neither on
+                // the detail panel nor on a planet -- same as pressing Escape.
+                if (PlanetDetailShowing()
+                    && !_planetDetailUIController.ContainsScreenPoint(mousePosition)
+                    && !IsPointerOverPlanet(mousePosition))
+                {
+                    HidePlanetDetail();
                 }
             }
 
@@ -102,6 +121,7 @@ namespace FlatSpace
                 InitializeInputActions();
                 _mainScreenUIController = GetComponentInChildren<MainScreenUIController>();
                 _planetDetailUIController = GetComponentInChildren<PlanetDetailUIController>();
+                _fleetUIController = GetComponentInChildren<FleetUIController>();
 
             }
 
@@ -454,6 +474,7 @@ namespace FlatSpace
 
             public void ShowPlanetDetail(string planetName)
             {
+                HideFleetUI();
                 _planetDetailUIController.SetPlanet(GetPlanet(planetName));
                 _planetDetailUIController.enabled = true;
             }
@@ -466,6 +487,23 @@ namespace FlatSpace
             public bool PlanetDetailShowing()
             {
                 return _planetDetailUIController.enabled;
+            }
+
+            public void ShowFleetUI(string planetName)
+            {
+                HidePlanetDetail();
+                _fleetUIController.SetPlanet(GetPlanet(planetName));
+                _fleetUIController.enabled = true;
+            }
+
+            public void HideFleetUI()
+            {
+                _fleetUIController.enabled = false;
+            }
+
+            public bool FleetUIShowing()
+            {
+                return _fleetUIController.enabled;
             }
             
             private void InitializeInputActions()
