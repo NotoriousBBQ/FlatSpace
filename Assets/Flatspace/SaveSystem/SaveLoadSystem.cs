@@ -43,6 +43,14 @@ public class SaveLoadSystem : MonoBehaviour
         }
     
         [Serializable]
+        public struct ShipSave
+        {
+            public Ship.ShipKind kind;
+            public int owner;
+            public List<string> researchSnapshot;
+        }
+
+        [Serializable]
         public struct PlanetSave
         {
             public string name;
@@ -60,6 +68,7 @@ public class SaveLoadSystem : MonoBehaviour
             public List<int> populationTransferInProgress;
             public bool foodTransferInProgress;
             public bool grotsitsTransferInProgress;
+            public List<GameSave.ShipSave> dockedShips;
         }
 
         [Serializable]
@@ -152,9 +161,20 @@ public class SaveLoadSystem : MonoBehaviour
                     populationTransferInProgress = planet.IncomingPopulationSource,
                     foodTransferInProgress = planet.FoodShipmentIncoming,
                     grotsitsTransferInProgress = planet.GrotsitsShipmentIncoming,
-                    population = new int[Gameboard.Instance.players.Count]
+                    population = new int[Gameboard.Instance.players.Count],
+                    dockedShips = new List<GameSave.ShipSave>()
                 };
-                
+
+                foreach (var ship in planet.DockedShips)
+                {
+                    planetSave.dockedShips.Add(new GameSave.ShipSave
+                    {
+                        kind = ship.Kind,
+                        owner = ship.Owner,
+                        researchSnapshot = new List<string>(ship.ResearchSnapshot)
+                    });
+                }
+
                 planetSave.productionQueue = new List<GameSave.ProductionSave>();
                 foreach (var production in planet.ProductionQueue)
                 {

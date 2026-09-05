@@ -203,6 +203,11 @@ namespace FlatSpace
                         for (var j = 0; j < planetStatus.population[i]; j++)
                             planet.Population.Add(new Planet.Inhabitant { Player = i });
                     }
+
+                    foreach (var shipSave in planetStatus.dockedShips)
+                    {
+                        planet.DockShipFromSave(shipSave.kind, shipSave.owner, shipSave.researchSnapshot);
+                    }
                 }
             }
 
