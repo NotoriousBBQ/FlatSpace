@@ -17,6 +17,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     [SerializeField] public TextMeshProUGUI _moraleTextField;
     [SerializeField] public Canvas _statsCanvas;
     private Image _fleetIconImage;
+    private readonly Vector2 _fleetIconBaseAnchoredPosition = new Vector2(40, -40);
     public string _planetName;
     public bool _changeColor = false;
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
@@ -59,7 +60,16 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     public void UIUpdateForScroll(float orthoChange = 0.0f)
     {
         var scaleChange = _statsCanvas.transform.localScale.x + (-orthoChange/5.0f);
-        _statsCanvas.transform.localScale = new Vector3(scaleChange, scaleChange, scaleChange);; 
+        _statsCanvas.transform.localScale = new Vector3(scaleChange, scaleChange, scaleChange);;
+        if (_fleetIconImage)
+        {
+            // Cancel out the stats canvas's counter-scaling for the icon only, so it tracks
+            // the planet sprite's on-screen size/position (which is never counter-scaled)
+            // instead of staying pinned to a constant screen spot like the readable text labels.
+            var iconRect = _fleetIconImage.rectTransform;
+            iconRect.anchoredPosition = _fleetIconBaseAnchoredPosition / scaleChange;
+            iconRect.localScale = Vector3.one / scaleChange;
+        }
     }
 
     public void SetPlanetColor(Planet.PlanetType planetType)
@@ -110,7 +120,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         var rect = iconObject.AddComponent<RectTransform>();
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
         rect.sizeDelta = new Vector2(16, 16);
-        rect.anchoredPosition = new Vector2(50, -30);
+        rect.anchoredPosition = _fleetIconBaseAnchoredPosition;
         _fleetIconImage = iconObject.AddComponent<Image>();
 //        _fleetIconImage.color = new Color32(255, 215, 0, 255); // placeholder gold badge -- swap for real art later
         _fleetIconImage.raycastTarget = true;
