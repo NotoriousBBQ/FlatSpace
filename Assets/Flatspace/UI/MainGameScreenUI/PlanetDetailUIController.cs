@@ -151,7 +151,20 @@ public class PlanetDetailUIController : MonoBehaviour
         _productionProgress.text = string.Format("{0}/{1}", _planet.CurrentProduction?.Progress.ToString() ?? "0",
             _planet.CurrentProduction?.Item.cost.ToString() ?? "X");
         if (_fleetIcon != null)
-            _fleetIcon.style.display = _planet.DockedShips.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        {
+            if (_planet.DockedShips.Count > 0)
+            {
+                var shipIcon = _planet.HasDockedShip(Ship.ShipKind.WarShip)
+                    ? _planet.GameAIConstants.warShipData.shipIcon
+                    : _planet.GameAIConstants.colonyShipData.shipIcon;
+                _fleetIcon.style.backgroundImage = new StyleBackground(shipIcon);
+                _fleetIcon.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                _fleetIcon.style.display = DisplayStyle.None;
+            }
+        }
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

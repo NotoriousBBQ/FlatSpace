@@ -3,7 +3,7 @@
         <ui:VisualElement name="TitleElement" picking-mode="Ignore" style="flex-grow: 1; flex-direction: row; height: 60px; max-height: 60px;">
             <ui:Image name="PlanetIcon" picking-mode="Ignore" style="height: 60px; width: 60px;"/>
             <ui:Label text="Label" name="PlanetName" picking-mode="Ignore" style="height: 60px; width: 479px; -unity-text-align: upper-center;"/>
-            <ui:VisualElement name="FleetIcon" picking-mode="Position" style="width: 20px; height: 20px; align-self: center; background-color: rgb(255, 215, 0);"/>
+            <ui:VisualElement name="FleetIcon" picking-mode="Position" style="width: 25px; height: 25px; position: absolute; right: 10px; top: 12.5px;"/>
         </ui:VisualElement>
         <ui:VisualElement name="PopulationElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: flex-start; justify-content: space-between;">
             <ui:Label text="Population" name="PopulationName" picking-mode="Ignore"/>
