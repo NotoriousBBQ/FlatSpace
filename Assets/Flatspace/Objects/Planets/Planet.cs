@@ -182,11 +182,12 @@ public class Planet : MonoBehaviour
 
     }
 
-    private GameAIConstants _gameAIConstants;
+    
+    public GameAIConstants GameAIConstants { get; set; }
 
     public void Init(PlanetSpawnData spawnData, Transform parentTransform, GameAIConstants gameAIConstants)
     {
-        _gameAIConstants = gameAIConstants;
+        GameAIConstants = gameAIConstants;
         _resourceData = spawnData._resourceData;
         PlanetName = spawnData._planetName;
 
@@ -209,7 +210,7 @@ public class Planet : MonoBehaviour
         foodWorkers = 0;
 
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.foodModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
@@ -239,7 +240,7 @@ public class Planet : MonoBehaviour
     {
         grotsitsWorkers = 0;
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.grotsitsModifier;
         var grotsitsRequirement = GetMaintainenceCost();
@@ -256,7 +257,7 @@ public class Planet : MonoBehaviour
     {
         researchWorkers = 0;
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.researchModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
@@ -270,7 +271,7 @@ public class Planet : MonoBehaviour
     {
         industryWorkers = 0;
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.industryModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
@@ -479,6 +480,7 @@ public class Planet : MonoBehaviour
     
     private void CheckColonizationReady(List<PlanetUpdateResult> resultList,bool populationDecrease = false)
     {
+        /*
         if (resultList.Any(x =>
                 x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
             return;
@@ -487,7 +489,7 @@ public class Planet : MonoBehaviour
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
                 1, Owner));
-        }
+        }*/
     }
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
@@ -596,13 +598,13 @@ public class Planet : MonoBehaviour
             // Can't give everyone goods
             grotsitsShort += Grotsits - grotsitsRequired;
             Grotsits = 0.0f;
-            Morale = Math.Clamp(Morale - _gameAIConstants.moraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale - GameAIConstants.moraleStep, 0.0f, 200.0f);
         }
         else
         {
             // Grotsits for everyone
             Grotsits -= grotsitsRequired;
-            Morale = Math.Clamp(Morale + _gameAIConstants.moraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale + GameAIConstants.moraleStep, 0.0f, 200.0f);
         }
 
         // add 1 to population here to allow for growth if possible
@@ -852,8 +854,8 @@ public class Planet : MonoBehaviour
     private Ship CreateShip(Ship.ShipKind kind, int owner)
     {
         var template = kind == Ship.ShipKind.ColonyShip
-            ? _gameAIConstants.colonyShipData
-            : _gameAIConstants.warShipData;
+            ? GameAIConstants.colonyShipData
+            : GameAIConstants.warShipData;
         var ship = this.AddComponent<Ship>();
         ship.Kind = kind;
         ship.Owner = owner;

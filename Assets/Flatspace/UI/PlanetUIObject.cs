@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlatSpace.AI;
 using FlatSpace.Game;
 using Game.UI.MainGameScreenUI;
 using TMPro;
@@ -41,7 +42,18 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         _moraleTextField.text = Math.Floor(planet.Morale).ToString();
         SetOwnerColor(planet.Owner);
         if (_fleetIconImage)
-            _fleetIconImage.gameObject.SetActive(planet.DockedShips.Count > 0);
+        {
+            if (planet.DockedShips.Count > 0)
+            {
+                _fleetIconImage.sprite = planet.HasDockedShip(Ship.ShipKind.WarShip) ? 
+                    planet.GameAIConstants.warShipData.shipIcon : planet.GameAIConstants.colonyShipData.shipIcon;
+                _fleetIconImage.gameObject.SetActive(true);
+            }
+            else
+            {
+                _fleetIconImage.gameObject.SetActive(false);
+            }
+        }
     }
 
     public void UIUpdateForScroll(float orthoChange = 0.0f)
@@ -98,9 +110,9 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         var rect = iconObject.AddComponent<RectTransform>();
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
         rect.sizeDelta = new Vector2(16, 16);
-        rect.anchoredPosition = new Vector2(20, -20);
+        rect.anchoredPosition = new Vector2(50, -30);
         _fleetIconImage = iconObject.AddComponent<Image>();
-        _fleetIconImage.color = new Color32(255, 215, 0, 255); // placeholder gold badge -- swap for real art later
+//        _fleetIconImage.color = new Color32(255, 215, 0, 255); // placeholder gold badge -- swap for real art later
         _fleetIconImage.raycastTarget = true;
         _fleetIconImage.gameObject.SetActive(false);
     }

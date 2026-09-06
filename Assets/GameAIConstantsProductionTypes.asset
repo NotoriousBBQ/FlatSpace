@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d8b6b848f93d8f34ab7dcf8e7135b629, type: 3}
-  m_Name: GameAIConstants4ProductionTypes
+  m_Name: GameAIConstantsProductionTypes
   m_EditorClassIdentifier: Assembly-CSharp::GameAIConstants
   moraleStep: 4
   defaultTravelSpeed: 150

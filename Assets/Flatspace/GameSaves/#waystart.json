@@ -1,8 +1,8 @@
 {
-    "turnNumber": 1,
+    "turnNumber": 29,
     "initialBoardStatePath": "",
     "boardDesignDataPath": "C:\\Projects\\FlatSpace\\Assets\\Flatspace\\BoardConfigs\\3PlayerMed.json",
-    "cameraOrtho": 5.0,
+    "cameraOrtho": 1.0,
     "scrollRectPosition": {
         "x": 0.7744886875152588,
         "y": 0.6600000858306885
@@ -13,47 +13,58 @@
             "strategy": 1,
             "researchCatalogSave": {
                 "CatalogName": "ResearchCatalog",
-                "Completed": []
+                "Completed": [
+                    "Food Improvement 1",
+                    "Grotsits Improvement 1"
+                ]
             },
             "productionCatalogSave": {
                 "CatalogName": "ProductionCatalog",
                 "Completed": [
                     "ColonyShipProduction",
                     "BaseFoodImprovement",
+                    "Food1Production",
                     "BaseGrotsitsProduction",
+                    "Grotsits1Production",
                     "BaseIndustryProduction",
                     "BaseResearchImprovement"
                 ]
             },
-            "currentResearchItem": "",
-            "currentResearch": 0.0
+            "currentResearchItem": "Industry Improvement 1",
+            "currentResearch": 40.099998474121097
         },
         {
             "playerId": 1,
             "strategy": 1,
             "researchCatalogSave": {
                 "CatalogName": "ResearchCatalog",
-                "Completed": []
+                "Completed": [
+                    "Food Improvement 1"
+                ]
             },
             "productionCatalogSave": {
                 "CatalogName": "ProductionCatalog",
                 "Completed": [
                     "ColonyShipProduction",
                     "BaseFoodImprovement",
+                    "Food1Production",
                     "BaseGrotsitsProduction",
                     "BaseIndustryProduction",
                     "BaseResearchImprovement"
                 ]
             },
-            "currentResearchItem": "",
-            "currentResearch": 0.0
+            "currentResearchItem": "Food Improvement 2",
+            "currentResearch": 174.07998657226563
         },
         {
             "playerId": 2,
             "strategy": 1,
             "researchCatalogSave": {
                 "CatalogName": "ResearchCatalog",
-                "Completed": []
+                "Completed": [
+                    "Grotsits Improvement 1",
+                    "Industry Improvement 1"
+                ]
             },
             "productionCatalogSave": {
                 "CatalogName": "ProductionCatalog",
@@ -61,12 +72,14 @@
                     "ColonyShipProduction",
                     "BaseFoodImprovement",
                     "BaseGrotsitsProduction",
+                    "Grotsits1Production",
                     "BaseIndustryProduction",
+                    "Industry1Production",
                     "BaseResearchImprovement"
                 ]
             },
-            "currentResearchItem": "",
-            "currentResearch": 0.0
+            "currentResearchItem": "Food Improvement 1",
+            "currentResearch": 38.480010986328128
         }
     ],
     "orders": [],
@@ -75,21 +88,37 @@
             "name": "Prime 0",
             "planetType": 0,
             "planetStrategy": 1,
-            "food": 2.0,
+            "food": 456.6156005859375,
             "population": [
-                2,
+                15,
                 0,
                 0
             ],
-            "grotsits": 2.0,
+            "grotsits": 118.55999755859375,
             "research": 0.0,
             "industry": 0.0,
-            "productionQueue": [],
-            "morale": 100.0,
+            "productionQueue": [
+                {
+                    "Name": "BaseGrotsitsProduction",
+                    "Progress": 0.0
+                },
+                {
+                    "Name": "BaseGrotsitsProduction",
+                    "Progress": 0.0
+                }
+            ],
+            "morale": 200.0,
             "owner": 0,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": [
+                {
+                    "kind": 0,
+                    "owner": 0,
+                    "researchSnapshot": []
+                }
+            ]
         },
         {
             "name": "Industrial 0",
@@ -109,7 +138,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Verdant 0",
@@ -129,7 +159,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desert 0",
@@ -149,7 +180,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Farm 0",
@@ -169,7 +201,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 0",
@@ -189,7 +222,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desolate 0",
@@ -209,7 +243,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Farm 1",
@@ -229,7 +264,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desert 1",
@@ -249,7 +285,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 1",
@@ -269,7 +306,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Ocean 0",
@@ -289,7 +327,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Industrial 1",
@@ -309,7 +348,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 2",
@@ -329,7 +369,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Ocean 1",
@@ -349,7 +390,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Industrial 2",
@@ -369,7 +411,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Ocean 2",
@@ -389,7 +432,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Farm 2",
@@ -409,7 +453,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 3",
@@ -429,27 +474,44 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Prime 1",
             "planetType": 0,
             "planetStrategy": 1,
-            "food": 2.0,
+            "food": 426.239990234375,
             "population": [
                 0,
-                2,
+                15,
                 0
             ],
-            "grotsits": 2.0,
+            "grotsits": 128.28475952148438,
             "research": 0.0,
             "industry": 0.0,
-            "productionQueue": [],
-            "morale": 100.0,
+            "productionQueue": [
+                {
+                    "Name": "Food1Production",
+                    "Progress": 0.0
+                },
+                {
+                    "Name": "BaseResearchImprovement",
+                    "Progress": 0.0
+                }
+            ],
+            "morale": 200.0,
             "owner": 1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": [
+                {
+                    "kind": 0,
+                    "owner": 1,
+                    "researchSnapshot": []
+                }
+            ]
         },
         {
             "name": "Ocean 3",
@@ -469,7 +531,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desert 2",
@@ -489,7 +552,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 4",
@@ -509,7 +573,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 5",
@@ -529,7 +594,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Verdant 1",
@@ -549,7 +615,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Farm 3",
@@ -569,7 +636,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Industrial 3",
@@ -589,27 +657,44 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Prime 2",
             "planetType": 0,
             "planetStrategy": 1,
-            "food": 2.0,
+            "food": 456.6156005859375,
             "population": [
                 0,
                 0,
-                2
+                15
             ],
-            "grotsits": 2.0,
+            "grotsits": 120.18000793457031,
             "research": 0.0,
             "industry": 0.0,
-            "productionQueue": [],
-            "morale": 100.0,
+            "productionQueue": [
+                {
+                    "Name": "BaseGrotsitsProduction",
+                    "Progress": 0.0
+                },
+                {
+                    "Name": "BaseResearchImprovement",
+                    "Progress": 0.0
+                }
+            ],
+            "morale": 200.0,
             "owner": 2,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": [
+                {
+                    "kind": 0,
+                    "owner": 2,
+                    "researchSnapshot": []
+                }
+            ]
         },
         {
             "name": "Verdant 2",
@@ -629,7 +714,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 6",
@@ -649,7 +735,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 7",
@@ -669,7 +756,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desert 3",
@@ -689,7 +777,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desolate 1",
@@ -709,7 +798,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Desolate 2",
@@ -729,7 +819,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         },
         {
             "name": "Normal 8",
@@ -749,7 +840,8 @@
             "owner": -1,
             "populationTransferInProgress": [],
             "foodTransferInProgress": false,
-            "grotsitsTransferInProgress": false
+            "grotsitsTransferInProgress": false,
+            "dockedShips": []
         }
     ]
 }
