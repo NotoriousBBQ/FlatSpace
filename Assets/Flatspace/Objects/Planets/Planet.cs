@@ -486,16 +486,16 @@ public class Planet : MonoBehaviour
     
     private void CheckColonizationReady(List<PlanetUpdateResult> resultList,bool populationDecrease = false)
     {
-        /*
+        
         if (resultList.Any(x =>
                 x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
             return;
         
-        if (HasDockedShip(Ship.ShipKind.ColonyShip) && (Population.Count >= MaxPopulation * _gameAIConstants.expandPopulationTrigger))
+        if (HasDockedShip(Ship.ShipKind.ColonyShip) && (Population.Count >= MaxPopulation * GameAIConstants.expandPopulationTrigger))
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
                 1, Owner));
-        }*/
+        }
     }
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
