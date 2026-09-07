@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FlatSpace
 {
@@ -27,7 +28,6 @@ namespace FlatSpace
             [ContextMenu("Generate Connections")]
             public void GenerateStarConnections()
             {
-
                 var planetList = new List<PlanetDesigner>();
                 foreach (Transform child in transform)
                 {
@@ -35,31 +35,49 @@ namespace FlatSpace
                         planetList.Add(child.GetComponent<PlanetDesigner>());
                 }
 
-                foreach (var planet in planetList)
+                if (planetList.Any(p => string.IsNullOrEmpty(p.planetName)))
                 {
-                    planet.Connections.Clear();
+                    Debug.LogError("[BoardDesigner] Generate Connections needs planet names; run 'Generate Names And Strategies' first.");
+                    return;
                 }
 
+                // Build the within-range name lists (symmetric).
+                var names = new Dictionary<PlanetDesigner, List<string>>();
                 foreach (var planet in planetList)
-                {
-                    var planetPosition = planet.transform.position;
-                    foreach (var possibleNeighbor in planetList)
-                    {
-                        if (possibleNeighbor == planet)
-                            continue;
+                    names[planet] = new List<string>();
 
+                for (var i = 0; i < planetList.Count; i++)
+                {
+                    for (var j = i + 1; j < planetList.Count; j++)
+                    {
+                        var a = planetList[i];
+                        var b = planetList[j];
                         var distance = Vector2.Distance(
-                            new Vector2(possibleNeighbor.transform.localPosition.x,
-                                possibleNeighbor.transform.localPosition.y),
-                            new Vector2(planet.transform.localPosition.x, planet.transform.localPosition.y));
+                            new Vector2(a.transform.localPosition.x, a.transform.localPosition.y),
+                            new Vector2(b.transform.localPosition.x, b.transform.localPosition.y));
                         if (distance <= MaxConnectionSize)
                         {
-                            planet.Connections.Add(new PlanetDesigner.DesignerConnection(possibleNeighbor, distance));
+                            names[a].Add(b.planetName);
+                            names[b].Add(a.planetName);
                         }
                     }
                 }
 
+                foreach (var planet in planetList)
+                    planet.SetConnectionNames(names[planet]);
+
+                RebuildAllConnectionCaches(planetList);
                 DrawConnections(planetList);
+            }
+
+            private void RebuildAllConnectionCaches(List<PlanetDesigner> planetList)
+            {
+                var byName = new Dictionary<string, PlanetDesigner>();
+                foreach (var planet in planetList)
+                    if (!string.IsNullOrEmpty(planet.planetName))
+                        byName[planet.planetName] = planet;
+                foreach (var planet in planetList)
+                    planet.RebuildConnectionsFromNames(byName);
             }
 
             [ContextMenu("Generate Names And Strategies")]

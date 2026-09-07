@@ -266,6 +266,7 @@ public class SaveLoadSystem : MonoBehaviour
             public string name;
             public Planet.PlanetType planetType;
             public Vector2 position;
+            public List<string> connections;
         }
 
         public List<BoardDesignerEntry> planetEntries = new List<BoardDesignerEntry>();
@@ -280,9 +281,10 @@ public class SaveLoadSystem : MonoBehaviour
                     name = planet.planetName,
                     planetType = planet.type,
                     position = planet.transform.localPosition,
+                    connections = new List<string>(planet.connectionNames ?? new List<string>()),
                 });
             }
-            
+
         }
     }
     private static void SaveDesignerConfig(BoardDesignerSave saveData, string filePath)

@@ -299,6 +299,9 @@ namespace FlatSpace
                     spawnData._planetPosition =
                         new Vector3(planetDesignData.position.x, planetDesignData.position.y, 0.0f);
                     spawnData._planetType = planetDesignData.planetType;
+                    spawnData._connections = planetDesignData.connections != null
+                        ? new List<string>(planetDesignData.connections)
+                        : new List<string>();
                     spawnData._resourceData =
                         gameAIConstants.resourceData.Find(x => x._planetType == planetDesignData.planetType);
                     planetSpawnData.Add(spawnData);

@@ -29,6 +29,35 @@ namespace FlatSpace
             public Dictionary<string, GameAIMap.DestinationToPathingListEntry> DistanceMapToPathingList;
             public List<DesignerConnection> Connections = new List<DesignerConnection>();
 
+            // Serialized source of truth for this planet's connections in the
+            // designer. The Connections list above is an in-memory cache rebuilt
+            // from these names via RebuildConnectionsFromNames.
+            public List<string> connectionNames = new List<string>();
+
+            public void SetConnectionNames(IEnumerable<string> names)
+            {
+                connectionNames = new List<string>();
+                foreach (var n in names)
+                {
+                    if (!string.IsNullOrEmpty(n) && n != planetName && !connectionNames.Contains(n))
+                        connectionNames.Add(n);
+                }
+            }
+
+            public void RebuildConnectionsFromNames(IReadOnlyDictionary<string, PlanetDesigner> byName)
+            {
+                Connections.Clear();
+                foreach (var name in connectionNames)
+                {
+                    if (!byName.TryGetValue(name, out var target) || target == this)
+                        continue;
+                    var cost = Vector2.Distance(
+                        new Vector2(transform.localPosition.x, transform.localPosition.y),
+                        new Vector2(target.transform.localPosition.x, target.transform.localPosition.y));
+                    Connections.Add(new DesignerConnection(target, cost));
+                }
+            }
+
             [SerializeField] public TextMeshProUGUI nameTextField;
             [SerializeField] public TextMeshProUGUI typeTextField;
 
