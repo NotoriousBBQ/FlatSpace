@@ -11,6 +11,7 @@ namespace FlatSpace
         {
             [SerializeField] private LineDrawObject lineDrawObjectPrefab;
             [SerializeField] private MapGenSettings mapGenSettings;
+            [SerializeField] private PlanetDesigner planetDesignerPrefab;
             private List<LineDrawObject> _lineDrawObjects = new List<LineDrawObject>();
 
             public void ClearConnections()
@@ -130,6 +131,84 @@ namespace FlatSpace
                 {
                     Debug.LogError($"[BoardDesigner] dry run failed: {result.Error}");
                 }
+            }
+
+            [ContextMenu("Generate Random Board")]
+            public void GenerateRandomBoard()
+            {
+                if (!mapGenSettings)
+                {
+                    Debug.LogError("[BoardDesigner] assign a MapGenSettings asset first");
+                    return;
+                }
+                if (!planetDesignerPrefab)
+                {
+                    Debug.LogError("[BoardDesigner] assign the PlanetDesigner prefab first");
+                    return;
+                }
+
+                var result = FlatSpace.Tools.MapGenerator.Generate(mapGenSettings);
+                if (!result.Success)
+                {
+                    Debug.LogError($"[BoardDesigner] Generate Random Board failed: {result.Error}");
+                    return; // scene left untouched
+                }
+
+                // Clear the existing board.
+                ClearConnections();
+                var existing = new List<PlanetDesigner>();
+                foreach (Transform child in transform)
+                    if (child.GetComponent<PlanetDesigner>())
+                        existing.Add(child.GetComponent<PlanetDesigner>());
+                foreach (var pd in existing)
+                    DestroyImmediate(pd.gameObject);
+
+                // Instantiate the generated planets.
+                var spawned = new List<PlanetDesigner>();
+                foreach (var gp in result.Planets)
+                {
+                    var pd = Instantiate(planetDesignerPrefab, transform);
+                    pd.name = gp.Name;
+                    pd.planetName = gp.Name;
+                    pd.type = gp.Type;
+                    pd.strategy = gp.Strategy;
+                    pd.transform.localPosition = new Vector3(gp.Position.x, gp.Position.y, 0f);
+                    pd.SetConnectionNames(gp.Connections);
+                    pd.UpdateGraphic();
+                    spawned.Add(pd);
+                }
+
+                RebuildAllConnectionCaches(spawned);
+                DrawConnections(spawned);
+
+                Debug.Log($"[BoardDesigner] Generated {spawned.Count} planets (seed {result.EffectiveSeed}). " +
+                          "Review, then use the Save button.");
+            }
+
+            [ContextMenu("Map Gen: Self Check (50 seeds)")]
+            public void MapGenSelfCheck()
+            {
+                if (!mapGenSettings)
+                {
+                    Debug.LogError("[BoardDesigner] assign a MapGenSettings asset first");
+                    return;
+                }
+
+                var baseSettings = Instantiate(mapGenSettings);
+                var pass = 0;
+                var failures = new List<string>();
+                for (var i = 1; i <= 50; i++)
+                {
+                    baseSettings.seed = i * 1000;
+                    var r = FlatSpace.Tools.MapGenerator.Generate(baseSettings);
+                    if (r.Success) pass++;
+                    else failures.Add($"seed base {i * 1000}: {r.Error}");
+                }
+                DestroyImmediate(baseSettings);
+
+                Debug.Log($"[BoardDesigner] Map Gen self check: {pass}/50 passed");
+                foreach (var f in failures.Take(5))
+                    Debug.LogWarning($"[BoardDesigner]   {f}");
             }
 
             private void DrawConnections(List<PlanetDesigner> planetList)
