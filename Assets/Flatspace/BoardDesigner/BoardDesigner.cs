@@ -68,6 +68,11 @@ namespace FlatSpace
                 foreach (var planet in planetList)
                     planet.SetConnectionNames(names[planet]);
 
+#if UNITY_EDITOR
+                foreach (var planet in planetList)
+                    UnityEditor.EditorUtility.SetDirty(planet);
+#endif
+
                 RebuildAllConnectionCaches(planetList);
                 DrawConnections(planetList);
             }
@@ -109,30 +114,6 @@ namespace FlatSpace
                 }
             }
 
-            [ContextMenu("Map Gen: Dry Run")]
-            public void MapGenDryRun()
-            {
-                if (!mapGenSettings)
-                {
-                    Debug.LogError("[BoardDesigner] assign a MapGenSettings asset first");
-                    return;
-                }
-                var result = FlatSpace.Tools.MapGenerator.Generate(mapGenSettings);
-                if (result.Success)
-                {
-                    var byType = string.Join(", ", result.Planets
-                        .GroupBy(p => p.Type)
-                        .Select(g => $"{g.Key}:{g.Count()}"));
-                    var degrees = result.Planets.Select(p => p.Connections.Count).ToList();
-                    Debug.Log($"[BoardDesigner] dry run OK: {result.Planets.Count} planets " +
-                              $"[{byType}], degree {degrees.Min()}-{degrees.Max()}, seed {result.EffectiveSeed}");
-                }
-                else
-                {
-                    Debug.LogError($"[BoardDesigner] dry run failed: {result.Error}");
-                }
-            }
-
             [ContextMenu("Generate Random Board")]
             public void GenerateRandomBoard()
             {
@@ -167,7 +148,12 @@ namespace FlatSpace
                 var spawned = new List<PlanetDesigner>();
                 foreach (var gp in result.Planets)
                 {
+#if UNITY_EDITOR
+                    var go = (GameObject)UnityEditor.PrefabUtility.InstantiatePrefab(planetDesignerPrefab.gameObject, transform);
+                    var pd = go.GetComponent<PlanetDesigner>();
+#else
                     var pd = Instantiate(planetDesignerPrefab, transform);
+#endif
                     pd.name = gp.Name;
                     pd.planetName = gp.Name;
                     pd.type = gp.Type;
@@ -179,6 +165,10 @@ namespace FlatSpace
                 }
 
                 RebuildAllConnectionCaches(spawned);
+#if UNITY_EDITOR
+                foreach (var pd in spawned)
+                    UnityEditor.EditorUtility.SetDirty(pd);
+#endif
                 DrawConnections(spawned);
 
                 Debug.Log($"[BoardDesigner] Generated {spawned.Count} planets (seed {result.EffectiveSeed}). " +

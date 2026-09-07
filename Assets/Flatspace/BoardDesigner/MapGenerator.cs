@@ -48,6 +48,8 @@ namespace FlatSpace
                     var result = TryGenerate(settings, seed);
                     if (result.Success)
                         return result;
+                    if (result.Error != null && result.Error.StartsWith("could not place planets"))
+                        return result; // deterministic settings failure; retrying other seeds won't help
                     lastFailure = result;
                 }
                 return lastFailure ?? GenerationResult.Fail("generation failed with no diagnostic", baseSeed);
@@ -258,6 +260,9 @@ namespace FlatSpace
                     edges.Add((unused[pick].A, unused[pick].B));
                     unused.RemoveAt(pick);
                 }
+
+                if (candidates.Count > 0 && unused.Count == 0)
+                    Debug.LogWarning($"[MapGenerator] every in-range pair is connected ({edges.Count} edges); consider more planets or a smaller connectionRadius for a sparser map");
 
                 return edges;
             }

@@ -71,6 +71,11 @@ namespace FlatSpace
                     BuildExplicitConnections(planets);
                 else
                     BuildDistanceConnections();
+
+                Debug.Log($"[PathingSystem] graph mode: {(useExplicit ? "explicit" : "distance")}, {PathNodes.Count} nodes");
+                foreach (var node in PathNodes.Values)
+                    if (node.Connections.Count == 0)
+                        Debug.LogError($"[PathingSystem] planet '{node.Name}' has no connections; pathing to/from it will be wrong");
             }
 
             // Current behavior: an edge between every pair of nodes closer than MaxConnectionSize.
@@ -97,11 +102,9 @@ namespace FlatSpace
             {
                 void AddEdge(string from, string to)
                 {
+                    if (from == to) return;
                     if (!PathNodes.ContainsKey(from) || !PathNodes.ContainsKey(to))
-                    {
-                        Debug.LogWarning($"[PathingSystem] connection '{from}' -> '{to}' names an unknown planet; skipped");
                         return;
-                    }
                     var node = PathNodes[from];
                     if (node.Connections.Any(c => c.NodeName == to))
                         return;
@@ -113,8 +116,15 @@ namespace FlatSpace
                 {
                     if (planet.Connections == null)
                         continue;
+                    if (!PathNodes.ContainsKey(planet.PlanetName))
+                        continue;
                     foreach (var neighbor in planet.Connections)
                     {
+                        if (!PathNodes.ContainsKey(neighbor))
+                        {
+                            Debug.LogWarning($"[PathingSystem] connection '{planet.PlanetName}' -> '{neighbor}' names an unknown planet; skipped");
+                            continue;
+                        }
                         AddEdge(planet.PlanetName, neighbor);
                         AddEdge(neighbor, planet.PlanetName);
                     }

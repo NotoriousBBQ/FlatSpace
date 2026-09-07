@@ -111,6 +111,14 @@ positions — an edge exists between two planets within `MaxConnectionSize` (400
 `Planet.DistanceMapToPathingList` (cost + node count). `PlayerAI` gates shipments/colonization on
 `NumNodes <= GameAIConstants.maxPathNodesForResourceDistribution`.
 
+Connections are now first-class data: `PathingSystem.InitializePathMap` builds the graph from each
+`Planet.Connections` list (explicit edges) when any planet carries one, and falls back to the historical
+"edge between every pair within `MaxConnectionSize` (400)" rule only when no planet has explicit
+connections. Explicit connection lists originate from the board designer
+(`PlanetDesigner.connectionNames` → `BoardDesignerSave` → `PlanetSpawnData._connections` →
+`Planet.Connections`), including from the procedural generator (`MapGenerator` /
+`BoardDesigner.GenerateRandomBoard`).
+
 ### Data: ScriptableObjects and JSON catalogs
 
 - **ScriptableObjects** hold tuning/spawn data: `BoardConfiguration`, `PlanetSpawnData`,
