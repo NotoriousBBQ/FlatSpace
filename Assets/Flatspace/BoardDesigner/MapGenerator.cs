@@ -167,6 +167,119 @@ namespace FlatSpace
                 return chosen;
             }
 
+            private readonly struct Edge
+            {
+                public readonly int A;
+                public readonly int B;
+                public readonly float Cost;
+                public Edge(int a, int b, float cost) { A = a; B = b; Cost = cost; }
+            }
+
+            // Union-find for Kruskal / component tracking.
+            private class DisjointSet
+            {
+                private readonly int[] _parent;
+                public DisjointSet(int n)
+                {
+                    _parent = new int[n];
+                    for (var i = 0; i < n; i++) _parent[i] = i;
+                }
+                public int Find(int x) => _parent[x] == x ? x : (_parent[x] = Find(_parent[x]));
+                public bool Union(int a, int b)
+                {
+                    int ra = Find(a), rb = Find(b);
+                    if (ra == rb) return false;
+                    _parent[ra] = rb;
+                    return true;
+                }
+            }
+
+            private static bool IsPrimePair(HashSet<int> primes, int a, int b) =>
+                primes.Contains(a) && primes.Contains(b);
+
+            // Returns the undirected edge set (pairs with A < B), or null if the
+            // graph cannot be made connected without a Prime-Prime edge.
+            private static HashSet<(int, int)> BuildGraph(
+                Random rng, List<Vector2> positions, HashSet<int> primes, float connectionRadius)
+            {
+                var n = positions.Count;
+
+                var candidates = new List<Edge>();
+                for (var i = 0; i < n; i++)
+                for (var j = i + 1; j < n; j++)
+                {
+                    if (IsPrimePair(primes, i, j)) continue;
+                    var d = Vector2.Distance(positions[i], positions[j]);
+                    if (d <= connectionRadius)
+                        candidates.Add(new Edge(i, j, d));
+                }
+
+                var edges = new HashSet<(int, int)>();
+                var ds = new DisjointSet(n);
+
+                // Kruskal MST over in-radius candidates.
+                foreach (var e in candidates.OrderBy(e => e.Cost))
+                {
+                    if (ds.Union(e.A, e.B))
+                        edges.Add((e.A, e.B));
+                }
+
+                // Bridge any remaining components with the shortest non-Prime-Prime
+                // inter-component edge, ignoring the radius limit.
+                while (true)
+                {
+                    var roots = Enumerable.Range(0, n).Select(ds.Find).Distinct().ToList();
+                    if (roots.Count <= 1) break;
+
+                    Edge? best = null;
+                    for (var i = 0; i < n; i++)
+                    for (var j = i + 1; j < n; j++)
+                    {
+                        if (ds.Find(i) == ds.Find(j)) continue;
+                        if (IsPrimePair(primes, i, j)) continue;
+                        var d = Vector2.Distance(positions[i], positions[j]);
+                        if (best == null || d < best.Value.Cost)
+                            best = new Edge(i, j, d);
+                    }
+
+                    if (best == null) return null; // only Prime-Prime bridges remain
+                    ds.Union(best.Value.A, best.Value.B);
+                    edges.Add((best.Value.A, best.Value.B));
+                }
+
+                // Add back a fraction of the unused in-radius candidates for loops.
+                var unused = candidates
+                    .Where(e => !edges.Contains((e.A, e.B)))
+                    .ToList();
+                var extra = Mathf.RoundToInt(ExtraEdgeFraction * unused.Count);
+                for (var k = 0; k < extra && unused.Count > 0; k++)
+                {
+                    var pick = rng.Next(unused.Count);
+                    edges.Add((unused[pick].A, unused[pick].B));
+                    unused.RemoveAt(pick);
+                }
+
+                return edges;
+            }
+
+            private static bool IsConnected(int n, HashSet<(int, int)> edges)
+            {
+                if (n == 0) return true;
+                var adj = new Dictionary<int, List<int>>();
+                for (var i = 0; i < n; i++) adj[i] = new List<int>();
+                foreach (var (a, b) in edges) { adj[a].Add(b); adj[b].Add(a); }
+
+                var seen = new HashSet<int> { 0 };
+                var stack = new Stack<int>();
+                stack.Push(0);
+                while (stack.Count > 0)
+                {
+                    foreach (var next in adj[stack.Pop()])
+                        if (seen.Add(next)) stack.Push(next);
+                }
+                return seen.Count == n;
+            }
+
             private static GenerationResult TryGenerate(MapGenSettings settings, int seed)
             {
                 var rng = new Random(seed);
@@ -182,10 +295,18 @@ namespace FlatSpace
 
                 var primeIndices = PickPrimeIndices(rng, positions, primeCount);
 
-                Debug.Log($"[MapGenerator] seed {seed}: placed {positions.Count} planets, " +
-                          $"prime indices [{string.Join(",", primeIndices.OrderBy(i => i))}]");
+                var edges = BuildGraph(rng, positions, primeIndices, settings.connectionRadius);
+                if (edges == null)
+                    return GenerationResult.Fail(
+                        "could not connect the map without joining two Prime planets; increase totalPlanetCount or connectionRadius", seed);
 
-                return GenerationResult.Fail("connection graph not implemented yet (Task 6)", seed);
+                var degree = new int[positions.Count];
+                foreach (var (a, b) in edges) { degree[a]++; degree[b]++; }
+                Debug.Log($"[MapGenerator] seed {seed}: {edges.Count} edges, " +
+                          $"degree min {degree.Min()} max {degree.Max()}, " +
+                          $"connected {IsConnected(positions.Count, edges)}");
+
+                return GenerationResult.Fail("type assignment not implemented yet (Task 7)", seed);
             }
         }
     }
