@@ -10,6 +10,7 @@ namespace FlatSpace
         public class BoardDesigner : MonoBehaviour
         {
             [SerializeField] private LineDrawObject lineDrawObjectPrefab;
+            [SerializeField] private MapGenSettings mapGenSettings;
             private List<LineDrawObject> _lineDrawObjects = new List<LineDrawObject>();
 
             public void ClearConnections()
@@ -107,6 +108,19 @@ namespace FlatSpace
                 }
             }
 
+            [ContextMenu("Map Gen: Dry Run")]
+            public void MapGenDryRun()
+            {
+                if (!mapGenSettings)
+                {
+                    Debug.LogError("[BoardDesigner] assign a MapGenSettings asset first");
+                    return;
+                }
+                var result = FlatSpace.Tools.MapGenerator.Generate(mapGenSettings);
+                Debug.Log(result.Success
+                    ? $"[BoardDesigner] dry run OK: {result.Planets.Count} planets, seed {result.EffectiveSeed}"
+                    : $"[BoardDesigner] dry run failed: {result.Error}");
+            }
 
             private void DrawConnections(List<PlanetDesigner> planetList)
             {
