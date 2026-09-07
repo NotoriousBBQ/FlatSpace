@@ -49,6 +49,11 @@ The simulation is deliberately separated from the visuals:
   on a small number of GameObjects** (mostly the `Gameboard` object and the `GameAI` object). There is no
   GameObject-per-planet in the simulation — a `Planet` is just a component in a `Dictionary<string, Planet>`
   keyed by planet name. Planet names are the universal identifier throughout orders, pathing, and saves.
+  A planet's docked ships are represented by `Ship` (`Assets/Flatspace/Objects/Ships/Ship.cs`) — one class
+  covering both kinds via a `ShipKind` enum (`ColonyShip`/`WarShip`), with `Owner`, a `Template` (`ShipData`),
+  and a `ResearchSnapshot` (the owner's completed Ship Improvement research at construction time). Ships live
+  in `Planet.DockedShips`, created with `Planet.DockNewShip`/`.DockShipFromSave` and removed with
+  `.UndockShip`; this replaces the old `Planet.HasColonyShip` bool.
 - **Presentation:** `PlanetUIObject` (world-space planet markers), `LineDrawObject` (connection / order
   lines), and the UI Toolkit HUD (`MainScreenUIController`, `NotificationListController`,
   `PlanetDetailUIController`, `GameButtonHandler`). `Gameboard.Update()` closes the planet detail
@@ -81,6 +86,11 @@ Hold), `TimingDelay` / `TotalDelay` (in turns; delay is roughly `path.Cost / def
 `float` — code branches on the runtime type, and saves record `dataType` as `"int"`/`"float"`). Every
 resource move is expressed as a trio of orders: a delayed transport, an immediate deduction at the
 origin, and an immediate "in progress" flag.
+
+`OrderType` also has `OrderTypeShipTransport`, added for the concrete `Ship` representation — it's
+mechanism-only so far (`GameAI` knows how to execute it, but nothing in `PlayerAI` creates one yet; a
+future task is expected to add that AI logic). Because `OrderType` serializes as a `JsonUtility` int,
+new values must always be appended last, never inserted.
 
 ### Decision-making: `ScoreMatrix`
 
@@ -121,7 +131,8 @@ positions — an edge exists between two planets within `MaxConnectionSize` (400
 simulation state — planets, orders, per-player catalogs & research progress, camera) and
 `BoardDesignerSave` (planet name/type/position list from the designer). Paths differ by build:
 `Application.dataPath/Flatspace/...` in the editor, `Application.persistentDataPath/...` in a player.
-`BoardConfiguration` assets are loaded through **Addressables**.
+`BoardConfiguration` assets are loaded through **Addressables**. `GameSave.PlanetSave` also carries a
+`dockedShips` list (kind, owner, and research snapshot at construction time) for each planet's `Ship`s.
 
 ### Board designer
 
@@ -149,6 +160,8 @@ from the `.inputactions` asset rather than editing it by hand.
   pure. The AI reads planet state back out during `ProcessResults` in the same turn.
 - "Grotsits" is the game's consumer-goods resource; low grotsits lowers `Morale`, which scales all
   production.
+- The Production and Research catalogs spell the WarShip subtype **`"Warship"`** (lowercase *s*), not
+  `"WarShip"` — every `subType` string comparison in code must match that exact casing.
 - **`UIDocument.rootVisualElement` is not the visible panel.** It's Unity's auto-generated root
   container for the whole document and stretches to fill the entire screen regardless of how the
   panel is positioned/sized in the `.uxml`. Bounds-testing against it (e.g. "is this click inside

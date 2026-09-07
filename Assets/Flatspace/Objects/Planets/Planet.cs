@@ -4,6 +4,7 @@ using System.Linq;
 using FlatSpace.AI;
 using FlatSpace.Game;
 using Flatspace.Objects.Production;
+using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -135,7 +136,7 @@ public class Planet : MonoBehaviour
         {"Research", 1f},
         {"Grotsits", 1f}
     };
-    public bool HasColonyShip {get; set;} = false;
+    public List<Ship> DockedShips = new List<Ship>();
     
     public void SetPopulationTransferInProgress(int playerID, bool inProgress = true)
     {
@@ -181,11 +182,12 @@ public class Planet : MonoBehaviour
 
     }
 
-    private GameAIConstants _gameAIConstants;
+    
+    public GameAIConstants GameAIConstants { get; set; }
 
     public void Init(PlanetSpawnData spawnData, Transform parentTransform, GameAIConstants gameAIConstants)
     {
-        _gameAIConstants = gameAIConstants;
+        GameAIConstants = gameAIConstants;
         _resourceData = spawnData._resourceData;
         PlanetName = spawnData._planetName;
 
@@ -208,7 +210,7 @@ public class Planet : MonoBehaviour
         foodWorkers = 0;
 
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.foodModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
@@ -238,7 +240,7 @@ public class Planet : MonoBehaviour
     {
         grotsitsWorkers = 0;
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.grotsitsModifier;
         var grotsitsRequirement = GetMaintainenceCost();
@@ -255,7 +257,7 @@ public class Planet : MonoBehaviour
     {
         researchWorkers = 0;
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.researchModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
@@ -269,7 +271,7 @@ public class Planet : MonoBehaviour
     {
         industryWorkers = 0;
         var strategyPopulationModifier = 0;
-        var modifierData = _gameAIConstants.productionModifierLists?[(int)CurrentStrategy];
+        var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.industryModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
@@ -478,15 +480,16 @@ public class Planet : MonoBehaviour
     
     private void CheckColonizationReady(List<PlanetUpdateResult> resultList,bool populationDecrease = false)
     {
+        /*
         if (resultList.Any(x =>
                 x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
             return;
         
-        if (HasColonyShip && (Population.Count >= MaxPopulation * _gameAIConstants.expandPopulationTrigger))
+        if (HasDockedShip(Ship.ShipKind.ColonyShip) && (Population.Count >= MaxPopulation * _gameAIConstants.expandPopulationTrigger))
         {
             resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
                 1, Owner));
-        }
+        }*/
     }
 
     private void ConsumeFood(List<PlanetUpdateResult> resultList)
@@ -595,13 +598,13 @@ public class Planet : MonoBehaviour
             // Can't give everyone goods
             grotsitsShort += Grotsits - grotsitsRequired;
             Grotsits = 0.0f;
-            Morale = Math.Clamp(Morale - _gameAIConstants.moraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale - GameAIConstants.moraleStep, 0.0f, 200.0f);
         }
         else
         {
             // Grotsits for everyone
             Grotsits -= grotsitsRequired;
-            Morale = Math.Clamp(Morale + _gameAIConstants.moraleStep, 0.0f, 200.0f);
+            Morale = Math.Clamp(Morale + GameAIConstants.moraleStep, 0.0f, 200.0f);
         }
 
         // add 1 to population here to allow for growth if possible
@@ -835,10 +838,63 @@ public class Planet : MonoBehaviour
         }
         else if (CurrentProduction?.Item.subType == "ColonyShip")
         {
-            HasColonyShip = true;
+            DockNewShip(Ship.ShipKind.ColonyShip);
         }
-        
-        // create game object from CurrentProduction
+        else if (CurrentProduction?.Item.subType == "Warship")
+        {
+            DockNewShip(Ship.ShipKind.WarShip);
+        }
+    }
+
+    public bool HasDockedShip(Ship.ShipKind kind)
+    {
+        return DockedShips.Exists(s => s.Kind == kind);
+    }
+
+    private Ship CreateShip(Ship.ShipKind kind, int owner)
+    {
+        var template = kind == Ship.ShipKind.ColonyShip
+            ? GameAIConstants.colonyShipData
+            : GameAIConstants.warShipData;
+        var ship = this.AddComponent<Ship>();
+        ship.Kind = kind;
+        ship.Owner = owner;
+        ship.Template = template;
+        return ship;
+    }
+
+    public void DockNewShip(Ship.ShipKind kind)
+    {
+        var ship = CreateShip(kind, Owner);
+        ship.ResearchSnapshot = BuildResearchSnapshot(kind);
+        DockedShips.Add(ship);
+    }
+
+    public void DockShipFromSave(Ship.ShipKind kind, int owner, List<string> researchSnapshot)
+    {
+        var ship = CreateShip(kind, owner);
+        ship.ResearchSnapshot = new List<string>(researchSnapshot);
+        DockedShips.Add(ship);
+    }
+
+    public bool UndockShip(Ship.ShipKind kind)
+    {
+        var ship = DockedShips.Find(s => s.Kind == kind);
+        if (ship == null) return false;
+        DockedShips.Remove(ship);
+        Destroy(ship);
+        return true;
+    }
+
+    private List<string> BuildResearchSnapshot(Ship.ShipKind kind)
+    {
+        if (Owner < 0 || Owner >= Gameboard.Instance.players.Count) return new List<string>();
+        var subType = kind == Ship.ShipKind.ColonyShip ? "ColonyShip" : "Warship";
+        var researchCatalog = Gameboard.Instance.players[Owner].playerAI.ResearchCatalog;
+        return researchCatalog.catalogItems
+            .Where(x => x.researched && x.type == "Ship Improvement" && x.subType == subType)
+            .Select(x => x.itemName)
+            .ToList();
     }
 
     private void AddActiveImprovement(ProductionItem? production)

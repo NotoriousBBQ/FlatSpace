@@ -12,5 +12,7 @@ public class GameAIConstants : ScriptableObject
     public int maxPathNodesForResourceDistribution;
     public List<ModifierListForPlanetStrategy> productionModifierLists;
     public List<PlanetResourceData> resourceData;
+    public ShipData colonyShipData;
+    public ShipData warShipData;
 
 }

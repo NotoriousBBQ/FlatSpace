@@ -53,8 +53,14 @@ namespace FlatSpace
             
             private MainScreenUIController _mainScreenUIController;
             private PlanetDetailUIController _planetDetailUIController;
+            private FleetUIController _fleetUIController;
             public int TurnNumber { get; private set; }= 1;
             private float orthoChange;
+            // Frame on which a UI panel handled a click (e.g. the Planet Detail fleet icon opening
+            // the Fleet UI). Update() polls the raw mouse independently of the EventSystem, so
+            // without this the same click would immediately be treated as an "outside" click and
+            // close the panel that just opened.
+            private int _panelClickFrame = -1;
             void Start()
             {
 
@@ -63,14 +69,31 @@ namespace FlatSpace
             // UpdatePlanet is called once per frame
             void Update()
             {
-                if (PlanetDetailShowing() && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
+                    return;
+
+                // A panel already consumed this click (the Planet Detail fleet icon opening the
+                // Fleet UI). Don't also process it as an outside-click this frame.
+                if (Time.frameCount == _panelClickFrame)
+                    return;
+
+                var mousePosition = Mouse.current.position.ReadValue();
+
+                if (FleetUIShowing())
                 {
-                    var mousePosition = Mouse.current.position.ReadValue();
-                    // A click on a planet is handled by PlanetUIObject.OnPointerClick (which shows
-                    // that planet's detail), so only close here for a click that lands neither on
-                    // the detail panel nor on a planet -- same as pressing Escape.
-                    if (!_planetDetailUIController.ContainsScreenPoint(mousePosition) && !IsPointerOverPlanet(mousePosition))
-                        HidePlanetDetail();
+                    if (!_fleetUIController.ContainsScreenPoint(mousePosition) && !IsPointerOverPlanet(mousePosition))
+                        HideFleetUI();
+                    return;
+                }
+
+                // A click on a planet is handled by PlanetUIObject.OnPointerClick (which shows
+                // that planet's detail), so only close here for a click that lands neither on
+                // the detail panel nor on a planet -- same as pressing Escape.
+                if (PlanetDetailShowing()
+                    && !_planetDetailUIController.ContainsScreenPoint(mousePosition)
+                    && !IsPointerOverPlanet(mousePosition))
+                {
+                    HidePlanetDetail();
                 }
             }
 
@@ -102,6 +125,7 @@ namespace FlatSpace
                 InitializeInputActions();
                 _mainScreenUIController = GetComponentInChildren<MainScreenUIController>();
                 _planetDetailUIController = GetComponentInChildren<PlanetDetailUIController>();
+                _fleetUIController = GetComponentInChildren<FleetUIController>();
 
             }
 
@@ -340,11 +364,12 @@ namespace FlatSpace
 
             private static bool OrderHasGraphic(GameAI.GameAIOrder order)
             {
-                var hasGraphicList = new GameAI.GameAIOrder.OrderType[3]
+                var hasGraphicList = new GameAI.GameAIOrder.OrderType[4]
                 {
-                    GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 
+                    GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
                     GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
                     GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
+                    GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
                 };
                 
                 return Array.Exists(hasGraphicList, t => t == order.Type);
@@ -364,6 +389,9 @@ namespace FlatSpace
                         break;
                     case GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
                         color = new Color32(210, 105, 30, 255);
+                        break;
+                    case GameAI.GameAIOrder.OrderType.OrderTypeShipTransport:
+                        color = new Color32(255, 0, 255, 255);
                         break;
                     default:
                         color = new Color32(255, 255, 255, 255);
@@ -395,19 +423,24 @@ namespace FlatSpace
 
                     if (lineDrawObject)
                     {
-                        var point1 = _planetUIObjects.Find(x => x._planetName == order.Origin).transform.localPosition;
-                        var point2 = _planetUIObjects.Find(x => x._planetName == order.Target).transform.localPosition;
                         float offset = 10.0f;
                         if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport)
                             offset = -10.0f;
                         else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport)
                             offset = 20.0f;
-                        var linePoints = (new Vector3(point1.x + offset, point1.y + offset, 0.0f), new Vector3(point2.x + offset, point2.y + offset, 0.0f) );
+                        else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport)
+                            offset = 30.0f;
+
+                        var path = GameAI.GameAIMap.GetPath(order.Origin, order.Target);
+                        var pathPoints = new List<Vector3>();
+                        foreach (var node in path.PathNodes)
+                            pathPoints.Add(new Vector3(node.Position.x + offset, node.Position.y + offset, 0.0f));
+
                         var progressAmount =
                             Math.Clamp(
                                 Convert.ToSingle(order.TotalDelay - (order.TimingDelay)) /
                                 Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
-                        lineDrawObject.SetPoints(linePoints,progressAmount );
+                        lineDrawObject.SetPath(pathPoints, progressAmount);
                         lineDrawObject.SetColor(ColorForOrderType(order.Type));
                     }
                 }
@@ -445,6 +478,7 @@ namespace FlatSpace
 
             public void ShowPlanetDetail(string planetName)
             {
+                HideFleetUI();
                 _planetDetailUIController.SetPlanet(GetPlanet(planetName));
                 _planetDetailUIController.enabled = true;
             }
@@ -457,6 +491,26 @@ namespace FlatSpace
             public bool PlanetDetailShowing()
             {
                 return _planetDetailUIController.enabled;
+            }
+
+            public void ShowFleetUI(string planetName)
+            {
+                if (!_fleetUIController) return;
+                _panelClickFrame = Time.frameCount;
+                HidePlanetDetail();
+                _fleetUIController.SetPlanet(GetPlanet(planetName));
+                _fleetUIController.enabled = true;
+            }
+
+            public void HideFleetUI()
+            {
+                if (!_fleetUIController) return;
+                _fleetUIController.enabled = false;
+            }
+
+            public bool FleetUIShowing()
+            {
+                return _fleetUIController && _fleetUIController.enabled;
             }
             
             private void InitializeInputActions()
@@ -532,6 +586,8 @@ namespace FlatSpace
                 _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, players[owningPlayerId].playerAI?.currentResearch?.itemName ?? "", 0 );
                 if(PlanetDetailShowing())
                     _planetDetailUIController.UpdatePlanetDetail();
+                if (FleetUIShowing())
+                    _fleetUIController.RefreshShipList();
             }
 
             private bool _timedUpdateRunning = false;

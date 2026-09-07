@@ -2,7 +2,8 @@
     <ui:VisualElement name="PlanetDetailElement" picking-mode="Ignore" enabled="true" style="flex-grow: initial; flex-direction: column; background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); -unity-text-outline-color: rgb(0, 0, 0); border-left-color: rgb(255, 0, 0); border-right-color: rgb(255, 0, 0); border-top-color: rgb(255, 0, 0); border-bottom-color: rgb(255, 0, 0); border-top-width: 2px; border-right-width: 2px; border-bottom-width: 2px; border-left-width: 2px; border-top-left-radius: 2px; border-top-right-radius: 2px; border-bottom-right-radius: 2px; border-bottom-left-radius: 2px; top: 25%; left: 0%; align-items: stretch; align-self: center; height: 230px;">
         <ui:VisualElement name="TitleElement" picking-mode="Ignore" style="flex-grow: 1; flex-direction: row; height: 60px; max-height: 60px;">
             <ui:Image name="PlanetIcon" picking-mode="Ignore" style="height: 60px; width: 60px;"/>
-            <ui:Label text="Label" name="PlanetName" picking-mode="Ignore" style="height: 60px; width: 499px; -unity-text-align: upper-center;"/>
+            <ui:Label text="Label" name="PlanetName" picking-mode="Ignore" style="height: 60px; width: 479px; -unity-text-align: upper-center;"/>
+            <ui:VisualElement name="FleetIcon" picking-mode="Position" style="width: 25px; height: 25px; position: absolute; right: 10px; top: 12.5px;"/>
         </ui:VisualElement>
         <ui:VisualElement name="PopulationElement" picking-mode="Ignore" style="flex-grow: 1; height: 60px; flex-direction: row; align-items: flex-start; justify-content: space-between;">
             <ui:Label text="Population" name="PopulationName" picking-mode="Ignore"/>

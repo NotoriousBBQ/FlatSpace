@@ -148,6 +148,12 @@ namespace Game.UI.MainGameScreenUI
 
         public void EscapeButtonPressed()
         {
+            if (Gameboard.Instance.FleetUIShowing())
+            {
+                Gameboard.Instance.HideFleetUI();
+                return;
+            }
+
             if (Gameboard.Instance.PlanetDetailShowing())
             {
                 Gameboard.Instance.HidePlanetDetail();

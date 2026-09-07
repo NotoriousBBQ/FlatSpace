@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d8b6b848f93d8f34ab7dcf8e7135b629, type: 3}
-  m_Name: GameAIConstants4ProductionTypes
+  m_Name: GameAIConstantsProductionTypes
   m_EditorClassIdentifier: Assembly-CSharp::GameAIConstants
   moraleStep: 4
   defaultTravelSpeed: 150
@@ -36,3 +36,5 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 36a318dcff54eab4ab7fb6e66ad1aa22, type: 2}
   - {fileID: 11400000, guid: 4bfaa4edbfc937d4cbd88b16c926395c, type: 2}
   - {fileID: 11400000, guid: 226c68321455ed34595ae20b3978ffe1, type: 2}
+  colonyShipData: {fileID: 11400000, guid: f6b5445eaddc90a4b8c222c727f858ef, type: 2}
+  warShipData: {fileID: 11400000, guid: b8400d812184ad7438279ac32978464d, type: 2}

@@ -20,4 +20,4 @@ MonoBehaviour:
   shipDefenseMax: 0
   shipOffense: 0
   shipOffenseMax: 0
-  shipIcon: {fileID: 0}
+  shipIcon: {fileID: 2145440094, guid: 8c1f41ea49e262e4785cd51c44db339f, type: 3}
