@@ -59,26 +59,64 @@ namespace FlatSpace
 
             public void InitializePathMap(List<Planet> planets)
             {
-                // create nodes for all planets
                 PathNodes.Clear();
                 foreach (var planet in planets)
                 {
-                    PathNodes[planet.PlanetName]= new PathNode(planet.PlanetName, new Vector2(planet.Position.x, planet.Position.y));
+                    PathNodes[planet.PlanetName] =
+                        new PathNode(planet.PlanetName, new Vector2(planet.Position.x, planet.Position.y));
                 }
-                // for each node, for wach other node that is closer than max distance, add a connection 
+
+                var useExplicit = planets.Any(p => p.Connections != null && p.Connections.Count > 0);
+                if (useExplicit)
+                    BuildExplicitConnections(planets);
+                else
+                    BuildDistanceConnections();
+            }
+
+            // Current behavior: an edge between every pair of nodes closer than MaxConnectionSize.
+            private void BuildDistanceConnections()
+            {
                 foreach (var pathNode in PathNodes.Values)
                 {
-                    // a little inefficient here, since all connections are 2-way, but the sample set is small
-                    // and this will only be done once
                     foreach (var possibleNeighborNode in PathNodes.Values)
                     {
                         if (possibleNeighborNode.Name == pathNode.Name)
                             continue;
                         var distance = Vector2.Distance(pathNode.Position, possibleNeighborNode.Position);
                         if (distance <= MaxConnectionSize)
-                        {
                             pathNode.Connections.Add(new Connection(possibleNeighborNode.Name, distance));
-                        }
+                    }
+                }
+            }
+
+            // Board-authored graph: edges come from Planet.Connections. Symmetrized (an
+            // edge A-B is added even if only A lists B) and de-duplicated. Unknown names
+            // are logged and skipped. Cost is straight-line distance, keeping the A*
+            // heuristic in FindPath admissible.
+            private void BuildExplicitConnections(List<Planet> planets)
+            {
+                void AddEdge(string from, string to)
+                {
+                    if (!PathNodes.ContainsKey(from) || !PathNodes.ContainsKey(to))
+                    {
+                        Debug.LogWarning($"[PathingSystem] connection '{from}' -> '{to}' names an unknown planet; skipped");
+                        return;
+                    }
+                    var node = PathNodes[from];
+                    if (node.Connections.Any(c => c.NodeName == to))
+                        return;
+                    var cost = Vector2.Distance(node.Position, PathNodes[to].Position);
+                    node.Connections.Add(new Connection(to, cost));
+                }
+
+                foreach (var planet in planets)
+                {
+                    if (planet.Connections == null)
+                        continue;
+                    foreach (var neighbor in planet.Connections)
+                    {
+                        AddEdge(planet.PlanetName, neighbor);
+                        AddEdge(neighbor, planet.PlanetName);
                     }
                 }
             }

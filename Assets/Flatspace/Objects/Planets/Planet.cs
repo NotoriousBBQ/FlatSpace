@@ -123,6 +123,9 @@ public class Planet : MonoBehaviour
     public float ResearchProduced {get; set;}
     public string PlanetName {get; private set;} = "";
     public Vector2 Position { get; private set; }= new Vector2(0.0f, 0.0f);
+    // Names of directly-connected planets for the pathing graph. Empty on a
+    // board that predates the random generator => distance-rule fallback.
+    public List<string> Connections = new List<string>();
     public List<int> IncomingPopulationSource = new List<int>();
     public bool IsPopulationTransferInProgress(int playerID) {return IncomingPopulationSource.Contains(playerID);}
     public bool FoodShipmentIncoming = false;
@@ -199,6 +202,9 @@ public class Planet : MonoBehaviour
         Food = ProjectedFood = _resourceData._baseFoodProduction;
         Grotsits = ProjectedGrotsits = _resourceData._baseGrotsitsProduction;
         Position = new Vector2(spawnData._planetPosition.x, spawnData._planetPosition.y);
+        Connections = spawnData._connections != null
+            ? new List<string>(spawnData._connections)
+            : new List<string>();
         Type = spawnData._planetType;
         DistanceMapToPathingList = new Dictionary<string, GameAIMap.DestinationToPathingListEntry>();
         CurrentStrategy = _resourceData._initialStrategy;
