@@ -117,9 +117,19 @@ namespace FlatSpace
                     return;
                 }
                 var result = FlatSpace.Tools.MapGenerator.Generate(mapGenSettings);
-                Debug.Log(result.Success
-                    ? $"[BoardDesigner] dry run OK: {result.Planets.Count} planets, seed {result.EffectiveSeed}"
-                    : $"[BoardDesigner] dry run failed: {result.Error}");
+                if (result.Success)
+                {
+                    var byType = string.Join(", ", result.Planets
+                        .GroupBy(p => p.Type)
+                        .Select(g => $"{g.Key}:{g.Count()}"));
+                    var degrees = result.Planets.Select(p => p.Connections.Count).ToList();
+                    Debug.Log($"[BoardDesigner] dry run OK: {result.Planets.Count} planets " +
+                              $"[{byType}], degree {degrees.Min()}-{degrees.Max()}, seed {result.EffectiveSeed}");
+                }
+                else
+                {
+                    Debug.LogError($"[BoardDesigner] dry run failed: {result.Error}");
+                }
             }
 
             private void DrawConnections(List<PlanetDesigner> planetList)

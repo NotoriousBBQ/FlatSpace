@@ -280,6 +280,135 @@ namespace FlatSpace
                 return seen.Count == n;
             }
 
+            // Assign `multiset` types to the non-prime node indices so that no
+            // edge joins two nodes of the same type unless that type is Normal.
+            // Randomized greedy with bounded backtracking. Returns a
+            // node-index -> type map, or null on failure.
+            private static Dictionary<int, Planet.PlanetType> AssignTypes(
+                Random rng, int n, HashSet<int> primes,
+                HashSet<(int, int)> edges, List<Planet.PlanetType> multiset)
+            {
+                var adj = new Dictionary<int, List<int>>();
+                for (var i = 0; i < n; i++) adj[i] = new List<int>();
+                foreach (var (a, b) in edges) { adj[a].Add(b); adj[b].Add(a); }
+
+                var nodes = Enumerable.Range(0, n)
+                    .Where(i => !primes.Contains(i))
+                    .OrderByDescending(i => adj[i].Count)
+                    .ToList();
+
+                var assignment = new Dictionary<int, Planet.PlanetType>();
+                foreach (var p in primes) assignment[p] = Planet.PlanetType.PlanetTypePrime;
+
+                // Remaining count of each type available to hand out.
+                var pool = multiset.GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
+                var steps = 0;
+                const int maxSteps = 20000;
+
+                bool Conflicts(int node, Planet.PlanetType type)
+                {
+                    if (type == Planet.PlanetType.PlanetTypeNormal) return false;
+                    foreach (var nb in adj[node])
+                        if (assignment.TryGetValue(nb, out var t) && t == type)
+                            return true;
+                    return false;
+                }
+
+                bool Recurse(int idx)
+                {
+                    if (++steps > maxSteps) return false;
+                    if (idx == nodes.Count) return true;
+                    var node = nodes[idx];
+
+                    var types = pool.Where(kv => kv.Value > 0).Select(kv => kv.Key).ToList();
+                    for (var i = types.Count - 1; i > 0; i--)
+                    {
+                        var j = rng.Next(i + 1);
+                        (types[i], types[j]) = (types[j], types[i]);
+                    }
+
+                    foreach (var type in types)
+                    {
+                        if (Conflicts(node, type)) continue;
+                        assignment[node] = type;
+                        pool[type]--;
+                        if (Recurse(idx + 1)) return true;
+                        pool[type]++;
+                        assignment.Remove(node);
+                    }
+                    return false;
+                }
+
+                return Recurse(0) ? assignment : null;
+            }
+
+            private static string Summarize(IEnumerable<Planet.PlanetType> types) =>
+                string.Join(", ", types.GroupBy(t => t)
+                    .Select(g => $"{PlanetTypeDefaults.ShortName(g.Key)}:{g.Count()}"));
+
+            private static string Validate(
+                int n, int primeCount, HashSet<int> primes,
+                HashSet<(int, int)> edges, Dictionary<int, Planet.PlanetType> assignment)
+            {
+                if (!IsConnected(n, edges))
+                    return "internal error: graph not connected after assignment";
+
+                if (assignment.Count(kv => kv.Value == Planet.PlanetType.PlanetTypePrime) != primeCount)
+                    return "internal error: Prime count mismatch after assignment";
+
+                var degree = new int[n];
+                foreach (var (a, b) in edges)
+                {
+                    degree[a]++; degree[b]++;
+                    if (IsPrimePair(primes, a, b))
+                        return "internal error: an edge joins two Prime planets";
+                    var ta = assignment[a];
+                    var tb = assignment[b];
+                    if (ta == tb && ta != Planet.PlanetType.PlanetTypeNormal)
+                        return $"internal error: edge joins two {PlanetTypeDefaults.ShortName(ta)} planets";
+                }
+                for (var i = 0; i < n; i++)
+                    if (degree[i] == 0)
+                        return "internal error: a planet has no connections";
+
+                return null;
+            }
+
+            private static List<GeneratedPlanet> Emit(
+                List<Vector2> positions, HashSet<(int, int)> edges,
+                Dictionary<int, Planet.PlanetType> assignment)
+            {
+                var adj = new Dictionary<int, List<int>>();
+                for (var i = 0; i < positions.Count; i++) adj[i] = new List<int>();
+                foreach (var (a, b) in edges) { adj[a].Add(b); adj[b].Add(a); }
+
+                // Per-type running index for "{ShortName} {n}" names.
+                var typeIndex = new Dictionary<Planet.PlanetType, int>();
+                var names = new string[positions.Count];
+                for (var i = 0; i < positions.Count; i++)
+                {
+                    var type = assignment[i];
+                    typeIndex.TryGetValue(type, out var next);
+                    names[i] = $"{PlanetTypeDefaults.ShortName(type)} {next}";
+                    typeIndex[type] = next + 1;
+                }
+
+                var planets = new List<GeneratedPlanet>();
+                for (var i = 0; i < positions.Count; i++)
+                {
+                    var type = assignment[i];
+                    planets.Add(new GeneratedPlanet
+                    {
+                        Name = names[i],
+                        Type = type,
+                        Strategy = PlanetTypeDefaults.StrategyFor(type),
+                        Position = positions[i],
+                        Connections = adj[i].Select(j => names[j]).OrderBy(s => s).ToList(),
+                    });
+                }
+                return planets;
+            }
+
             private static GenerationResult TryGenerate(MapGenSettings settings, int seed)
             {
                 var rng = new Random(seed);
@@ -300,13 +429,25 @@ namespace FlatSpace
                     return GenerationResult.Fail(
                         "could not connect the map without joining two Prime planets; increase totalPlanetCount or connectionRadius", seed);
 
-                var degree = new int[positions.Count];
-                foreach (var (a, b) in edges) { degree[a]++; degree[b]++; }
-                Debug.Log($"[MapGenerator] seed {seed}: {edges.Count} edges, " +
-                          $"degree min {degree.Min()} max {degree.Max()}, " +
-                          $"connected {IsConnected(positions.Count, edges)}");
+                var assignment = AssignTypes(rng, positions.Count, primeIndices, edges, typeMultiset);
+                if (assignment == null)
+                    return GenerationResult.Fail(
+                        "could not assign types without same-type neighbors; loosen the frequency weights " +
+                        $"(non-Prime multiset was [{Summarize(typeMultiset)}])", seed);
 
-                return GenerationResult.Fail("type assignment not implemented yet (Task 7)", seed);
+                var validationError = Validate(positions.Count, primeCount, primeIndices, edges, assignment);
+                if (validationError != null)
+                    return GenerationResult.Fail(validationError, seed);
+
+                var planets = Emit(positions, edges, assignment);
+                Debug.Log($"[MapGenerator] seed {seed} OK: {planets.Count} planets, {edges.Count} edges, " +
+                          $"non-Prime [{Summarize(typeMultiset)}], connectivity OK");
+                return new GenerationResult
+                {
+                    Success = true,
+                    EffectiveSeed = seed,
+                    Planets = planets,
+                };
             }
         }
     }
