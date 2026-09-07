@@ -105,8 +105,68 @@ namespace FlatSpace
                 return multiset;
             }
 
-            // Filled in over Tasks 5-7. For now: resolve counts and report them,
-            // then fail so the dry-run has something to print.
+            // Rejection-sampled blue-noise scatter. Returns null if it cannot
+            // place `count` points respecting `minSeparation` even after growing
+            // the extent several times.
+            private static List<Vector2> PlacePlanets(Random rng, int count, float minSeparation, float nominalSpacing)
+            {
+                var side = Mathf.Sqrt(count) * nominalSpacing;
+                var half = side / 2f;
+                var minSqr = minSeparation * minSeparation;
+                var points = new List<Vector2>();
+
+                var stall = 0;
+                var grows = 0;
+                while (points.Count < count)
+                {
+                    var candidate = new Vector2(
+                        (float)(rng.NextDouble() * 2.0 - 1.0) * half,
+                        (float)(rng.NextDouble() * 2.0 - 1.0) * half);
+
+                    var ok = true;
+                    foreach (var p in points)
+                    {
+                        if ((p - candidate).sqrMagnitude < minSqr) { ok = false; break; }
+                    }
+
+                    if (ok)
+                    {
+                        points.Add(candidate);
+                        stall = 0;
+                    }
+                    else if (++stall > 40)
+                    {
+                        if (++grows > 6)
+                            return null;
+                        half *= 1.1f;
+                        stall = 0;
+                    }
+                }
+                return points;
+            }
+
+            // Farthest-point sampling: pick `primeCount` indices out of `positions`
+            // that are spread as far apart as possible.
+            private static HashSet<int> PickPrimeIndices(Random rng, List<Vector2> positions, int primeCount)
+            {
+                var chosen = new HashSet<int> { rng.Next(positions.Count) };
+                while (chosen.Count < primeCount)
+                {
+                    var bestIdx = -1;
+                    var bestDist = -1f;
+                    for (var i = 0; i < positions.Count; i++)
+                    {
+                        if (chosen.Contains(i)) continue;
+                        var nearest = float.MaxValue;
+                        foreach (var c in chosen)
+                            nearest = Mathf.Min(nearest, (positions[i] - positions[c]).sqrMagnitude);
+                        if (nearest > bestDist) { bestDist = nearest; bestIdx = i; }
+                    }
+                    chosen.Add(bestIdx);
+                }
+                return chosen;
+            }
+
             private static GenerationResult TryGenerate(MapGenSettings settings, int seed)
             {
                 var rng = new Random(seed);
@@ -114,12 +174,18 @@ namespace FlatSpace
                 var nonPrimeCount = settings.totalPlanetCount - primeCount;
                 var typeMultiset = ResolveTypeMultiset(settings, nonPrimeCount);
 
-                var summary = string.Join(", ", typeMultiset
-                    .GroupBy(t => t)
-                    .Select(g => $"{PlanetTypeDefaults.ShortName(g.Key)}:{g.Count()}"));
-                Debug.Log($"[MapGenerator] seed {seed}: {primeCount} Prime, non-Prime [{summary}]");
+                var positions = PlacePlanets(rng, settings.totalPlanetCount,
+                    settings.minPlanetSeparation, settings.nominalSpacing);
+                if (positions == null)
+                    return GenerationResult.Fail(
+                        "could not place planets: minPlanetSeparation too large for the planet count", seed);
 
-                return GenerationResult.Fail("placement not implemented yet (Task 5)", seed);
+                var primeIndices = PickPrimeIndices(rng, positions, primeCount);
+
+                Debug.Log($"[MapGenerator] seed {seed}: placed {positions.Count} planets, " +
+                          $"prime indices [{string.Join(",", primeIndices.OrderBy(i => i))}]");
+
+                return GenerationResult.Fail("connection graph not implemented yet (Task 6)", seed);
             }
         }
     }
