@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 12790e3364b993e458f4e948b66a3444, type: 3}
+  m_Name: MapGenSettings_Default
+  m_EditorClassIdentifier: Assembly-CSharp::MapGenSettings
+  seed: 0
+  playerCount: 3
+  totalPlanetCount: 40
+  typeWeights:
+  - type: 1
+    weight: 15
+  - type: 2
+    weight: 10
+  - type: 3
+    weight: 3
+  - type: 4
+    weight: 10
+  - type: 5
+    weight: 3
+  - type: 6
+    weight: 7
+  - type: 7
+    weight: 7
+  minPlanetSeparation: 120
+  connectionRadius: 400
+  nominalSpacing: 200
+  seedRetryBudget: 8

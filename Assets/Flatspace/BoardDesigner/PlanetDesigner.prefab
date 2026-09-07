@@ -122,6 +122,7 @@ MonoBehaviour:
   strategy: 0
   planetName: Planet
   position: {x: 408, y: 204.5}
+  connectionNames: []
   nameTextField: {fileID: 1810204264512034258}
   typeTextField: {fileID: 8365256585650121412}
 --- !u!1 &6082427682980022752
