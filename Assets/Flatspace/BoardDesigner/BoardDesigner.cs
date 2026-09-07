@@ -71,95 +71,22 @@ namespace FlatSpace
                     if (child.GetComponent<PlanetDesigner>())
                         planetList.Add(child.GetComponent<PlanetDesigner>());
                 }
-                
+
                 Debug.Log($"Total Num Planets {planetList.Count}");
-                var count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesolate))
-                {
-                    planet.name = "Desolate " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedGrotsits;
-                    planet.UpdateGraphic();
-                    count++;
-                }
-                Debug.Log($"{count} Desolate");
 
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeFarm))
+                foreach (var type in PlanetTypeDefaults.AllTypes)
                 {
-                    planet.name = "Farm " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFood;
-                    planet.UpdateGraphic();
-                    count++;
+                    var count = 0;
+                    foreach (var planet in planetList.FindAll(x => x.type == type))
+                    {
+                        planet.name = $"{PlanetTypeDefaults.ShortName(type)} {count}";
+                        planet.planetName = planet.name;
+                        planet.strategy = PlanetTypeDefaults.StrategyFor(type);
+                        planet.UpdateGraphic();
+                        count++;
+                    }
+                    Debug.Log($"{count} {PlanetTypeDefaults.ShortName(type)}");
                 }
-                Debug.Log($"{count} Farm");
-                
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeIndustrial))
-                {
-                    planet.name = "Industrial " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedIndustry;
-                    planet.UpdateGraphic();
-                    count++;
-                }
-                Debug.Log($"{count} Industrial");
-                
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeNormal))
-                {
-                    planet.name = "Normal " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyBalanced;
-                    planet.UpdateGraphic();
-                    count++;
-                }
-                Debug.Log($"{count} Normal");                
-
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypePrime))
-                {
-                    planet.name = "Prime " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyBalanced;
-                    planet.UpdateGraphic();
-                    count++;
-                }
-                Debug.Log($"{count} Prime");
-                
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeVerdant))
-                {
-                    planet.name = "Verdant " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedFood;
-                    planet.UpdateGraphic();
-                    count++;
-                }
-                Debug.Log($"{count} Verdant");                
-                
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeOcean))
-                {
-                    planet.name = "Ocean " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyFocusedResearch;
-                    planet.UpdateGraphic();
-                    count++;
-                }
-                Debug.Log($"{count} Ocean");                
-                
-                count = 0;
-                foreach (var planet in planetList.FindAll(x => x.type == Planet.PlanetType.PlanetTypeDesert))
-                {
-                    planet.name = "Desert " + count.ToString();
-                    planet.planetName = planet.name;
-                    planet.strategy = Planet.PlanetStrategy.PlanetStrategyIndustry;
-                    planet.UpdateGraphic();
-                    count++;
-                }                
-                Debug.Log($"{count} Desert");
             }
 
 
