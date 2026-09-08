@@ -44,7 +44,7 @@ namespace FlatSpace.Fog
             InitCore(positions, segments, settings, numPlayers);
         }
 
-        internal void InitForTest(IReadOnlyList<Vector2> planetPositions,
+        public void InitForTest(IReadOnlyList<Vector2> planetPositions,
             IReadOnlyList<(Vector2, Vector2)> segments, FogOfWarSettings settings, int numPlayers)
         {
             _planetNames = new List<string>();
