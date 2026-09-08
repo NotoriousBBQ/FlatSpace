@@ -299,6 +299,7 @@ MonoBehaviour:
   _lineDrawObjectPrefab: {fileID: 5226953852233311075, guid: 0e55f099c06447b41b421337a3648791, type: 3}
   _orderLineDrawObjectPrefab: {fileID: 4779870425705875092, guid: 387624431a5c15e428e7d465ff2d0775, type: 3}
   _scrollRect: {fileID: 667686344}
+  _fogOfWarSettings: {fileID: 11400000, guid: d8226f25a66ce5749aa0fa2089e7c245, type: 2}
   _PlanetUIPrefab: {fileID: 4090082300911639246, guid: 316745e97eac54b4b9d80e6e838b5ce9, type: 3}
   _PlanetUIPrefabs:
   - {fileID: 8146981275839630820, guid: c8fa997062f047d4baad6a91f926c2d2, type: 3}
