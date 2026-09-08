@@ -9,6 +9,7 @@ public static class FogSelfCheck
     {
         var ok = RunFogGridChecks();
         ok &= RunVisibilityGridChecks();
+        ok &= RunFogSystemChecks();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -92,6 +93,59 @@ public static class FogSelfCheck
         g3.SetExploredPacked(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF });
         ok &= Check(g3.ExploredCount() == 0, "mismatched packed length is ignored");
 
+        return ok;
+    }
+
+    public static bool RunFogSystemChecks()
+    {
+        var ok = true;
+        var go = new GameObject("FogSelfCheckSystem");
+        try
+        {
+            var sys = go.AddComponent<FlatSpace.Fog.FogOfWarSystem>();
+            var settings = ScriptableObject.CreateInstance<FlatSpace.Fog.FogOfWarSettings>();
+            settings.cellSize = 25f;
+            settings.boundsMargin = 100f;
+            settings.planetVisionRadius = 120f;
+            settings.edgeSoftness = 20f;
+            settings.visibleCutoff = 0.5f;
+            settings.visibleThreshold = 0.35f;
+            settings.openSpaceThreshold = 80f;
+            settings.openSpaceFalloff = 80f;
+            settings.openSpaceRadiusMultiplier = 2f;
+
+            var positions = new[] { new Vector2(0, 0), new Vector2(600, 0) };
+            var segments = new (Vector2, Vector2)[0];
+            sys.InitForTest(positions, segments, settings, numPlayers: 2);
+
+            sys.RecomputeFromSources(new[]
+            {
+                (0, new Vector2(0, 0), settings.planetVisionRadius),
+                (1, new Vector2(600, 0), settings.planetVisionRadius),
+            });
+
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.Player, 0);
+            ok &= Check(sys.Classify(new Vector2(0, 0)) == FlatSpace.Fog.FogVisibility.Visible,
+                "player 0 view: on planet A is Visible");
+            ok &= Check(sys.Classify(new Vector2(600, 0)) == FlatSpace.Fog.FogVisibility.Hidden,
+                "player 0 view: planet B is Hidden");
+
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.AllPlayers, 0);
+            ok &= Check(sys.Classify(new Vector2(600, 0)) == FlatSpace.Fog.FogVisibility.Visible,
+                "all-players view: planet B is Visible");
+
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
+            ok &= Check(sys.Classify(new Vector2(9999, 9999)) == FlatSpace.Fog.FogVisibility.Visible,
+                "no-fog view: everything Visible");
+
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.Player, 0);
+            sys.RecomputeFromSources(new (int, Vector2, float)[0]);
+            ok &= Check(sys.Classify(new Vector2(0, 0)) == FlatSpace.Fog.FogVisibility.Explored,
+                "player 0 view: planet A drops to Explored once vision leaves");
+
+            Object.DestroyImmediate(settings);
+        }
+        finally { Object.DestroyImmediate(go); }
         return ok;
     }
 }
