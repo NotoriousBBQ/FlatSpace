@@ -209,26 +209,27 @@ namespace FlatSpace.Fog
         private void ResolveDisplay()
         {
             if (!Ready) return;
-            if (ViewMode == FogViewMode.NoFog) return; // display buffers unused
-
-            for (var i = 0; i < _grid.CellCount; i++)
+            if (ViewMode != FogViewMode.NoFog)
             {
-                if (ViewMode == FogViewMode.AllPlayers)
+                for (var i = 0; i < _grid.CellCount; i++)
                 {
-                    var s = 0f; var e = false;
-                    foreach (var vg in _players)
+                    if (ViewMode == FogViewMode.AllPlayers)
                     {
-                        if (vg.VisibleStrength[i] > s) s = vg.VisibleStrength[i];
-                        e |= vg.IsExplored(i);
+                        var s = 0f; var e = false;
+                        foreach (var vg in _players)
+                        {
+                            if (vg.VisibleStrength[i] > s) s = vg.VisibleStrength[i];
+                            e |= vg.IsExplored(i);
+                        }
+                        _displayStrength[i] = s;
+                        _displayExplored[i] = e;
                     }
-                    _displayStrength[i] = s;
-                    _displayExplored[i] = e;
-                }
-                else
-                {
-                    var vg = _players[ViewPlayer];
-                    _displayStrength[i] = vg.VisibleStrength[i];
-                    _displayExplored[i] = vg.IsExplored(i);
+                    else
+                    {
+                        var vg = _players[ViewPlayer];
+                        _displayStrength[i] = vg.VisibleStrength[i];
+                        _displayExplored[i] = vg.IsExplored(i);
+                    }
                 }
             }
 
