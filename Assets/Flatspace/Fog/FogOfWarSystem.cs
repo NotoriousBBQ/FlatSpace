@@ -23,6 +23,12 @@ namespace FlatSpace.Fog
         private List<Vector2> _planetPositions; // parallel to _planetNames
         private List<string> _planetNames;
 
+        private const int OverlaySortingOrder = 1000;
+        private GameObject _overlayGo;
+        private SpriteRenderer _overlayRenderer;
+        private Texture2D _overlayTex;
+        private Color32[] _overlayBuffer;
+
         // ---- Init -------------------------------------------------------------
 
         public void Init(IReadOnlyList<Planet> planets, FogOfWarSettings settings, int numPlayers)
@@ -70,6 +76,7 @@ namespace FlatSpace.Fog
             _displayExplored = new bool[_grid.CellCount];
             Ready = true;
             ResolveDisplay();
+            BuildOverlay();
         }
 
         private static List<(Vector2, Vector2)> GatherSegments()
@@ -224,6 +231,8 @@ namespace FlatSpace.Fog
                     _displayExplored[i] = vg.IsExplored(i);
                 }
             }
+
+            RefreshOverlay();
         }
 
         public FogSample Sample(Vector2 worldPos)
@@ -282,5 +291,51 @@ namespace FlatSpace.Fog
                 buffer[i] = c;
             }
         }
+
+        // ---- Overlay ----------------------------------------------------------
+
+        private void BuildOverlay()
+        {
+            DestroyOverlay();
+            _overlayTex = new Texture2D(_grid.Cols, _grid.Rows, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            _overlayBuffer = new Color32[_grid.CellCount];
+
+            var sprite = Sprite.Create(_overlayTex,
+                new Rect(0, 0, _grid.Cols, _grid.Rows),
+                new Vector2(0.5f, 0.5f),
+                pixelsPerUnit: 1f / _grid.CellSize);
+
+            _overlayGo = new GameObject("FogOverlay");
+            _overlayGo.transform.SetParent(transform, false);
+            _overlayGo.transform.position = new Vector3(_grid.Center.x, _grid.Center.y, 0f);
+            _overlayRenderer = _overlayGo.AddComponent<SpriteRenderer>();
+            _overlayRenderer.sprite = sprite;
+            _overlayRenderer.sortingOrder = OverlaySortingOrder;
+            RefreshOverlay();
+        }
+
+        public void RefreshOverlay()
+        {
+            if (_overlayRenderer == null) return;
+            var noFog = ViewMode == FogViewMode.NoFog;
+            _overlayRenderer.enabled = !noFog;
+            if (noFog) return;
+            FillOverlayColors(_overlayBuffer);
+            _overlayTex.SetPixels32(_overlayBuffer);
+            _overlayTex.Apply(false);
+        }
+
+        public void DestroyOverlay()
+        {
+            if (_overlayGo != null) DestroyImmediate(_overlayGo);
+            if (_overlayTex != null) DestroyImmediate(_overlayTex);
+            _overlayGo = null; _overlayRenderer = null; _overlayTex = null; _overlayBuffer = null;
+        }
+
+        private void OnDestroy() => DestroyOverlay();
     }
 }
