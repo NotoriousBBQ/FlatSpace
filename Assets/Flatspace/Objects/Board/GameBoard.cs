@@ -242,7 +242,15 @@ namespace FlatSpace
 
                 if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
                 {
-                    // Task 9 fills in explored restore here.
+                    foreach (var playerSave in gameSave.players)
+                    {
+                        if (playerSave.exploredCols == _fogOfWarSystem.GridCols &&
+                            playerSave.exploredRows == _fogOfWarSystem.GridRows)
+                        {
+                            _fogOfWarSystem.SetExploredPacked(
+                                playerSave.playerId, FogExplored.Decode(playerSave.exploredGrid));
+                        }
+                    }
                     _fogOfWarSystem.Recompute();
                     FogUIUpdate();
                 }

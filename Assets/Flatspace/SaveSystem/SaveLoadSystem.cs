@@ -94,6 +94,9 @@ public class SaveLoadSystem : MonoBehaviour
             public CatalogSave productionCatalogSave;
             public string currentResearchItem;
             public float currentResearch;
+            public string exploredGrid;
+            public int exploredCols;
+            public int exploredRows;
         }
 
         [Serializable]
@@ -139,7 +142,10 @@ public class SaveLoadSystem : MonoBehaviour
                         researchCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
                         productionCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ProductionCatalog),
                         currentResearchItem = Gameboard.Instance.players[i].playerAI.currentResearch?.itemName ?? string.Empty,
-                        currentResearch = Gameboard.Instance.players[i].playerAI.researchTotal
+                        currentResearch = Gameboard.Instance.players[i].playerAI.researchTotal,
+                        exploredGrid = FogExplored.Encode(i),
+                        exploredCols = Gameboard.Instance.FogOfWar != null ? Gameboard.Instance.FogOfWar.GridCols : 0,
+                        exploredRows = Gameboard.Instance.FogOfWar != null ? Gameboard.Instance.FogOfWar.GridRows : 0,
                     });
             }
             
@@ -498,8 +504,27 @@ public class SaveLoadSystem : MonoBehaviour
         var configPath = Path.Combine(Application.persistentDataPath, "BoardConfigs");
 #endif
         SetFileBrowserFilters();
-        FileBrowser.ShowSaveDialog((paths) => SaveDesignerConfig(saveData, paths[0]), 
+        FileBrowser.ShowSaveDialog((paths) => SaveDesignerConfig(saveData, paths[0]),
             ()=> Debug.Log("Save Cancelled"), FileBrowser.PickMode.Files, false, configPath);
     }
     #endregion
+}
+
+internal static class FogExplored
+{
+    public static string Encode(int player)
+    {
+        var fog = FlatSpace.Game.Gameboard.Instance != null
+            ? FlatSpace.Game.Gameboard.Instance.FogOfWar : null;
+        if (fog == null || !fog.Ready) return string.Empty;
+        var bytes = fog.GetExploredPacked(player);
+        return bytes == null || bytes.Length == 0 ? string.Empty : System.Convert.ToBase64String(bytes);
+    }
+
+    public static byte[] Decode(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return System.Array.Empty<byte>();
+        try { return System.Convert.FromBase64String(s); }
+        catch { return System.Array.Empty<byte>(); }
+    }
 }
