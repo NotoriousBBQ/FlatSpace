@@ -310,7 +310,7 @@ namespace FlatSpace
                 _fogOfWarSystem.Init(GameAI.GameAIMap.PlanetList, _fogOfWarSettings, NumPlayers);
                 _fogOfWarSystem.SetViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
 
-                var handler = GetComponentInChildren<Game.UI.MainGameScreenUI.GameButtonHandler>();
+                var handler = GetComponentInChildren<GameButtonHandler>();
                 if (handler) handler.RefreshFogView();
 
                 _fogOfWarSystem.Recompute();
