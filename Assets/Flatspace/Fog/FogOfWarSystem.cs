@@ -312,7 +312,7 @@ namespace FlatSpace.Fog
 
             _overlayGo = new GameObject("FogOverlay");
             _overlayGo.transform.SetParent(transform, false);
-            _overlayGo.transform.position = new Vector3(_grid.Center.x, _grid.Center.y, 0f);
+            _overlayGo.transform.localPosition = new Vector3(_grid.Center.x, _grid.Center.y, 0f);
             _overlayRenderer = _overlayGo.AddComponent<SpriteRenderer>();
             _overlayRenderer.sprite = sprite;
             _overlayRenderer.sortingOrder = OverlaySortingOrder;
