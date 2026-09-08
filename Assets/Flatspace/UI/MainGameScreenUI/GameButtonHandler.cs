@@ -71,6 +71,14 @@ namespace Game.UI.MainGameScreenUI
             if (_fogViewDropdown != null)
             {
                 _fogViewDropdown.labelElement.style.display = DisplayStyle.None;
+                var fogValueText = _fogViewDropdown.Q<TextElement>();
+                if (fogValueText != null)
+                {
+                    fogValueText.style.flexGrow = 1;
+                    fogValueText.style.height = Length.Percent(100);
+                    fogValueText.style.fontSize = 12;
+                    fogValueText.style.unityTextAlign = TextAnchor.MiddleLeft;
+                }
                 RefreshFogView();
                 _fogViewDropdown.RegisterValueChangedCallback(OnFogViewChanged);
             }
