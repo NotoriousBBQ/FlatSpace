@@ -13,6 +13,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 using FlatSpace.AI;
+using FlatSpace.Fog;
 using Game.UI.MainGameScreenUI;
 
 namespace FlatSpace
@@ -35,6 +36,10 @@ namespace FlatSpace
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
             [SerializeField] private LineDrawObject _orderLineDrawObjectPrefab;
             [SerializeField] private ScrollRect _scrollRect;
+
+            [SerializeField] private FlatSpace.Fog.FogOfWarSettings _fogOfWarSettings;
+            private FlatSpace.Fog.FogOfWarSystem _fogOfWarSystem;
+            public FlatSpace.Fog.FogOfWarSystem FogOfWar => _fogOfWarSystem;
 
             public PlanetUIObject _PlanetUIPrefab;
             public PlanetUIObject[] _PlanetUIPrefabs;
@@ -234,6 +239,13 @@ namespace FlatSpace
 
                 }
                 GameAI.SetSimulationStats(gameSave);
+
+                if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
+                {
+                    // Task 9 fills in explored restore here.
+                    _fogOfWarSystem.Recompute();
+                    FogUIUpdate();
+                }
             }
 
             private void ClearExistingGameState()
@@ -251,6 +263,8 @@ namespace FlatSpace
                 var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
                 foreach (var linedrawObject in lineDrawObjects)
                     Destroy(linedrawObject.gameObject);
+                if (_fogOfWarSystem != null)
+                    _fogOfWarSystem.DestroyOverlay();
                 if (_camera)
                 {
                     _camera.orthographicSize = _cameraInitialOrtho;
@@ -269,9 +283,31 @@ namespace FlatSpace
                 GameAI.InitGameAI(planetSpawnData, gameAIConstants);
                 InitPlanetGraphics(planetSpawnData);
                 InitPathGraphics();
+                InitFogOfWar();
                 var playerOneCapital = GetPlayerCapitol(0);
                 if(playerOneCapital)
                     ViewPlanet(playerOneCapital);
+            }
+
+            private void InitFogOfWar()
+            {
+                if (_fogOfWarSettings == null)
+                {
+                    Debug.LogWarning("[Gameboard] No FogOfWarSettings assigned; fog of war disabled.");
+                    return;
+                }
+                if (_fogOfWarSystem == null)
+                    _fogOfWarSystem = this.gameObject.AddComponent<FlatSpace.Fog.FogOfWarSystem>();
+
+                _fogOfWarSystem.Init(GameAI.GameAIMap.PlanetList, _fogOfWarSettings, NumPlayers);
+                _fogOfWarSystem.SetViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
+
+                // TODO(Task 8): restore once GameButtonHandler.RefreshFogView exists
+                // var handler = GetComponentInChildren<Game.UI.MainGameScreenUI.GameButtonHandler>();
+                // if (handler) handler.RefreshFogView();
+
+                _fogOfWarSystem.Recompute();
+                FogUIUpdate();
             }
 
             private bool InitGame(SaveLoadSystem.BoardDesignerSave boardData)
@@ -445,6 +481,21 @@ namespace FlatSpace
                                 Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
                         lineDrawObject.SetPath(pathPoints, progressAmount);
                         lineDrawObject.SetColor(ColorForOrderType(order.Type));
+                        if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
+                        {
+                            var originPlanet = GetPlanet(order.Origin);
+                            var targetPlanet = GetPlanet(order.Target);
+                            var visible = FlatSpace.Fog.FogVisibility.Hidden;
+                            if (originPlanet != null)
+                                visible = Max(visible, _fogOfWarSystem.Classify(originPlanet.Position));
+                            if (targetPlanet != null)
+                                visible = Max(visible, _fogOfWarSystem.Classify(targetPlanet.Position));
+                            var dim = _fogOfWarSettings != null ? _fogOfWarSettings.exploredObjectDim : 0.45f;
+                            lineDrawObject.SetFogState(
+                                visible == FlatSpace.Fog.FogVisibility.Hidden
+                                    ? FlatSpace.Fog.FogVisibility.Hidden
+                                    : FlatSpace.Fog.FogVisibility.Visible, dim);
+                        }
                     }
                 }
             }
@@ -569,6 +620,8 @@ namespace FlatSpace
                 _playerNotifications.Clear();
                 GameAI.GameAIUpdate();
                 TurnNumber++;
+                if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
+                    _fogOfWarSystem.Recompute();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
 
@@ -591,6 +644,46 @@ namespace FlatSpace
                     _planetDetailUIController.UpdatePlanetDetail();
                 if (FleetUIShowing())
                     _fleetUIController.RefreshShipList();
+                FogUIUpdate();
+            }
+
+            public void FogUIUpdate()
+            {
+                if (_fogOfWarSystem == null || !_fogOfWarSystem.Ready)
+                    return;
+                var dim = _fogOfWarSettings != null ? _fogOfWarSettings.exploredObjectDim : 0.45f;
+
+                foreach (var planetUI in _planetUIObjects)
+                {
+                    var planet = GetPlanet(planetUI._planetName);
+                    if (planet == null) continue;
+                    planetUI.SetFogState(_fogOfWarSystem.Classify(planet.Position), dim);
+                }
+
+                var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
+                foreach (var line in lineDrawObjects)
+                {
+                    if (line.CompareTag("OrderLineDraw")) continue; // handled in DisplayOrderGraphics
+                    var lr = line.lineRenderer;
+                    if (lr == null || lr.positionCount < 2) continue;
+                    var a = (Vector2)lr.GetPosition(0);
+                    var b = (Vector2)lr.GetPosition(lr.positionCount - 1);
+                    var mid = (a + b) * 0.5f;
+                    var state = Max(_fogOfWarSystem.Classify(a),
+                                Max(_fogOfWarSystem.Classify(b), _fogOfWarSystem.Classify(mid)));
+                    line.SetFogState(state, dim);
+                }
+            }
+
+            private static FlatSpace.Fog.FogVisibility Max(
+                FlatSpace.Fog.FogVisibility x, FlatSpace.Fog.FogVisibility y)
+                => (FlatSpace.Fog.FogVisibility)Mathf.Max((int)x, (int)y);
+
+            public void SetFogViewMode(FlatSpace.Fog.FogViewMode mode, int playerIndex)
+            {
+                if (_fogOfWarSystem == null) return;
+                _fogOfWarSystem.SetViewMode(mode, playerIndex);
+                FogUIUpdate();
             }
 
             private bool _timedUpdateRunning = false;

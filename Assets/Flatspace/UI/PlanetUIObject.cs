@@ -100,8 +100,6 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
 
     public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
     {
-        var spriteRenderer = GetComponentInChildren<SpriteRenderer>();
-
         if (state == FlatSpace.Fog.FogVisibility.Hidden)
         {
             gameObject.SetActive(false);
@@ -109,6 +107,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         }
         if (!gameObject.activeSelf) gameObject.SetActive(true);
 
+        var spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         var explored = state == FlatSpace.Fog.FogVisibility.Explored;
 
         // When Visible, the renderer color is authoritative (just set by UIUpdate);
