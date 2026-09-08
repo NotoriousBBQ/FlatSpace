@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlatSpace.AI;
+using FlatSpace.Fog;
 using FlatSpace.Game;
 using Game.UI.MainGameScreenUI;
 using TMPro;
@@ -22,6 +23,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     private readonly Vector2 _fleetIconBaseAnchoredPosition = new Vector2(40, -40);
     public string _planetName;
     public bool _changeColor = false;
+    private Color _fogBasePlanetColor = Color.white;
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
     {
         { Planet.PlanetType.PlanetTypeDesolate,  new Color32(196, 65,19, 255 )},
@@ -94,6 +96,31 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
             else
                 statsPanelImage.color = Player.PlayerColors[owner];
         }
+    }
+
+    public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
+    {
+        var spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+
+        if (state == FlatSpace.Fog.FogVisibility.Hidden)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
+
+        var explored = state == FlatSpace.Fog.FogVisibility.Explored;
+
+        // When Visible, the renderer color is authoritative (just set by UIUpdate);
+        // remember it so Explored can dim from the true base.
+        if (spriteRenderer)
+        {
+            if (!explored) _fogBasePlanetColor = spriteRenderer.color;
+            else spriteRenderer.color =
+                _fogBasePlanetColor * new Color(exploredDim, exploredDim, exploredDim, 1f);
+        }
+
+        if (_statsCanvas) _statsCanvas.enabled = !explored;
     }
 
     public void OnPointerClick(PointerEventData eventData)

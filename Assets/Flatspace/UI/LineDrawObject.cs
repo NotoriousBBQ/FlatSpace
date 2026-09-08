@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlatSpace.Fog;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -8,6 +9,34 @@ public class LineDrawObject : MonoBehaviour
     // Start is called once before the first execution of UpdatePlanet after the MonoBehaviour is created
     public LineRenderer lineRenderer;
     public SpriteRenderer spriteRenderer;
+
+    private Color _fogBaseLineColor = Color.white;
+    private Color _fogBaseSpriteColor = Color.white;
+    private bool _fogBaseCaptured;
+
+    public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
+    {
+        if (!_fogBaseCaptured)
+        {
+            _fogBaseLineColor = lineRenderer ? lineRenderer.startColor : Color.white;
+            _fogBaseSpriteColor = spriteRenderer ? spriteRenderer.color : Color.white;
+            _fogBaseCaptured = true;
+        }
+
+        var show = state != FlatSpace.Fog.FogVisibility.Hidden;
+        if (lineRenderer) lineRenderer.enabled = show;
+        if (spriteRenderer) spriteRenderer.enabled = show;
+        if (!show) return;
+
+        var dim = state == FlatSpace.Fog.FogVisibility.Explored ? exploredDim : 1f;
+        var mul = new Color(dim, dim, dim, 1f);
+        if (lineRenderer)
+        {
+            lineRenderer.startColor = _fogBaseLineColor * mul;
+            lineRenderer.endColor = _fogBaseLineColor * mul;
+        }
+        if (spriteRenderer) spriteRenderer.color = _fogBaseSpriteColor * mul;
+    }
 
     public virtual void SetPoints((Vector3, Vector3) points, float progressAmount = 0.0f)
     {
