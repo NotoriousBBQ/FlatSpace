@@ -338,5 +338,18 @@ namespace FlatSpace.Fog
         }
 
         private void OnDestroy() => DestroyOverlay();
+
+        // ---- Gizmo ----
+
+        private void OnDrawGizmosSelected()
+        {
+            if (!Ready) return;
+            Gizmos.color = new Color(0.3f, 0.7f, 1f, 0.4f);
+            Gizmos.DrawWireCube(GridWorldBounds.center, GridWorldBounds.size);
+            if (_settings == null || _planetPositions == null) return;
+            Gizmos.color = new Color(1f, 1f, 0.4f, 0.5f);
+            foreach (var p in _planetPositions)
+                Gizmos.DrawWireSphere(new Vector3(p.x, p.y, 0f), _settings.planetVisionRadius);
+        }
     }
 }
