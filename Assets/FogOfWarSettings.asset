@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: db3c3cff65155284aa3a7543440f7497, type: 3}
+  m_Name: FogOfWarSettings
+  m_EditorClassIdentifier: Assembly-CSharp::FlatSpace.Fog.FogOfWarSettings
+  cellSize: 25
+  boundsMargin: 250
+  planetVisionRadius: 220
+  shipVisionRadius: 160
+  openSpaceRadiusMultiplier: 2.5
+  openSpaceThreshold: 200
+  openSpaceFalloff: 300
+  edgeSoftness: 40
+  visibleCutoff: 0.5
+  visibleThreshold: 0.35
+  unseenColor: {r: 0.01, g: 0.012, b: 0.03, a: 0.97}
+  exploredColor: {r: 0.02, g: 0.025, b: 0.06, a: 0.55}
+  exploredObjectDim: 0.45
