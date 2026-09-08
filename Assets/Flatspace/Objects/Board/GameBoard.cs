@@ -302,9 +302,8 @@ namespace FlatSpace
                 _fogOfWarSystem.Init(GameAI.GameAIMap.PlanetList, _fogOfWarSettings, NumPlayers);
                 _fogOfWarSystem.SetViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
 
-                // TODO(Task 8): restore once GameButtonHandler.RefreshFogView exists
-                // var handler = GetComponentInChildren<Game.UI.MainGameScreenUI.GameButtonHandler>();
-                // if (handler) handler.RefreshFogView();
+                var handler = GetComponentInChildren<Game.UI.MainGameScreenUI.GameButtonHandler>();
+                if (handler) handler.RefreshFogView();
 
                 _fogOfWarSystem.Recompute();
                 FogUIUpdate();

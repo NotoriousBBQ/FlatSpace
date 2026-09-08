@@ -15,6 +15,7 @@ namespace Game.UI.MainGameScreenUI
         private Button _stopRunButton;
         private Button _saveButton;
         private Button _loadButton;
+        private DropdownField _fogViewDropdown;
         private NotificationListController _notificationListController;
 
         public void Setup(VisualElement root, NotificationListController notificationListController)
@@ -66,6 +67,12 @@ namespace Game.UI.MainGameScreenUI
                 _loadButton.visible = false;
             }
 
+            _fogViewDropdown = root.Q<DropdownField>("FogViewDropdown");
+            if (_fogViewDropdown != null)
+            {
+                RefreshFogView();
+                _fogViewDropdown.RegisterValueChangedCallback(OnFogViewChanged);
+            }
         }
 
         void OnDisable()
@@ -98,6 +105,40 @@ namespace Game.UI.MainGameScreenUI
             if (_loadButton != null)
             {
                 _loadButton.clicked -= OnLoadButtonClicked;
+            }
+
+            if (_fogViewDropdown != null)
+                _fogViewDropdown.UnregisterValueChangedCallback(OnFogViewChanged);
+        }
+
+        public void RefreshFogView()
+        {
+            if (_fogViewDropdown == null) return;
+            var choices = new System.Collections.Generic.List<string> { "No Fog", "All Players" };
+            var n = FlatSpace.Game.Gameboard.Instance != null
+                ? FlatSpace.Game.Gameboard.Instance.NumPlayers : 0;
+            for (var i = 0; i < n; i++) choices.Add($"Player {i}");
+            _fogViewDropdown.choices = choices;
+            _fogViewDropdown.SetValueWithoutNotify("No Fog");
+        }
+
+        private void OnFogViewChanged(ChangeEvent<string> evt)
+        {
+            var board = FlatSpace.Game.Gameboard.Instance;
+            if (board == null) return;
+            switch (evt.newValue)
+            {
+                case "No Fog":
+                    board.SetFogViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
+                    break;
+                case "All Players":
+                    board.SetFogViewMode(FlatSpace.Fog.FogViewMode.AllPlayers, 0);
+                    break;
+                default:
+                    if (evt.newValue != null && evt.newValue.StartsWith("Player ")
+                        && int.TryParse(evt.newValue.Substring("Player ".Length), out var idx))
+                        board.SetFogViewMode(FlatSpace.Fog.FogViewMode.Player, idx);
+                    break;
             }
         }
 
