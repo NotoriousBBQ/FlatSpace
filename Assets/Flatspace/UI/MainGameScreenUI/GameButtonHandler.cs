@@ -70,6 +70,7 @@ namespace Game.UI.MainGameScreenUI
             _fogViewDropdown = root.Q<DropdownField>("FogViewDropdown");
             if (_fogViewDropdown != null)
             {
+                _fogViewDropdown.labelElement.style.display = DisplayStyle.None;
                 RefreshFogView();
                 _fogViewDropdown.RegisterValueChangedCallback(OnFogViewChanged);
             }
