@@ -8,6 +8,7 @@ public static class FogSelfCheck
     public static void Run()
     {
         var ok = RunFogGridChecks();
+        ok &= RunVisibilityGridChecks();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -56,6 +57,40 @@ public static class FogSelfCheck
         // A cell right on the segment (midpoint) is not open.
         var onSegment = grid.Openness(grid.WorldToCellIndex(new Vector2(200, 0)));
         ok &= Check(onSegment < 0.01f, $"openness on a connection segment ~0 (was {onSegment})");
+
+        return ok;
+    }
+
+    public static bool RunVisibilityGridChecks()
+    {
+        var ok = true;
+        var g = new FlatSpace.Fog.VisibilityGrid(10);
+
+        g.Observe(3, 0.9f, exploredCutoff: 0.5f);
+        g.Observe(3, 0.2f, exploredCutoff: 0.5f); // must not lower it
+        ok &= Check(Mathf.Approximately(g.VisibleStrength[3], 0.9f), "Observe keeps the max strength");
+        ok &= Check(g.IsExplored(3), "strength above cutoff marks explored");
+
+        g.Observe(4, 0.3f, exploredCutoff: 0.5f);
+        ok &= Check(!g.IsExplored(4), "strength below cutoff does not mark explored");
+
+        g.ClearVisible();
+        ok &= Check(Mathf.Approximately(g.VisibleStrength[3], 0f), "ClearVisible zeroes strength");
+        ok &= Check(g.IsExplored(3), "ClearVisible keeps explored history");
+
+        // Pack / unpack round trip.
+        g.Observe(0, 1f, 0.5f);
+        g.Observe(9, 1f, 0.5f);
+        var packed = g.GetExploredPacked();
+        var g2 = new FlatSpace.Fog.VisibilityGrid(10);
+        g2.SetExploredPacked(packed);
+        ok &= Check(g2.IsExplored(0) && g2.IsExplored(3) && g2.IsExplored(9), "unpack restores explored bits");
+        ok &= Check(g2.ExploredCount() == g.ExploredCount(), "explored count survives round trip");
+
+        // Wrong-length data is ignored.
+        var g3 = new FlatSpace.Fog.VisibilityGrid(10);
+        g3.SetExploredPacked(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF });
+        ok &= Check(g3.ExploredCount() == 0, "mismatched packed length is ignored");
 
         return ok;
     }
