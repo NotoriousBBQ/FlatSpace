@@ -74,6 +74,12 @@ namespace FlatSpace.Fog
 
             _displayStrength = new float[_grid.CellCount];
             _displayExplored = new bool[_grid.CellCount];
+
+            // Reset the view before ResolveDisplay so re-initialising with fewer players
+            // while a Player-n view is active can't index past the reallocated _players array.
+            ViewMode = FogViewMode.NoFog;
+            ViewPlayer = 0;
+
             Ready = true;
             ResolveDisplay();
             BuildOverlay();

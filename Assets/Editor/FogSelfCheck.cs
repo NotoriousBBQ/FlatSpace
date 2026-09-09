@@ -10,6 +10,7 @@ public static class FogSelfCheck
         var ok = RunFogGridChecks();
         ok &= RunVisibilityGridChecks();
         ok &= RunFogSystemChecks();
+        ok &= RunPlanetTintCheck();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -143,7 +144,50 @@ public static class FogSelfCheck
             ok &= Check(sys.Classify(new Vector2(0, 0)) == FlatSpace.Fog.FogVisibility.Explored,
                 "player 0 view: planet A drops to Explored once vision leaves");
 
+            // Re-init with FEWER players while a Player-n view is selected must not throw (regression: OOB in ResolveDisplay).
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.Player, 1);
+            var threw = false;
+            try { sys.InitForTest(new[] { new Vector2(0, 0) }, new (Vector2, Vector2)[0], settings, numPlayers: 1); }
+            catch { threw = true; }
+            ok &= Check(!threw, "re-Init with fewer players (Player-1 view active) does not throw");
+            ok &= Check(sys.Classify(new Vector2(0, 0)) == FlatSpace.Fog.FogVisibility.Visible,
+                "after re-Init the view resets to NoFog (everything Visible)");
+
             Object.DestroyImmediate(settings);
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunPlanetTintCheck()
+    {
+        var ok = true;
+        var go = new GameObject("FogTintCheckPlanet");
+        try
+        {
+            var child = new GameObject("sprite");
+            child.transform.SetParent(go.transform, false);
+            var sr = child.AddComponent<SpriteRenderer>();
+            sr.color = new Color(0.8f, 0.4f, 0.2f, 1f);
+            var pui = go.AddComponent<PlanetUIObject>();
+
+            const float dim = 0.45f;
+            pui.SetFogState(FlatSpace.Fog.FogVisibility.Visible, dim);
+            pui.SetFogState(FlatSpace.Fog.FogVisibility.Explored, dim);
+            pui.SetFogState(FlatSpace.Fog.FogVisibility.Visible, dim);
+            pui.SetFogState(FlatSpace.Fog.FogVisibility.Explored, dim);
+
+            var expected = new Color(0.8f, 0.4f, 0.2f, 1f) * new Color(dim, dim, dim, 1f);
+            var got = go.GetComponentInChildren<SpriteRenderer>().color;
+            ok &= Check(Mathf.Abs(got.r - expected.r) < 0.001f && Mathf.Abs(got.g - expected.g) < 0.001f
+                        && Mathf.Abs(got.b - expected.b) < 0.001f,
+                $"planet tint does not decay over Visible/Explored cycles (got {got}, expected {expected})");
+
+            pui.SetFogState(FlatSpace.Fog.FogVisibility.Visible, dim);
+            var back = go.GetComponentInChildren<SpriteRenderer>().color;
+            ok &= Check(Mathf.Abs(back.r - 0.8f) < 0.001f && Mathf.Abs(back.g - 0.4f) < 0.001f
+                        && Mathf.Abs(back.b - 0.2f) < 0.001f,
+                $"planet returns to full brightness when Visible again (got {back})");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;

@@ -24,6 +24,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     public string _planetName;
     public bool _changeColor = false;
     private Color _fogBasePlanetColor = Color.white;
+    private bool _fogBaseCaptured;
     private Dictionary<Planet.PlanetType, Color32> _planetColors = new Dictionary<Planet.PlanetType, Color32>
     {
         { Planet.PlanetType.PlanetTypeDesolate,  new Color32(196, 65,19, 255 )},
@@ -110,13 +111,15 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         var spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         var explored = state == FlatSpace.Fog.FogVisibility.Explored;
 
-        // When Visible, the renderer color is authoritative (just set by UIUpdate);
-        // remember it so Explored can dim from the true base.
+        // Capture the base color once and always rewrite it from that base, so repeated
+        // Visible<->Explored cycles don't compound the dimming and a planet returning to
+        // vision brightens back. Capture-once is safe because nothing mutates the sprite
+        // color after SetPlanetColor runs at creation.
         if (spriteRenderer)
         {
-            if (!explored) _fogBasePlanetColor = spriteRenderer.color;
-            else spriteRenderer.color =
-                _fogBasePlanetColor * new Color(exploredDim, exploredDim, exploredDim, 1f);
+            if (!_fogBaseCaptured) { _fogBasePlanetColor = spriteRenderer.color; _fogBaseCaptured = true; }
+            var d = explored ? exploredDim : 1f;
+            spriteRenderer.color = _fogBasePlanetColor * new Color(d, d, d, 1f);
         }
 
         if (_statsCanvas) _statsCanvas.enabled = !explored;

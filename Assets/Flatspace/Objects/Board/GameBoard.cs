@@ -691,6 +691,7 @@ namespace FlatSpace
                 if (_fogOfWarSystem == null) return;
                 _fogOfWarSystem.SetViewMode(mode, playerIndex);
                 FogUIUpdate();
+                DisplayOrderGraphics(GameAI.CurrentAIOrders);
             }
 
             private bool _timedUpdateRunning = false;
