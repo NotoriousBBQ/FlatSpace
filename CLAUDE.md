@@ -160,11 +160,13 @@ from the `.inputactions` asset rather than editing it by hand.
 - **Namespace casing is inconsistent** and both spellings are in use: `FlatSpace` (e.g. `FlatSpace.AI`,
   `FlatSpace.Game`, `FlatSpace.Pathing`) and `Flatspace` (e.g. `Flatspace.Objects.Production`,
   `Flatspace.Objects.Resource`). Match whatever the file/folder you're editing already uses.
-- **Misspelled identifiers are load-bearing.** Serialized/public names like `IntialBoardState`,
-  `InitGameFromGaveSave`, and various `Grotsit`/`Grotsits` mixes are referenced from Unity scene/prefab
-  YAML and from JSON save keys. Renaming them silently breaks serialization — only rename with a
-  matching Unity script-rename + asset migration. (Purely private, code-only misspellings are safe to
-  fix normally; `PlayerAI.CompleteResearch` and `Planet.GetMaintenanceCost` were two such fixes.)
+- **Misspelled identifiers can be load-bearing.** A serialized/public name like `IntialBoardState` is
+  referenced from Unity scene/prefab YAML (and JSON save keys carry their own misspellings), so renaming
+  it silently breaks serialization — only rename with a matching Unity script-rename + asset migration.
+  Identifiers that are private or otherwise code-only — even public methods that nothing wires through a
+  UnityEvent — are safe to fix normally; `PlayerAI.CompleteResearch`, `Planet.GetMaintenanceCost`, and
+  `Gameboard.InitGameFromSave` (was `InitGameFromGaveSave`) were such fixes. Also watch the
+  `Grotsit`/`Grotsits` split on serialized fields (`_grotsitProduction` vs `_baseGrotsitsProduction`).
 - `Planet.UpdatePlanet` mutates shared `Planet` state and appends to the passed result list; it is not
   pure. The AI reads planet state back out during `ProcessResults` in the same turn.
 - "Grotsits" is the game's consumer-goods resource; low grotsits lowers `Morale`, which scales all

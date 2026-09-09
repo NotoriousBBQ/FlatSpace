@@ -238,13 +238,13 @@ public class SaveLoadSystem : MonoBehaviour
             var bSaveGameInitialized = false;
             LoadGameScene("Flatspace", (scene, sceneMode) =>
             {
-                bSaveGameInitialized = Gameboard.Instance.InitGameFromGaveSave(saveConfig);
+                bSaveGameInitialized = Gameboard.Instance.InitGameFromSave(saveConfig);
                 SceneManager.SetActiveScene(scene);
             });   
             return bSaveGameInitialized;
         }
        
-        return Gameboard.Instance.InitGameFromGaveSave(saveConfig);
+        return Gameboard.Instance.InitGameFromSave(saveConfig);
     }
 
     public void LoadBoardConfigAddressable(string address, Action<AsyncOperationHandle<BoardConfiguration>> loadCompleteDelegate)
