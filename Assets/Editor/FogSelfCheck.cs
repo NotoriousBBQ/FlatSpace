@@ -165,11 +165,20 @@ public static class FogSelfCheck
         var go = new GameObject("FogTintCheckPlanet");
         try
         {
+            go.SetActive(false); // defer PlanetUIObject.Awake until _statsCanvas is set
+
+            var canvasGo = new GameObject("canvas");
+            canvasGo.transform.SetParent(go.transform, false);
+            var canvas = canvasGo.AddComponent<Canvas>();
+
             var child = new GameObject("sprite");
             child.transform.SetParent(go.transform, false);
             var sr = child.AddComponent<SpriteRenderer>();
             sr.color = new Color(0.8f, 0.4f, 0.2f, 1f);
+
             var pui = go.AddComponent<PlanetUIObject>();
+            pui._statsCanvas = canvas;
+            go.SetActive(true); // Awake / CreateFleetIcon now runs with _statsCanvas set
 
             const float dim = 0.45f;
             pui.SetFogState(FlatSpace.Fog.FogVisibility.Visible, dim);
