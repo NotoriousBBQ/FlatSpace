@@ -24,10 +24,15 @@ namespace FlatSpace.Fog
         private List<string> _planetNames;
 
         private const int OverlaySortingOrder = 1000;
+        private const float BorderPad = 4000f; // how far past the grid the solid border fog extends
+                                               // (board content is ~4242x2600, so this covers it
+                                               // even for an off-centre planet cluster)
         private GameObject _overlayGo;
         private SpriteRenderer _overlayRenderer;
         private Texture2D _overlayTex;
         private Color32[] _overlayBuffer;
+        private readonly List<GameObject> _borderStrips = new List<GameObject>();
+        private Sprite _stripSprite;
 
         // ---- Init -------------------------------------------------------------
 
@@ -351,7 +356,82 @@ namespace FlatSpace.Fog
             _overlayRenderer = _overlayGo.AddComponent<SpriteRenderer>();
             _overlayRenderer.sprite = sprite;
             _overlayRenderer.sortingOrder = OverlaySortingOrder;
+
+            BuildBorderStrips();
             RefreshOverlay();
+        }
+
+        /// <summary>
+        /// The visibility grid only spans the planet bounding box + margin. Fill a large pad around
+        /// it with static solid `unseenColor` strips so a player scrolling past a corner planet sees
+        /// fog continuing to the board edge, not a hard cut-off. The strips never change (nothing
+        /// out there is ever explored) — they are built once and only toggled with the overlay.
+        /// </summary>
+        private void BuildBorderStrips()
+        {
+            var inner = new FogRect
+            {
+                MinX = _grid.Origin.x,
+                MinY = _grid.Origin.y,
+                MaxX = _grid.Origin.x + _grid.WorldSize.x,
+                MaxY = _grid.Origin.y + _grid.WorldSize.y,
+            };
+            var outer = new FogRect
+            {
+                MinX = inner.MinX - BorderPad,
+                MinY = inner.MinY - BorderPad,
+                MaxX = inner.MaxX + BorderPad,
+                MaxY = inner.MaxY + BorderPad,
+            };
+
+            var strips = new List<FogRect>();
+            CollectBorderStrips(inner, outer, strips);
+            if (strips.Count == 0) return;
+
+            if (_stripSprite == null)
+                _stripSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1),
+                    new Vector2(0.5f, 0.5f), 1f);
+
+            foreach (var s in strips)
+            {
+                var go = new GameObject("FogBorderStrip");
+                go.transform.SetParent(_overlayGo.transform, false); // _overlayGo is at _grid.Center
+                go.transform.localPosition = new Vector3(
+                    (s.MinX + s.MaxX) * 0.5f - _grid.Center.x,
+                    (s.MinY + s.MaxY) * 0.5f - _grid.Center.y, 0f);
+                go.transform.localScale = new Vector3(
+                    Mathf.Max(0f, s.MaxX - s.MinX), Mathf.Max(0f, s.MaxY - s.MinY), 1f);
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = _stripSprite;
+                sr.color = _settings.unseenColor;
+                sr.sortingOrder = OverlaySortingOrder;
+                _borderStrips.Add(go);
+            }
+        }
+
+        public struct FogRect
+        {
+            public float MinX, MinY, MaxX, MaxY;
+            public float Area => Mathf.Max(0f, MaxX - MinX) * Mathf.Max(0f, MaxY - MinY);
+        }
+
+        /// <summary>
+        /// Decompose (outer - inner) into up to 4 non-overlapping strips that exactly tile the
+        /// border region: full-width top and bottom bands, then left and right bands spanning only
+        /// the inner's vertical extent. A side where `outer` meets `inner` produces no strip.
+        /// Assumes `inner` is contained in `outer`.
+        /// </summary>
+        public static void CollectBorderStrips(FogRect inner, FogRect outer, List<FogRect> outStrips)
+        {
+            if (outStrips == null) return;
+            if (outer.MaxY > inner.MaxY)
+                outStrips.Add(new FogRect { MinX = outer.MinX, MaxX = outer.MaxX, MinY = inner.MaxY, MaxY = outer.MaxY });
+            if (inner.MinY > outer.MinY)
+                outStrips.Add(new FogRect { MinX = outer.MinX, MaxX = outer.MaxX, MinY = outer.MinY, MaxY = inner.MinY });
+            if (inner.MinX > outer.MinX)
+                outStrips.Add(new FogRect { MinX = outer.MinX, MaxX = inner.MinX, MinY = inner.MinY, MaxY = inner.MaxY });
+            if (outer.MaxX > inner.MaxX)
+                outStrips.Add(new FogRect { MinX = inner.MaxX, MaxX = outer.MaxX, MinY = inner.MinY, MaxY = inner.MaxY });
         }
 
         public void RefreshOverlay()
@@ -359,6 +439,8 @@ namespace FlatSpace.Fog
             if (_overlayRenderer == null) return;
             var noFog = ViewMode == FogViewMode.NoFog;
             _overlayRenderer.enabled = !noFog;
+            for (var i = 0; i < _borderStrips.Count; i++)
+                if (_borderStrips[i] != null) _borderStrips[i].SetActive(!noFog);
             if (noFog) return;
             FillOverlayColors(_overlayBuffer);
             _overlayTex.SetPixels32(_overlayBuffer);
@@ -367,9 +449,12 @@ namespace FlatSpace.Fog
 
         public void DestroyOverlay()
         {
-            if (_overlayGo != null) DestroyImmediate(_overlayGo);
+            if (_overlayGo != null) DestroyImmediate(_overlayGo); // border strips are children, destroyed with it
             if (_overlayTex != null) DestroyImmediate(_overlayTex);
+            if (_stripSprite != null) DestroyImmediate(_stripSprite);
+            _borderStrips.Clear();
             _overlayGo = null; _overlayRenderer = null; _overlayTex = null; _overlayBuffer = null;
+            _stripSprite = null;
         }
 
         private void OnDestroy() => DestroyOverlay();

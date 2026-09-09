@@ -12,6 +12,7 @@ public static class FogSelfCheck
         ok &= RunFogSystemChecks();
         ok &= RunPlanetTintCheck();
         ok &= RunCorridorCheck();
+        ok &= RunBorderStripsCheck();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -187,6 +188,48 @@ public static class FogSelfCheck
         FlatSpace.Fog.FogOfWarSystem.CollectCorridorSamples(path, 0f, step, samples);
         ok &= Check(samples.Count == 2 && Vector2.Distance(samples[0], samples[1]) < 0.01f,
             "zero revealed distance yields only the start point (twice)");
+
+        return ok;
+    }
+
+    public static bool RunBorderStripsCheck()
+    {
+        var ok = true;
+        var inner = new FlatSpace.Fog.FogOfWarSystem.FogRect { MinX = -10, MinY = -10, MaxX = 10, MaxY = 10 };
+        var outer = new FlatSpace.Fog.FogOfWarSystem.FogRect { MinX = -100, MinY = -100, MaxX = 100, MaxY = 100 };
+        var strips = new System.Collections.Generic.List<FlatSpace.Fog.FogOfWarSystem.FogRect>();
+        FlatSpace.Fog.FogOfWarSystem.CollectBorderStrips(inner, outer, strips);
+
+        ok &= Check(strips.Count == 4, $"fully-inset inner produces 4 border strips (got {strips.Count})");
+
+        var stripArea = 0f;
+        foreach (var s in strips) stripArea += s.Area;
+        var expected = outer.Area - inner.Area; // 40000 - 400 = 39600
+        ok &= Check(Mathf.Abs(stripArea - expected) < 0.01f,
+            $"strips tile (outer - inner) exactly (got {stripArea}, expected {expected})");
+
+        for (var i = 0; i < strips.Count; i++)
+            for (var j = i + 1; j < strips.Count; j++)
+            {
+                var a = strips[i];
+                var b = strips[j];
+                var ox = Mathf.Min(a.MaxX, b.MaxX) - Mathf.Max(a.MinX, b.MinX);
+                var oy = Mathf.Min(a.MaxY, b.MaxY) - Mathf.Max(a.MinY, b.MinY);
+                ok &= Check(ox <= 0.01f || oy <= 0.01f, $"border strips {i} and {j} do not overlap");
+            }
+
+        foreach (var s in strips)
+        {
+            var ix = Mathf.Min(s.MaxX, inner.MaxX) - Mathf.Max(s.MinX, inner.MinX);
+            var iy = Mathf.Min(s.MaxY, inner.MaxY) - Mathf.Max(s.MinY, inner.MinY);
+            ok &= Check(ix <= 0.01f || iy <= 0.01f, "no border strip overlaps the inner rect");
+        }
+
+        // Inner flush with the outer's left edge => the left strip is dropped.
+        var flush = new FlatSpace.Fog.FogOfWarSystem.FogRect { MinX = -100, MinY = -10, MaxX = 10, MaxY = 10 };
+        strips.Clear();
+        FlatSpace.Fog.FogOfWarSystem.CollectBorderStrips(flush, outer, strips);
+        ok &= Check(strips.Count == 3, $"inner flush with one outer edge drops that strip (got {strips.Count})");
 
         return ok;
     }
