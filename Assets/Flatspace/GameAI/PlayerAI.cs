@@ -277,7 +277,7 @@ namespace FlatSpace
 
                         if (matrix.MatrixElements.ContainsKey(decision))
                         {
-                            Debug.LogError("Duplicate Key n Build Resource Matrix");
+                            Debug.LogError("Duplicate Key in Build Resource Matrix");
                         }
                         else
                         {
@@ -388,20 +388,20 @@ namespace FlatSpace
                 else if (researchTotal >= currentResearch.cost)
                 {
                     researchTotal -= currentResearch?.cost ?? 0.0f;
-                    CompleteReserch(orders);
+                    CompleteResearch(orders);
                     ChooseNewResearch(orders);
                 }
             }
 
-            private void CompleteReserch(List<GameAI.GameAIOrder> orders)
+            private void CompleteResearch(List<GameAI.GameAIOrder> orders)
             {
                 if (currentResearch == null)
                     return;
                 var completedResearchName = currentResearch.name;
                 currentResearch.researched = true;
-                foreach( var dependantItem in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == currentResearch.itemName))
+                foreach( var dependentItem in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == currentResearch.itemName))
                 {
-                    dependantItem.researched  = true;
+                    dependentItem.researched  = true;
                 }
                 Gameboard.Instance.CreateNotificationsForCompletedResearch(completedResearchName, Player.playerID);
 
@@ -424,7 +424,7 @@ namespace FlatSpace
                 currentResearch = actions[0].ChosenItem;
                 if (Player.playerID == 0)
                 {
-                    Debug.Log("Turn: " + Gameboard.Instance.TurnNumber + "New Research: " + currentResearch.name);
+                    Debug.Log("Turn: " + Gameboard.Instance.TurnNumber + " New Research: " + currentResearch.name);
                 }
 
                 orders.Add(MakeOrder(

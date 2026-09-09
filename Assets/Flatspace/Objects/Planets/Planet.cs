@@ -228,12 +228,12 @@ public class Planet : MonoBehaviour
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out foodWorkers);
     }
 
-    private float GetMaintainenceCost()
+    private float GetMaintenanceCost()
     {
-        return Population.Count + GetImprovementMaintainenceCost();
+        return Population.Count + GetImprovementMaintenanceCost();
     }
 
-    private float GetImprovementMaintainenceCost()
+    private float GetImprovementMaintenanceCost()
     {
         var totalImprovementCost = 0f;
         foreach (var improvement in CompletedImprovements)
@@ -242,14 +242,14 @@ public class Planet : MonoBehaviour
         }
         return totalImprovementCost;
     }
-    private bool GrotsitWorkerRequirement(out int grotsitsWorkers)
+    private bool GrotsitsWorkerRequirement(out int grotsitsWorkers)
     {
         grotsitsWorkers = 0;
         var strategyPopulationModifier = 0;
         var modifierData = GameAIConstants.productionModifierLists?[(int)CurrentStrategy];
         if (modifierData != null)
             strategyPopulationModifier = modifierData.grotsitsModifier;
-        var grotsitsRequirement = GetMaintainenceCost();
+        var grotsitsRequirement = GetMaintenanceCost();
         if(grotsitsRequirement <= 0.0f)
             return false;
         var shortfall = Grotsits - grotsitsRequirement;
@@ -306,7 +306,7 @@ public class Planet : MonoBehaviour
         {
             case PlanetStrategy.PlanetStrategyBalanced:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);                
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -329,7 +329,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyGrowth:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -343,7 +343,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyFood:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -357,7 +357,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyFocusedFood:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -371,7 +371,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyGrotsits:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -385,7 +385,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyFocusedGrotsits:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -399,7 +399,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyResearch:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -413,7 +413,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyFocusedResearch:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -427,7 +427,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyIndustry:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -442,7 +442,7 @@ public class Planet : MonoBehaviour
                 break;
             case PlanetStrategy.PlanetStrategyFocusedIndustry:
                 FoodWorkerRequirement(out FoodWorkers);
-                GrotsitWorkerRequirement(out GrotsitsWorkers);
+                GrotsitsWorkerRequirement(out GrotsitsWorkers);
                 IndustryWorkerRequirement(out IndustryWorkers);
                 ResearchWorkerRequirement(out ResearchWorkers);
                 remainingWorkers = Population.Count - FoodWorkers;
@@ -467,7 +467,7 @@ public class Planet : MonoBehaviour
         FoodProduced = (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction * ImprovementYieldModifier["Food"])) * (Morale/100.0f);
         Food += FoodProduced;
         Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
-        // produce grosits
+        // produce grotsits
         GrotsitsProduced = (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
         Grotsits += GrotsitsProduced;
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
@@ -506,7 +506,7 @@ public class Planet : MonoBehaviour
         float foodShortage = 0.0f;
         if (Food < Population.Count) 
         { 
-            // cant feed everyong
+            // can't feed everyone
             foodShortage = Food - Population.Count;
             //hinky code to prevent mass dieoffs
              Food--;
@@ -520,7 +520,7 @@ public class Planet : MonoBehaviour
                      1, playerID));
                  if (Population.Count <= 0)
                  {
-                     // planet id dead
+                     // planet is dead
                      resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
                  }
              }
@@ -598,7 +598,7 @@ public class Planet : MonoBehaviour
             return;
 
         var grotsitsShort = 0.0f;
-        var grotsitsRequired = GetMaintainenceCost();
+        var grotsitsRequired = GetMaintenanceCost();
         if (Grotsits < grotsitsRequired) 
         { 
             // Can't give everyone goods

@@ -35,7 +35,7 @@ namespace Flatspace.Objects.Resource
         public override int GetHashCode() => Source.GetHashCode();
     }
 
-// ── Research action ───────────────────────────────────────────────────────────
+// ── Resource action ───────────────────────────────────────────────────────────
 
     public struct ResourceAction : IScoreMatrixAction
     {

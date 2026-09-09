@@ -75,7 +75,7 @@ namespace FlatSpace
 
                 PathingSystem.Instance.InitializePathMap(PlanetList);
 
-                // painfully ineffeceint process here
+                // painfully inefficient process here
                 _planetPathings = new List<GameAIPlanetPathing>();
 
                 for (var i = 0; i < PlanetList.Count - 1; i++)

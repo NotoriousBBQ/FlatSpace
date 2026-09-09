@@ -235,13 +235,13 @@ public class SaveLoadSystem : MonoBehaviour
         var gameScene = SceneManager.GetSceneByName("Flatspace");
         if (!gameScene.isLoaded)
         {
-            var bSaveGameInialized = false;
+            var bSaveGameInitialized = false;
             LoadGameScene("Flatspace", (scene, sceneMode) =>
             {
-                bSaveGameInialized = Gameboard.Instance.InitGameFromGaveSave(saveConfig);
+                bSaveGameInitialized = Gameboard.Instance.InitGameFromGaveSave(saveConfig);
                 SceneManager.SetActiveScene(scene);
             });   
-            return bSaveGameInialized;
+            return bSaveGameInitialized;
         }
        
         return Gameboard.Instance.InitGameFromGaveSave(saveConfig);
@@ -375,7 +375,7 @@ public class SaveLoadSystem : MonoBehaviour
         string loadedData = null;
         SetFileBrowserFilters();
         FileBrowser.ShowLoadDialog((paths) => bDataLoaded= LoadJsonData(out loadedData, paths[0]), 
-            () => Debug.Log("load Cancelled"), FileBrowser.PickMode.Files, false, @fullLoadPath.ToString()
+            () => Debug.Log("Load Cancelled"), FileBrowser.PickMode.Files, false, @fullLoadPath.ToString()
         );
         if(bDataLoaded)
             jsonData = loadedData;

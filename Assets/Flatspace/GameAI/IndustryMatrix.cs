@@ -1,4 +1,4 @@
-// IndustyMatrix.cs
+// IndustryMatrix.cs
 
 using System;
 using Flatspace.Objects.Production;
@@ -34,7 +34,7 @@ public struct IndustryChoiceElement : IScoreMatrixChoiceElement
 
 }
 
-// ── Research action ───────────────────────────────────────────────────────────
+// ── Industry action ───────────────────────────────────────────────────────────
 
 public struct IndustryAction : IScoreMatrixAction
 {
