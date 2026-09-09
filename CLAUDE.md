@@ -165,8 +165,9 @@ from the `.inputactions` asset rather than editing it by hand.
   it silently breaks serialization — only rename with a matching Unity script-rename + asset migration.
   Identifiers that are private or otherwise code-only — even public methods that nothing wires through a
   UnityEvent — are safe to fix normally; `PlayerAI.CompleteResearch`, `Planet.GetMaintenanceCost`, and
-  `Gameboard.InitGameFromSave` (was `InitGameFromGaveSave`) were such fixes. Also watch the
-  `Grotsit`/`Grotsits` split on serialized fields (`_grotsitProduction` vs `_baseGrotsitsProduction`).
+  `Gameboard.InitGameFromSave` (was `InitGameFromGaveSave`) were such fixes. A serialized-field rename
+  is fine too when it carries a `[FormerlySerializedAs]` and the `.asset` YAML keys are updated to match:
+  `PlanetResourceData._grotsitsProduction` (was `_grotsitProduction`) was done that way.
 - `Planet.UpdatePlanet` mutates shared `Planet` state and appends to the passed result list; it is not
   pure. The AI reads planet state back out during `ProcessResults` in the same turn.
 - "Grotsits" is the game's consumer-goods resource; low grotsits lowers `Morale`, which scales all

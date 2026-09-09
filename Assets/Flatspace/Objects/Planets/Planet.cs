@@ -224,7 +224,7 @@ public class Planet : MonoBehaviour
             return false;
         if (Food > 3 * populationAdjustedForPlanetType)
             populationAdjustedForPlanetType = Population.Count;
-        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Food"];
+        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Food"];
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out foodWorkers);
     }
 
@@ -255,7 +255,7 @@ public class Planet : MonoBehaviour
         var shortfall = Grotsits - grotsitsRequirement;
         if (shortfall <= 0.0f)
             grotsitsRequirement += -shortfall + strategyPopulationModifier;
-        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"];
+        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Grotsits"];
         return ResourceWorkerRequirement(grotsitsRequirement, productionRate, out grotsitsWorkers);
     }
 
@@ -269,7 +269,7 @@ public class Planet : MonoBehaviour
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
-        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Research"];
+        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Research"];
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out researchWorkers);
     }
 
@@ -281,7 +281,7 @@ public class Planet : MonoBehaviour
         if (modifierData != null)
             strategyPopulationModifier = modifierData.industryModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
-        var productionRate = _resourceData._grotsitProduction * ImprovementYieldModifier["Industry"];
+        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Industry"];
         return populationAdjustedForPlanetType > 0.0f 
                && ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out industryWorkers);
     }
@@ -468,7 +468,7 @@ public class Planet : MonoBehaviour
         Food += FoodProduced;
         Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
         // produce grotsits
-        GrotsitsProduced = (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
+        GrotsitsProduced = (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitsProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
         Grotsits += GrotsitsProduced;
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         // produce industry
@@ -616,7 +616,7 @@ public class Planet : MonoBehaviour
         // add 1 to population here to allow for growth if possible
         var projectedPopulation = Population.Count + (Population.Count < MaxPopulation ? 1 : 0);
         // assumes projected worker already set
-        ProjectedGrotsits = Math.Clamp(Grotsits + _resourceData._baseGrotsitsProduction + (ProjectedGrotsitsWorkers *_resourceData._grotsitProduction), 0.0f, MaxGrotsitsStorage);
+        ProjectedGrotsits = Math.Clamp(Grotsits + _resourceData._baseGrotsitsProduction + (ProjectedGrotsitsWorkers *_resourceData._grotsitsProduction), 0.0f, MaxGrotsitsStorage);
         var projectedGrotsitsRequirement = grotsitsRequired + projectedPopulation;
         if (ProjectedGrotsits >= projectedGrotsitsRequirement)
         {

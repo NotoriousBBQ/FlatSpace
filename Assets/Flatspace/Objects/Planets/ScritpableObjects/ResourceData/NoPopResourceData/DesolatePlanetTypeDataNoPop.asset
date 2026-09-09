@@ -17,7 +17,7 @@ MonoBehaviour:
   _baseFoodProduction: 0
   _foodProduction: 0
   _baseGrotsitsProduction: 3
-  _grotsitProduction: 7
+  _grotsitsProduction: 7
   _baseResearchProduction: 1
   _researchProduction: 3
   _baseIndustrialProduction: 2

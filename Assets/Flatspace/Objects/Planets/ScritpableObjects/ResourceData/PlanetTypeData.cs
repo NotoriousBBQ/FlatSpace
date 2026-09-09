@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Serialization;
 
 [CreateAssetMenu(fileName = "PlanetResourceData", menuName = "Scriptable Objects/PlanetResourceData")]
 public class PlanetResourceData : ScriptableObject
@@ -9,7 +10,8 @@ public class PlanetResourceData : ScriptableObject
     public float _baseFoodProduction;
     public float _foodProduction;
     public float _baseGrotsitsProduction;
-    public float _grotsitProduction;
+    [FormerlySerializedAs("_grotsitProduction")]
+    public float _grotsitsProduction;
     public float _baseResearchProduction;
     public float _researchProduction;
     public float _baseIndustrialProduction;
