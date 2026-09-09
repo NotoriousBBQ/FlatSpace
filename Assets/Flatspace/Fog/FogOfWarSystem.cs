@@ -212,11 +212,20 @@ namespace FlatSpace.Fog
             if (!Ready) return;
             foreach (var vg in _players) vg.ClearVisible();
 
-            var byPlayer = new List<(Vector2 pos, float radius)>[_players.Length];
+            // Each source projects ONE uniform circle: its base radius boosted by how open the
+            // source's own position is. Scaling the radius per cell instead (by the cell's openness)
+            // makes `strength` non-monotonic in distance from the source and produces a detached
+            // outer arc of visibility on the void-facing side of edge planets.
+            var mult = Mathf.Max(1f, _settings.openSpaceRadiusMultiplier);
+            var softness = Mathf.Max(0.001f, _settings.edgeSoftness);
+            var byPlayer = new List<(Vector2 pos, float eff)>[_players.Length];
             for (var i = 0; i < byPlayer.Length; i++) byPlayer[i] = new List<(Vector2, float)>();
             foreach (var (player, pos, radius) in sources)
-                if (player >= 0 && player < _players.Length)
-                    byPlayer[player].Add((pos, radius));
+            {
+                if (player < 0 || player >= _players.Length) continue;
+                var srcOpenness = _grid.Openness(_grid.WorldToCellIndex(pos));
+                byPlayer[player].Add((pos, Mathf.Lerp(radius, radius * mult, srcOpenness)));
+            }
 
             for (var pl = 0; pl < _players.Length; pl++)
             {
@@ -226,14 +235,11 @@ namespace FlatSpace.Fog
                 for (var i = 0; i < _grid.CellCount; i++)
                 {
                     var c = _grid.CellCenter(i);
-                    var openness = _grid.Openness(i);
                     var best = 0f;
                     for (var s = 0; s < srcs.Count; s++)
                     {
-                        var eff = Mathf.Lerp(srcs[s].radius,
-                            srcs[s].radius * _settings.openSpaceRadiusMultiplier, openness);
                         var strength = Mathf.Clamp01(
-                            (eff - Vector2.Distance(c, srcs[s].pos)) / Mathf.Max(0.001f, _settings.edgeSoftness));
+                            (srcs[s].eff - Vector2.Distance(c, srcs[s].pos)) / softness);
                         if (strength > best) best = strength;
                         if (best >= 1f) break;
                     }
