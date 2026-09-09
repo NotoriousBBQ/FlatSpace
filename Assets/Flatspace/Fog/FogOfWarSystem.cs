@@ -69,7 +69,14 @@ namespace FlatSpace.Fog
                 raw = new Bounds(positions[0], Vector3.zero);
                 foreach (var p in positions) raw.Encapsulate(p);
             }
-            _grid = new FogGrid(raw, settings.cellSize, settings.boundsMargin);
+            // The grid must extend far enough past the outermost planet that no vision source can
+            // ever light a cell on its edge — otherwise the overlay shows lit/explored cells right
+            // up to the boundary and then cuts hard to the solid border strips. Reach = the largest
+            // open-space-boosted vision radius plus the soft rim.
+            var visionReach = Mathf.Max(settings.planetVisionRadius, settings.shipVisionRadius)
+                              * Mathf.Max(1f, settings.openSpaceRadiusMultiplier) + settings.edgeSoftness;
+            var margin = Mathf.Max(settings.boundsMargin, visionReach);
+            _grid = new FogGrid(raw, settings.cellSize, margin);
             _grid.BakeEmptiness(positions, segments,
                 settings.openSpaceThreshold, settings.openSpaceFalloff);
 
@@ -369,12 +376,16 @@ namespace FlatSpace.Fog
         /// </summary>
         private void BuildBorderStrips()
         {
+            // Overlap the strips one cell into the grid's guaranteed-dark border ring (the grid
+            // margin is sized so no vision reaches its edge), so there is no rasterization seam
+            // between the grid quad and the strips.
+            var seam = _grid.CellSize;
             var inner = new FogRect
             {
-                MinX = _grid.Origin.x,
-                MinY = _grid.Origin.y,
-                MaxX = _grid.Origin.x + _grid.WorldSize.x,
-                MaxY = _grid.Origin.y + _grid.WorldSize.y,
+                MinX = _grid.Origin.x + seam,
+                MinY = _grid.Origin.y + seam,
+                MaxX = _grid.Origin.x + _grid.WorldSize.x - seam,
+                MaxY = _grid.Origin.y + _grid.WorldSize.y - seam,
             };
             var outer = new FogRect
             {
@@ -404,7 +415,7 @@ namespace FlatSpace.Fog
                 var sr = go.AddComponent<SpriteRenderer>();
                 sr.sprite = _stripSprite;
                 sr.color = _settings.unseenColor;
-                sr.sortingOrder = OverlaySortingOrder;
+                sr.sortingOrder = OverlaySortingOrder + 1; // deterministically in front of the grid quad in the overlap ring
                 _borderStrips.Add(go);
             }
         }
