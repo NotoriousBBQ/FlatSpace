@@ -202,11 +202,16 @@ For player `p`:
    - Each planet with `planet.GetPopulationFraction(p) > 0` → `(planet.Position, settings.planetVisionRadius)`.
    - Each planet with a docked `Ship` where `Owner == p` → `(planet.Position, settings.shipVisionRadius)`.
    - Each `GameAI.GameAIOrder` with `PlayerId == p` and
-     `Type ∈ { OrderTypePopulationTransport, OrderTypeShipTransport }` and a valid in-flight
-     position → `(interpolatedPos, settings.shipVisionRadius)`, where `interpolatedPos` reuses the
-     path-lerp from `LineDrawObject.SetPath` / `DisplayOrderGraphics`:
-     `progress = clamp((TotalDelay − TimingDelay) / TotalDelay, 0, 1)` along
-     `GameAIMap.GetPath(Origin, Target)`.
+     `Type ∈ { OrderTypePopulationTransport, OrderTypeShipTransport }` → the **traversed corridor**
+     of `GameAIMap.GetPath(Origin, Target)`. With
+     `progress = clamp((TotalDelay − TimingDelay) / TotalDelay, 0, 1)` and
+     `revealed = totalPathLength × progress`, emit a source `(pt, settings.shipVisionRadius)` at
+     every point along the path from distance 0 to `revealed`, spaced
+     `settings.shipVisionRadius × 0.75` apart (plus the exact endpoints). Overlapping the samples
+     this way means no planet the ship passed between two turn positions is skipped — the earlier
+     single-interpolated-point form let a fast ship "jump over" intermediate planets. Sampling the
+     whole traversed length each turn is stateless; the corridor reads bright during the flight and
+     fades to explored once the order completes.
 2. **For each cell** (centre `c`), over all sources, take the maximum of:
    ```
    effectiveRadius = lerp(source.radius,
@@ -403,3 +408,38 @@ Optional: a `FogOfWarSystem` editor gizmo drawing the grid bounds and each curre
   player.
 - **Temporal fade.** Animate the overlay between states across a few frames instead of snapping at
   the turn boundary.
+
+### Deferred during implementation (2026-09-08)
+
+- **Overlay should cover the whole background, not just the planet bounding box.** Today the grid
+  bounds are the planet AABB + `boundsMargin`; a planet in the corner of that region shows a hard
+  fog edge when the camera scrolls past it into empty space. The overlay (or a second, always-dark
+  backdrop behind it) should extend to cover the full scrollable board area / camera view so there
+  is no visible edge.
+- **Adjacency visibility.** From any planet that meets the visible criteria (player population,
+  owned docked ship), its directly-connected (`Planet.Connections`) neighbour planets and the
+  `LineDrawObject`s of those connections should also read as visible, independent of the distance
+  grid.
+- **Debug dropdown selection does not persist across save/load.** After a load the fog view resets
+  to "No Fog" (the dropdown is rebuilt by `RefreshFogView`); persisting the selection would be nicer
+  for iterative testing.
+- **Explored planets show no name.** `PlanetUIObject.SetFogState` disables the whole `_statsCanvas`
+  for explored planets, which also hides the name label; the spec wants the name visible for
+  explored planets. Needs a serialized reference to just the stats sub-panel (or splitting the name
+  onto its own canvas).
+- **Debug dropdown closed-field value text is clipped.** The `DropdownField`'s closed-state value
+  label renders collapsed (~100×8 px) in the runtime panel; `labelElement`-hide and `TextElement`
+  flex/height/font forcing did not fix it. Likely needs a USS stylesheet on the HUD `PanelSettings`.
+- **`visibleThreshold` (0.35) < `visibleCutoff` (0.5) is a tunables trap.** A cell whose strength
+  lands in that band classifies as `Visible` but never sets its explored bit, so on losing vision
+  the planet goes `Visible → Hidden` (vanishes) instead of `Visible → Explored` (dims). Either keep
+  `visibleThreshold >= visibleCutoff` by default, or mark explored using the classification
+  threshold. Document the intended relationship on the fields.
+- **`RecomputeFromSources` has no spatial culling and `CellCount` has no cap.** Every source is
+  distance-tested against every cell each turn; a small `cellSize` on a large procedural board
+  produces a multi-megapixel `Texture2D` re-uploaded every turn. Add per-source bounding-box
+  iteration (squared distance) and a cell-budget `Debug.LogWarning` in `InitCore`.
+- **Minor leaks / polish:** the `Sprite` from `Sprite.Create` is never destroyed by `DestroyOverlay`
+  (one leak per `InitGame`); `SetExploredPacked` triggers a full overlay rebuild per player on load;
+  in-flight ship vision uses `progress` clamped `[0,1]` while the drawn ship icon is clamped
+  `[0.15, 0.85]` (tip/marker disagree); `_planetNames` is dead state.
