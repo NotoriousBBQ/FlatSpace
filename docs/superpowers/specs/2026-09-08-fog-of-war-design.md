@@ -212,15 +212,20 @@ For player `p`:
      single-interpolated-point form let a fast ship "jump over" intermediate planets. Sampling the
      whole traversed length each turn is stateless; the corridor reads bright during the flight and
      fades to explored once the order completes.
-2. **For each cell** (centre `c`), over all sources, take the maximum of:
+2. **Per source**, compute one effective radius from the openness at the *source's own position*:
    ```
    effectiveRadius = lerp(source.radius,
                           source.radius * settings.openSpaceRadiusMultiplier,
-                          openness01[cell])
-   strength        = saturate((effectiveRadius − distance(c, source.pos)) / settings.edgeSoftness)
+                          openness01[cellOf(source.pos)])
    ```
-   A cell well inside any circle is `1`; the rim ramps to `0` over `edgeSoftness` world units. A
-   circle is round in populated space and bulges into voids.
+   Then **for each cell** (centre `c`), over all sources, take the maximum of:
+   ```
+   strength = saturate((source.effectiveRadius − distance(c, source.pos)) / settings.edgeSoftness)
+   ```
+   A cell well inside any circle is `1`; the rim ramps to `0` over `edgeSoftness` world units. Each
+   source is a uniform circle — larger when the source sits in open space, smaller among neighbours.
+   (Scaling the radius by the *cell's* openness instead makes `strength` non-monotonic in distance
+   and produces a detached outer arc of visibility on the void-facing side of edge planets.)
 3. **Store**: `visibleStrength[cell] = maxStrength`. If `maxStrength > settings.visibleCutoff`, set
    the explored bit for `cell`.
 
