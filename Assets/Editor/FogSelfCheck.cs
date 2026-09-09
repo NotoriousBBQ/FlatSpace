@@ -11,6 +11,7 @@ public static class FogSelfCheck
         ok &= RunVisibilityGridChecks();
         ok &= RunFogSystemChecks();
         ok &= RunPlanetTintCheck();
+        ok &= RunCorridorCheck();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -156,6 +157,37 @@ public static class FogSelfCheck
             Object.DestroyImmediate(settings);
         }
         finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunCorridorCheck()
+    {
+        var ok = true;
+        // Path: three points, 400 + 400 units. Ship 75% done => revealed 600.
+        var path = new System.Collections.Generic.List<Vector2>
+        {
+            new Vector2(0, 0), new Vector2(400, 0), new Vector2(400, 400),
+        };
+        var step = 50f;
+        var samples = new System.Collections.Generic.List<Vector2>();
+        FlatSpace.Fog.FogOfWarSystem.CollectCorridorSamples(path, 600f, step, samples);
+
+        ok &= Check(samples.Count >= 2, "corridor produces at least start + head samples");
+        ok &= Check(Vector2.Distance(samples[0], new Vector2(0, 0)) < 0.01f, "first sample is the path start");
+        ok &= Check(Vector2.Distance(samples[samples.Count - 1], new Vector2(400, 200)) < 0.01f,
+            "last sample is the point 600 units along (400,0)->(400,400) midpoint");
+
+        var maxGap = 0f;
+        for (var i = 1; i < samples.Count; i++)
+            maxGap = Mathf.Max(maxGap, Vector2.Distance(samples[i - 1], samples[i]));
+        ok &= Check(maxGap <= step + 0.01f, $"no gap between consecutive corridor samples exceeds step (max {maxGap})");
+
+        // Zero progress => just the start.
+        samples.Clear();
+        FlatSpace.Fog.FogOfWarSystem.CollectCorridorSamples(path, 0f, step, samples);
+        ok &= Check(samples.Count == 2 && Vector2.Distance(samples[0], samples[1]) < 0.01f,
+            "zero revealed distance yields only the start point (twice)");
+
         return ok;
     }
 

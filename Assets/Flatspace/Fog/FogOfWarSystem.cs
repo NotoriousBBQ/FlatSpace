@@ -120,49 +120,78 @@ namespace FlatSpace.Fog
                 }
             }
 
+            var corridorPts = new List<Vector2>();
+            var corridorSamples = new List<Vector2>();
             foreach (var order in gameAI.CurrentAIOrders)
             {
                 if (order.Type != GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport &&
                     order.Type != GameAI.GameAIOrder.OrderType.OrderTypeShipTransport)
                     continue;
                 if (order.PlayerId < 0 || order.PlayerId >= _players.Length) continue;
-                if (TryOrderPosition(gameAI, order, out var pos))
-                    sources.Add((order.PlayerId, pos, _settings.shipVisionRadius));
+                if (string.IsNullOrEmpty(order.Origin) || string.IsNullOrEmpty(order.Target)) continue;
+
+                var path = gameAI.GameAIMap.GetPath(order.Origin, order.Target);
+                if (path == null || path.PathNodes.Count == 0) continue;
+
+                corridorPts.Clear();
+                foreach (var n in path.PathNodes) corridorPts.Add(n.Position);
+
+                var totalLen = 0f;
+                for (var i = 1; i < corridorPts.Count; i++)
+                    totalLen += Vector2.Distance(corridorPts[i - 1], corridorPts[i]);
+                var progress = order.TotalDelay > 0
+                    ? Mathf.Clamp01((float)(order.TotalDelay - order.TimingDelay) / order.TotalDelay)
+                    : 1f;
+
+                corridorSamples.Clear();
+                CollectCorridorSamples(corridorPts, totalLen * progress,
+                    _settings.shipVisionRadius * 0.75f, corridorSamples);
+                foreach (var s in corridorSamples)
+                    sources.Add((order.PlayerId, s, _settings.shipVisionRadius));
             }
 
             RecomputeFromSources(sources);
         }
 
-        private static bool TryOrderPosition(GameAI gameAI, GameAI.GameAIOrder order, out Vector2 pos)
+        /// <summary>
+        /// Sample points along `pathPts` from distance 0 up to `revealedDist`, spaced `step`
+        /// apart, always including the start and the exact point at `revealedDist`. Used to
+        /// reveal the whole corridor an in-flight ship has traversed so no planet between two
+        /// turn positions is skipped.
+        /// </summary>
+        public static void CollectCorridorSamples(
+            System.Collections.Generic.IReadOnlyList<Vector2> pathPts,
+            float revealedDist, float step, System.Collections.Generic.List<Vector2> outSamples)
         {
-            pos = default;
-            if (string.IsNullOrEmpty(order.Origin) || string.IsNullOrEmpty(order.Target)) return false;
-            var path = gameAI.GameAIMap.GetPath(order.Origin, order.Target);
-            if (path == null || path.PathNodes.Count == 0) return false;
-            var pts = new List<Vector2>(path.PathNodes.Count);
-            foreach (var n in path.PathNodes) pts.Add(n.Position);
+            if (pathPts == null || pathPts.Count == 0) return;
+            if (pathPts.Count == 1) { outSamples.Add(pathPts[0]); return; }
 
-            var progress = order.TotalDelay > 0
-                ? Mathf.Clamp01((float)(order.TotalDelay - order.TimingDelay) / order.TotalDelay)
-                : 1f;
+            step = Mathf.Max(1f, step);
+            revealedDist = Mathf.Max(0f, revealedDist);
 
-            var total = 0f;
-            for (var i = 1; i < pts.Count; i++) total += Vector2.Distance(pts[i - 1], pts[i]);
-            var target = total * progress;
+            outSamples.Add(PointAlongPath(pathPts, 0f));
+            for (var d = step; d < revealedDist; d += step)
+                outSamples.Add(PointAlongPath(pathPts, d));
+            outSamples.Add(PointAlongPath(pathPts, revealedDist));
+        }
+
+        private static Vector2 PointAlongPath(
+            System.Collections.Generic.IReadOnlyList<Vector2> pts, float dist)
+        {
+            if (pts.Count == 0) return default;
+            if (pts.Count == 1 || dist <= 0f) return pts[0];
             var travelled = 0f;
             for (var i = 1; i < pts.Count; i++)
             {
                 var seg = Vector2.Distance(pts[i - 1], pts[i]);
-                if (travelled + seg >= target || i == pts.Count - 1)
+                if (travelled + seg >= dist || i == pts.Count - 1)
                 {
-                    var t = seg > 0f ? Mathf.Clamp01((target - travelled) / seg) : 0f;
-                    pos = Vector2.Lerp(pts[i - 1], pts[i], t);
-                    return true;
+                    var t = seg > 0f ? Mathf.Clamp01((dist - travelled) / seg) : 0f;
+                    return Vector2.Lerp(pts[i - 1], pts[i], t);
                 }
                 travelled += seg;
             }
-            pos = pts[pts.Count - 1];
-            return true;
+            return pts[pts.Count - 1];
         }
 
         /// <summary>Rebuild every player's visibility from an explicit source list. Test seam.</summary>
