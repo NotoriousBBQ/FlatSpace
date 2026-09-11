@@ -231,14 +231,28 @@ namespace FlatSpace.Fog
         private void MarkAdjacencyFrom(int player, int planetIndex)
         {
             var vg = _players[player];
+            var neighbourPatch = _settings.planetVisionRadius * 0.5f;
             foreach (var ni in _adjacency[planetIndex])
             {
                 var a = _planetPositions[planetIndex];
                 var b = _planetPositions[ni];
+                // the connecting corridor: a thin line of cells
                 var steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(a, b) / _grid.CellSize));
                 for (var k = 0; k <= steps; k++)
                     vg.MarkExplored(_grid.WorldToCellIndex(Vector2.Lerp(a, b, (float)k / steps)));
+                // the neighbour planet: a small explored patch so its marker reads as an area
+                MarkExploredDisc(vg, b, neighbourPatch);
             }
+        }
+
+        private void MarkExploredDisc(VisibilityGrid vg, Vector2 center, float radius)
+        {
+            var r2 = radius * radius;
+            var step = _grid.CellSize * 0.5f;
+            for (var dy = -radius; dy <= radius; dy += step)
+                for (var dx = -radius; dx <= radius; dx += step)
+                    if (dx * dx + dy * dy <= r2)
+                        vg.MarkExplored(_grid.WorldToCellIndex(center + new Vector2(dx, dy)));
         }
 
         /// <summary>Test seam: mark adjacency-explored as if `player` has a source on planet `planetIndex`.</summary>
