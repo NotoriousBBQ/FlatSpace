@@ -416,15 +416,17 @@ Optional: a `FogOfWarSystem` editor gizmo drawing the grid bounds and each curre
 
 ### Deferred during implementation (2026-09-08)
 
-- **Overlay should cover the whole background, not just the planet bounding box.** Today the grid
-  bounds are the planet AABB + `boundsMargin`; a planet in the corner of that region shows a hard
-  fog edge when the camera scrolls past it into empty space. The overlay (or a second, always-dark
-  backdrop behind it) should extend to cover the full scrollable board area / camera view so there
-  is no visible edge.
-- **Adjacency visibility.** From any planet that meets the visible criteria (player population,
-  owned docked ship), its directly-connected (`Planet.Connections`) neighbour planets and the
-  `LineDrawObject`s of those connections should also read as visible, independent of the distance
-  grid.
+- ~~**Overlay should cover the whole background.**~~ *Done (2026-09-08).* Four static solid
+  `unseenColor` strips frame the grid out to `grid + 4000` units; the grid margin was also sized to
+  the full vision reach so its own edge always fades to solid dark.
+- ~~**Adjacency visibility.**~~ *Done (2026-09-10), as "explored", not "visible".* A planet where a
+  player has population or a docked ship marks that player's grid `Explored` (sticky, via
+  `VisibilityGrid.MarkExplored` — bit set, strength untouched) at each directly-connected
+  (`Planet.Connections`, symmetrised) neighbour planet and along the connecting segment, in a
+  per-turn `FogOfWarSystem.ApplyAdjacency` pass. Connection lines are now classified by 3 interior
+  samples rather than endpoints + midpoint, so an adjacency-explored segment reads grey (and a long
+  connection between two visible planets whose middle is genuinely unexplored also reads grey).
+  Legacy boards with no `Planet.Connections` data get nothing.
 - **Debug dropdown selection does not persist across save/load.** After a load the fog view resets
   to "No Fog" (the dropdown is rebuilt by `RefreshFogView`); persisting the selection would be nicer
   for iterative testing.
