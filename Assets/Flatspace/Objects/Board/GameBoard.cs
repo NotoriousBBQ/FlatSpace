@@ -675,9 +675,12 @@ namespace FlatSpace
                     if (lr == null || lr.positionCount < 2) continue;
                     var a = (Vector2)lr.GetPosition(0);
                     var b = (Vector2)lr.GetPosition(lr.positionCount - 1);
-                    var mid = (a + b) * 0.5f;
-                    var state = Max(_fogOfWarSystem.Classify(a),
-                                Max(_fogOfWarSystem.Classify(b), _fogOfWarSystem.Classify(mid)));
+                    // Sample interior points, not the endpoints: a connection reads as what you can
+                    // see ALONG it. Endpoints sit on planets (biased visible) and would light a long
+                    // connection whose middle is unexplored; adjacency-explored segments read grey.
+                    var state = Max(_fogOfWarSystem.Classify(Vector2.Lerp(a, b, 0.2f)),
+                                Max(_fogOfWarSystem.Classify(Vector2.Lerp(a, b, 0.5f)),
+                                    _fogOfWarSystem.Classify(Vector2.Lerp(a, b, 0.8f))));
                     line.SetFogState(state, dim);
                 }
             }

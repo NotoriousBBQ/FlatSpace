@@ -13,6 +13,8 @@ public static class FogSelfCheck
         ok &= RunPlanetTintCheck();
         ok &= RunCorridorCheck();
         ok &= RunBorderStripsCheck();
+        ok &= RunMarkExploredCheck();
+        ok &= RunAdjacencyCheck();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -231,6 +233,60 @@ public static class FogSelfCheck
         FlatSpace.Fog.FogOfWarSystem.CollectBorderStrips(flush, outer, strips);
         ok &= Check(strips.Count == 3, $"inner flush with one outer edge drops that strip (got {strips.Count})");
 
+        return ok;
+    }
+
+    public static bool RunMarkExploredCheck()
+    {
+        var ok = true;
+        var g = new FlatSpace.Fog.VisibilityGrid(8);
+        g.MarkExplored(3);
+        ok &= Check(g.IsExplored(3), "MarkExplored sets the explored bit");
+        ok &= Check(Mathf.Approximately(g.VisibleStrength[3], 0f), "MarkExplored leaves VisibleStrength at 0");
+        g.MarkExplored(-1);
+        g.MarkExplored(99);
+        ok &= Check(g.ExploredCount() == 1, "out-of-range MarkExplored is ignored");
+        return ok;
+    }
+
+    public static bool RunAdjacencyCheck()
+    {
+        var ok = true;
+        var go = new GameObject("FogAdjacencyCheck");
+        try
+        {
+            var sys = go.AddComponent<FlatSpace.Fog.FogOfWarSystem>();
+            var settings = ScriptableObject.CreateInstance<FlatSpace.Fog.FogOfWarSettings>();
+            settings.cellSize = 25f;
+            settings.boundsMargin = 100f;
+            settings.planetVisionRadius = 60f;   // small: the 600-unit connection's interior is out of range
+            settings.shipVisionRadius = 60f;
+            settings.edgeSoftness = 10f;
+            settings.visibleCutoff = 0.5f;
+            settings.visibleThreshold = 0.35f;
+            settings.openSpaceThreshold = 40f;
+            settings.openSpaceFalloff = 40f;
+            settings.openSpaceRadiusMultiplier = 1f;
+
+            // planet 0 -- planet 1 connected (600 apart); planet 2 unconnected.
+            var positions = new[] { new Vector2(0, 0), new Vector2(600, 0), new Vector2(0, 600) };
+            sys.InitForTest(positions, new (Vector2, Vector2)[0], settings, numPlayers: 1,
+                adjacencyEdges: new (int, int)[] { (0, 1) });
+
+            // Player 0 has a source on planet 0.
+            sys.MarkAdjacencyFromForTest(0, 0);
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.Player, 0);
+
+            ok &= Check(sys.Classify(new Vector2(600, 0)) == FlatSpace.Fog.FogVisibility.Explored,
+                "connected neighbour reads Explored (known, not live)");
+            ok &= Check(sys.Classify(new Vector2(300, 0)) == FlatSpace.Fog.FogVisibility.Explored,
+                "connection midpoint reads Explored");
+            ok &= Check(sys.Classify(new Vector2(0, 600)) == FlatSpace.Fog.FogVisibility.Hidden,
+                "unconnected planet stays Hidden");
+
+            Object.DestroyImmediate(settings);
+        }
+        finally { Object.DestroyImmediate(go); }
         return ok;
     }
 

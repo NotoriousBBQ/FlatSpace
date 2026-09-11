@@ -33,6 +33,7 @@ namespace FlatSpace.Fog
         private Color32[] _overlayBuffer;
         private readonly List<GameObject> _borderStrips = new List<GameObject>();
         private Sprite _stripSprite;
+        private List<int>[] _adjacency; // planet index -> explicitly-connected planet indices (symmetric)
 
         // ---- Init -------------------------------------------------------------
 
@@ -45,14 +46,45 @@ namespace FlatSpace.Fog
                 positions.Add(p.Position);
                 _planetNames.Add(p.PlanetName);
             }
+            BuildAdjacency(planets);
             var segments = GatherSegments();
             InitCore(positions, segments, settings, numPlayers);
         }
 
+        private void BuildAdjacency(IReadOnlyList<Planet> planets)
+        {
+            var nameToIndex = new Dictionary<string, int>(planets.Count);
+            for (var i = 0; i < planets.Count; i++) nameToIndex[planets[i].PlanetName] = i;
+
+            _adjacency = new List<int>[planets.Count];
+            for (var i = 0; i < planets.Count; i++) _adjacency[i] = new List<int>();
+            for (var i = 0; i < planets.Count; i++)
+            {
+                var conns = planets[i].Connections;
+                if (conns == null) continue;
+                foreach (var name in conns)
+                    if (name != null && nameToIndex.TryGetValue(name, out var j) && j != i)
+                    {
+                        if (!_adjacency[i].Contains(j)) _adjacency[i].Add(j);
+                        if (!_adjacency[j].Contains(i)) _adjacency[j].Add(i);
+                    }
+            }
+        }
+
         public void InitForTest(IReadOnlyList<Vector2> planetPositions,
-            IReadOnlyList<(Vector2, Vector2)> segments, FogOfWarSettings settings, int numPlayers)
+            IReadOnlyList<(Vector2, Vector2)> segments, FogOfWarSettings settings, int numPlayers,
+            IReadOnlyList<(int a, int b)> adjacencyEdges = null)
         {
             _planetNames = new List<string>();
+            _adjacency = new List<int>[planetPositions.Count];
+            for (var i = 0; i < _adjacency.Length; i++) _adjacency[i] = new List<int>();
+            if (adjacencyEdges != null)
+                foreach (var (a, b) in adjacencyEdges)
+                    if (a >= 0 && a < _adjacency.Length && b >= 0 && b < _adjacency.Length && a != b)
+                    {
+                        if (!_adjacency[a].Contains(b)) _adjacency[a].Add(b);
+                        if (!_adjacency[b].Contains(a)) _adjacency[b].Add(a);
+                    }
             InitCore(new List<Vector2>(planetPositions), new List<(Vector2, Vector2)>(segments),
                 settings, numPlayers);
         }
@@ -162,7 +194,61 @@ namespace FlatSpace.Fog
                     sources.Add((order.PlayerId, s, _settings.shipVisionRadius));
             }
 
-            RecomputeFromSources(sources);
+            foreach (var vg in _players) vg.ClearVisible();
+            ApplySources(sources);
+            ApplyAdjacency(gameAI);
+            ResolveDisplay();
+        }
+
+        /// <summary>
+        /// A planet the player has population or a docked ship on lets that player *know* (as
+        /// "explored", never live) its directly-connected neighbour planets and the connecting
+        /// segments — independent of vision radius. Sticky, like grid-explored area.
+        /// </summary>
+        private void ApplyAdjacency(GameAI gameAI)
+        {
+            if (_adjacency == null || _planetNames == null || gameAI == null) return;
+            var map = gameAI.GameAIMap;
+            for (var i = 0; i < _adjacency.Length && i < _planetNames.Count; i++)
+            {
+                if (_adjacency[i].Count == 0) continue;
+                var planet = map.GetPlanet(_planetNames[i]);
+                if (planet == null) continue;
+                for (var pl = 0; pl < _players.Length; pl++)
+                    if (IsAdjacencySource(planet, pl))
+                        MarkAdjacencyFrom(pl, i);
+            }
+        }
+
+        private static bool IsAdjacencySource(Planet planet, int player)
+        {
+            if (planet.GetPopulationFraction(player) > 0f) return true;
+            foreach (var ship in planet.DockedShips)
+                if (ship.Owner == player) return true;
+            return false;
+        }
+
+        private void MarkAdjacencyFrom(int player, int planetIndex)
+        {
+            var vg = _players[player];
+            foreach (var ni in _adjacency[planetIndex])
+            {
+                var a = _planetPositions[planetIndex];
+                var b = _planetPositions[ni];
+                var steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(a, b) / _grid.CellSize));
+                for (var k = 0; k <= steps; k++)
+                    vg.MarkExplored(_grid.WorldToCellIndex(Vector2.Lerp(a, b, (float)k / steps)));
+            }
+        }
+
+        /// <summary>Test seam: mark adjacency-explored as if `player` has a source on planet `planetIndex`.</summary>
+        public void MarkAdjacencyFromForTest(int player, int planetIndex)
+        {
+            if (!Ready || _adjacency == null) return;
+            if (player < 0 || player >= _players.Length) return;
+            if (planetIndex < 0 || planetIndex >= _adjacency.Length) return;
+            MarkAdjacencyFrom(player, planetIndex);
+            ResolveDisplay();
         }
 
         /// <summary>
@@ -211,7 +297,12 @@ namespace FlatSpace.Fog
         {
             if (!Ready) return;
             foreach (var vg in _players) vg.ClearVisible();
+            ApplySources(sources);
+            ResolveDisplay();
+        }
 
+        private void ApplySources(IEnumerable<(int player, Vector2 pos, float radius)> sources)
+        {
             // Each source projects ONE uniform circle: its base radius boosted by how open the
             // source's own position is. Scaling the radius per cell instead (by the cell's openness)
             // makes `strength` non-monotonic in distance from the source and produces a detached
@@ -246,8 +337,6 @@ namespace FlatSpace.Fog
                     if (best > 0f) vg.Observe(i, best, _settings.visibleCutoff);
                 }
             }
-
-            ResolveDisplay();
         }
 
         // ---- View / sampling ----------------------------------------------

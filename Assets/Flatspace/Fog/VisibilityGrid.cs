@@ -32,6 +32,14 @@ namespace FlatSpace.Fog
             if (strength > exploredCutoff) _explored[index >> 6] |= 1UL << (index & 63);
         }
 
+        /// <summary>Set the sticky explored bit without changing VisibleStrength — the cell then
+        /// reads "known but not currently seen" (Classify → Explored, not Visible).</summary>
+        public void MarkExplored(int index)
+        {
+            if (index < 0 || index >= CellCount) return;
+            _explored[index >> 6] |= 1UL << (index & 63);
+        }
+
         public bool IsExplored(int index)
         {
             if (index < 0 || index >= CellCount) return false;
