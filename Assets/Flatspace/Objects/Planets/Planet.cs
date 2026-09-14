@@ -723,13 +723,9 @@ public class Planet : MonoBehaviour
 
     private void GetPopulationDistribution(out Dictionary<int, int> popDistribution)
     {
-        popDistribution = new Dictionary<int, int>();
-        for (var i = 0; i < Gameboard.Instance.players.Count; i++)
-        {
-            var popByPlayer = Population.FindAll(x => x.Player == i).Count;
-            if(popByPlayer > 0)
-                popDistribution.Add(i, popByPlayer);
-        }
+        popDistribution = Population
+            .GroupBy(x => x.Player)
+            .ToDictionary(g => g.Key, g => g.Count());
     }
 
     public float GetPopulationFraction(int playerID)

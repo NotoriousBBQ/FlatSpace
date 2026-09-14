@@ -73,6 +73,8 @@ namespace FlatSpace
                     _planets[planetSpawnData._planetName] = planet;
                 }
 
+                BuildNeighbours();
+
                 PathingSystem.Instance.InitializePathMap(PlanetList);
 
                 // painfully inefficient process here
@@ -155,6 +157,72 @@ namespace FlatSpace
                 Planet planet = null;
                 _planets.TryGetValue(planetName, out planet);
                 return planet;
+            }
+
+            public struct VisionSource
+            {
+                public Planet Planet;
+                public bool HasPopulation;
+                public bool HasOwnedShip;
+            }
+
+            /// <summary>
+            /// Planets that currently give playerId vision: population presence or a docked ship
+            /// they own. Shared by PlayerKnowledge (sticky, planet-level knowledge) and
+            /// FogOfWarSystem (radius/gradient rendering) so both read the exact same underlying
+            /// fact instead of two independently-derived copies of it.
+            /// </summary>
+            public List<VisionSource> GetVisionSourcePlanets(int playerId)
+            {
+                var result = new List<VisionSource>();
+                foreach (var planet in PlanetList)
+                {
+                    var hasPopulation = planet.GetPopulationFraction(playerId) > 0f;
+                    var hasOwnedShip = planet.DockedShips.Exists(s => s.Owner == playerId);
+                    if (hasPopulation || hasOwnedShip)
+                        result.Add(new VisionSource
+                        {
+                            Planet = planet,
+                            HasPopulation = hasPopulation,
+                            HasOwnedShip = hasOwnedShip
+                        });
+                }
+                return result;
+            }
+
+            private static readonly List<string> EmptyNeighbours = new List<string>();
+            private Dictionary<string, List<string>> _neighbours;
+
+            /// <summary>
+            /// Planet.Connections, symmetrized: a link declared on only one side still appears in
+            /// both planets' neighbour lists. Built once in GameAIMapInit.
+            /// </summary>
+            public IReadOnlyList<string> GetNeighbours(string planetName)
+            {
+                return _neighbours != null && _neighbours.TryGetValue(planetName, out var list)
+                    ? list
+                    : EmptyNeighbours;
+            }
+
+            private void BuildNeighbours()
+            {
+                _neighbours = new Dictionary<string, List<string>>();
+                foreach (var planet in PlanetList)
+                    _neighbours[planet.PlanetName] = new List<string>();
+
+                foreach (var planet in PlanetList)
+                {
+                    if (planet.Connections == null) continue;
+                    foreach (var name in planet.Connections)
+                    {
+                        if (name == null || name == planet.PlanetName || !_neighbours.ContainsKey(name))
+                            continue;
+                        if (!_neighbours[planet.PlanetName].Contains(name))
+                            _neighbours[planet.PlanetName].Add(name);
+                        if (!_neighbours[name].Contains(planet.PlanetName))
+                            _neighbours[name].Add(planet.PlanetName);
+                    }
+                }
             }
 
             public Planet GetPlayerCapitol(int playerID)
