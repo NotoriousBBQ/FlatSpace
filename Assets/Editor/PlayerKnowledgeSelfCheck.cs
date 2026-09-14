@@ -11,6 +11,7 @@ public static class PlayerKnowledgeSelfCheck
     {
         var ok = RunGameAIMapSharedQueriesCheck();
         ok &= RunPlayerKnowledgeChecks();
+        ok &= RunColonizationKnowledgeGateCheck();
         Debug.Log(ok
             ? "[PlayerKnowledgeSelfCheck] ALL PASSED"
             : "[PlayerKnowledgeSelfCheck] FAILURES (see errors above)");
@@ -160,6 +161,50 @@ public static class PlayerKnowledgeSelfCheck
         }
         finally
         {
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    public static bool RunColonizationKnowledgeGateCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PKSelfCheckMap_Colonization");
+        var playerGo = new GameObject("PKSelfCheckPlayer_Colonization");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.expandPopulationTrigger = 0.8f;
+            constants.maxPathNodesForResourceDistribution = 10;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Home", initialPopulation: 1, connections: new[] { "Target" }),
+                MakeSpawn("Target", initialPopulation: 0),
+            };
+            map.GameAIMapInit(spawns, constants);
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var target = map.GetPlanet("Target");
+
+            ok &= Check(!playerAI.IsValidColonizationTarget(target),
+                "an undiscovered planet is not a valid colonization target");
+
+            map.Knowledge.Update(map, numPlayers: 1);
+
+            ok &= Check(playerAI.IsValidColonizationTarget(target),
+                "the same planet becomes valid once PlayerKnowledge marks it known");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
         }
         return ok;

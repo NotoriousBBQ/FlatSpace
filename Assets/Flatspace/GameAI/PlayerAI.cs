@@ -99,11 +99,13 @@ namespace FlatSpace
                 
                 return false;
             }
-            private bool IsValidColonizationTarget(Planet planet)
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            public bool IsValidColonizationTarget(Planet planet)
             {
-                if (planet.IsPopulationTransferInProgress(Player.playerID)) return false;
-                if (planet.Population.Count == 0)                           return true;
-                if (planet.Population.Count >= planet.MaxPopulation)        return false;
+                if (!AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;
+                if (planet.IsPopulationTransferInProgress(Player.playerID))       return false;
+                if (planet.Population.Count == 0)                                return true;
+                if (planet.Population.Count >= planet.MaxPopulation)             return false;
                 return planet.PlayerWithMostPopulation() != Player.playerID;
             }
             private void ProcessColonizers(
