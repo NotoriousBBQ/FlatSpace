@@ -309,6 +309,9 @@ namespace FlatSpace
 
                 _fogOfWarSystem.Init(GameAI.GameAIMap.PlanetList, _fogOfWarSettings, NumPlayers);
                 _fogOfWarSystem.SetViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
+                // Reset alongside the fog view: a save/board with fewer players than the previous
+                // match could otherwise leave owningPlayerId indexing past the end of players[].
+                owningPlayerId = 0;
 
                 var handler = GetComponentInChildren<GameButtonHandler>();
                 if (handler) handler.RefreshFogView();
@@ -645,7 +648,16 @@ namespace FlatSpace
             private void BoardUIUpdate()
             {
                 DisplayOrderGraphics(GameAI.CurrentAIOrders);
-                _mainScreenUIController?.SetNotifications(_playerNotifications);
+
+                // When the debug fog view is locked to one player, scope the notification list to
+                // that player too; "No Fog"/"All Players" show everyone's notifications as before.
+                var scopedToOnePlayer = _fogOfWarSystem != null
+                    && _fogOfWarSystem.ViewMode == FlatSpace.Fog.FogViewMode.Player;
+                var notifications = scopedToOnePlayer
+                    ? _playerNotifications.FindAll(n => n.PlayerName == owningPlayerId.ToString())
+                    : _playerNotifications;
+                _mainScreenUIController?.SetNotifications(notifications);
+
                 _mainScreenUIController?.SetStatus(Gameboard.Instance.TurnNumber, players[owningPlayerId].playerAI?.researchTotal ?? 0, players[owningPlayerId].playerAI?.currentResearch?.itemName ?? "", 0 );
                 if(PlanetDetailShowing())
                     _planetDetailUIController.UpdatePlanetDetail();
@@ -693,8 +705,13 @@ namespace FlatSpace
             {
                 if (_fogOfWarSystem == null) return;
                 _fogOfWarSystem.SetViewMode(mode, playerIndex);
-                FogUIUpdate();
-                DisplayOrderGraphics(GameAI.CurrentAIOrders);
+                // Converge the debug view with "which player's HUD am I looking at": locking the
+                // fog view to one player also scopes the status bar + notifications to them;
+                // No Fog / All Players resets to player 0 (today's unfiltered default).
+                owningPlayerId = mode == FlatSpace.Fog.FogViewMode.Player
+                    ? Mathf.Clamp(playerIndex, 0, Mathf.Max(0, NumPlayers - 1))
+                    : 0;
+                BoardUIUpdate(); // refreshes fog visuals, order lines, status bar, and notifications immediately
             }
 
             private bool _timedUpdateRunning = false;
