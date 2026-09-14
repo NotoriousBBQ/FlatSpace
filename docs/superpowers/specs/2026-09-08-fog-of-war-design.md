@@ -408,9 +408,11 @@ Optional: a `FogOfWarSystem` editor gizmo drawing the grid bounds and each curre
   feed it into `PlayerAI` / `ScoreMatrix` so the AI only acts on what it currently sees.
 - **Explored-planet detail panel.** Show a "last known" snapshot in `PlanetDetailUIController` for an
   explored-but-not-visible planet instead of full live data.
-- **Player-scoped presentation.** Converge the fog view selector with `owningPlayerId` so choosing
-  `Player n` also filters notifications, the status bar, and any other player-specific HUD to that
-  player.
+- ~~**Player-scoped presentation.**~~ *Done (2026-09-14).* `Gameboard.SetFogViewMode` sets
+  `owningPlayerId` (0 for `NoFog`/`AllPlayers`, the selected index for `Player n`) and refreshes
+  through `BoardUIUpdate`, which now filters `_playerNotifications` to `owningPlayerId` whenever the
+  fog view is locked to one player. Status bar and notifications were the only player-specific HUD
+  elements found.
 - **Temporal fade.** Animate the overlay between states across a few frames instead of snapping at
   the turn boundary.
 
