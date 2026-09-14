@@ -75,6 +75,7 @@ namespace FlatSpace
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 UpdateAllPlanets(planetUpdateResults);
+                GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count);
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
