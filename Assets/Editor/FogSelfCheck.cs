@@ -15,6 +15,7 @@ public static class FogSelfCheck
         ok &= RunBorderStripsCheck();
         ok &= RunMarkExploredCheck();
         ok &= RunAdjacencyCheck();
+        ok &= RunExploredThresholdCheck();
         Debug.Log(ok ? "[FogSelfCheck] ALL PASSED" : "[FogSelfCheck] FAILURES (see errors above)");
     }
 
@@ -156,6 +157,54 @@ public static class FogSelfCheck
             ok &= Check(!threw, "re-Init with fewer players (Player-1 view active) does not throw");
             ok &= Check(sys.Classify(new Vector2(0, 0)) == FlatSpace.Fog.FogVisibility.Visible,
                 "after re-Init the view resets to NoFog (everything Visible)");
+
+            Object.DestroyImmediate(settings);
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunExploredThresholdCheck()
+    {
+        var ok = true;
+        var go = new GameObject("FogSelfCheckExploredThreshold");
+        try
+        {
+            var sys = go.AddComponent<FlatSpace.Fog.FogOfWarSystem>();
+            var settings = ScriptableObject.CreateInstance<FlatSpace.Fog.FogOfWarSettings>();
+            // A wide edgeSoftness relative to cellSize so the Visible/Explored strength band
+            // (~15 world units wide here) is much bigger than one grid cell (10) — otherwise
+            // SampleBilinear's cell-center discretization can miss a narrow band entirely and
+            // this check becomes flaky rather than a real regression signal.
+            settings.cellSize = 10f;
+            settings.boundsMargin = 50f;
+            settings.planetVisionRadius = 200f;
+            settings.edgeSoftness = 100f;
+            // openSpaceRadiusMultiplier = 1 takes openness out of the equation entirely, so the
+            // expected strength depends only on distance/radius/softness below.
+            settings.openSpaceRadiusMultiplier = 1f;
+            // The trap configuration: visibleCutoff (explored bar) ABOVE visibleThreshold (visible
+            // bar). Without the Mathf.Min guard in ApplySources, a cell whose strength lands in
+            // (0.35, 0.5] classifies Visible but never gets marked Explored.
+            settings.visibleCutoff = 0.5f;
+            settings.visibleThreshold = 0.35f;
+            settings.openSpaceThreshold = 80f;
+            settings.openSpaceFalloff = 80f;
+
+            var positions = new[] { new Vector2(0, 0) };
+            sys.InitForTest(positions, new (Vector2, Vector2)[0], settings, numPlayers: 1);
+
+            // dist=157.5 from a radius-200/edgeSoftness-100 source => strength = (200-157.5)/100
+            // = 0.425, comfortably inside (visibleThreshold, visibleCutoff] = (0.35, 0.5].
+            var midBand = new Vector2(157.5f, 0);
+            sys.RecomputeFromSources(new[] { (0, new Vector2(0, 0), settings.planetVisionRadius) });
+            sys.SetViewMode(FlatSpace.Fog.FogViewMode.Player, 0);
+            ok &= Check(sys.Classify(midBand) == FlatSpace.Fog.FogVisibility.Visible,
+                "mid-band cell (strength 0.4) classifies Visible");
+
+            sys.RecomputeFromSources(new (int, Vector2, float)[0]);
+            ok &= Check(sys.Classify(midBand) == FlatSpace.Fog.FogVisibility.Explored,
+                "mid-band cell drops to Explored (not Hidden) once vision leaves");
 
             Object.DestroyImmediate(settings);
         }

@@ -323,6 +323,11 @@ namespace FlatSpace.Fog
             // outer arc of visibility on the void-facing side of edge planets.
             var mult = Mathf.Max(1f, _settings.openSpaceRadiusMultiplier);
             var softness = Mathf.Max(0.001f, _settings.edgeSoftness);
+            // A cell that classifies Visible (strength > visibleThreshold) must also become
+            // Explored, or losing vision later pops it straight to Hidden instead of fading to
+            // Explored. Never mark explored at a HIGHER bar than "Visible" itself, regardless of
+            // how visibleCutoff/visibleThreshold get tuned.
+            var exploredCutoff = Mathf.Min(_settings.visibleCutoff, _settings.visibleThreshold);
             var byPlayer = new List<(Vector2 pos, float eff)>[_players.Length];
             for (var i = 0; i < byPlayer.Length; i++) byPlayer[i] = new List<(Vector2, float)>();
             foreach (var (player, pos, radius) in sources)
@@ -348,7 +353,7 @@ namespace FlatSpace.Fog
                         if (strength > best) best = strength;
                         if (best >= 1f) break;
                     }
-                    if (best > 0f) vg.Observe(i, best, _settings.visibleCutoff);
+                    if (best > 0f) vg.Observe(i, best, exploredCutoff);
                 }
             }
         }
