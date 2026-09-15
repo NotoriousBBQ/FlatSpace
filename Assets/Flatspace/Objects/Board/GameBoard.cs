@@ -236,6 +236,8 @@ namespace FlatSpace
                     players[playerSave.playerId].playerAI.currentResearch =
                         players[playerSave.playerId].playerAI.ResearchCatalog.catalogItems
                             .Find(x => x.itemName == playerSave.currentResearchItem);
+                    GameAI.GameAIMap.Knowledge.SetKnownPlanets(
+                        playerSave.playerId, playerSave.knownPlanets ?? new List<string>());
 
                 }
                 GameAI.SetSimulationStats(gameSave);

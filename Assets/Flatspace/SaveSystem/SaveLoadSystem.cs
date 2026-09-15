@@ -97,6 +97,7 @@ public class SaveLoadSystem : MonoBehaviour
             public string exploredGrid;
             public int exploredCols;
             public int exploredRows;
+            public List<string> knownPlanets;
         }
 
         [Serializable]
@@ -136,7 +137,7 @@ public class SaveLoadSystem : MonoBehaviour
             {
                 players.Add(
                     new PlayerSave
-                    { 
+                    {
                         playerId = i,
                         strategy = Gameboard.Instance.players[i].GetStrategy(),
                         researchCatalogSave = new CatalogSave(Gameboard.Instance.players[i].playerAI.ResearchCatalog),
@@ -146,6 +147,7 @@ public class SaveLoadSystem : MonoBehaviour
                         exploredGrid = FogExplored.Encode(i),
                         exploredCols = Gameboard.Instance.FogOfWar != null ? Gameboard.Instance.FogOfWar.GridCols : 0,
                         exploredRows = Gameboard.Instance.FogOfWar != null ? Gameboard.Instance.FogOfWar.GridRows : 0,
+                        knownPlanets = new List<string>(gameAI.GameAIMap.Knowledge.KnownPlanets(i)),
                     });
             }
             

@@ -12,6 +12,7 @@ public static class PlayerKnowledgeSelfCheck
         var ok = RunGameAIMapSharedQueriesCheck();
         ok &= RunPlayerKnowledgeChecks();
         ok &= RunColonizationKnowledgeGateCheck();
+        ok &= RunKnownPlanetsSaveRoundTripCheck();
         Debug.Log(ok
             ? "[PlayerKnowledgeSelfCheck] ALL PASSED"
             : "[PlayerKnowledgeSelfCheck] FAILURES (see errors above)");
@@ -207,6 +208,24 @@ public static class PlayerKnowledgeSelfCheck
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
         }
+        return ok;
+    }
+
+    public static bool RunKnownPlanetsSaveRoundTripCheck()
+    {
+        var ok = true;
+        var knowledge = new PlayerKnowledge();
+        knowledge.SetKnownPlanets(0, new List<string> { "A", "B" });
+
+        var savedNames = new List<string>(knowledge.KnownPlanets(0));
+
+        var reloaded = new PlayerKnowledge();
+        reloaded.SetKnownPlanets(0, savedNames);
+
+        ok &= Check(reloaded.IsKnown(0, "A") && reloaded.IsKnown(0, "B"),
+            "known planets round-trip through KnownPlanets/SetKnownPlanets");
+        ok &= Check(!reloaded.IsKnown(0, "C"), "an unlisted planet stays unknown after round trip");
+        ok &= Check(reloaded.KnownPlanets(0).Count == 2, "round trip does not add or drop entries");
         return ok;
     }
 }
