@@ -404,8 +404,17 @@ Optional: a `FogOfWarSystem` editor gizmo drawing the grid bounds and each curre
 
 ## Follow-ups (out of scope, recorded for later)
 
-- **Gate the AI on visibility.** The reason `FogOfWarSystem` is a standalone seam: a later task can
-  feed it into `PlayerAI` / `ScoreMatrix` so the AI only acts on what it currently sees.
+- ~~**Gate the AI on visibility.**~~ *Done (2026-09-14), via a new simulation-owned seam rather than
+  feeding `FogOfWarSystem` into `PlayerAI` directly.* Reading fog data from `PlayerAI` would have been
+  one turn stale (fog recomputes after the turn's AI decisions run) and would have coupled a
+  simulation decision to a presentation-tier component. Instead, a new `PlayerKnowledge` class
+  (`Assets/Flatspace/GameAI/PlayerKnowledge.cs`) tracks a sticky per-player "known planets" set,
+  computed from two queries added to `GameAIMap` (`GetVisionSourcePlanets`, `GetNeighbours`) that
+  `FogOfWarSystem` itself was refactored to consume too, so the two systems share one source of truth
+  for "who has vision from where" instead of independently deriving it. `PlayerAI.ProcessColonizers`
+  (the only AI decision that reasoned about planets outside a player's own empire — every other
+  decision is already scoped to owned planets) is now gated by it. See
+  `docs/superpowers/specs/2026-09-14-player-knowledge-design.md`.
 - **Explored-planet detail panel.** Show a "last known" snapshot in `PlanetDetailUIController` for an
   explored-but-not-visible planet instead of full live data.
 - ~~**Player-scoped presentation.**~~ *Done (2026-09-14).* `Gameboard.SetFogViewMode` sets

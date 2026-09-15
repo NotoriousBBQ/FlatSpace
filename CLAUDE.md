@@ -40,10 +40,15 @@ but no test assemblies exist. Files/assets with `Test` in the name (e.g. `Camera
 
 The established substitute is a **self-check invoked from the Unity Editor**: a batch of plain
 assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reachable either as a
-`[MenuItem]` under `Assets/Editor/` (`FlatSpace → Fog → Run Self-Check`, in
-`Assets/Editor/FogSelfCheck.cs`) or a `[ContextMenu]` on the relevant component (`BoardDesigner`'s
-"Map Gen: Self Check (50 seeds)"). When adding a subsystem that needs regression coverage, extend or
-add one of these rather than reaching for a test framework that isn't set up.
+`[MenuItem]` under `Assets/Editor/` (`FlatSpace → Fog → Run Self-Check` in `Assets/Editor/FogSelfCheck.cs`;
+`FlatSpace → AI → Run Player Knowledge Self-Check` in `Assets/Editor/PlayerKnowledgeSelfCheck.cs`;
+`FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`) or
+a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
+adding a subsystem that needs regression coverage, extend or add one of these rather than reaching for
+a test framework that isn't set up. A self-check must never depend on `Gameboard.Instance` (build a
+minimal `GameAIMap`/`Planet`/`PlayerAI` set directly instead) — several of `Planet`'s methods
+(`GetPopulationFraction` among them) touch it transitively, so check for that before assuming a method
+is safe to call in isolation.
 
 ## Scenes and flow
 
@@ -134,6 +139,14 @@ connections. Explicit connection lists originate from the board designer
 `Planet.Connections`), including from the procedural generator (`MapGenerator` /
 `BoardDesigner.GenerateRandomBoard`).
 
+`PathingSystem.FindPath`'s A* tie-breaking has a known fragility: with a graph where two positions
+coincide (making every edge cost and heuristic exactly `0` — a real risk when hand-building tiny
+synthetic planet sets for a self-check), a tie can cause it to reopen an already-closed node forever
+instead of terminating. Rather than fix the tie-breaking itself, `FindPath` now throws
+`InvalidOperationException` the instant that reopen would happen, so this fails loudly (a crash) rather
+than hanging the Editor — if you hit this exception, the fix is almost always to give your test/board
+planets distinct positions, not to touch `FindPath`.
+
 ### Data: ScriptableObjects and JSON catalogs
 
 - **ScriptableObjects** hold tuning/spawn data: `BoardConfiguration`, `PlanetSpawnData`,
@@ -160,7 +173,11 @@ simulation state — planets, orders, per-player catalogs & research progress, c
 `dockedShips` list (kind, owner, and research snapshot at construction time) for each planet's `Ship`s.
 `GameSave.PlayerSave` also carries each player's packed fog-of-war `explored` bitset (`exploredGrid`
 base64 string + `exploredCols`/`exploredRows`); on load, a grid-dimension mismatch against the current
-board discards the saved bits instead of misapplying them.
+board discards the saved bits instead of misapplying them. It also carries each player's
+`PlayerKnowledge` known-planet names as a plain `knownPlanets: List<string>` (no packing needed, unlike
+the grid bitset); a missing/older field deserializes to `null` and is treated as "nothing known yet" —
+each player re-learns its home planet on the very next `PlayerKnowledge.Update()` since a populated
+planet is always a source.
 
 ### Board designer
 
@@ -177,32 +194,52 @@ pair of planets, but not every planet in range is connected, and a single-connec
 no two same-type planets share an edge, Normal excepted). `[ContextMenu("Map Gen: Self Check (50
 seeds)")]` batch-validates the generator across seeds.
 
+### Player Knowledge
+
+`PlayerKnowledge` (`Assets/Flatspace/GameAI/PlayerKnowledge.cs`, namespace `FlatSpace.AI`) is a
+simulation-owned, per-player sticky "discovered planets" set. It gates the one AI decision that used
+to reason about the whole map regardless of a player's actual presence: colonization targeting. A
+planet becomes known to a player once it's a *vision source* for that player (population or a docked
+ship) or a direct neighbour of one — both facts come from two shared queries on `GameAIMap`,
+`GetVisionSourcePlanets(playerId)` and `GetNeighbours(planetName)` (the latter a symmetrized view of
+`Planet.Connections`, built once in `GameAIMapInit`), also consumed by `FogOfWarSystem` (below) so
+the two systems never independently re-derive the same fact. Knowledge is sticky (never un-learned)
+and grows outward one hop per turn as new planets are colonized. `GameAIMap.Knowledge.Update(...)`
+runs once per turn in `GameAI.GameAIUpdate()`, between `UpdateAllPlanets()` and `ProcessResults()`, so
+this turn's arrivals are known before this turn's AI decisions run. The only current consumer is
+`PlayerAI.IsValidColonizationTarget` (`public` — see Conventions below — so both `ProcessColonizers`
+and `PlanetCanColonize`/`GetIndustrySituationalWeightMultiplier` are gated by the one guard clause).
+Persisted per player as `GameSave.PlayerSave.knownPlanets`. `Assets/Editor/PlayerKnowledgeSelfCheck.cs`
+is this subsystem's self-check.
+
 ### Fog of war
 
 `FlatSpace.Fog` (`Assets/Flatspace/Fog/`) is a **presentation-only** per-player visibility layer:
-`FogOfWarSystem` reads simulation state (population, docked ships, `Planet.Connections`, in-flight
-orders) but never writes to it, and is `AddComponent`'d onto the `Gameboard` GameObject
-(`Gameboard.InitFogOfWar`). Per-player visibility is recomputed once per turn; switching the debug
-view only re-resolves the already-computed per-player grids for display, it doesn't re-run the vision
-math.
+`FogOfWarSystem` reads simulation state (via the same `GameAIMap.GetVisionSourcePlanets`/
+`GetNeighbours` queries `PlayerKnowledge` uses, plus `Planet.Connections` and in-flight orders directly)
+but never writes to it, and is `AddComponent`'d onto the `Gameboard` GameObject
+(`Gameboard.InitFogOfWar`, which calls `FogOfWarSystem.Init(GameAIMap, settings, numPlayers)`).
+Per-player visibility is recomputed once per turn; switching the debug view only re-resolves the
+already-computed per-player grids for display, it doesn't re-run the vision math.
 `FogGrid` bakes a low-resolution grid, plus a static "openness" field (distance to the nearest
 planet/connection, for a bigger vision radius in open space), over the planet bounding box — the
 margin is sized to the largest possible vision reach so no vision source ever lights a cell on the
 grid's own edge. `VisibilityGrid` holds one player's per-cell strength (replaced each turn) plus a
-sticky, save-persisted `explored` bitset. Vision sources are populated/crewed planets and in-flight
-colony/ship orders (which reveal the whole corridor they've traversed so far, not just their current
-point); each source projects one uniform circle sized by *its own* position's openness — boosting the
-radius per cell instead makes visibility non-monotonic with distance and produces a detached "ghost"
-ring of visibility around edge planets. A planet with population/a ship also marks its
-`Planet.Connections` neighbours `Explored` (never live-visible) independent of vision radius, via
-`VisibilityGrid.MarkExplored`. `FogOfWarSettings` (a `[CreateAssetMenu]` ScriptableObject) holds all
-the tunables. The overlay is a `SpriteRenderer` quad positioned via `.localPosition`, not `.position`
-— the `Gameboard` GameObject is a `RectTransform` inside a `ScrollRect`/`Canvas`, not a plain world
-transform, so world-space `.position` puts the overlay in the wrong place — plus four static
-border-strip quads covering the area beyond the grid so scrolling past an edge planet doesn't show a
-hard cut-off. A debug `DropdownField` on the HUD (`GameButtonHandler`) switches the displayed view
-between `NoFog` (the default, so the feature is inert unless a developer opts in) / `AllPlayers` /
-`Player n`. `Assets/Editor/FogSelfCheck.cs` is this subsystem's self-check (see Tests above).
+sticky, save-persisted `explored` bitset. Vision sources are populated/crewed planets (via
+`GetVisionSourcePlanets`) and in-flight colony/ship orders (which reveal the whole corridor they've
+traversed so far, not just their current point); each source projects one uniform circle sized by
+*its own* position's openness — boosting the radius per cell instead makes visibility non-monotonic
+with distance and produces a detached "ghost" ring of visibility around edge planets. A planet with
+population/a ship also marks its neighbours (via `GetNeighbours`) `Explored` (never live-visible)
+independent of vision radius, via `VisibilityGrid.MarkExplored`. `FogOfWarSettings` (a
+`[CreateAssetMenu]` ScriptableObject) holds all the tunables. The overlay is a `SpriteRenderer` quad
+positioned via `.localPosition`, not `.position` — the `Gameboard` GameObject is a `RectTransform`
+inside a `ScrollRect`/`Canvas`, not a plain world transform, so world-space `.position` puts the
+overlay in the wrong place — plus four static border-strip quads covering the area beyond the grid so
+scrolling past an edge planet doesn't show a hard cut-off. A debug `DropdownField` on the HUD
+(`GameButtonHandler`) switches the displayed view between `NoFog` (the default, so the feature is
+inert unless a developer opts in) / `AllPlayers` / `Player n`. `Assets/Editor/FogSelfCheck.cs` is this
+subsystem's self-check (see Tests above).
 
 ### Input
 
@@ -236,3 +273,17 @@ from the `.inputactions` asset rather than editing it by hand.
   `rootVisualElement.Q<VisualElement>("PlanetDetailElement")`) and test its `worldBound` instead.
 - Generated / large directories are git-ignored: `Library/`, `Temp/`, `obj/`, `Logs/`, `UserSettings/`,
   `Recordings/`, and all `*.csproj` / `*.sln` files.
+- **A method a self-check needs to call directly is made `public`, not `internal`.** `Assets/Editor/`
+  is a separate assembly (`Assembly-CSharp-Editor`) with no `InternalsVisibleTo` configured against the
+  runtime assembly, so `internal` is invisible to it. `FogOfWarSystem.InitForTest` and
+  `PlayerAI.IsValidColonizationTarget` both had to go straight to `public` for this reason — don't
+  spend time on `internal` first.
+- **A newly-created script's `.meta` file must be committed alongside it.** Unity generates one per
+  asset carrying its GUID; if it's left untracked, another checkout (or this one after a `Library/`
+  wipe) regenerates a fresh GUID for that script, which can silently break serialized references to
+  it. `git status` after adding a new script and confirm the `.meta` is staged too.
+- **`PlayerAI.BuildResourceMatrix`'s `shortages` and `surplusResults` must both filter by
+  `x.PlayerID == Player.playerID`.** The shared per-turn result list is passed to every player's
+  `ProcessResults` call, so an unfiltered side lets one player match a shortage/surplus that actually
+  belongs to another player (this was a real, shipped bug for `shortages` — fixed, but keep both sides
+  symmetric if this pattern is copied for a new resource type).
