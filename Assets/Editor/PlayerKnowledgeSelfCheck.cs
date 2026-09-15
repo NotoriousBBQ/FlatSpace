@@ -6,6 +6,8 @@ using FlatSpace.AI;
 
 public static class PlayerKnowledgeSelfCheck
 {
+    private static float _nextPlanetX;
+
     [MenuItem("FlatSpace/AI/Run Player Knowledge Self-Check")]
     public static void Run()
     {
@@ -33,7 +35,14 @@ public static class PlayerKnowledgeSelfCheck
 
         var spawn = ScriptableObject.CreateInstance<PlanetSpawnData>();
         spawn._planetName = name;
-        spawn._planetPosition = Vector3.zero;
+        // Distinct, non-zero positions: PathingSystem.FindPath's A* tie-breaking reopens an
+        // already-closed node whenever a new score is not strictly worse, which every planet
+        // sharing one position triggered constantly (zero-cost edges, zero heuristics) — this
+        // either stalls FindPath's own search loop or creates a cycle in a reopened node's
+        // parent chain that hangs ConstructPath instead. Strictly increasing X keeps every
+        // pairwise distance positive, so no tie is ever hit for these tree-shaped test graphs.
+        spawn._planetPosition = new Vector3(_nextPlanetX, 0f, 0f);
+        _nextPlanetX += 100f;
         spawn._planetType = Planet.PlanetType.PlanetTypeNormal;
         spawn._resourceData = resourceData;
         spawn._connections = connections != null ? new List<string>(connections) : new List<string>();
