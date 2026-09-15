@@ -50,6 +50,10 @@ minimal `GameAIMap`/`Planet`/`PlayerAI` set directly instead) — several of `Pl
 (`GetPopulationFraction` among them) touch it transitively, so check for that before assuming a method
 is safe to call in isolation.
 
+The one deliberate exception is `AITuningLogger` (see AI Tuning Log below): it writes to the real
+filesystem, which doesn't fit the in-memory self-check pattern, so it has none by design — verify it
+via a real Play-mode run instead.
+
 ## Scenes and flow
 
 `Assets/Scenes/`: `MainMenu` → either `Flatspace` (the game) or `MapDesigner` (the board editor).
@@ -241,6 +245,32 @@ scrolling past an edge planet doesn't show a hard cut-off. A debug `DropdownFiel
 inert unless a developer opts in) / `AllPlayers` / `Player n`. `Assets/Editor/FogSelfCheck.cs` is this
 subsystem's self-check (see Tests above).
 
+### AI Tuning Log
+
+`AITuningLogger` (`Assets/Flatspace/Diagnostics/AITuningLogger.cs`, global namespace, plain static
+class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
+events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
+started/arrived, production set/completed, colonizer-ready, research started/completed) for
+reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
+It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
+independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
+`[SerializeField] private bool _logAIEvents` (set directly on the `Gameboard` component in
+`Flatspace.unity`, for testing by pressing Play directly on that scene), or `MainMenu`'s
+`[SerializeField] private bool _logAIEvents` (set on the `MainMenu` component in `MainMenu.unity`,
+copied into the static `AITuningLogger.EnabledViaMainMenu` in `MainMenu.Awake()` — before any button
+can trigger the scene load into Flatspace — so a developer never has to open/edit `Flatspace.unity`
+just to toggle logging). Every `Log*` method no-ops safely when no match is currently logging, so all
+call sites (in `GameAI.cs`/`PlayerAI.cs`, right next to the equivalent notification call) invoke it
+unconditionally with no toggle check of their own. There is deliberately no close/flush method:
+`File.AppendAllLines` opens, appends, and closes within each call, so whatever was last written is
+already durable regardless of how the process exits — this project has no consolidated "quit game"
+path to hook a close into anyway. Files land under `Application.dataPath/Flatspace/AITuningLogs`
+(editor) / `Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match,
+gitignored. Two known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the
+underlying condition holds, not once, so a naive grep-count of those two codes overcounts; and
+`Gameboard.InitGame` (which starts a match's log) can run more than once for a single match, and two
+inits within the same wall-clock second would silently collide on the same filename.
+
 ### Input
 
 New Input System. `Assets/Game/Input/MapInputActions.cs` is the generated C# wrapper for the map action
@@ -287,3 +317,15 @@ from the `.inputactions` asset rather than editing it by hand.
   `ProcessResults` call, so an unfiltered side lets one player match a shortage/surplus that actually
   belongs to another player (this was a real, shipped bug for `shortages` — fixed, but keep both sides
   symmetric if this pattern is copied for a new resource type).
+- **No `DontDestroyOnLoad` singleton exists anywhere in first-party Flatspace code** (the only one in
+  the whole project is inside the third-party SimpleFileBrowser plugin). `SaveLoadSystem` and
+  `PathingSystem` both have a static `Instance`, but each is a fresh object recreated whenever its
+  scene loads — neither survives a `MainMenu` → `Flatspace` scene transition. To carry a value across
+  that boundary, use a plain `static` field on an ordinary (non-`MonoBehaviour`) class instead — Unity
+  only clears statics on a domain reload or exiting Play mode, not on `SceneManager.LoadScene`, so no
+  `DontDestroyOnLoad` ceremony is needed (`AITuningLogger.EnabledViaMainMenu` does this). Mind the
+  timing: `Gameboard.Awake()` calls `InitGame()` synchronously and reads config the instant the
+  Flatspace scene's objects wake up, which is *before* a `SceneManager.sceneLoaded` callback would
+  fire (the mechanism `SaveLoadSystem.LoadGameScene` already uses to pass a board/file path forward) —
+  so anything `Awake()` needs must be set by the calling scene *before* `SceneManager.LoadScene` is
+  invoked, not via that callback.
