@@ -38,6 +38,7 @@ namespace FlatSpace
             [SerializeField] private ScrollRect _scrollRect;
 
             [SerializeField] private FlatSpace.Fog.FogOfWarSettings _fogOfWarSettings;
+            [SerializeField] private bool _logAIEvents = false;
             private FlatSpace.Fog.FogOfWarSystem _fogOfWarSystem;
             public FlatSpace.Fog.FogOfWarSystem FogOfWar => _fogOfWarSystem;
 
@@ -283,6 +284,8 @@ namespace FlatSpace
 
             private void InitGame(List<PlanetSpawnData> planetSpawnData)
             {
+                AITuningLogger.BeginMatch(_logAIEvents);
+
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;
 
