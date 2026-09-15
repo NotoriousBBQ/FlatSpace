@@ -246,7 +246,8 @@ namespace FlatSpace
             {
                 surplusResults = null;
 
-                var shortages = results.FindAll(x => x.Result == shortageType && !incomingCheck(x.Name));
+                var shortages = results.FindAll(x =>
+                    x.Result == shortageType && x.PlayerID == Player.playerID && !incomingCheck(x.Name));
                 if (shortages.Count == 0) return null;
 
                 surplusResults = results.FindAll(x => x.PlayerID == Player.playerID && x.Result == surplusType);
