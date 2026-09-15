@@ -284,7 +284,7 @@ namespace FlatSpace
 
             private void InitGame(List<PlanetSpawnData> planetSpawnData)
             {
-                AITuningLogger.BeginMatch(_logAIEvents);
+                AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
 
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;

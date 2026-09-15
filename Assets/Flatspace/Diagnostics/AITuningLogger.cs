@@ -8,6 +8,14 @@ public static class AITuningLogger
 {
     private static string _currentLogPath;
 
+    /// <summary>Set from MainMenu's own Inspector-configurable toggle, before it loads the
+    /// Flatspace scene — lets a developer enable logging without opening/editing Flatspace.unity
+    /// directly. OR'd with Gameboard's own scene-level toggle in BeginMatch's caller, so pressing
+    /// Play directly on the Flatspace scene (bypassing MainMenu) still works via that field alone.
+    /// Static so it survives the MainMenu -> Flatspace scene load with no DontDestroyOnLoad
+    /// ceremony (Unity only clears statics on domain reload / exiting Play mode).</summary>
+    public static bool EnabledViaMainMenu;
+
     /// <summary>Call once per match, from Gameboard.InitGame. Sets up a fresh timestamped log
     /// file when enabled, or clears any previous match's active path when not — either way,
     /// every Log* method below becomes safe to call unconditionally afterward.</summary>

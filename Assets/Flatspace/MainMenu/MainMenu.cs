@@ -9,6 +9,7 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private Button _saveButton;
     [SerializeField] private Button _loadButton;
     [SerializeField] private Button _designerButton;
+    [SerializeField] private bool _logAIEvents = false;
 
     public void StartGame()
     {
@@ -34,5 +35,6 @@ public class MainMenu : MonoBehaviour
     {
         if(_saveButton != null)
             _saveButton.interactable = false;
+        AITuningLogger.EnabledViaMainMenu = _logAIEvents;
     }
 }
