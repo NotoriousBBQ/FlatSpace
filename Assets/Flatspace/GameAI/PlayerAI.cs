@@ -407,6 +407,7 @@ namespace FlatSpace
                     dependentItem.researched  = true;
                 }
                 Gameboard.Instance.CreateNotificationsForCompletedResearch(completedResearchName, Player.playerID);
+                AITuningLogger.LogResearchComplete(Gameboard.Instance.TurnNumber, Player.playerID, completedResearchName);
 
             }
             private void ChooseNewResearch(List<GameAI.GameAIOrder> orders)
@@ -435,6 +436,7 @@ namespace FlatSpace
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                     0, 0, 0f, currentResearch.itemName, currentResearch.itemName));
                 Gameboard.Instance.CreateNotificationsForNewResearch(currentResearch?.itemName, Player.playerID);
+                AITuningLogger.LogResearchStart(Gameboard.Instance.TurnNumber, Player.playerID, currentResearch?.itemName);
             }
 
             /// <summary>

@@ -75,9 +75,11 @@ namespace FlatSpace
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 UpdateAllPlanets(planetUpdateResults);
+                AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count);
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
+                AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
             }
 
@@ -90,6 +92,7 @@ namespace FlatSpace
 
                 var executableOrders = CurrentAIOrders.FindAll(x => x.TimingDelay <= 0);
                 Gameboard.Instance.CreateNotificationsForExecutingOrders(executableOrders);
+                AITuningLogger.LogExecutingOrders(Gameboard.Instance.TurnNumber, executableOrders);
                 foreach (var executableOrder in executableOrders)
                 {
                     ExecuteOrder(executableOrder);
