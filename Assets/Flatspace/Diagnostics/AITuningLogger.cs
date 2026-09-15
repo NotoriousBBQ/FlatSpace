@@ -125,6 +125,14 @@ public static class AITuningLogger
     private static void AppendLines(List<string> lines)
     {
         if (lines.Count == 0 || _currentLogPath == null) return;
-        File.AppendAllLines(_currentLogPath, lines);
+        try
+        {
+            File.AppendAllLines(_currentLogPath, lines);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"AITuningLogger: disabling logging after write failure: {e.Message}");
+            _currentLogPath = null;
+        }
     }
 }
