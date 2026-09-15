@@ -198,6 +198,13 @@ human already sees in the in-game notification for the same event.
 - **Written**: each `Log*` call appends its lines immediately via `File.AppendAllText` (or
   `File.AppendAllLines`) — no buffering, no persistent open `FileStream`, so there's no handle to leak
   or flush on teardown. The cost of an open-append-close per call is negligible at turn-based cadence.
+- **No close step, and none is needed.** There is deliberately no `AITuningLogger.EndMatch()` /
+  "close the file" method, and nothing calls one. Because every write already opens, appends, and
+  closes the file within a single `Log*` call, whatever was last written is already durable on disk
+  the instant that call returns — a normal quit, a crash, or killing the process outright (there is no
+  consolidated "quit game" path in this project to hook a close into anyway) all leave the file in the
+  same valid, complete-up-to-the-last-event state. A new match simply starts a new timestamped file via
+  `BeginMatch`; the previous file isn't "open" and needs no finalization.
 - **Never read by the game itself** — this is a write-only, developer-facing artifact. Claude reads it
   with the `Read` tool when asked a tuning question.
 
