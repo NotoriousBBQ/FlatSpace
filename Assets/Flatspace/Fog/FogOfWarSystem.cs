@@ -34,6 +34,7 @@ namespace FlatSpace.Fog
         private readonly List<GameObject> _borderStrips = new List<GameObject>();
         private Sprite _stripSprite;
         private List<int>[] _adjacency; // planet index -> explicitly-connected planet indices (symmetric)
+        private Dictionary<string, int> _nameToIndex;
 
         // ---- Init -------------------------------------------------------------
 
@@ -63,6 +64,7 @@ namespace FlatSpace.Fog
                 foreach (var name in map.GetNeighbours(planets[i].PlanetName))
                     if (name != null && nameToIndex.TryGetValue(name, out var j) && j != i)
                         if (!_adjacency[i].Contains(j)) _adjacency[i].Add(j);
+            _nameToIndex = nameToIndex;
         }
 
         public void InitForTest(IReadOnlyList<Vector2> planetPositions,
@@ -196,25 +198,13 @@ namespace FlatSpace.Fog
         /// </summary>
         private void ApplyAdjacency(GameAI gameAI)
         {
-            if (_adjacency == null || _planetNames == null || gameAI == null) return;
+            if (_adjacency == null || _nameToIndex == null || gameAI == null) return;
             var map = gameAI.GameAIMap;
-            for (var i = 0; i < _adjacency.Length && i < _planetNames.Count; i++)
-            {
-                if (_adjacency[i].Count == 0) continue;
-                var planet = map.GetPlanet(_planetNames[i]);
-                if (planet == null) continue;
-                for (var pl = 0; pl < _players.Length; pl++)
-                    if (IsAdjacencySource(planet, pl))
+            for (var pl = 0; pl < _players.Length; pl++)
+                foreach (var source in map.GetVisionSourcePlanets(pl))
+                    if (_nameToIndex.TryGetValue(source.Planet.PlanetName, out var i) &&
+                        _adjacency[i].Count > 0)
                         MarkAdjacencyFrom(pl, i);
-            }
-        }
-
-        private static bool IsAdjacencySource(Planet planet, int player)
-        {
-            if (planet.GetPopulationFraction(player) > 0f) return true;
-            foreach (var ship in planet.DockedShips)
-                if (ship.Owner == player) return true;
-            return false;
         }
 
         private void MarkAdjacencyFrom(int player, int planetIndex)
