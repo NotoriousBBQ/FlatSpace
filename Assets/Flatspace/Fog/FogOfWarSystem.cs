@@ -37,8 +37,9 @@ namespace FlatSpace.Fog
 
         // ---- Init -------------------------------------------------------------
 
-        public void Init(IReadOnlyList<Planet> planets, FogOfWarSettings settings, int numPlayers)
+        public void Init(GameAIMap map, FogOfWarSettings settings, int numPlayers)
         {
+            var planets = map.PlanetList;
             var positions = new List<Vector2>(planets.Count);
             _planetNames = new List<string>(planets.Count);
             foreach (var p in planets)
@@ -46,12 +47,12 @@ namespace FlatSpace.Fog
                 positions.Add(p.Position);
                 _planetNames.Add(p.PlanetName);
             }
-            BuildAdjacency(planets);
+            BuildAdjacency(map, planets);
             var segments = GatherSegments();
             InitCore(positions, segments, settings, numPlayers);
         }
 
-        private void BuildAdjacency(IReadOnlyList<Planet> planets)
+        private void BuildAdjacency(GameAIMap map, IReadOnlyList<Planet> planets)
         {
             var nameToIndex = new Dictionary<string, int>(planets.Count);
             for (var i = 0; i < planets.Count; i++) nameToIndex[planets[i].PlanetName] = i;
@@ -59,16 +60,9 @@ namespace FlatSpace.Fog
             _adjacency = new List<int>[planets.Count];
             for (var i = 0; i < planets.Count; i++) _adjacency[i] = new List<int>();
             for (var i = 0; i < planets.Count; i++)
-            {
-                var conns = planets[i].Connections;
-                if (conns == null) continue;
-                foreach (var name in conns)
+                foreach (var name in map.GetNeighbours(planets[i].PlanetName))
                     if (name != null && nameToIndex.TryGetValue(name, out var j) && j != i)
-                    {
                         if (!_adjacency[i].Contains(j)) _adjacency[i].Add(j);
-                        if (!_adjacency[j].Contains(i)) _adjacency[j].Add(i);
-                    }
-            }
         }
 
         public void InitForTest(IReadOnlyList<Vector2> planetPositions,
@@ -147,20 +141,15 @@ namespace FlatSpace.Fog
             if (gameAI == null) return;
 
             var sources = new List<(int player, Vector2 pos, float radius)>();
-            var planetList = gameAI.GameAIMap.PlanetList;
 
             for (var pl = 0; pl < _players.Length; pl++)
             {
-                foreach (var planet in planetList)
+                foreach (var source in gameAI.GameAIMap.GetVisionSourcePlanets(pl))
                 {
-                    if (planet.GetPopulationFraction(pl) > 0f)
-                        sources.Add((pl, planet.Position, _settings.planetVisionRadius));
-                    foreach (var ship in planet.DockedShips)
-                        if (ship.Owner == pl)
-                        {
-                            sources.Add((pl, planet.Position, _settings.shipVisionRadius));
-                            break;
-                        }
+                    if (source.HasPopulation)
+                        sources.Add((pl, source.Planet.Position, _settings.planetVisionRadius));
+                    if (source.HasOwnedShip)
+                        sources.Add((pl, source.Planet.Position, _settings.shipVisionRadius));
                 }
             }
 

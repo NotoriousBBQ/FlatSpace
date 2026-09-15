@@ -307,7 +307,7 @@ namespace FlatSpace
                 if (_fogOfWarSystem == null)
                     _fogOfWarSystem = this.gameObject.AddComponent<FlatSpace.Fog.FogOfWarSystem>();
 
-                _fogOfWarSystem.Init(GameAI.GameAIMap.PlanetList, _fogOfWarSettings, NumPlayers);
+                _fogOfWarSystem.Init(GameAI.GameAIMap, _fogOfWarSettings, NumPlayers);
                 _fogOfWarSystem.SetViewMode(FlatSpace.Fog.FogViewMode.NoFog, 0);
                 // Reset alongside the fog view: a save/board with fewer players than the previous
                 // match could otherwise leave owningPlayerId indexing past the end of players[].
