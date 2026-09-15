@@ -58,6 +58,11 @@ public static class PlayerKnowledgeSelfCheck
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
 
+            // C and D are deliberately unconnected (below) to exercise GetNeighbours on an
+            // isolated planet. GameAIMapInit's PathingSystem.InitializePathMap will log a
+            // [PathingSystem] "has no connections" Error for each of them — that diagnostic is
+            // correct for a real board (an unreachable planet is usually a mistake) and is
+            // expected, harmless noise here, not a self-check failure.
             var spawns = new List<PlanetSpawnData>
             {
                 MakeSpawn("A", initialPopulation: 1, connections: new[] { "B" }), // only A declares the link
@@ -114,7 +119,11 @@ public static class PlayerKnowledgeSelfCheck
             {
                 MakeSpawn("A", initialPopulation: 1, connections: new[] { "B" }),
                 MakeSpawn("B", initialPopulation: 0),
-                MakeSpawn("C", initialPopulation: 0), // not connected to A or B
+                // C is deliberately unconnected to A or B. GameAIMapInit's PathingSystem will log
+                // a [PathingSystem] "has no connections" Error for it — expected, harmless noise
+                // here (see the identical note in RunGameAIMapSharedQueriesCheck above), not a
+                // self-check failure.
+                MakeSpawn("C", initialPopulation: 0),
             };
             map.GameAIMapInit(spawns, constants);
 
