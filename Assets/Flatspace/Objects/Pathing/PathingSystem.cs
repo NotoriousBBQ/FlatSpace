@@ -199,6 +199,16 @@ namespace FlatSpace
                         {
                             if (closedListElement.Item2 < nodeFValue)
                                 continue;
+                            // A closed node should never need reopening on a graph with positive
+                            // edge costs and an admissible heuristic (straight-line distance) - a
+                            // tied or "improved" F-value here means a zero/tied-cost cycle, which
+                            // this tie-breaking can re-expand forever instead of terminating (this
+                            // hung the Unity Editor once already). Fail loudly instead of hanging.
+                            throw new InvalidOperationException(
+                                $"[PathingSystem] FindPath({originName} -> {destinationName}): node " +
+                                $"'{currentConnection.NodeName}' would be reopened from closed " +
+                                $"(closed F={closedListElement.Item2}, new F={nodeFValue}). This " +
+                                "indicates a zero/tied-cost cycle in the path graph.");
                         }
                         
                         var openListElement = openList.Find(x => x.Item1 == currentConnection.NodeName);
