@@ -92,6 +92,81 @@ namespace FlatSpace
                     default: return 0;
                 }
             }
+
+            // ── Round and roles ──────────────────────────────────────────────
+
+            public class PlanetState
+            {
+                public Planet Planet;
+                public int Category;
+                public int Garrison;        // base garrison
+                public int Docked;
+                public int Incoming;
+                public int RoundGarrison;   // Garrison x current round
+                public int Spare   => Math.Max(0, Docked - RoundGarrison);
+                public int Deficit => Math.Max(0, RoundGarrison - (Docked + Incoming));
+            }
+
+            /// <summary>Current garrison round set by the last BuildStates call.</summary>
+            public int LastRound { get; private set; } = 1;
+
+            public int CountWarships(Planet planet)
+                => planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == _playerId);
+
+            /// <summary>
+            /// Participating planets with this turn's round garrison filled in. Locked
+            /// category-5-only planets are left out entirely (neither source nor target).
+            /// </summary>
+            public List<PlanetState> BuildStates()
+            {
+                var colonized = _map.PlanetList.Where(IsColonized).ToList();
+                var totalWarships = colonized.Sum(CountWarships);
+                var category5Unlocked = totalWarships
+                    >= _constants.category5UnlockShipsPerColonizedPlanet * colonized.Count;
+
+                var states = new List<PlanetState>();
+                foreach (var planet in colonized)
+                {
+                    var categories = ApplicableCategories(planet);
+                    if (!category5Unlocked && categories.Count == 1 && categories[0] == 5) continue;
+                    states.Add(new PlanetState
+                    {
+                        Planet   = planet,
+                        Category = categories.Count == 0 ? NoCategory : categories.Min(),
+                        Garrison = GarrisonOf(categories),
+                        Docked   = CountWarships(planet),
+                        Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
+                    });
+                }
+
+                LastRound = ComputeRound(states);
+                foreach (var state in states) state.RoundGarrison = state.Garrison * LastRound;
+                return states;
+            }
+
+            // r = 1 + min(floor((docked + incoming) / garrison)) over planets that have a garrison
+            // and can be reached from another participant. Unreachable planets are excluded so one
+            // stranded planet cannot pin the round at 1 forever.
+            private int ComputeRound(List<PlanetState> states)
+            {
+                var pool = states.Where(s => s.Garrison > 0 && HasReachablePeer(s, states)).ToList();
+                if (pool.Count == 0) return 1;
+                return 1 + pool.Min(s => (s.Docked + s.Incoming) / s.Garrison);
+            }
+
+            // A path between two distinct planets always has at least 2 nodes. PathingSystem.FindPath
+            // returns a 1-node, zero-cost "path" (it does not throw) when no route exists, so
+            // NumNodes < 2 means unreachable and must not be mistaken for a free, adjacent trip.
+            private bool IsUsablePath(GameAIMap.DestinationToPathingListEntry entry)
+                => entry.NumNodes >= 2 && entry.NumNodes <= _constants.maxPathNodesForShipTransport;
+
+            private bool HasReachablePeer(PlanetState state, List<PlanetState> states)
+            {
+                var paths = state.Planet.DistanceMapToPathingList;
+                return states.Any(other => other != state
+                    && paths.TryGetValue(other.Planet.PlanetName, out var entry)
+                    && IsUsablePath(entry));
+            }
         }
     }
 }

@@ -14,6 +14,7 @@ public static class ShipTransportSelfCheck
         var ok = RunMatrixTypesCheck();
         ok &= RunPlanetShipHelpersCheck();
         ok &= RunCategoryCheck();
+        ok &= RunRoundAndRolesCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -176,6 +177,161 @@ public static class ShipTransportSelfCheck
                 "once Q is colonized, P is just Prime: category 3, garrison 4");
             ok &= Check(planner.Category(map.GetPlanet("V")) == 5 && planner.Garrison(map.GetPlanet("V")) == 1,
                 "Verdant is category 5 with the smallest garrison");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunRoundAndRolesCheck()
+    {
+        var ok = true;
+
+        // Chain A(Farm g4) - B(Desert g4) - C(Normal g0), all colonized, no uncolonized neighbours.
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Rounds");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert, new[] { "C" }),
+                MakeSpawn("C", Planet.PlanetType.PlanetTypeNormal));
+            var a = Colonize(map, "A"); var b = Colonize(map, "B"); var c = Colonize(map, "C");
+            var planner = new ShipTransportPlanner(map, 0);
+
+            var states = planner.BuildStates();
+            ok &= Check(planner.LastRound == 1, "empty garrisons: round 1");
+            ok &= Check(states.Find(s => s.Planet == a).Deficit == 4, "A needs its full garrison of 4");
+            ok &= Check(states.Find(s => s.Planet == c).RoundGarrison == 0, "C has no garrison");
+
+            Dock(c, 10);
+            states = planner.BuildStates();
+            ok &= Check(states.Find(s => s.Planet == c).Spare == 10, "all of C's ships are spare (garrison 0)");
+            ok &= Check(states.Find(s => s.Planet == a).Spare == 0, "A holds nothing spare");
+
+            Dock(a, 4); Dock(b, 4);
+            states = planner.BuildStates();
+            ok &= Check(planner.LastRound == 2, "all garrisons full: round advances to 2");
+            ok &= Check(states.Find(s => s.Planet == a).RoundGarrison == 8 && states.Find(s => s.Planet == a).Deficit == 4,
+                "round 2: A's target is 2 x 4 and it is 4 short");
+
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 2);
+            states = planner.BuildStates();
+            ok &= Check(states.Find(s => s.Planet == a).Deficit == 2, "incoming ships count against the deficit");
+            a.ClearIncomingShips();
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        ok &= RunNewPlanetDropsRoundCheck();
+        ok &= RunUnreachablePlanetCheck();
+        ok &= RunCategory5UnlockCheck();
+        ok &= RunNoColonizedPlanetsCheck();
+        return ok;
+    }
+
+    private static bool RunNewPlanetDropsRoundCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_NewPlanet");
+        try
+        {
+            // A(Farm) - B(Desert) - D(Farm, new and empty)
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert, new[] { "D" }),
+                MakeSpawn("D", Planet.PlanetType.PlanetTypeFarm));
+            var a = Colonize(map, "A"); var b = Colonize(map, "B"); var d = Colonize(map, "D");
+            Dock(a, 6); Dock(b, 4);
+            var planner = new ShipTransportPlanner(map, 0);
+            var states = planner.BuildStates();
+            ok &= Check(planner.LastRound == 1, "an empty new planet pins the round at 1 (new planets fill first)");
+            ok &= Check(states.Find(s => s.Planet == a).Spare == 2, "A holds 2 above 1 x garrison: spare 2");
+            ok &= Check(states.Find(s => s.Planet == d).Deficit == 4, "the new planet D is 4 short");
+            Dock(d, 4);
+            planner.BuildStates();
+            ok &= Check(planner.LastRound == 2, "once D is filled the round returns to 2");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunUnreachablePlanetCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Unreachable");
+        try
+        {
+            // Z is colonized and isolated. GameAIMapInit logs a harmless "[PathingSystem] ... no connections" error for it.
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert),
+                MakeSpawn("Z", Planet.PlanetType.PlanetTypeFarm));
+            var a = Colonize(map, "A"); var b = Colonize(map, "B"); Colonize(map, "Z");
+            Dock(a, 4); Dock(b, 4);
+            var planner = new ShipTransportPlanner(map, 0);
+            planner.BuildStates();
+            ok &= Check(planner.LastRound == 2, "an unreachable empty planet does not pin the round at 1");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunCategory5UnlockCheck()
+    {
+        var ok = true;
+        foreach (var extraColonized in new[] { false, true })
+        {
+            _nextPlanetX = 0f;
+            var go = new GameObject("STSelfCheckMap_Cat5");
+            try
+            {
+                var spawns = new List<PlanetSpawnData>
+                {
+                    MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                    MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert, new[] { "C" }),
+                    MakeSpawn("C", Planet.PlanetType.PlanetTypeNormal, new[] { "V" }),
+                    MakeSpawn("V", Planet.PlanetType.PlanetTypeVerdant, extraColonized ? new[] { "E" } : null),
+                };
+                if (extraColonized) spawns.Add(MakeSpawn("E", Planet.PlanetType.PlanetTypeNormal));
+                var map = BuildMap(go, NewConstants(), spawns.ToArray());
+                var a = Colonize(map, "A"); var b = Colonize(map, "B"); Colonize(map, "C"); Colonize(map, "V");
+                if (extraColonized) Colonize(map, "E");
+                Dock(a, 4); Dock(b, 3);    // 7 warships
+                var planner = new ShipTransportPlanner(map, 0);
+
+                // Threshold = ratio 2 x colonized planets: 4 planets -> 8, 5 planets -> 10.
+                ok &= Check(!planner.BuildStates().Exists(s => s.Planet.PlanetName == "V"),
+                    $"7 ships is below the unlock threshold: V is excluded (extraColonized={extraColonized})");
+                Dock(b, 1);                // 8 warships
+                var unlocked = planner.BuildStates().Exists(s => s.Planet.PlanetName == "V");
+                ok &= Check(unlocked == !extraColonized,
+                    $"8 ships unlocks V only when the threshold is 8, not 10 (extraColonized={extraColonized})");
+                if (extraColonized)
+                {
+                    Dock(b, 2);            // 10 warships
+                    ok &= Check(planner.BuildStates().Exists(s => s.Planet.PlanetName == "V"),
+                        "10 ships unlocks V once the threshold has grown to 10");
+                }
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+        return ok;
+    }
+
+    private static bool RunNoColonizedPlanetsCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_NoColonized");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert));
+            var planner = new ShipTransportPlanner(map, 0);
+            ok &= Check(planner.BuildStates().Count == 0, "a player with no colonized planets has no participants");
+            ok &= Check(planner.LastRound == 1, "round defaults to 1 with no participants");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;
