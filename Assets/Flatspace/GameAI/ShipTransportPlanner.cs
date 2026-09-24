@@ -120,11 +120,27 @@ namespace FlatSpace
             public List<PlanetState> BuildStates()
             {
                 var colonized = _map.PlanetList.Where(IsColonized).ToList();
-                var totalWarships = colonized.Sum(CountWarships);
+                // Planets the player holds ships on but no longer has colonized (ownership can flip
+                // while a fleet is in flight): they are source-only so those ships are not stranded.
+                var stranded = _map.PlanetList.Where(p => !IsColonized(p) && CountWarships(p) > 0).ToList();
+                // Ships in flight still belong to the player, so they count toward the unlock total.
+                var totalWarships = colonized.Concat(stranded)
+                    .Sum(p => CountWarships(p) + p.GetIncomingShips(Ship.ShipKind.WarShip));
                 var category5Unlocked = totalWarships
                     >= _constants.category5UnlockShipsPerColonizedPlanet * colonized.Count;
 
                 var states = new List<PlanetState>();
+                foreach (var planet in stranded)
+                {
+                    states.Add(new PlanetState
+                    {
+                        Planet   = planet,
+                        Category = NoCategory,
+                        Garrison = 0,
+                        Docked   = CountWarships(planet),
+                        Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
+                    });
+                }
                 foreach (var planet in colonized)
                 {
                     var categories = ApplicableCategories(planet);

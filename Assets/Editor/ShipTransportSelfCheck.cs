@@ -307,6 +307,10 @@ public static class ShipTransportSelfCheck
                 // Threshold = ratio 2 x colonized planets: 4 planets -> 8, 5 planets -> 10.
                 ok &= Check(!planner.BuildStates().Exists(s => s.Planet.PlanetName == "V"),
                     $"7 ships is below the unlock threshold: V is excluded (extraColonized={extraColonized})");
+                b.AddIncomingShips(Ship.ShipKind.WarShip, 1);   // one ship in flight still counts: 7 + 1
+                ok &= Check(planner.BuildStates().Exists(s => s.Planet.PlanetName == "V") == !extraColonized,
+                    $"ships in flight count toward the unlock total (extraColonized={extraColonized})");
+                b.ClearIncomingShips();
                 Dock(b, 1);                // 8 warships
                 var unlocked = planner.BuildStates().Exists(s => s.Planet.PlanetName == "V");
                 ok &= Check(unlocked == !extraColonized,
@@ -430,18 +434,39 @@ public static class ShipTransportSelfCheck
         finally { Object.DestroyImmediate(go); }
 
         // A colonized planet with no route: PathingSystem reports a 1-node zero-cost path for it,
-        // which must not be planned as a free trip. Logs a harmless "[PathingSystem] ... no connections" error.
+        // which must not be planned as a free trip. S-Y carry an explicit connection so the map uses
+        // explicit-connection mode (with no connections anywhere it would connect planets by distance
+        // and Z would NOT be isolated). Logs a harmless "[PathingSystem] ... no connections" error for Z.
         _nextPlanetX = 0f;
         go = new GameObject("STSelfCheckMap_Plan5");
         try
         {
             var map = BuildMap(go, NewConstants(),
-                MakeSpawn("S", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("S", Planet.PlanetType.PlanetTypeNormal, new[] { "Y" }),
+                MakeSpawn("Y", Planet.PlanetType.PlanetTypeNormal),
                 MakeSpawn("Z", Planet.PlanetType.PlanetTypeFarm));
-            var s = Colonize(map, "S"); Colonize(map, "Z");
+            var s = Colonize(map, "S"); Colonize(map, "Y"); Colonize(map, "Z");
             Dock(s, 2);
             ok &= Check(new ShipTransportPlanner(map, 0).Plan().Count == 0,
                 "an isolated (unroutable) target is not planned as a reachable trip");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Ships docked on a planet the player no longer has colonized (e.g. it flipped owner while
+        // they were in flight) must still be movable: they count as spare (garrison 0).
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_Plan6");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "C" }),
+                MakeSpawn("C", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); Colonize(map, "B");
+            Dock(map.GetPlanet("C"), 2);   // C is not colonized by player 0
+            var actions = new ShipTransportPlanner(map, 0).Plan();
+            ok &= Check(actions.Exists(x => x.Origin == "C"),
+                "ships stranded on a planet the player does not hold are sent out again");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;
