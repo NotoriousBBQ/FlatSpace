@@ -33,7 +33,9 @@ namespace FlatSpace
                     OrderTypeIndustrySetProduction,
                     OrderTypeIndustryTransport,
                     OrderTypeRemoveShip,
-                    OrderTypeShipTransport
+                    OrderTypeShipTransport,
+                    OrderTypeShipDeparture,
+                    OrderTypeShipTransferInProgress
                 }
 
                 public enum OrderTimingType
@@ -51,6 +53,39 @@ namespace FlatSpace
                 public string Target;
                 public string Origin;
                 public int PlayerId;
+
+                // Ships carried by a ship order. Not serialized by Unity; saves go through GameSave.ShipSave.
+                [NonSerialized] public ShipFleetPayload Fleet;
+
+                /// <summary>What a fleet in flight is: the ship kind and one research snapshot per ship.</summary>
+                public class ShipFleetPayload
+                {
+                    public Ship.ShipKind Kind = Ship.ShipKind.WarShip;
+                    public List<List<string>> Snapshots = new List<List<string>>();
+
+                    public List<SaveLoadSystem.GameSave.ShipSave> ToSave(int owner)
+                    {
+                        return Snapshots.Select(snapshot => new SaveLoadSystem.GameSave.ShipSave
+                        {
+                            kind = Kind,
+                            owner = owner,
+                            researchSnapshot = new List<string>(snapshot),
+                        }).ToList();
+                    }
+
+                    /// <summary>Null or empty (older saves, non-ship orders) yields no payload.</summary>
+                    public static ShipFleetPayload FromSave(List<SaveLoadSystem.GameSave.ShipSave> ships)
+                    {
+                        if (ships == null || ships.Count == 0) return null;
+                        return new ShipFleetPayload
+                        {
+                            Kind = ships[0].kind,
+                            Snapshots = ships
+                                .Select(s => new List<string>(s.researchSnapshot ?? new List<string>()))
+                                .ToList(),
+                        };
+                    }
+                }
             }
             public GameAIMap GameAIMap { get; private set; }
             public List<GameAIOrder> CurrentAIOrders { get; private set; } = new List<GameAIOrder>();
@@ -161,22 +196,49 @@ namespace FlatSpace
                         targetPlanet.UndockShip(Ship.ShipKind.ColonyShip);
                         break;
                     case GameAIOrder.OrderType.OrderTypeShipTransport:
-                        var shipDelta = Convert.ToInt32(executableOrder.Data);
-                        if (shipDelta < 0)
-                        {
-                            for (var i = 0; i < -shipDelta; i++)
-                                targetPlanet.UndockShip(Ship.ShipKind.WarShip);
-                        }
-                        else
-                        {
-                            for (var i = 0; i < shipDelta; i++)
-                                targetPlanet.DockNewShip(Ship.ShipKind.WarShip);
-                        }
+                        ApplyShipArrival(targetPlanet, executableOrder);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeShipDeparture:
+                        ApplyShipDeparture(targetPlanet, executableOrder);
+                        break;
+                    case GameAIOrder.OrderType.OrderTypeShipTransferInProgress:
+                        ApplyShipTransferInProgress(targetPlanet, executableOrder);
                         break;
                     default:
                         break;
                 }
 
+            }
+
+            private static Ship.ShipKind FleetKind(GameAIOrder order)
+                => order.Fleet != null ? order.Fleet.Kind : Ship.ShipKind.WarShip;
+
+            // Immediate: takes the fleet's ships off the origin planet (same first-N ships the payload was read from).
+            public static void ApplyShipDeparture(Planet origin, GameAIOrder order)
+            {
+                origin.UndockShips(FleetKind(order), order.PlayerId, Convert.ToInt32(order.Data));
+            }
+
+            // Immediate: marks ships as on their way so the target's deficit accounts for them.
+            public static void ApplyShipTransferInProgress(Planet target, GameAIOrder order)
+            {
+                target.AddIncomingShips(FleetKind(order), Convert.ToInt32(order.Data));
+            }
+
+            // Delayed arrival: docks the fleet for the ORDER's player with the snapshots it left with.
+            // A fleet with fewer snapshots than ships (should not happen) falls back to a rebuilt one.
+            public static void ApplyShipArrival(Planet target, GameAIOrder order)
+            {
+                var kind = FleetKind(order);
+                var count = Convert.ToInt32(order.Data);
+                for (var i = 0; i < count; i++)
+                {
+                    if (order.Fleet != null && i < order.Fleet.Snapshots.Count)
+                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i]);
+                    else
+                        target.DockShipRebuiltSnapshot(kind, order.PlayerId);
+                }
+                target.AddIncomingShips(kind, -count);
             }
 
             private void ProcessNewOrders(List<GameAIOrder> newOrders)

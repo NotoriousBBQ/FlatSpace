@@ -232,6 +232,23 @@ namespace FlatSpace
                 return PlanetList.Find(x => x.Owner == playerID && x.Type == Planet.PlanetType.PlanetTypePrime);
             }
 
+            /// <summary>
+            /// Rebuilds every planet's incoming-ship count from in-flight ShipTransport orders.
+            /// The counter is derived state, so it is recomputed on load instead of being saved.
+            /// </summary>
+            public void RecomputeIncomingShips(List<GameAI.GameAIOrder> orders)
+            {
+                foreach (var planet in PlanetList) planet.ClearIncomingShips();
+                foreach (var order in orders)
+                {
+                    if (order.Type != GameAI.GameAIOrder.OrderType.OrderTypeShipTransport) continue;
+                    var target = GetPlanet(order.Target);
+                    if (target == null) continue;
+                    var kind = order.Fleet != null ? order.Fleet.Kind : Ship.ShipKind.WarShip;
+                    target.AddIncomingShips(kind, System.Convert.ToInt32(order.Data));
+                }
+            }
+
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
                 var catalog = Gameboard.Instance.GetComponent<Catalog>();

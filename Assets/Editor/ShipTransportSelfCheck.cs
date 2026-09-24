@@ -16,6 +16,7 @@ public static class ShipTransportSelfCheck
         ok &= RunCategoryCheck();
         ok &= RunRoundAndRolesCheck();
         ok &= RunPlanCheck();
+        ok &= RunOrderExecutionCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -439,6 +440,66 @@ public static class ShipTransportSelfCheck
             Dock(s, 2);
             ok &= Check(new ShipTransportPlanner(map, 0).Plan().Count == 0,
                 "an isolated (unroutable) target is not planned as a reachable trip");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunOrderExecutionCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Orders");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            var a = map.GetPlanet("A"); var b = map.GetPlanet("B");
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "x" });
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "y" });
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "z" });
+
+            var fleet = new GameAI.GameAIOrder.ShipFleetPayload
+            {
+                Kind = Ship.ShipKind.WarShip,
+                Snapshots = a.PeekShipSnapshots(Ship.ShipKind.WarShip, 1, 2),
+            };
+            var departure = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture,
+                Data = 2, Origin = "A", Target = "A", PlayerId = 1, Fleet = fleet,
+            };
+            var inProgress = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransferInProgress,
+                Data = 2, Origin = "A", Target = "B", PlayerId = 1, Fleet = fleet,
+            };
+            var arrival = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                Data = 2, Origin = "A", Target = "B", PlayerId = 1, Fleet = fleet,
+            };
+
+            GameAI.ApplyShipDeparture(a, departure);
+            ok &= Check(a.DockedShips.Count == 1 && a.DockedShips[0].ResearchSnapshot[0] == "z",
+                "departure undocks the first 2 ships (x, y); z stays");
+            GameAI.ApplyShipTransferInProgress(b, inProgress);
+            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip) == 2, "in-progress raises the target's incoming count");
+            GameAI.ApplyShipArrival(b, arrival);
+            ok &= Check(b.DockedShips.Count == 2, "arrival docks 2 ships");
+            ok &= Check(b.DockedShips.All(s => s.Owner == 1 && s.Kind == Ship.ShipKind.WarShip),
+                "arrived ships belong to the ORDER's player, not the planet's owner");
+            ok &= Check(b.DockedShips[0].ResearchSnapshot[0] == "x" && b.DockedShips[1].ResearchSnapshot[0] == "y",
+                "arrived ships keep the snapshots they left with");
+            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "arrival clears the incoming count");
+
+            // Recompute from in-flight orders (used after loading a save).
+            b.AddIncomingShips(Ship.ShipKind.WarShip, 7);   // stale value
+            map.RecomputeIncomingShips(new List<GameAI.GameAIOrder> { arrival, departure });
+            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip) == 2,
+                "recompute counts only in-flight ShipTransport orders and drops stale values");
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "other planets are reset to 0");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;
