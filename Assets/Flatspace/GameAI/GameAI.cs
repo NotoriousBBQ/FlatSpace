@@ -277,11 +277,13 @@ namespace FlatSpace
                         Data = (orderStatus.dataType == "float" ? (float)orderStatus.data : (int)orderStatus.data),
                         Origin = orderStatus.origin,
                         Target = orderStatus.target,
-                        PlayerId = orderStatus.playerId
+                        PlayerId = orderStatus.playerId,
+                        Fleet = GameAIOrder.ShipFleetPayload.FromSave(orderStatus.fleetShips)
                     });
                 }
 
                 GameAIMap.SetPlanetSimulationStats(gameSave);
+                GameAIMap.RecomputeIncomingShips(CurrentAIOrders);
             }
 
             public Planet GetPlanet(string planetName)

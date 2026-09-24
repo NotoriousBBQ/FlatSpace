@@ -83,6 +83,8 @@ public class SaveLoadSystem : MonoBehaviour
             public string target;
             public string origin;
             public int playerId;
+            // Ships in flight for a ship-transport order (null/empty for every other order and for older saves).
+            public List<GameSave.ShipSave> fleetShips;
         }
 
         [Serializable]
@@ -211,7 +213,8 @@ public class SaveLoadSystem : MonoBehaviour
                         totalDelay = order.TotalDelay,
                         data = Convert.ToSingle(order.Data),
                         dataType = order.Data is float ? "float" : "int",
-                        playerId = order.PlayerId
+                        playerId = order.PlayerId,
+                        fleetShips = order.Fleet?.ToSave(order.PlayerId)
                     });
             }
 

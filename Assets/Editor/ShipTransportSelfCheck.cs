@@ -17,6 +17,7 @@ public static class ShipTransportSelfCheck
         ok &= RunRoundAndRolesCheck();
         ok &= RunPlanCheck();
         ok &= RunOrderExecutionCheck();
+        ok &= RunFleetSaveCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -502,6 +503,45 @@ public static class ShipTransportSelfCheck
             ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "other planets are reset to 0");
         }
         finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunFleetSaveCheck()
+    {
+        var ok = true;
+        var fleet = new GameAI.GameAIOrder.ShipFleetPayload
+        {
+            Kind = Ship.ShipKind.WarShip,
+            Snapshots = new List<List<string>> { new List<string> { "r1", "r2" }, new List<string>() },
+        };
+        var save = new SaveLoadSystem.GameSave.OrderSave
+        {
+            type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+            timingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+            timingDelay = 3, totalDelay = 3, data = 2f, dataType = "int",
+            origin = "A", target = "B", playerId = 1,
+            fleetShips = fleet.ToSave(1),
+        };
+        var json = JsonUtility.ToJson(save);
+        var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>(json);
+        var restored = GameAI.GameAIOrder.ShipFleetPayload.FromSave(loaded.fleetShips);
+        ok &= Check(restored != null && restored.Kind == Ship.ShipKind.WarShip, "fleet kind survives JSON");
+        ok &= Check(restored != null && restored.Snapshots.Count == 2
+                    && restored.Snapshots[0].SequenceEqual(new[] { "r1", "r2" })
+                    && restored.Snapshots[1].Count == 0,
+            "each ship's snapshot survives JSON, including an empty one");
+        ok &= Check(loaded.fleetShips != null && loaded.fleetShips.All(s => s.owner == 1),
+            "saved ships record the fleet owner");
+
+        // An older save: an order entry with no fleetShips field at all.
+        const string oldJson = "{\"type\":16,\"timingType\":0,\"timingDelay\":1,\"totalDelay\":1,\"data\":1.0,"
+                               + "\"dataType\":\"int\",\"target\":\"B\",\"origin\":\"A\",\"playerId\":0}";
+        var old = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>(oldJson);
+        ok &= Check(GameAI.GameAIOrder.ShipFleetPayload.FromSave(old.fleetShips) == null,
+            "an older save with no fleetShips loads as no fleet");
+        ok &= Check(GameAI.GameAIOrder.ShipFleetPayload.FromSave(null) == null, "null list gives no fleet");
+        ok &= Check(GameAI.GameAIOrder.ShipFleetPayload.FromSave(new List<SaveLoadSystem.GameSave.ShipSave>()) == null,
+            "empty list gives no fleet");
         return ok;
     }
 
