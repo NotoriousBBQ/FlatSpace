@@ -13,6 +13,7 @@ public static class ShipTransportSelfCheck
     {
         var ok = RunMatrixTypesCheck();
         ok &= RunPlanetShipHelpersCheck();
+        ok &= RunCategoryCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -123,6 +124,58 @@ public static class ShipTransportSelfCheck
             a.AddIncomingShips(Ship.ShipKind.WarShip, 2);
             a.ClearIncomingShips();
             ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "ClearIncomingShips resets");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunCategoryCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Categories");
+        try
+        {
+            // A(Farm)-B(Normal)-C(Desert)-D(Normal, uncolonized). H is a hub with 4 neighbours.
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "C" }),
+                MakeSpawn("C", Planet.PlanetType.PlanetTypeDesert, new[] { "D" }),
+                MakeSpawn("D", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("H", Planet.PlanetType.PlanetTypeNormal, new[] { "X1", "X2", "X3", "X4" }),
+                MakeSpawn("X1", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("X2", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("X3", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("X4", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("P", Planet.PlanetType.PlanetTypePrime, new[] { "Q" }),
+                MakeSpawn("Q", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("V", Planet.PlanetType.PlanetTypeVerdant));
+            foreach (var n in new[] { "A", "B", "C", "H", "X1", "X2", "X3", "X4", "P", "V" }) Colonize(map, n);
+            var planner = new ShipTransportPlanner(map, 0);
+
+            ok &= Check(planner.Category(map.GetPlanet("A")) == 1 && planner.Garrison(map.GetPlanet("A")) == 4,
+                "A (Farm) is category 1 with the specialized garrison");
+            ok &= Check(!planner.IsOuter(map.GetPlanet("A")), "A has only colonized neighbours: not outer");
+            ok &= Check(planner.Category(map.GetPlanet("B")) == ShipTransportPlanner.NoCategory
+                        && planner.Garrison(map.GetPlanet("B")) == 0,
+                "B (Normal, 2 connections, all neighbours colonized) has no category and garrison 0");
+            ok &= Check(planner.IsOuter(map.GetPlanet("C")), "C has uncolonized neighbour D: outer");
+            ok &= Check(planner.Category(map.GetPlanet("C")) == 1,
+                "overlap: Desert+outer takes the best (lowest) category for priority");
+            ok &= Check(planner.Garrison(map.GetPlanet("C")) == 6,
+                "overlap: Desert+outer takes the LARGEST garrison (outer 6 > specialized 4)");
+            ok &= Check(!planner.IsColonized(map.GetPlanet("D")), "D is not colonized");
+            ok &= Check(planner.Category(map.GetPlanet("H")) == 4 && planner.Garrison(map.GetPlanet("H")) == 2,
+                "H with 4 neighbours is high traffic (category 4, garrison 2)");
+            ok &= Check(planner.Category(map.GetPlanet("X1")) == ShipTransportPlanner.NoCategory,
+                "a leaf planet with one neighbour has no category");
+            ok &= Check(planner.Category(map.GetPlanet("P")) == 2 && planner.Garrison(map.GetPlanet("P")) == 6,
+                "Prime with an uncolonized neighbour is outer: category 2, garrison 6");
+            Colonize(map, "Q");
+            ok &= Check(planner.Category(map.GetPlanet("P")) == 3 && planner.Garrison(map.GetPlanet("P")) == 4,
+                "once Q is colonized, P is just Prime: category 3, garrison 4");
+            ok &= Check(planner.Category(map.GetPlanet("V")) == 5 && planner.Garrison(map.GetPlanet("V")) == 1,
+                "Verdant is category 5 with the smallest garrison");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;
