@@ -166,3 +166,29 @@ Combat or anything reading snapshots; mixed-fleet creation; a 3D matrix; Consoli
 - A large deficit takes several turns to fill under Option B.
 - A drop back to round 1 (a new planet) drains ships from planets that were partway through a higher round; this is intended.
 - Peek/undock "first N" coupling must be preserved (covered by the self-check).
+
+## Plan-time refinements
+
+Decisions made while writing the implementation plan (`docs/superpowers/plans/2026-09-23-ship-transport.md`).
+Where these differ from the body above, these win.
+
+- **Choice equality is on the target planet only** (not source + target). `ScoreMatrix` removes a chosen
+  choice from other rows via `Equals`; the same target appears in every row with different cost/spare
+  values, so any other equality would let two sources claim one target.
+- **Row priorities are unique.** Each source row's `Priority` is its rank (largest spare first). The
+  existing `ScoreMatrixDecisionComparer` can report distinct rows as equal when their positive
+  priorities tie, which would make `SortedDictionary` throw. `ScoreMatrix.cs` is not modified.
+- **High traffic** counts `GameAIMap.GetNeighbours(name).Count` (the symmetrized connection view shared
+  with fog of war and player knowledge) against a tunable `highTrafficConnectionCount` (default 4).
+- **Locked category-5-only planets** (only category 5 applies and the unlock ratio is not met) are neither
+  source nor target while locked. A planet that also has another category is never locked.
+- **Fleet save shape** reuses `GameSave.ShipSave` (kind, owner, researchSnapshot) as
+  `OrderSave.fleetShips`; no new wrapper class. Empty/missing means no fleet.
+- **Travel delay** is clamped to at least 1 turn: a `Delayed` order with `TimingDelay <= 0` is both queued
+  and executed at once by `ProcessNewOrders`, which would dock the fleet twice.
+- **`ProcessShipActions(orders)`** takes only the order list (it does not read the turn's result list).
+- **Defaults** for all new tunables live as field initializers on `GameAIConstants`, so the existing
+  asset works without editing (garrisons 4/6/4/2/1, `maxPathNodesForShipTransport` 10,
+  `category5UnlockShipsPerColonizedPlanet` 3, `highTrafficConnectionCount` 4).
+- **Edit-mode safety:** `Planet` destroys ship components with `DestroyImmediate` outside Play mode, so the
+  self-check can exercise undocking.
