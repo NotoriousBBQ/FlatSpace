@@ -53,12 +53,13 @@ Roles each turn (one role per planet; target wins a tie):
 - **Target:** `garrison - (docked + incoming) > 0`. Category 5 planets are only targets when the player's
   total warship count is at least `category5UnlockShipsPerColonizedPlanet` x the number of colonized
   planets (owned by the player with population above 0), so the unlock scales with empire size.
-- Trip length is bounded by the existing `maxPathNodesForResourceDistribution`.
+- Trip length is bounded by a new, separate `maxPathNodesForShipTransport` (not the resource-distribution value).
 
 ## Tunables
 
 New fields on `GameAIConstants` (edited through the existing asset
-`Assets/GameAIConstants4ProductionTypes.asset`): five garrison sizes (one per category) and
+`Assets/GameAIConstants4ProductionTypes.asset`): five garrison sizes (one per category),
+`maxPathNodesForShipTransport` (int, max path node count for a ship trip) and
 `category5UnlockShipsPerColonizedPlanet` (float ratio of total warships to colonized planets). No other tunable mechanism is introduced.
 
 ## Matrix
@@ -125,7 +126,7 @@ New `Assets/Editor/ShipTransportSelfCheck.cs` at `FlatSpace → AI → Run Ship 
 plain assertions, never touching `Gameboard.Instance`; it builds a minimal `GameAIMap`/`Planet`/`PlayerAI`
 set with distinct planet positions (avoids the `FindPath` tie issue). Covers: category detection and
 overlap resolution; outer-planet definition; spare/deficit arithmetic including in-flight ships; a target
-claimed once per turn; category-5 unlock ratio (excluded below `ratio x colonized planets`, included at or above it, and it scales as planets are added); count = `min(spare, deficit)`; order trio types,
+claimed once per turn; category-5 unlock ratio (excluded below `ratio x colonized planets`, included at or above it, and it scales as planets are added); targets beyond `maxPathNodesForShipTransport` are excluded; count = `min(spare, deficit)`; order trio types,
 timing and payload; payload snapshots match departing ships; save round-trip and older-save load; kind
 field accepted while Expand never produces mixed fleets. Methods the check calls are `public`.
 Line drawing, notification text and log output are verified in a real Play-mode run.
