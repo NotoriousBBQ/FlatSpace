@@ -61,6 +61,7 @@ namespace FlatSpace
                 ProcessGrotsitsShortage(results, orders);
                 ProcessResearch(results, orders);
                 ProcessIndustry(results, orders);
+                ProcessShipActions(orders);
             }
 
             // ── Colonization ─────────────────────────────────────────────────
@@ -648,6 +649,58 @@ namespace FlatSpace
                 Target      = target,
                 PlayerId    = Player.playerID,
             };
+
+            // ── Ship transport ───────────────────────────────────────────────
+
+            /// <summary>
+            /// Moves spare warships toward planets short of their garrison. The decision lives in
+            /// ShipTransportPlanner; this turns each resulting ShipAction into orders.
+            /// </summary>
+            public void ProcessShipActions(List<GameAI.GameAIOrder> orders)
+            {
+                var planner = new ShipTransportPlanner(AIMap, Player.playerID);
+                foreach (var action in planner.Plan())
+                    EmitShipOrders(action, orders);
+            }
+
+            /// <summary>
+            /// Emits the standard order trio for a fleet: delayed arrival (carrying each ship's
+            /// snapshot), immediate departure from the origin, immediate "incoming" flag at the target.
+            /// </summary>
+            public void EmitShipOrders(ShipAction action, List<GameAI.GameAIOrder> orders)
+            {
+                var origin = AIMap.GetPlanet(action.Origin);
+                var snapshots = origin.PeekShipSnapshots(action.Kind, Player.playerID, action.Count);
+                if (snapshots.Count < action.Count)
+                {
+                    Debug.LogWarning($"Ship transport {action.Origin}->{action.Target} skipped: " +
+                                     $"wanted {action.Count} ships, only {snapshots.Count} docked.");
+                    return;
+                }
+
+                var fleet = new GameAI.GameAIOrder.ShipFleetPayload { Kind = action.Kind, Snapshots = snapshots };
+                // At least 1: a Delayed order with TimingDelay <= 0 is both queued AND executed
+                // immediately by ProcessNewOrders, which would dock the fleet twice.
+                var delay = Math.Max(1, Convert.ToInt32(action.Cost / AIMap.GameAIConstants.defaultTravelSpeed));
+
+                var transport = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                    delay, delay, action.Count, action.Origin, action.Target);
+                transport.Fleet = fleet;
+                orders.Add(transport);
+
+                var departure = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, action.Count, action.Origin, action.Origin);
+                departure.Fleet = fleet;
+                orders.Add(departure);
+
+                var inProgress = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipTransferInProgress,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, action.Count, action.Origin, action.Target);
+                inProgress.Fleet = fleet;
+                orders.Add(inProgress);
+            }
 
             // ── MonoBehaviour ────────────────────────────────────────────────
 

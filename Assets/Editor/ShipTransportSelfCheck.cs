@@ -18,6 +18,7 @@ public static class ShipTransportSelfCheck
         ok &= RunPlanCheck();
         ok &= RunOrderExecutionCheck();
         ok &= RunFleetSaveCheck();
+        ok &= RunPlayerAIShipOrdersCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -542,6 +543,71 @@ public static class ShipTransportSelfCheck
         ok &= Check(GameAI.GameAIOrder.ShipFleetPayload.FromSave(null) == null, "null list gives no fleet");
         ok &= Check(GameAI.GameAIOrder.ShipFleetPayload.FromSave(new List<SaveLoadSystem.GameSave.ShipSave>()) == null,
             "empty list gives no fleet");
+        return ok;
+    }
+
+    public static bool RunPlayerAIShipOrdersCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("STSelfCheckMap_PlayerAI");
+        var playerGo = new GameObject("STSelfCheckPlayer");
+        try
+        {
+            var constants = NewConstants();
+            constants.defaultTravelSpeed = 1000000f;   // cost / speed rounds to 0: the delay must be clamped to 1
+            var map = BuildMap(mapGo, constants,
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); var b = Colonize(map, "B");
+            b.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "s1" });
+            b.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "s2" });
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessShipActions(orders);
+
+            ok &= Check(orders.Count == 3, "one action yields the trio: transport, departure, in-progress");
+            var transport = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport);
+            var departure = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture);
+            var progress  = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransferInProgress);
+            ok &= Check(transport != null && departure != null && progress != null, "all three order types are present");
+            if (transport == null || departure == null || progress == null) return false;
+
+            ok &= Check(transport.TimingType == GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed
+                        && transport.Origin == "B" && transport.Target == "A" && System.Convert.ToInt32(transport.Data) == 2,
+                "the arrival is delayed, B -> A, carrying 2 ships");
+            ok &= Check(transport.TimingDelay >= 1 && transport.TotalDelay >= 1,
+                "a delay that rounds to 0 is clamped to at least 1 (never runs twice)");
+            ok &= Check(departure.TimingType == GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate
+                        && departure.Origin == "B" && departure.Target == "B",
+                "departure is immediate and acts on the origin");
+            ok &= Check(progress.TimingType == GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate
+                        && progress.Target == "A", "in-progress is immediate and flags the destination");
+            ok &= Check(transport.Fleet != null && transport.Fleet.Snapshots.Count == 2
+                        && transport.Fleet.Snapshots[0][0] == "s1" && transport.Fleet.Snapshots[1][0] == "s2",
+                "the payload carries the snapshots of the ships that will leave");
+            ok &= Check(transport.PlayerId == 0, "orders are stamped with the player");
+
+            // Apply the trio the way ProcessNewOrders would: immediates now, the arrival later.
+            GameAI.ApplyShipDeparture(b, departure);
+            GameAI.ApplyShipTransferInProgress(map.GetPlanet("A"), progress);
+            ok &= Check(b.DockedShips.Count == 0, "the ships left B");
+            GameAI.ApplyShipArrival(map.GetPlanet("A"), transport);
+            var arrived = map.GetPlanet("A").DockedShips;
+            ok &= Check(arrived.Count == 2 && arrived[0].ResearchSnapshot[0] == "s1" && arrived[1].ResearchSnapshot[0] == "s2",
+                "the ships arrive at A with their snapshots");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
         return ok;
     }
 
