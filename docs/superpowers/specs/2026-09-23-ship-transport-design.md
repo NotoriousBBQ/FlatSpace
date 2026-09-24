@@ -48,12 +48,28 @@ category 5 very low. Initial values are a starting guess to be tuned from the AI
 
 Roles each turn (one role per planet; target wins a tie):
 
-- **Source:** docked warships above garrison. `spare = docked - garrison`, excluding ships already
+- **Source:** docked warships above the round garrison (see Garrison rounds). `spare = docked - roundGarrison`, excluding ships already
   ordered out this turn.
-- **Target:** `garrison - (docked + incoming) > 0`. Category 5 planets are only targets when the player's
+- **Target:** `roundGarrison - (docked + incoming) > 0`. Category 5 planets are only targets when the player's
   total warship count is at least `category5UnlockShipsPerColonizedPlanet` x the number of colonized
   planets (owned by the player with population above 0), so the unlock scales with empire size.
 - Trip length is bounded by a new, separate `maxPathNodesForShipTransport` (not the resource-distribution value).
+
+## Garrison rounds
+
+Ships built beyond the sum of all base garrisons start further rounds of filling.
+
+- For each eligible planet, `filled = floor((docked + incoming) / garrison)`.
+- The **current round** is `r = 1 + min(filled)` over all eligible planets.
+- `roundGarrison = r x garrison` for every planet (its own garrison, the max over its categories).
+- Eligible planets are the player's colonized planets with garrison above 0, excluding category 5
+  planets while locked, and excluding planets that no other owned planet can reach within
+  `maxPathNodesForShipTransport` (otherwise one unreachable planet would pin `r` at 1 forever).
+- When all garrisons are full at level 1, `r` becomes 2 and every planet targets `2 x base`, and so on.
+- A new planet (or a newly unlocked category 5 planet) holds 0 ships, so `min(filled)` is 0 and `r` is 1:
+  planets holding more than `1 x base` become sources for it, so new planets fill first. Once it is
+  filled, `r` returns to its higher value and normal category-priority filling resumes.
+- No cap on rounds (a cap could be added later as a tunable).
 
 ## Tunables
 
@@ -126,7 +142,7 @@ New `Assets/Editor/ShipTransportSelfCheck.cs` at `FlatSpace → AI → Run Ship 
 plain assertions, never touching `Gameboard.Instance`; it builds a minimal `GameAIMap`/`Planet`/`PlayerAI`
 set with distinct planet positions (avoids the `FindPath` tie issue). Covers: category detection and
 overlap resolution; outer-planet definition; spare/deficit arithmetic including in-flight ships; a target
-claimed once per turn; category-5 unlock ratio (excluded below `ratio x colonized planets`, included at or above it, and it scales as planets are added); targets beyond `maxPathNodesForShipTransport` are excluded; count = `min(spare, deficit)`; order trio types,
+claimed once per turn; garrison round computation (advances when all are full, drops back to 1 when a new planet or unlocked category 5 planet appears, unreachable planets excluded); category-5 unlock ratio (excluded below `ratio x colonized planets`, included at or above it, and it scales as planets are added); targets beyond `maxPathNodesForShipTransport` are excluded; count = `min(spare, deficit)`; order trio types,
 timing and payload; payload snapshots match departing ships; save round-trip and older-save load; kind
 field accepted while Expand never produces mixed fleets. Methods the check calls are `public`.
 Line drawing, notification text and log output are verified in a real Play-mode run.
@@ -148,4 +164,5 @@ Combat or anything reading snapshots; mixed-fleet creation; a 3D matrix; Consoli
 
 - Initial tuning values (garrisons and the category-5 ratio) are guesses; the tuning log will show whether they behave as intended.
 - A large deficit takes several turns to fill under Option B.
+- A drop back to round 1 (a new planet) drains ships from planets that were partway through a higher round; this is intended.
 - Peek/undock "first N" coupling must be preserved (covered by the self-check).
