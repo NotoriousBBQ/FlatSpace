@@ -867,8 +867,16 @@ public class Planet : MonoBehaviour
 
     public void DockNewShip(Ship.ShipKind kind)
     {
-        var ship = CreateShip(kind, Owner);
-        ship.ResearchSnapshot = BuildResearchSnapshot(kind);
+        DockShipRebuiltSnapshot(kind, Owner);
+    }
+
+    // Docks a ship for `owner` whose snapshot is rebuilt from that owner's CURRENT research.
+    // Used for newly built ships and as the fallback for a fleet that arrives without a snapshot.
+    // Needs Gameboard.Instance, so self-checks must not call it.
+    public void DockShipRebuiltSnapshot(Ship.ShipKind kind, int owner)
+    {
+        var ship = CreateShip(kind, owner);
+        ship.ResearchSnapshot = BuildResearchSnapshot(kind, owner);
         DockedShips.Add(ship);
     }
 
@@ -884,15 +892,55 @@ public class Planet : MonoBehaviour
         var ship = DockedShips.Find(s => s.Kind == kind);
         if (ship == null) return false;
         DockedShips.Remove(ship);
-        Destroy(ship);
+        DestroyShipComponent(ship);
         return true;
     }
 
-    private List<string> BuildResearchSnapshot(Ship.ShipKind kind)
+    // Snapshots of the first `count` docked ships of this kind and owner, in dock order.
+    // UndockShips removes the SAME ships, so a fleet's payload matches the ships that leave.
+    public List<List<string>> PeekShipSnapshots(Ship.ShipKind kind, int owner, int count)
     {
-        if (Owner < 0 || Owner >= Gameboard.Instance.players.Count) return new List<string>();
+        return DockedShips
+            .Where(s => s.Kind == kind && s.Owner == owner)
+            .Take(count)
+            .Select(s => new List<string>(s.ResearchSnapshot))
+            .ToList();
+    }
+
+    public int UndockShips(Ship.ShipKind kind, int owner, int count)
+    {
+        var toRemove = DockedShips
+            .Where(s => s.Kind == kind && s.Owner == owner)
+            .Take(count)
+            .ToList();
+        foreach (var ship in toRemove)
+        {
+            DockedShips.Remove(ship);
+            DestroyShipComponent(ship);
+        }
+        return toRemove.Count;
+    }
+
+    // Destroy() is illegal outside Play mode (self-checks run in the Editor).
+    private static void DestroyShipComponent(Ship ship)
+    {
+        if (Application.isPlaying) Destroy(ship);
+        else DestroyImmediate(ship);
+    }
+
+    // Ships of each kind currently in flight toward this planet (planned but not yet arrived).
+    private readonly Dictionary<Ship.ShipKind, int> _incomingShips = new Dictionary<Ship.ShipKind, int>();
+    public int GetIncomingShips(Ship.ShipKind kind)
+        => _incomingShips.TryGetValue(kind, out var n) ? n : 0;
+    public void AddIncomingShips(Ship.ShipKind kind, int delta)
+        => _incomingShips[kind] = System.Math.Max(0, GetIncomingShips(kind) + delta);
+    public void ClearIncomingShips() => _incomingShips.Clear();
+
+    private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
+    {
+        if (owner < 0 || owner >= Gameboard.Instance.players.Count) return new List<string>();
         var subType = kind == Ship.ShipKind.ColonyShip ? "ColonyShip" : "Warship";
-        var researchCatalog = Gameboard.Instance.players[Owner].playerAI.ResearchCatalog;
+        var researchCatalog = Gameboard.Instance.players[owner].playerAI.ResearchCatalog;
         return researchCatalog.catalogItems
             .Where(x => x.researched && x.type == "Ship Improvement" && x.subType == subType)
             .Select(x => x.itemName)

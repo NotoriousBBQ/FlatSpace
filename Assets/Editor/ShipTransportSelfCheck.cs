@@ -12,6 +12,7 @@ public static class ShipTransportSelfCheck
     public static void Run()
     {
         var ok = RunMatrixTypesCheck();
+        ok &= RunPlanetShipHelpersCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -79,6 +80,52 @@ public static class ShipTransportSelfCheck
     {
         for (var i = 0; i < count; i++)
             planet.DockShipFromSave(Ship.ShipKind.WarShip, owner, new List<string>());
+    }
+
+    public static bool RunPlanetShipHelpersCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_PlanetShips");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            var a = map.GetPlanet("A");
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "s1" });
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "s2" });
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "other" });
+            a.DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string> { "c" });
+
+            var snaps = a.PeekShipSnapshots(Ship.ShipKind.WarShip, 0, 2);
+            ok &= Check(snaps.Count == 2 && snaps[0][0] == "s1" && snaps[1][0] == "s2",
+                "peek returns the first N matching ships' snapshots in dock order");
+            ok &= Check(a.PeekShipSnapshots(Ship.ShipKind.WarShip, 0, 5).Count == 2,
+                "peek is capped at the ships that exist for that owner and kind");
+            ok &= Check(a.DockedShips.Count == 4, "peek does not remove ships");
+
+            var removed = a.UndockShips(Ship.ShipKind.WarShip, 0, 1);
+            ok &= Check(removed == 1 && a.DockedShips.Count == 3, "undock removes exactly N ships");
+            ok &= Check(!a.DockedShips.Exists(s => s.ResearchSnapshot.Count > 0 && s.ResearchSnapshot[0] == "s1"),
+                "undock removed the same first ship peek reported (s1)");
+            ok &= Check(a.DockedShips.Exists(s => s.ResearchSnapshot.Count > 0 && s.ResearchSnapshot[0] == "s2"),
+                "the second ship (s2) remains");
+            ok &= Check(a.DockedShips.Exists(s => s.Owner == 1), "another player's ship is untouched");
+            ok &= Check(a.DockedShips.Exists(s => s.Kind == Ship.ShipKind.ColonyShip), "colony ship is untouched");
+            ok &= Check(a.UndockShips(Ship.ShipKind.WarShip, 0, 9) == 1, "undock is capped at available ships");
+
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "incoming starts at 0");
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 3);
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 3, "incoming adds");
+            a.AddIncomingShips(Ship.ShipKind.WarShip, -5);
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "incoming never goes below 0");
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 2);
+            a.ClearIncomingShips();
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "ClearIncomingShips resets");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
     }
 
     public static bool RunMatrixTypesCheck()
