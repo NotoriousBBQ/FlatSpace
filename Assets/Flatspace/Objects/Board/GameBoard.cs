@@ -764,6 +764,9 @@ namespace FlatSpace
                 }
             }
 
+            private static string FleetKindLabel(GameAI.GameAIOrder order)
+                => order.Fleet != null && order.Fleet.Kind == Ship.ShipKind.ColonyShip ? "colony ships" : "warships";
+
             public void CreateNotificationsForExecutingOrders(List<GameAI.GameAIOrder> gameAIOrders)
             {
                 foreach (var order in gameAIOrders)
@@ -793,6 +796,15 @@ namespace FlatSpace
                             {
                                 PlayerName = order.PlayerId.ToString(),
                                 Message = "Colonizer arrived at " + order.Target + " From " + order.Origin,
+                                ViewTarget = order.Target,
+                            });
+                            break;
+                        case GameAI.GameAIOrder.OrderType.OrderTypeShipTransport:
+                            _playerNotifications.Add(new PlayerNotification
+                            {
+                                PlayerName = order.PlayerId.ToString(),
+                                Message = "Fleet of " + order.Data + " " + FleetKindLabel(order) + " arrived at " +
+                                          order.Target + " from " + order.Origin,
                                 ViewTarget = order.Target,
                             });
                             break;
@@ -840,6 +852,15 @@ namespace FlatSpace
                                 ViewTarget = order.Origin,
                             });
                             break;
+                         case GameAI.GameAIOrder.OrderType.OrderTypeShipTransport:
+                             _playerNotifications.Add(new PlayerNotification
+                             {
+                                 PlayerName = order.PlayerId.ToString(),
+                                 Message = "Fleet of " + order.Data + " " + FleetKindLabel(order) + " departing " +
+                                           order.Origin + " for " + order.Target,
+                                 ViewTarget = order.Origin,
+                             });
+                             break;
                          default:
                              break;
                     }

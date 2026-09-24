@@ -61,6 +61,10 @@ public static class AITuningLogger
                     lines.Add(FormatLine(turnNumber, order.PlayerId, "ProductionSet",
                         order.Origin, order.Data.ToString()));
                     break;
+                case GameAI.GameAIOrder.OrderType.OrderTypeShipTransport:
+                    lines.Add(FormatLine(turnNumber, order.PlayerId, "ShipMove",
+                        $"{order.Origin}->{order.Target}", order.Data.ToString()));
+                    break;
             }
         }
         AppendLines(lines);
@@ -85,6 +89,10 @@ public static class AITuningLogger
                 case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
                     lines.Add(FormatLine(turnNumber, order.PlayerId, "ColonizeArrive",
                         $"{order.Origin}->{order.Target}"));
+                    break;
+                case GameAI.GameAIOrder.OrderType.OrderTypeShipTransport:
+                    lines.Add(FormatLine(turnNumber, order.PlayerId, "ShipArrive",
+                        $"{order.Origin}->{order.Target}", order.Data.ToString()));
                     break;
             }
         }
