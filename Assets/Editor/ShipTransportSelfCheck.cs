@@ -15,6 +15,7 @@ public static class ShipTransportSelfCheck
         ok &= RunPlanetShipHelpersCheck();
         ok &= RunCategoryCheck();
         ok &= RunRoundAndRolesCheck();
+        ok &= RunPlanCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -332,6 +333,112 @@ public static class ShipTransportSelfCheck
             var planner = new ShipTransportPlanner(map, 0);
             ok &= Check(planner.BuildStates().Count == 0, "a player with no colonized planets has no participants");
             ok &= Check(planner.LastRound == 1, "round defaults to 1 with no participants");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunPlanCheck()
+    {
+        var ok = true;
+
+        // Chain A(Farm) - B(Desert) - C(Normal, spare 3). C is nearest to B.
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Plan1");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert, new[] { "C" }),
+                MakeSpawn("C", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); Colonize(map, "B"); var c = Colonize(map, "C");
+            Dock(c, 3);
+            var actions = new ShipTransportPlanner(map, 0).Plan();
+            ok &= Check(actions.Count == 1, "one source produces one action");
+            ok &= Check(actions.Count == 1 && actions[0].Origin == "C" && actions[0].Target == "B",
+                "same category: the nearer target (B) wins on path cost");
+            ok &= Check(actions.Count == 1 && actions[0].Count == 3 && actions[0].Kind == Ship.ShipKind.WarShip,
+                "count = min(spare 3, deficit 4) warships");
+            ok &= Check(actions.Count == 1 && actions[0].Cost > 0f, "the action carries the path cost");
+
+            Dock(c, 9);   // 12 spare
+            actions = new ShipTransportPlanner(map, 0).Plan();
+            ok &= Check(actions.Count == 1 && actions[0].Count == 4,
+                "count is capped at the target's deficit (4), the rest stays home");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Two sources with IDENTICAL spare counts and two targets: no crash, each target claimed once.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_Plan2");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeDesert, new[] { "C", "D" }),
+                MakeSpawn("C", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("D", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); Colonize(map, "B"); var c = Colonize(map, "C"); var d = Colonize(map, "D");
+            Dock(c, 3); Dock(d, 3);
+            var actions = new ShipTransportPlanner(map, 0).Plan();
+            ok &= Check(actions.Count == 2, "two equal-spare sources both produce an action (no comparer collision)");
+            ok &= Check(actions.Select(x => x.Target).Distinct().Count() == 2,
+                "a target claimed by one source is removed for the other");
+            ok &= Check(actions.All(x => x.Count == 3), "each action moves the source's 3 spare ships");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Category beats cost: source S sits between Prime P (cat 3) and Desert Z (cat 1), equal distance.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_Plan3");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("P", Planet.PlanetType.PlanetTypePrime, new[] { "S" }),
+                MakeSpawn("S", Planet.PlanetType.PlanetTypeNormal, new[] { "Z" }),
+                MakeSpawn("Z", Planet.PlanetType.PlanetTypeDesert));
+            Colonize(map, "P"); var s = Colonize(map, "S"); Colonize(map, "Z");
+            Dock(s, 2);
+            var actions = new ShipTransportPlanner(map, 0).Plan();
+            ok &= Check(actions.Count == 1 && actions[0].Target == "Z",
+                "at equal cost the better category (Desert, 1) beats Prime (3)");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Trip length limit, and empty plans.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_Plan4");
+        try
+        {
+            var constants = NewConstants();
+            var map = BuildMap(go, constants,
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); var b = Colonize(map, "B");
+            var planner = new ShipTransportPlanner(map, 0);
+            ok &= Check(planner.Plan().Count == 0, "no spare ships: empty plan, no exception");
+            Dock(b, 2);
+            ok &= Check(planner.Plan().Count == 1, "spare ships and a reachable target: one action");
+            constants.maxPathNodesForShipTransport = 0;
+            ok &= Check(planner.Plan().Count == 0, "targets beyond maxPathNodesForShipTransport are excluded");
+            ok &= Check(new ShipTransportPlanner(map, 1).Plan().Count == 0,
+                "a player who owns nothing gets an empty plan");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // A colonized planet with no route: PathingSystem reports a 1-node zero-cost path for it,
+        // which must not be planned as a free trip. Logs a harmless "[PathingSystem] ... no connections" error.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_Plan5");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("S", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("Z", Planet.PlanetType.PlanetTypeFarm));
+            var s = Colonize(map, "S"); Colonize(map, "Z");
+            Dock(s, 2);
+            ok &= Check(new ShipTransportPlanner(map, 0).Plan().Count == 0,
+                "an isolated (unroutable) target is not planned as a reachable trip");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;

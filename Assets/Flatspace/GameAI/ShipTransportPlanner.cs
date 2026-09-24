@@ -167,6 +167,84 @@ namespace FlatSpace
                     && paths.TryGetValue(other.Planet.PlanetName, out var entry)
                     && IsUsablePath(entry));
             }
+
+            // ── Matrix / plan ────────────────────────────────────────────────
+
+            /// <summary>
+            /// One row per source planet (largest spare first); choices are reachable target planets
+            /// ordered by category then path cost. ScoreMatrix removes a chosen target from every
+            /// other row, so each target is claimed once per turn. Count = min(spare, deficit).
+            /// </summary>
+            public List<ShipAction> Plan()
+            {
+                var actions = new List<ShipAction>();
+                var states = BuildStates();
+                if (states.Count == 0) return actions;
+
+                var sources = states.Where(s => s.Spare > 0)
+                    .OrderByDescending(s => s.Spare)
+                    .ThenBy(s => s.Planet.PlanetName, StringComparer.Ordinal)
+                    .ToList();
+                var targets = states.Where(s => s.Deficit > 0).ToList();
+                if (sources.Count == 0 || targets.Count == 0) return actions;
+
+                var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ShipChoiceElement, ShipAction>(
+                    new ScoreMatrixDecisionComparer());
+
+                for (var i = 0; i < sources.Count; i++)
+                {
+                    var source = sources[i];
+                    var paths = source.Planet.DistanceMapToPathingList;
+                    var entries = targets
+                        .Where(t => t != source
+                                    && paths.TryGetValue(t.Planet.PlanetName, out var e)
+                                    && IsUsablePath(e))
+                        .Select(t => new ShipChoiceElement
+                        {
+                            TargetPlanet = t.Planet.PlanetName,
+                            Category     = t.Category,
+                            PathCost     = paths[t.Planet.PlanetName].Cost,
+                            SpareShips   = source.Spare,
+                            Deficit      = t.Deficit,
+                        })
+                        .ToList();
+                    if (entries.Count == 0) continue;
+
+                    // Priority must be UNIQUE per row: ScoreMatrixDecisionComparer can report two
+                    // distinct rows as equal when their positive priorities tie (SortedDictionary
+                    // would then throw). Rank order (largest spare first) is the priority.
+                    matrix.MatrixElements.Add(
+                        new ScoreMatrixDecisionElement
+                        {
+                            Target   = source.Planet.PlanetName,
+                            Priority = sources.Count - i,
+                        },
+                        entries);
+                }
+
+                foreach (var action in matrix.GenerateActionList(
+                             (origin, element) => new ShipAction
+                             {
+                                 Origin = origin.Target,
+                                 Target = element.Target,
+                                 Cost   = element.PathCost,
+                                 Count  = (int)Math.Min(element.SpareShips, element.Deficit),
+                                 Kind   = Ship.ShipKind.WarShip,
+                             },
+                             CompareChoices))
+                {
+                    if (action.Count > 0) actions.Add(action);
+                }
+                return actions;
+            }
+
+            private static int CompareChoices(ShipChoiceElement a, ShipChoiceElement b)
+            {
+                var byCategory = a.Category.CompareTo(b.Category);
+                if (byCategory != 0) return byCategory;
+                var byCost = a.PathCost.CompareTo(b.PathCost);
+                return byCost != 0 ? byCost : string.CompareOrdinal(a.TargetPlanet, b.TargetPlanet);
+            }
         }
     }
 }
