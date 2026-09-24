@@ -338,7 +338,7 @@ namespace FlatSpace
             // Weight for a choice whose subType is not in the strategy table.
             private const float DefaultChoiceWeight = 1f;
             // Weight multiplier applied to a ColonyShip on a planet that is ready to colonize.
-            private const float ColonyShipUrgentBoost = 8f;
+            private const float ColonyShipUrgentBoost = 2f;
 
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
             // 1.0f = neutral. Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
@@ -353,7 +353,7 @@ namespace FlatSpace
                             { "Grotsits",      1.0f },  // least useful while expanding
                             { "Research",      1.0f },  // least useful while expanding
                             { "ColonyShip",    2.5f },  // ships useful but secondary
-                            { "Warship",       0.5f },  // least useful while expanding
+                            { "Warship",       1.5f },  // Updated priority
                         }
                     },
                     // AIStrategyConsolidate — add when needed
@@ -496,7 +496,7 @@ namespace FlatSpace
                             { "Grotsits",      1.0f },  // build the base
                             { "Research",      1.0f },  // build the base
                             { "ColonyShip",    2.5f },  // colony ships needed
-                            { "Warship",       0.5f },  // least useful while expanding
+                            { "Warship",       1.5f },  // Updated priority
                         }
                     },
                     // AIStrategyConsolidate — add when needed

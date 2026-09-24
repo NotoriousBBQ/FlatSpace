@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 12790e3364b993e458f4e948b66a3444, type: 3}
-  m_Name: MapGenSettings_Default
+  m_Name: MapGenSettings4PBig
   m_EditorClassIdentifier: Assembly-CSharp::MapGenSettings
   seed: 0
-  playerCount: 3
-  totalPlanetCount: 80
+  playerCount: 4
+  totalPlanetCount: 100
   typeWeights:
   - type: 1
     weight: 15
