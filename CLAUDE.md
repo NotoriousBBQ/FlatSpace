@@ -42,7 +42,8 @@ The established substitute is a **self-check invoked from the Unity Editor**: a 
 assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reachable either as a
 `[MenuItem]` under `Assets/Editor/` (`FlatSpace → Fog → Run Self-Check` in `Assets/Editor/FogSelfCheck.cs`;
 `FlatSpace → AI → Run Player Knowledge Self-Check` in `Assets/Editor/PlayerKnowledgeSelfCheck.cs`;
-`FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`) or
+`FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`;
+`FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
 adding a subsystem that needs regression coverage, extend or add one of these rather than reaching for
 a test framework that isn't set up. A self-check must never depend on `Gameboard.Instance` (build a
@@ -111,10 +112,15 @@ Hold), `TimingDelay` / `TotalDelay` (in turns; delay is roughly `path.Cost / def
 resource move is expressed as a trio of orders: a delayed transport, an immediate deduction at the
 origin, and an immediate "in progress" flag.
 
-`OrderType` also has `OrderTypeShipTransport`, added for the concrete `Ship` representation — it's
-mechanism-only so far (`GameAI` knows how to execute it, but nothing in `PlayerAI` creates one yet; a
-future task is expected to add that AI logic). Because `OrderType` serializes as a `JsonUtility` int,
-new values must always be appended last, never inserted.
+Moving ships is a trio of ship orders created by `PlayerAI.ProcessShipActions` (Expand strategy only;
+see Ship Transport below): `OrderTypeShipTransport` (delayed arrival; `Data` is the ship count; carries a
+`GameAIOrder.Fleet` payload of the ship kind plus one research snapshot per ship),
+`OrderTypeShipDeparture` (immediate undock at the origin) and `OrderTypeShipTransferInProgress`
+(immediate "incoming ships" flag at the target). Arrival docks the ships for the *order's* `PlayerId`
+with the snapshots they left with (`GameAI.ApplyShipArrival`). The ship-transport delay is clamped to at
+least 1 turn: a `Delayed` order with `TimingDelay <= 0` is both queued and executed by
+`ProcessNewOrders`, which would dock the fleet twice. Because `OrderType` serializes as a `JsonUtility`
+int, new values must always be appended last, never inserted.
 
 ### Decision-making: `ScoreMatrix`
 
@@ -245,12 +251,46 @@ scrolling past an edge planet doesn't show a hard cut-off. A debug `DropdownFiel
 inert unless a developer opts in) / `AllPlayers` / `Player n`. `Assets/Editor/FogSelfCheck.cs` is this
 subsystem's self-check (see Tests above).
 
+### Ship Transport
+
+`ShipTransportPlanner` (`Assets/Flatspace/GameAI/ShipTransportPlanner.cs`, namespace `FlatSpace.AI`) moves
+a player's spare warships between its own colonized planets to fill tunable garrisons; `PlayerAI.ProcessShipActions`
+turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Orders. It must not touch
+`Gameboard.Instance` so the self-check can drive it directly.
+
+- **Categories** (per colonized planet, lower = better): 1 Desert/Industrial/Farm/Ocean, 2 outer (has an
+  uncolonized neighbour), 3 Prime, 4 high traffic (`GetNeighbours(name).Count >= highTrafficConnectionCount`),
+  5 Verdant/Desolate. A planet's priority is its best applicable category; its garrison is the *largest*
+  garrison among its applicable categories.
+- **Garrison rounds:** `round = 1 + min(floor((docked + incoming) / garrison))` over garrisoned, reachable
+  planets; each planet's target that turn is `round x garrison`. Excess ships therefore start a second,
+  third... fill; a new empty planet drops the round back to 1, so new planets fill first (this intentionally
+  drains planets that were partway through a higher round). Planets above target are sources, below are targets.
+- **Locked category 5:** planets whose only category is 5 are ignored entirely until total warships >=
+  `category5UnlockShipsPerColonizedPlanet` x colonized planet count.
+- **Matrix:** one row per source (largest spare first), choices are reachable targets sorted by category then
+  path cost, `count = min(spare, deficit)`. `ShipChoiceElement` equality is on the *target planet only* so
+  `ScoreMatrix` removes a claimed target from every other row. Row priorities are unique ranks because
+  `ScoreMatrixDecisionComparer` reports distinct rows as equal when their positive priorities tie.
+- **Reachability** is `2 <= NumNodes <= maxPathNodesForShipTransport`: `PathingSystem.FindPath` does not throw
+  when no route exists, it returns a 1-node zero-cost path, which must not be read as a free adjacent trip.
+- **Incoming counter:** `Planet.GetIncomingShips` is derived state, recomputed on load from in-flight orders
+  (`GameAIMap.RecomputeIncomingShips`), not saved.
+- **Saves:** the fleet rides on `OrderSave.fleetShips` (reusing `GameSave.ShipSave`); a missing/empty list
+  (older saves) loads as no fleet.
+- **Tunables** on `GameAIConstants` (`maxPathNodesForShipTransport`, `garrisonSpecialized/Outer/Prime/HighTraffic/HighlySpecialized`,
+  `highTrafficConnectionCount`, `category5UnlockShipsPerColonizedPlanet`) all have in-code defaults, so the
+  asset needs no edit until you tune.
+
+`Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
+
 ### AI Tuning Log
 
 `AITuningLogger` (`Assets/Flatspace/Diagnostics/AITuningLogger.cs`, global namespace, plain static
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
-started/arrived, production set/completed, colonizer-ready, research started/completed) for
+started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
+colonizer-ready, research started/completed) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
