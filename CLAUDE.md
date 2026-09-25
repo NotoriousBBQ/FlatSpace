@@ -216,11 +216,20 @@ ship) or a direct neighbour of one — both facts come from two shared queries o
 the two systems never independently re-derive the same fact. Knowledge is sticky (never un-learned)
 and grows outward one hop per turn as new planets are colonized. `GameAIMap.Knowledge.Update(...)`
 runs once per turn in `GameAI.GameAIUpdate()`, between `UpdateAllPlanets()` and `ProcessResults()`, so
-this turn's arrivals are known before this turn's AI decisions run. The only current consumer is
+this turn's arrivals are known before this turn's AI decisions run. The first consumer is
 `PlayerAI.IsValidColonizationTarget` (`public` — see Conventions below — so both `ProcessColonizers`
 and `PlanetCanColonize`/`GetIndustrySituationalWeightMultiplier` are gated by the one guard clause).
 Persisted per player as `GameSave.PlayerSave.knownPlanets`. `Assets/Editor/PlayerKnowledgeSelfCheck.cs`
 is this subsystem's self-check.
+
+The second consumer is first-contact detection: `PlayerKnowledge.HasContact(map, playerId)` is true when
+any known planet holds another player's population or docked ship (read directly from
+`Planet.Population`/`DockedShips`, since `Planet.Owner` is `NoOwner` on a population tie).
+`PlayerAI.TryEnterConsolidate` calls it first thing in `ProcessResults` and flips Expand → Consolidate
+one-way; Amass/None are never switched. Consolidate has no behavior of its own yet: its `ProcessResults`
+case runs the Expand routine, and its research/industry weight-table entries alias Expand's dictionaries
+(a missing strategy key silently falls back to a neutral weight, so a new strategy must be given entries
+or it loses Expand's tuning).
 
 ### Fog of war
 
@@ -290,7 +299,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed) for
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
