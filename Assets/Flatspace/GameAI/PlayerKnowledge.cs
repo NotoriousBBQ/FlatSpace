@@ -21,6 +21,23 @@ namespace FlatSpace
             public IReadOnlyCollection<string> KnownPlanets(int playerId) =>
                 _known.TryGetValue(playerId, out var set) ? set : Array.Empty<string>();
 
+            /// <summary>
+            /// True when any planet this player knows holds another player's population or docked
+            /// ship. Reads Planet.Population / DockedShips directly (not Planet.Owner, which is
+            /// NoOwner on a population tie) and needs no player count or Gameboard.Instance.
+            /// </summary>
+            public bool HasContact(GameAIMap map, int playerId)
+            {
+                foreach (var name in KnownPlanets(playerId))
+                {
+                    var planet = map.GetPlanet(name);
+                    if (planet == null) continue;
+                    if (planet.Population.Exists(p => p.Player != playerId)) return true;
+                    if (planet.DockedShips.Exists(s => s.Owner != playerId)) return true;
+                }
+                return false;
+            }
+
             public void Update(GameAIMap map, int numPlayers)
             {
                 for (var p = 0; p < numPlayers; p++)

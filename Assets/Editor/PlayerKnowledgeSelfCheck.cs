@@ -15,6 +15,7 @@ public static class PlayerKnowledgeSelfCheck
         ok &= RunPlayerKnowledgeChecks();
         ok &= RunColonizationKnowledgeGateCheck();
         ok &= RunKnownPlanetsSaveRoundTripCheck();
+        ok &= RunFirstContactChecks();
         Debug.Log(ok
             ? "[PlayerKnowledgeSelfCheck] ALL PASSED"
             : "[PlayerKnowledgeSelfCheck] FAILURES (see errors above)");
@@ -244,6 +245,91 @@ public static class PlayerKnowledgeSelfCheck
             "known planets round-trip through KnownPlanets/SetKnownPlanets");
         ok &= Check(!reloaded.IsKnown(0, "C"), "an unlisted planet stays unknown after round trip");
         ok &= Check(reloaded.KnownPlanets(0).Count == 2, "round trip does not add or drop entries");
+        return ok;
+    }
+
+    // A - B - C, all Normal planets; A starts populated by player 0.
+    private static GameAIMap BuildContactLine(GameObject mapGo)
+    {
+        var map = mapGo.AddComponent<GameAIMap>();
+        var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        var spawns = new List<PlanetSpawnData>
+        {
+            MakeSpawn("A", initialPopulation: 1, connections: new[] { "B" }),
+            MakeSpawn("B", initialPopulation: 0, connections: new[] { "C" }),
+            MakeSpawn("C", initialPopulation: 0),
+        };
+        map.GameAIMapInit(spawns, constants);
+        return map;
+    }
+
+    public static bool RunFirstContactChecks()
+    {
+        var ok = true;
+
+        // No rival anywhere; player 0's own ship on a known planet must not count.
+        var go = new GameObject("PKSelfCheckMap_Contact_None");
+        try
+        {
+            var map = BuildContactLine(go);
+            map.GetPlanet("B").DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>());
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 2);
+            ok &= Check(!knowledge.HasContact(map, 0), "no rival: own population and own ship are not contact");
+            ok &= Check(!knowledge.HasContact(map, 1), "player 1 knows nothing, so it has no contact");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Rival population on a direct neighbour of A (B is known to player 0).
+        go = new GameObject("PKSelfCheckMap_Contact_Population");
+        try
+        {
+            var map = BuildContactLine(go);
+            map.GetPlanet("B").Population.Add(new Planet.Inhabitant { Player = 1 });
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 2);
+            ok &= Check(knowledge.HasContact(map, 0), "rival population on a known neighbour is contact");
+            ok &= Check(knowledge.HasContact(map, 1), "contact is mutual: player 1 knows A, which player 0 populates");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Rival docked ship, no population, on a known neighbour.
+        go = new GameObject("PKSelfCheckMap_Contact_Ship");
+        try
+        {
+            var map = BuildContactLine(go);
+            map.GetPlanet("B").DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 2);
+            ok &= Check(knowledge.HasContact(map, 0), "a rival docked ship on a known planet is contact");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Rival two hops from A: C is not in player 0's known set, and A is not in player 1's.
+        go = new GameObject("PKSelfCheckMap_Contact_TwoHops");
+        try
+        {
+            var map = BuildContactLine(go);
+            map.GetPlanet("C").Population.Add(new Planet.Inhabitant { Player = 1 });
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 2);
+            ok &= Check(!knowledge.IsKnown(0, "C"), "precondition: C is two hops from A and unknown to player 0");
+            ok &= Check(!knowledge.HasContact(map, 0), "a rival outside the known set is not contact");
+            ok &= Check(!knowledge.HasContact(map, 1), "and neither is player 0's A for player 1 (also two hops)");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Single-player board.
+        go = new GameObject("PKSelfCheckMap_Contact_Solo");
+        try
+        {
+            var map = BuildContactLine(go);
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 1);
+            ok &= Check(!knowledge.HasContact(map, 0), "a lone player never has contact");
+        }
+        finally { Object.DestroyImmediate(go); }
+
         return ok;
     }
 }
