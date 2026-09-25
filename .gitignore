@@ -77,5 +77,4 @@ crashlytics-build.properties
 .superpowers/
 
 # AI tuning logs (generated per match, developer-only)
-/[Aa]ssets/[Ff]latspace/AITuningLogs/
-/[Aa]ssets/[Ff]latspace/AITuningLogs.meta
+/AITuningLogs/

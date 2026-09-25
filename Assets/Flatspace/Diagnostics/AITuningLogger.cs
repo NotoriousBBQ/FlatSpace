@@ -28,7 +28,8 @@ public static class AITuningLogger
         }
 
 #if UNITY_EDITOR
-        var dir = Path.Combine(Application.dataPath, "Flatspace/AITuningLogs");
+        // Sibling of Assets (project root), so Unity's asset database and IDE searches never see the logs.
+        var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "AITuningLogs"));
 #else
         var dir = Path.Combine(Application.persistentDataPath, "AITuningLogs");
 #endif

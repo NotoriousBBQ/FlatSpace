@@ -313,9 +313,9 @@ call sites (in `GameAI.cs`/`PlayerAI.cs`, right next to the equivalent notificat
 unconditionally with no toggle check of their own. There is deliberately no close/flush method:
 `File.AppendAllLines` opens, appends, and closes within each call, so whatever was last written is
 already durable regardless of how the process exits — this project has no consolidated "quit game"
-path to hook a close into anyway. Files land under `Application.dataPath/Flatspace/AITuningLogs`
-(editor) / `Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match,
-gitignored. Two known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the
+path to hook a close into anyway. Files land in `AITuningLogs/` at the project root, a sibling of `Assets/`
+(editor — outside `Assets/` so Unity's asset database and IDE searches never index them) /
+`Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match, gitignored. Two known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the
 underlying condition holds, not once, so a naive grep-count of those two codes overcounts; and
 `Gameboard.InitGame` (which starts a match's log) can run more than once for a single match, and two
 inits within the same wall-clock second would silently collide on the same filename.
