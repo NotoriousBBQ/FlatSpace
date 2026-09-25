@@ -6,3 +6,4 @@
 - **Ship to ship combat** — warships engaging each other.
 - **Blockade planet with docked ships** — ships docked at a planet can blockade it.
 - **Planetary invasion** — taking over another player's planet.
+- **Multi-fleet planet icons** — the planet UI shows a single fleet icon today; once assault fleets sit on enemy planets it needs to show more than one, at most one per player.
