@@ -37,7 +37,8 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                TryEnterConsolidate(Gameboard.Instance.TurnNumber);
+                // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
+                TryEnterConsolidate(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
 
                 switch (Strategy)
                 {
