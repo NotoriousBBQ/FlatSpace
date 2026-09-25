@@ -39,14 +39,15 @@ population tie, so ownership alone is not used).
 
 ### Components
 
-1. **`PlayerKnowledge.HasContact(GameAIMap map, int playerId, int numPlayers)`** (public, so
-   `Assets/Editor/` can call it). Iterates `KnownPlanets(playerId)`; for each planet checks every other
-   player id for `GetPopulationFraction(other) > 0f` or a docked ship with `Owner == other`. Must not
-   touch `Gameboard.Instance` (`GetPopulationFraction` is already used the same way by
-   `GameAIMap.GetVisionSourcePlanets`).
-2. **Switch at the top of `PlayerAI.ProcessResults`**, before the strategy `switch`: if `Strategy` is
-   Expand and `HasContact` is true, set `Strategy = AIStrategyConsolidate` and log it. One-way and sticky:
-   Consolidate never reverts to Expand.
+1. **`PlayerKnowledge.HasContact(GameAIMap map, int playerId)`** (public, so `Assets/Editor/` can call
+   it). Iterates `KnownPlanets(playerId)`; a planet is contact if any `Population` entry has
+   `Player != playerId` or any docked ship has `Owner != playerId`. No player count is needed (`PlayerAI`
+   has no way to get one without `Gameboard.Instance`), and it must not touch `Gameboard.Instance`.
+2. **`PlayerAI.TryEnterConsolidate(int turnNumber)`** (public, so the self-check can drive it without
+   `Gameboard.Instance`): if `Strategy` is Expand and `HasContact` is true, set
+   `Strategy = AIStrategyConsolidate`, log it, and return true. **`ProcessResults` calls it first**, before
+   the strategy `switch`, passing `Gameboard.Instance.TurnNumber`. One-way and sticky: Consolidate never
+   reverts to Expand, and Amass/None are never switched.
 3. **Consolidate behavior:** the `AIStrategyConsolidate` case calls `ProcessResultsStrategyExpand`.
 4. **Weight tables:** add `AIStrategyConsolidate` entries to `ResearchWeightTable` and
    `IndustryWeightTable` that alias the same dictionaries as Expand, so the switch changes no weights.
@@ -81,8 +82,11 @@ building a minimal `GameAIMap`/`Planet`/`PlayerAI` set directly and giving plane
 3. Rival docked ship, no population, on a known planet: contact.
 4. Rival planet outside the known set: no contact.
 5. Single player: never contact.
-6. `ProcessResults` switches Expand to Consolidate on contact and does not revert on a later turn.
-7. The Consolidate weight aliases resolve to the same weights as Expand.
+6. `TryEnterConsolidate` switches Expand to Consolidate on contact, does not revert once the rival is
+   gone, and never switches an Amass player. (`ProcessResults` itself runs Expand code that needs
+   `Gameboard.Instance`, so the self-check drives `TryEnterConsolidate` directly.)
+7. The Consolidate weight aliases resolve to the same weights as Expand (via `PlayerAI.GetResearchWeight`
+   and a new public static `PlayerAI.GetIndustryStrategyWeight`, extracted from `GetIndustryWeight`).
 
 The new `AITuningLogger` event has no self-check by design (it writes to the real filesystem); verify via
 a Play-mode run with `_logAIEvents` on and confirm one `StrategyChange` line per player.
