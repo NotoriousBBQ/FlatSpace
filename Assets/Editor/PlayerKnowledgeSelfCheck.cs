@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using FlatSpace.AI;
+using Flatspace.Objects.Production;
 
 public static class PlayerKnowledgeSelfCheck
 {
@@ -16,6 +17,8 @@ public static class PlayerKnowledgeSelfCheck
         ok &= RunColonizationKnowledgeGateCheck();
         ok &= RunKnownPlanetsSaveRoundTripCheck();
         ok &= RunFirstContactChecks();
+        ok &= RunConsolidateSwitchCheck();
+        ok &= RunConsolidateWeightAliasCheck();
         Debug.Log(ok
             ? "[PlayerKnowledgeSelfCheck] ALL PASSED"
             : "[PlayerKnowledgeSelfCheck] FAILURES (see errors above)");
@@ -330,6 +333,88 @@ public static class PlayerKnowledgeSelfCheck
         }
         finally { Object.DestroyImmediate(go); }
 
+        return ok;
+    }
+
+    public static bool RunConsolidateSwitchCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PKSelfCheckMap_Switch");
+        var playerGo = new GameObject("PKSelfCheckPlayer_Switch");
+        try
+        {
+            var map = BuildContactLine(mapGo);
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            map.Knowledge.Update(map, numPlayers: 2);
+            ok &= Check(playerAI.Strategy == PlayerAI.AIStrategy.AIStrategyExpand,
+                "a new PlayerAI starts in Expand");
+            ok &= Check(!playerAI.TryEnterConsolidate(1) &&
+                        playerAI.Strategy == PlayerAI.AIStrategy.AIStrategyExpand,
+                "no contact: stays in Expand");
+
+            var rival = new Planet.Inhabitant { Player = 1 };
+            map.GetPlanet("B").Population.Add(rival);
+            map.Knowledge.Update(map, numPlayers: 2);
+            ok &= Check(playerAI.TryEnterConsolidate(2) &&
+                        playerAI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate,
+                "contact: switches to Consolidate and reports it");
+
+            map.GetPlanet("B").Population.Remove(rival);
+            map.Knowledge.Update(map, numPlayers: 2);
+            ok &= Check(!playerAI.TryEnterConsolidate(3) &&
+                        playerAI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate,
+                "sticky: stays Consolidate after the rival is gone, and does not report a second switch");
+
+            playerAI.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
+            map.GetPlanet("B").Population.Add(rival);
+            map.Knowledge.Update(map, numPlayers: 2);
+            ok &= Check(!playerAI.TryEnterConsolidate(4) &&
+                        playerAI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass,
+                "an Amass player is never switched to Consolidate");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    public static bool RunConsolidateWeightAliasCheck()
+    {
+        var ok = true;
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        try
+        {
+            foreach (var subType in new[] { "Food", "Industry", "Grotsits", "Research", "ColonyShip", "Warship" })
+            {
+                item.subType = subType;
+                ok &= Check(
+                    PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) ==
+                    PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyExpand),
+                    $"Consolidate research weight matches Expand for {subType}");
+                ok &= Check(
+                    PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) ==
+                    PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyExpand),
+                    $"Consolidate industry weight matches Expand for {subType}");
+            }
+
+            // Guard against both sides silently being the neutral default.
+            item.subType = "Food";
+            ok &= Check(PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 3.0f,
+                "Consolidate Food research weight is Expand's 3.0, not the neutral default");
+            ok &= Check(PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 2.5f,
+                "Consolidate Food industry weight is Expand's 2.5, not the neutral default");
+        }
+        finally
+        {
+            Object.DestroyImmediate(item);
+        }
         return ok;
     }
 }

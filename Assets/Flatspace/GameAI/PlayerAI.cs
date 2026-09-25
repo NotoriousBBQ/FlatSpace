@@ -37,16 +37,34 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
+                TryEnterConsolidate(Gameboard.Instance.TurnNumber);
+
                 switch (Strategy)
                 {
                     case AIStrategy.AIStrategyExpand:
-                        ProcessResultsStrategyExpand(results, Player, ref orders);
-                        break;
                     case AIStrategy.AIStrategyConsolidate:
+                        // Consolidate has no behavior of its own yet; it plays like Expand.
+                        ProcessResultsStrategyExpand(results, Player, ref orders);
                         break;
                     case AIStrategy.AIStrategyAmass:
                         break;
                 }
+            }
+
+            /// <summary>
+            /// One-way switch from Expand to Consolidate on first contact with another player.
+            /// Public (and free of Gameboard.Instance) so the self-check can drive it directly.
+            /// Returns true only on the turn the switch happens.
+            /// </summary>
+            public bool TryEnterConsolidate(int turnNumber)
+            {
+                if (Strategy != AIStrategy.AIStrategyExpand) return false;
+                if (!AIMap.Knowledge.HasContact(AIMap, Player.playerID)) return false;
+
+                Strategy = AIStrategy.AIStrategyConsolidate;
+                AITuningLogger.LogStrategyChange(turnNumber, Player.playerID,
+                    AIStrategy.AIStrategyExpand.ToString(), AIStrategy.AIStrategyConsolidate.ToString());
+                return true;
             }
 
             // ── Strategy: Expand ─────────────────────────────────────────────
@@ -341,23 +359,24 @@ namespace FlatSpace
             private const float ColonyShipUrgentBoost = 2f;
 
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
-            // 1.0f = neutral. Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
+            // 1.0f = neutral. Add an entry for AIStrategyAmass when needed.
+            private static readonly Dictionary<string, float> ExpandResearchWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          3.0f },  // food upgrades biggest boost
+                    { "Industry",      2.0f },  // useful but secondary
+                    { "Grotsits",      1.0f },  // least useful while expanding
+                    { "Research",      1.0f },  // least useful while expanding
+                    { "ColonyShip",    2.5f },  // ships useful but secondary
+                    { "Warship",       1.5f },  // Updated priority
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
-                    {
-                        AIStrategy.AIStrategyExpand, new Dictionary<string, float>
-                        {
-                            { "Food",          3.0f },  // food upgrades biggest boost
-                            { "Industry",      2.0f },  // useful but secondary
-                            { "Grotsits",      1.0f },  // least useful while expanding
-                            { "Research",      1.0f },  // least useful while expanding
-                            { "ColonyShip",    2.5f },  // ships useful but secondary
-                            { "Warship",       1.5f },  // Updated priority
-                        }
-                    },
-                    // AIStrategyConsolidate — add when needed
-                    // AIStrategyAmass       — add when needed
+                    { AIStrategy.AIStrategyExpand,      ExpandResearchWeights },
+                    // Consolidate reuses Expand's weights until it gets its own tuning.
+                    { AIStrategy.AIStrategyConsolidate, ExpandResearchWeights },
+                    // AIStrategyAmass — add when needed
                 };
 
             private void ProcessResearch(
@@ -471,7 +490,7 @@ namespace FlatSpace
             /// Higher = more likely to be picked. Falls back to a neutral weight if the
             /// strategy or subType has no table entry.
             /// </summary>
-            private static float GetResearchWeight(CatalogItem item, AIStrategy strategy)
+            public static float GetResearchWeight(CatalogItem item, AIStrategy strategy)
             {
                 if (ResearchWeightTable.TryGetValue(strategy, out var typeWeights) &&
                     typeWeights.TryGetValue(item.subType, out var weight))
@@ -484,33 +503,40 @@ namespace FlatSpace
 
             // ── Industry ─────────────────────────────────────────────────────
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
-            // 1.0f = neutral. Add entries for AIStrategyConsolidate and AIStrategyAmass when needed.
+            // 1.0f = neutral. Add an entry for AIStrategyAmass when needed.
+            private static readonly Dictionary<string, float> ExpandIndustryWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          2.5f },  // food needed for pop growth
+                    { "Industry",      1.5f },  // slightly useful while expanding
+                    { "Grotsits",      1.0f },  // build the base
+                    { "Research",      1.0f },  // build the base
+                    { "ColonyShip",    2.5f },  // colony ships needed
+                    { "Warship",       1.5f },  // Updated priority
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
-                    {
-                        AIStrategy.AIStrategyExpand, new Dictionary<string, float>
-                        {
-                            { "Food",          2.5f },  // food needed for pop growth
-                            { "Industry",      1.5f },  // slightly useful while expanding
-                            { "Grotsits",      1.0f },  // build the base
-                            { "Research",      1.0f },  // build the base
-                            { "ColonyShip",    2.5f },  // colony ships needed
-                            { "Warship",       1.5f },  // Updated priority
-                        }
-                    },
-                    // AIStrategyConsolidate — add when needed
-                    // AIStrategyAmass       — add when needed
+                    { AIStrategy.AIStrategyExpand,      ExpandIndustryWeights },
+                    // Consolidate reuses Expand's weights until it gets its own tuning.
+                    { AIStrategy.AIStrategyConsolidate, ExpandIndustryWeights },
+                    // AIStrategyAmass — add when needed
                 };
-            private float  GetIndustryWeight(CatalogItem item, AIStrategy strategy, string planetName)
+
+            public static float GetIndustryStrategyWeight(CatalogItem item, AIStrategy strategy)
             {
-                var weight = DefaultChoiceWeight;
                 if (IndustryWeightTable.TryGetValue(strategy, out var typeWeights) &&
                     typeWeights.TryGetValue(item.subType, out var strategyWeight))
                 {
-                    weight = strategyWeight;
+                    return strategyWeight;
                 }
-                return weight * GetIndustrySituationalWeightMultiplier(item, planetName);
+
+                return DefaultChoiceWeight;
+            }
+
+            private float GetIndustryWeight(CatalogItem item, AIStrategy strategy, string planetName)
+            {
+                return GetIndustryStrategyWeight(item, strategy) * GetIndustrySituationalWeightMultiplier(item, planetName);
             }
 
             private float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
