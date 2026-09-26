@@ -27,6 +27,7 @@ public static class ShipTransportSelfCheck
         ok &= RunAssaultTargetExcludesOwnPlanetsCheck();
         ok &= RunSameOriginSnapshotCheck();
         ok &= RunWarshipShortfallChecks();
+        ok &= RunWarshipCeilingChecks();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -61,6 +62,7 @@ public static class ShipTransportSelfCheck
         c.assaultMinimumShips = 3;
         c.warshipShortfallBoost = 2f;
         c.warshipFleetCap = 1.5f;
+        c.warshipsPerColonizedPlanet = 100f;   // generous: the ceiling checks lower it explicitly
         return c;
     }
 
@@ -1268,6 +1270,79 @@ public static class ShipTransportSelfCheck
             map.Knowledge.Update(map, numPlayers: 2);
             var ai = MakeAI(playerGo, map, PlayerAI.AIStrategy.AIStrategyConsolidate);
             ok &= Check(ai.WantedWarships() == 6, "no known enemy: only outer B's garrison of 6 is wanted");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // The wanted fleet is bounded by my economy: warshipsPerColonizedPlanet x my colonized planets. Without
+    // it wanted chases 1.5 x the enemies' fleets, they chase mine, and the fleets grow without limit.
+    public static bool RunWarshipCeilingChecks()
+    {
+        var ok = true;
+
+        // A - B - E(enemy, 4 warships) - F. I colonize A and B; unbounded wanted = 6 (outer B) + 6 (assault) = 12.
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("STSelfCheckMap_WarshipCeiling");
+        var playerGo = new GameObject("STSelfCheckPlayer_WarshipCeiling");
+        try
+        {
+            var map = BuildAssaultLine(mapGo);
+            Dock(map.GetPlanet("E"), 4, owner: 1);
+            map.Knowledge.Update(map, numPlayers: 2);
+            var ai = MakeAI(playerGo, map, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            var constants = map.GameAIConstants;
+
+            ok &= Check(ai.ColonizedPlanetCount() == 2,
+                "I colonize A and B; E and F belong to the enemy");
+            ok &= Check(ai.WantedWarships() == 12, "a generous ceiling (100 per planet) leaves wanted at 12");
+
+            constants.warshipsPerColonizedPlanet = 8f;   // ceiling 16
+            ok &= Check(ai.WantedWarships() == 12, "a ceiling above the unbounded wanted changes nothing");
+            constants.warshipsPerColonizedPlanet = 5f;   // ceiling 10
+            ok &= Check(ai.WantedWarships() == 10, "a ceiling of 10 bounds the unbounded 12");
+            constants.warshipsPerColonizedPlanet = 4f;   // ceiling 8
+            ok &= Check(ai.WantedWarships() == 8, "a ceiling of 8 bounds it further: 4 per planet x 2 planets");
+
+            // The boost / taper / cap arithmetic runs on the bounded value: wanted 8, cap 1.5 -> 12.
+            var b = map.GetPlanet("B");
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 3f,
+                "no warships against a bounded wanted of 8: full boost 1 + 2 x 8/8 = 3");
+            Dock(b, 8);
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 1f,
+                "8 of 8 wanted: multiplier 1");
+            Dock(b, 4);
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 0f,
+                "12 of a bounded 8 wanted reaches the 1.5 cap: production cut off, though the enemy's 4 ships would have wanted 12 or more");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+
+        // The ceiling scales with how many planets I colonize: one planet, 4 per planet -> ceiling 4.
+        _nextPlanetX = 0f;
+        mapGo = new GameObject("STSelfCheckMap_WarshipCeilingOnePlanet");
+        playerGo = new GameObject("STSelfCheckPlayer_WarshipCeilingOnePlanet");
+        try
+        {
+            var map = BuildMap(mapGo, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "E" }),
+                MakeSpawn("E", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A");
+            map.Knowledge.Update(map, numPlayers: 2);
+            var ai = MakeAI(playerGo, map, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            map.GameAIConstants.warshipsPerColonizedPlanet = 4f;
+
+            ok &= Check(ai.ColonizedPlanetCount() == 1, "one colonized planet");
+            ok &= Check(ai.WantedWarships() == 4,
+                "A is outer (garrison 6) but the ceiling is 4 per planet x 1 planet = 4");
         }
         finally
         {

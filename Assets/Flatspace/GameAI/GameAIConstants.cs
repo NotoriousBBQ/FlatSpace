@@ -43,4 +43,7 @@ public class GameAIConstants : ScriptableObject
     // at wanted x this, and Warship is not offered at all from there. Weights are relative (and an
     // all-zero row is picked uniformly), so a zero weight alone would not stop warship production.
     public float warshipFleetCap = 1.5f;
+    // Ceiling on the wanted fleet: this x my colonized planets. Without it the wanted fleet (garrisons +
+    // assaultRatio x the enemies' known fleets) chases the enemies, who chase mine, and grows without limit.
+    public float warshipsPerColonizedPlanet = 8f;
 }

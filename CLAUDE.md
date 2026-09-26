@@ -311,7 +311,10 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   x shortfall / wanted)`, computed once per turn in `BuildIndustryMatrix` (`PlayerAI.ComputeWarshipMultiplier`).
   Wanted = round-1 garrisons of outer planets + the assault's required force whenever a known enemy planet
   exists (`AssaultPlanner.HasKnownEnemyPlanet`, not `ChooseTarget`, which is null while I hold no warships);
-  have = my docked warships + my own in-flight ships. The multiplier is 1 exactly at the wanted fleet, then
+  have = my docked warships + my own in-flight ships. Wanted is bounded by `warshipsPerColonizedPlanet` (default
+  8) x my colonized planets: without that ceiling the assault force (`assaultRatio` x the enemies' known
+  fleets) chases them while they chase mine, and in a 300-turn test `wanted` reached the hundreds and a
+  thousand, so the fleet never reached the cap. The multiplier is 1 exactly at the wanted fleet, then
   tapers linearly to 0 at `wanted x warshipFleetCap` (default 1.5), and from there `BuildIndustryMatrix`
   removes Warship from every planet's choices entirely: `ScoreMatrix.WeightedPick` treats weights as relative
   and picks uniformly when every weight is 0, so a zero weight alone does not stop warship production (in a

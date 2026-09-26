@@ -572,8 +572,16 @@ namespace FlatSpace
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, AIStrategy.AIStrategyConsolidate);
                 var garrisons = transport.BuildStates().Sum(s => s.RoundGarrison);
                 var assault = new AssaultPlanner(AIMap, Player.playerID);
-                return garrisons + (assault.HasKnownEnemyPlanet() ? assault.RequiredForce() : 0);
+                var unbounded = garrisons + (assault.HasKnownEnemyPlanet() ? assault.RequiredForce() : 0);
+
+                // Bounded by my economy: the assault force follows the enemies' fleets, which follow mine.
+                var ceiling = (int)(AIMap.GameAIConstants.warshipsPerColonizedPlanet * ColonizedPlanetCount());
+                return Math.Min(unbounded, ceiling);
             }
+
+            /// <summary>Planets I own with population (the same test as ShipTransportPlanner.IsColonized).</summary>
+            public int ColonizedPlanetCount()
+                => AIMap.PlanetList.Count(p => p.Owner == Player.playerID && p.Population.Count > 0);
 
             /// <summary>Every warship I own: docked anywhere plus my own in-flight ships. Ships still in production are not counted.</summary>
             public int OwnedWarships()
