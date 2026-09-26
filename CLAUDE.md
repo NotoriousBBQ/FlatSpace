@@ -112,7 +112,7 @@ Hold), `TimingDelay` / `TotalDelay` (in turns; delay is roughly `path.Cost / def
 resource move is expressed as a trio of orders: a delayed transport, an immediate deduction at the
 origin, and an immediate "in progress" flag.
 
-Moving ships is a trio of ship orders created by `PlayerAI.ProcessShipActions` (Expand strategy only;
+Moving ships is a trio of ship orders created by `PlayerAI.ProcessShipActions` (Expand and Consolidate;
 see Ship Transport below): `OrderTypeShipTransport` (delayed arrival; `Data` is the ship count; carries a
 `GameAIOrder.Fleet` payload of the ship kind plus one research snapshot per ship),
 `OrderTypeShipDeparture` (immediate undock at the origin) and `OrderTypeShipTransferInProgress`
@@ -267,8 +267,8 @@ a player's spare warships between its own colonized planets to fill tunable garr
 turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Orders. It must not touch
 `Gameboard.Instance` so the self-check can drive it directly.
 
-- **Categories** (per colonized planet, lower = better): 1 Desert/Industrial/Farm/Ocean, 2 outer (has an
-  uncolonized neighbour), 3 Prime, 4 high traffic (`GetNeighbours(name).Count >= highTrafficConnectionCount`),
+- **Categories** (per colonized planet, lower = better): 1 Desert/Industrial/Farm/Ocean, 2 outer (has a
+  neighbour not colonized by this player: empty, enemy-held or contested), 3 Prime, 4 high traffic (`GetNeighbours(name).Count >= highTrafficConnectionCount`),
   5 Verdant/Desolate. A planet's priority is its best applicable category; its garrison is the *largest*
   garrison among its applicable categories.
 - **Garrison rounds:** `round = 1 + min(floor((docked + incoming) / garrison))` over garrisoned, reachable
@@ -290,6 +290,18 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 - **Tunables** on `GameAIConstants` (`maxPathNodesForShipTransport`, `garrisonSpecialized/Outer/Prime/HighTraffic/HighlySpecialized`,
   `highTrafficConnectionCount`, `category5UnlockShipsPerColonizedPlanet`) all have in-code defaults, so the
   asset needs no edit until you tune.
+- **Consolidate:** `ShipTransportPlanner` takes an optional strategy (default Expand = the rules above,
+  unchanged). Under Consolidate `MaintainsGarrison(planet)` is true only for outer planets, so only they
+  garrison, at round 1 only; every other ship is spare, including on category-5-only planets that would be
+  locked under Expand. Change `MaintainsGarrison` to garrison non-outer planets later. `TargetRank` sorts
+  outer planets first (0 + category, others 100 + category; Expand: rank = category). `HeldPlanet` (the
+  assault target) removes that planet's ships from the stranded set so the assault force is not sent home.
+  `AssaultPlanner` (`Assets/Flatspace/GameAI/AssaultPlanner.cs`) then picks one known enemy-occupied planet
+  (sticky: most of my ships docked/incoming there, else cheapest path), sizes the force to
+  `max(assaultMinimumShips, ceil(known enemy docked warships x assaultRatio))` (unknown planets and
+  ownerless ships are not counted), and sends the ships home defence left spare, cheapest path first.
+  `PlayerAI.PlanShipActions` orchestrates both; ships trickle to the target rather than launching together
+  (revisit when combat exists). `assaultRatio` and `assaultMinimumShips` have in-code defaults too.
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
 
@@ -299,7 +311,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`) for
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
