@@ -315,11 +315,13 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   8) x my colonized planets: without that ceiling the assault force (`assaultRatio` x the enemies' known
   fleets) chases them while they chase mine, and in a 300-turn test `wanted` reached the hundreds and a
   thousand, so the fleet never reached the cap. The multiplier is 1 exactly at the wanted fleet, then
-  tapers linearly to 0 at `wanted x warshipFleetCap` (default 1.5), and from there `BuildIndustryMatrix`
-  removes Warship from every planet's choices entirely: `ScoreMatrix.WeightedPick` treats weights as relative
-  and picks uniformly when every weight is 0, so a zero weight alone does not stop warship production (in a
-  long test run the one-time improvements ran out and warships flooded the queue). A planet left with no
-  choices starts nothing that turn. Nothing wanted (`wanted <= 0`) means no taper. Ships still in production
+  tapers linearly to 0 at `wanted x warshipFleetCap` (default 1.5). `BuildIndustryMatrix` then drops every
+  choice whose weight is not a positive finite number (`PlayerAI.OfferedChoices`, all strategies):
+  `ScoreMatrix.WeightedPick` treats weights as relative and picks uniformly when every weight is 0, so a zero
+  weight alone never removes a choice. Two long test runs showed it: once the one-time improvements ran out
+  warships flooded the queue, and after the warship cutoff the same flood moved to colony ships (weight 0
+  when the planet already holds one) with nothing left to colonize. A planet left with no choices starts
+  nothing that turn and re-checks the next. Nothing wanted (`wanted <= 0`) means no taper. Ships still in production
   are not counted, so several planets finishing on the same turn can slightly over-build. The
   `WarshipBoost|wanted|have|multiplier` tuning-log line shows the multiplier each production turn.
 

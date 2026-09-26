@@ -28,6 +28,7 @@ public static class ShipTransportSelfCheck
         ok &= RunSameOriginSnapshotCheck();
         ok &= RunWarshipShortfallChecks();
         ok &= RunWarshipCeilingChecks();
+        ok &= RunOfferedChoicesCheck();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -1348,6 +1349,48 @@ public static class ShipTransportSelfCheck
         {
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    private static IndustryChoiceElement Choice(string name, float weight)
+    {
+        var item = ScriptableObject.CreateInstance<Flatspace.Objects.Production.CatalogItem>();
+        item.itemName = name;
+        return new IndustryChoiceElement { Item = item, Weight = weight, PlanetName = "P" };
+    }
+
+    // ScoreMatrix.WeightedPick treats weights as relative and picks uniformly when every weight is 0, so a
+    // zero weight alone never removes a choice. A planet that already holds a colony ship (weight 0) or a
+    // fleet at its cap (Warship weight 0) must therefore have those choices dropped, not just weighted down.
+    public static bool RunOfferedChoicesCheck()
+    {
+        var ok = true;
+        var made = new List<IndustryChoiceElement>();
+        try
+        {
+            var food = Choice("Food", 2.5f); var colony = Choice("Colony", 0f); var warship = Choice("Warship", 1.5f);
+            var nan = Choice("Nan", float.NaN); var negative = Choice("Negative", -1f);
+            var infinite = Choice("Infinite", float.PositiveInfinity); var tiny = Choice("Tiny", 0.001f);
+            made.AddRange(new[] { food, colony, warship, nan, negative, infinite, tiny });
+
+            var offered = PlayerAI.OfferedChoices(new List<IndustryChoiceElement>
+                { food, colony, warship, nan, negative, infinite, tiny });
+            ok &= Check(offered.Count == 3
+                        && offered[0].Item.itemName == "Food"
+                        && offered[1].Item.itemName == "Warship"
+                        && offered[2].Item.itemName == "Tiny",
+                "only choices with a positive, finite weight are offered, in their original order");
+
+            var cut = Choice("Cut", 0f);
+            made.Add(cut);
+            var allZero = PlayerAI.OfferedChoices(new List<IndustryChoiceElement> { colony, cut });
+            ok &= Check(allZero.Count == 0,
+                "an all-zero row offers nothing (so the planet stays idle) instead of falling back to a uniform pick");
+        }
+        finally
+        {
+            foreach (var choice in made) Object.DestroyImmediate(choice.Item);
         }
         return ok;
     }

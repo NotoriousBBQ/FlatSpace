@@ -579,6 +579,14 @@ namespace FlatSpace
                 return Math.Min(unbounded, ceiling);
             }
 
+            /// <summary>
+            /// Drops every production choice whose weight is not a positive finite number (the values
+            /// ScoreMatrix.WeightedPick would treat as 0), keeping the rest in order. Applies to every
+            /// strategy: 0 always meant "exclude" (see the ColonyShip situational multiplier).
+            /// </summary>
+            public static List<IndustryChoiceElement> OfferedChoices(List<IndustryChoiceElement> choices)
+                => choices.FindAll(c => c.Weight > 0f && !float.IsNaN(c.Weight) && !float.IsInfinity(c.Weight));
+
             /// <summary>Planets I own with population (the same test as ShipTransportPlanner.IsColonized).</summary>
             public int ColonizedPlanetCount()
                 => AIMap.PlanetList.Count(p => p.Owner == Player.playerID && p.Population.Count > 0);
@@ -687,18 +695,13 @@ namespace FlatSpace
                         Player.playerID, wanted, have, warshipMultiplier);
                 }
                 
-                // A zero weight does not remove a choice (all-zero rows are picked uniformly, and weights
-                // are relative), so once the fleet is at the cap Warship is not offered at all.
-                var warshipExcluded = strategy == AIStrategy.AIStrategyConsolidate && warshipMultiplier <= 0f;
-
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
                 {
                     var planetResults = productionCompleteResults.FindAll(x => x.Name == planetName);
                     var planet = AIMap.GetPlanet(planetName);
                     var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true
-                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name))
-                        && !(warshipExcluded && x.subType == "Warship"));
+                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name)) );
 
                     var planetSurplus = surplusResults.FindIndex(x => x.Name == planetName) == -1
                         ? 0f
@@ -711,8 +714,12 @@ namespace FlatSpace
                         PlanetName = planetName,
                     }).ToList();
 
+                    // A weight of 0 means "do not offer" (already holds a colony ship; Warship at its fleet
+                    // cap), but ScoreMatrix treats weights as relative and picks uniformly when every
+                    // weight is 0, so such choices must be dropped, not just weighted down.
+                    entries = OfferedChoices(entries);
                     if(entries.Count == 0) continue;
-                    
+
                     // A planet has one production slot, so it gets exactly one new
                     // item per turn — even when it emitted several production signals
                     // this turn (e.g. ProductionComplete + ProductionQueueEmpty both
