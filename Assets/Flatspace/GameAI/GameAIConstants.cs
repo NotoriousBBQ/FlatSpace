@@ -34,4 +34,9 @@ public class GameAIConstants : ScriptableObject
     public float assaultRatio = 1.5f;
     // ...but never fewer than this.
     public int assaultMinimumShips = 3;
+
+    [Header("Production (Consolidate)")]
+    // The Warship production weight is multiplied by 1 + this x (fleet shortfall / wanted fleet), where
+    // the wanted fleet is the outer-planet garrisons plus the assault force. 0 disables the boost.
+    public float warshipShortfallBoost = 2f;
 }

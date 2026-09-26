@@ -41,6 +41,21 @@ namespace FlatSpace
                 => planet.Owner == _playerId && planet.Population.Count > 0;
 
             /// <summary>
+            /// A known planet with enemy population that I do not colonize exists. Unlike ChooseTarget
+            /// this needs no warships and no path, so production can ask "is there anyone to attack?"
+            /// even while the fleet is empty.
+            /// </summary>
+            public bool HasKnownEnemyPlanet()
+            {
+                foreach (var name in _map.Knowledge.KnownPlanets(_playerId))
+                {
+                    var planet = _map.GetPlanet(name);
+                    if (planet != null && IsEnemyOccupied(planet) && !IsHeldByMe(planet)) return true;
+                }
+                return false;
+            }
+
+            /// <summary>
             /// Enemy warships docked on planets THIS player knows. Ownerless ships (Owner &lt; 0) are not
             /// an enemy fleet, and unknown planets are outside the AI's view.
             /// </summary>

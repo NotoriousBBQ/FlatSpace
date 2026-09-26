@@ -515,12 +515,15 @@ namespace FlatSpace
                     { "ColonyShip",    2.5f },  // colony ships needed
                     { "Warship",       1.5f },  // Updated priority
                 };
+            // Consolidate's own copy, starting at Expand's values, so it can be retuned without
+            // touching Expand. Must be declared after ExpandIndustryWeights (static init order).
+            private static readonly Dictionary<string, float> ConsolidateIndustryWeights =
+                new Dictionary<string, float>(ExpandIndustryWeights);
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     { AIStrategy.AIStrategyExpand,      ExpandIndustryWeights },
-                    // Consolidate reuses Expand's weights until it gets its own tuning.
-                    { AIStrategy.AIStrategyConsolidate, ExpandIndustryWeights },
+                    { AIStrategy.AIStrategyConsolidate, ConsolidateIndustryWeights },
                     // AIStrategyAmass — add when needed
                 };
 
@@ -535,9 +538,49 @@ namespace FlatSpace
                 return DefaultChoiceWeight;
             }
 
-            private float GetIndustryWeight(CatalogItem item, AIStrategy strategy, string planetName)
+            private float GetIndustryWeight(CatalogItem item, AIStrategy strategy, string planetName,
+                float warshipMultiplier)
             {
-                return GetIndustryStrategyWeight(item, strategy) * GetIndustrySituationalWeightMultiplier(item, planetName);
+                var weight = GetIndustryStrategyWeight(item, strategy)
+                             * GetIndustrySituationalWeightMultiplier(item, planetName);
+                return item.subType == "Warship" ? weight * warshipMultiplier : weight;
+            }
+
+            /// <summary>
+            /// 1 + boost x (shortfall / wanted), where shortfall = max(0, wanted - have). 1 when nothing
+            /// is wanted or the fleet has met it, so the table weight alone applies then.
+            /// </summary>
+            public static float WarshipShortfallMultiplier(int wanted, int have, float boost)
+            {
+                if (wanted <= 0 || have >= wanted) return 1f;
+                return 1f + boost * (wanted - have) / wanted;
+            }
+
+            /// <summary>
+            /// The fleet Consolidate wants: round-1 garrisons for every outer planet (from the Consolidate
+            /// transport planner), plus the assault's required force whenever a known enemy planet exists
+            /// (not ChooseTarget, which is null while I hold no warships, exactly when I most need to build).
+            /// </summary>
+            public int WantedWarships()
+            {
+                var transport = new ShipTransportPlanner(AIMap, Player.playerID, AIStrategy.AIStrategyConsolidate);
+                var garrisons = transport.BuildStates().Sum(s => s.RoundGarrison);
+                var assault = new AssaultPlanner(AIMap, Player.playerID);
+                return garrisons + (assault.HasKnownEnemyPlanet() ? assault.RequiredForce() : 0);
+            }
+
+            /// <summary>Every warship I own: docked anywhere plus my own in-flight ships. Ships still in production are not counted.</summary>
+            public int OwnedWarships()
+                => AIMap.PlanetList.Sum(p =>
+                    p.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID)
+                    + p.GetIncomingShips(Ship.ShipKind.WarShip, Player.playerID));
+
+            /// <summary>The Warship production multiplier for a strategy; 1 for anything but Consolidate.</summary>
+            public float ComputeWarshipMultiplier(AIStrategy strategy)
+            {
+                if (strategy != AIStrategy.AIStrategyConsolidate) return 1f;
+                return WarshipShortfallMultiplier(WantedWarships(), OwnedWarships(),
+                    AIMap.GameAIConstants.warshipShortfallBoost);
             }
 
             private float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
@@ -617,6 +660,9 @@ namespace FlatSpace
                 var matrix = new ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction  >
                     (new ScoreMatrixMultipleDecisionComparer());
 
+                // Once per turn, not per choice: it reads every planet.
+                var warshipMultiplier = ComputeWarshipMultiplier(strategy);
+
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
                 {
@@ -631,7 +677,7 @@ namespace FlatSpace
                     var entries = potentialProduction.Select(item => new IndustryChoiceElement
                     {
                         Item     = item,
-                        Weight = GetIndustryWeight(item, strategy, planetName),
+                        Weight = GetIndustryWeight(item, strategy, planetName, warshipMultiplier),
                         Surplus = planetSurplus,
                         PlanetName = planetName,
                     }).ToList();

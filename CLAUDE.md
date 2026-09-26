@@ -228,10 +228,11 @@ The second consumer is first-contact detection: `PlayerKnowledge.HasContact(map,
 any known planet holds another player's population or docked ship (read directly from
 `Planet.Population`/`DockedShips`, since `Planet.Owner` is `NoOwner` on a population tie).
 `PlayerAI.TryEnterConsolidate` calls it first thing in `ProcessResults` and flips Expand → Consolidate
-one-way; Amass/None are never switched. Consolidate has no behavior of its own yet: its `ProcessResults`
-case runs the Expand routine, and its research/industry weight-table entries alias Expand's dictionaries
-(a missing strategy key silently falls back to a neutral weight, so a new strategy must be given entries
-or it loses Expand's tuning).
+one-way; Amass/None are never switched. Consolidate's `ProcessResults` case runs the Expand routine, its
+research weight-table entry aliases Expand's dictionary, and its industry entry is its own copy of Expand's
+values (so it can be retuned independently; see the Consolidate bullet under Ship Transport for the Warship
+production boost). A missing strategy key silently falls back to a neutral weight, so a new strategy must be
+given entries or it loses Expand's tuning.
 
 ### Fog of war
 
@@ -306,6 +307,12 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   ownerless ships are not counted), and sends the ships home defence left spare, cheapest path first.
   `PlayerAI.PlanShipActions` orchestrates both; ships trickle to the target rather than launching together
   (revisit when combat exists). `assaultRatio` and `assaultMinimumShips` have in-code defaults too.
+  **Production:** under Consolidate the Warship industry weight is `table value x (1 + warshipShortfallBoost
+  x shortfall / wanted)`, computed once per turn in `BuildIndustryMatrix` (`PlayerAI.ComputeWarshipMultiplier`).
+  Wanted = round-1 garrisons of outer planets + the assault's required force whenever a known enemy planet
+  exists (`AssaultPlanner.HasKnownEnemyPlanet`, not `ChooseTarget`, which is null while I hold no warships);
+  have = my docked warships + my own in-flight ships. The multiplier is 1 once met, and ships still in
+  production are not counted, so several planets finishing on the same turn can slightly over-build.
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
 

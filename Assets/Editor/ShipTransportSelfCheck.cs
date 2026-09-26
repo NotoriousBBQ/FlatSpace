@@ -26,6 +26,7 @@ public static class ShipTransportSelfCheck
         ok &= RunIncomingPerPlayerCheck();
         ok &= RunAssaultTargetExcludesOwnPlanetsCheck();
         ok &= RunSameOriginSnapshotCheck();
+        ok &= RunWarshipShortfallChecks();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -58,6 +59,7 @@ public static class ShipTransportSelfCheck
         c.category5UnlockShipsPerColonizedPlanet = 2f;
         c.assaultRatio = 1.5f;
         c.assaultMinimumShips = 3;
+        c.warshipShortfallBoost = 2f;
         return c;
     }
 
@@ -1150,6 +1152,103 @@ public static class ShipTransportSelfCheck
                 }
             ok &= Check(total == 9 && distinct,
                 "the two fleets carry 9 different ships' snapshots, none duplicated");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    private static PlayerAI MakeAI(GameObject playerGo, GameAIMap map, PlayerAI.AIStrategy strategy)
+    {
+        var player = playerGo.AddComponent<Player>();
+        var playerAI = playerGo.AddComponent<PlayerAI>();
+        playerAI.Player = player;
+        playerAI.AIMap = map;
+        player.playerID = 0;
+        playerAI.Strategy = strategy;
+        return playerAI;
+    }
+
+    // Consolidate production: the Warship weight is boosted by the shortfall between the fleet wanted
+    // (outer garrisons + the assault force) and the fleet I have (docked + in flight).
+    public static bool RunWarshipShortfallChecks()
+    {
+        var ok = true;
+
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 0, 2f) == 3f,
+            "an empty fleet gets the full boost: 1 + 2 x 12/12 = 3");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 6, 2f) == 2f,
+            "half the wanted fleet gets half the boost");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 12, 2f) == 1f
+                    && PlayerAI.WarshipShortfallMultiplier(12, 20, 2f) == 1f,
+            "a met or exceeded fleet gets no boost");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(0, 0, 2f) == 1f,
+            "nothing wanted: no boost, and no divide by zero");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 0, 0f) == 1f, "a boost of 0 disables it");
+
+        var item = ScriptableObject.CreateInstance<Flatspace.Objects.Production.CatalogItem>();
+        try
+        {
+            item.subType = "Warship";
+            ok &= Check(PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 1.5f
+                        && PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyExpand) == 1.5f,
+                "Consolidate's own Warship table entry starts at Expand's baseline of 1.5");
+        }
+        finally { Object.DestroyImmediate(item); }
+
+        // A - B - E(enemy) - F. B is outer (garrison 6); E holds 4 enemy warships, so the assault needs 6.
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("STSelfCheckMap_WarshipShortfall");
+        var playerGo = new GameObject("STSelfCheckPlayer_WarshipShortfall");
+        try
+        {
+            var map = BuildAssaultLine(mapGo);
+            Dock(map.GetPlanet("E"), 4, owner: 1);
+            map.Knowledge.Update(map, numPlayers: 2);
+            var ai = MakeAI(playerGo, map, PlayerAI.AIStrategy.AIStrategyConsolidate);
+
+            ok &= Check(ai.WantedWarships() == 12, "wanted = outer B's garrison 6 + the assault's required 6");
+            ok &= Check(ai.OwnedWarships() == 0, "no warships owned yet");
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 3f,
+                "with no warships at all the assault part still counts (no target needed) and the boost is full");
+
+            var b = map.GetPlanet("B");
+            Dock(b, 4);
+            b.AddIncomingShips(Ship.ShipKind.WarShip, 0, 2);
+            b.AddIncomingShips(Ship.ShipKind.WarShip, 1, 5);   // another player's fleet in flight: not mine
+            ok &= Check(ai.OwnedWarships() == 6, "my fleet is docked + my own in-flight ships only");
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 2f,
+                "6 of 12 wanted: half the boost");
+
+            Dock(b, 6);
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 1f,
+                "12 of 12 wanted: no boost");
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyExpand) == 1f,
+                "Expand never gets the shortfall boost");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+
+        // No known enemy planet: only the outer garrison is wanted.
+        _nextPlanetX = 0f;
+        mapGo = new GameObject("STSelfCheckMap_WarshipNoEnemy");
+        playerGo = new GameObject("STSelfCheckPlayer_WarshipNoEnemy");
+        try
+        {
+            var map = BuildMap(mapGo, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "E" }),
+                MakeSpawn("E", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); Colonize(map, "B");
+            map.Knowledge.Update(map, numPlayers: 2);
+            var ai = MakeAI(playerGo, map, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            ok &= Check(ai.WantedWarships() == 6, "no known enemy: only outer B's garrison of 6 is wanted");
         }
         finally
         {
