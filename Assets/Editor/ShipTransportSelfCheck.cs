@@ -20,6 +20,7 @@ public static class ShipTransportSelfCheck
         ok &= RunFleetSaveCheck();
         ok &= RunPlayerAIShipOrdersCheck();
         ok &= RunConsolidatePlannerChecks();
+        ok &= RunAssaultChecks();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -46,6 +47,8 @@ public static class ShipTransportSelfCheck
         c.garrisonHighlySpecialized = 1;
         c.highTrafficConnectionCount = 4;
         c.category5UnlockShipsPerColonizedPlanet = 2f;
+        c.assaultRatio = 1.5f;
+        c.assaultMinimumShips = 3;
         return c;
     }
 
@@ -800,6 +803,168 @@ public static class ShipTransportSelfCheck
                 "with E held, its ships are not a state at all");
             ok &= Check(!held.Plan().Exists(a => a.Origin == "E"),
                 "and the home plan never moves them");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // A - B - E - F. A and B are player 0's; E and F are player 1's. F is two hops from B, so it is
+    // unknown to player 0. Knowledge is updated for two players.
+    private static GameAIMap BuildAssaultLine(GameObject go)
+    {
+        var map = BuildMap(go, NewConstants(),
+            MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+            MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "E" }),
+            MakeSpawn("E", Planet.PlanetType.PlanetTypeNormal, new[] { "F" }),
+            MakeSpawn("F", Planet.PlanetType.PlanetTypeNormal));
+        Colonize(map, "A"); Colonize(map, "B"); Colonize(map, "E", 1); Colonize(map, "F", 1);
+        return map;
+    }
+
+    public static bool RunAssaultChecks()
+    {
+        var ok = RunAssaultSizingCheck();
+        ok &= RunAssaultTargetCheck();
+        ok &= RunAssaultPlanCheck();
+        return ok;
+    }
+
+    private static bool RunAssaultSizingCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_AssaultSizing");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            var e = map.GetPlanet("E"); var f = map.GetPlanet("F");
+            Dock(e, 4, owner: 1);
+            Dock(f, 10, owner: 1);    // unknown to player 0: must not count
+            Dock(e, 2, owner: -1);    // ownerless: must not count
+            map.Knowledge.Update(map, numPlayers: 2);
+            var assault = new AssaultPlanner(map, 0);
+
+            ok &= Check(assault.EnemyWarshipTotal() == 4,
+                "enemy total counts only known planets and only ships with a valid, different owner");
+            ok &= Check(assault.RequiredForce() == 6, "required force is ceil(4 x 1.5) = 6");
+
+            // Deficit counts my docked ships and incoming ships at the target.
+            ok &= Check(assault.Deficit(e) == 6, "nothing committed yet: the deficit is the full 6");
+            Dock(e, 2);
+            e.AddIncomingShips(Ship.ShipKind.WarShip, 1);
+            ok &= Check(assault.Deficit(e) == 3, "2 docked + 1 incoming leaves a deficit of 3");
+            Dock(e, 3);
+            ok &= Check(assault.Deficit(e) == 0, "5 docked + 1 incoming meets the force: deficit 0");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_AssaultFloor");
+        try
+        {
+            var map = BuildAssaultLine(go);   // no enemy ships anywhere
+            map.Knowledge.Update(map, numPlayers: 2);
+            ok &= Check(new AssaultPlanner(map, 0).RequiredForce() == 3,
+                "with no enemy ships the minimum of 3 applies");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunAssaultTargetCheck()
+    {
+        var ok = true;
+
+        // No holders / no known enemy -> no target.
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_AssaultNoTarget");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            map.Knowledge.Update(map, numPlayers: 2);
+            ok &= Check(new AssaultPlanner(map, 0).ChooseTarget() == null,
+                "no warships anywhere: no target");
+            Dock(map.GetPlanet("B"), 3);
+            ok &= Check(new AssaultPlanner(map, 0).ChooseTarget() == map.GetPlanet("E"),
+                "warships at B and a known enemy-occupied E: E is the target");
+            ok &= Check(new AssaultPlanner(map, 0).ChooseTarget() != map.GetPlanet("F"),
+                "F is unknown to player 0 and never a candidate");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Two enemy planets off B: nearest first, then sticky once ships are committed.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_AssaultSticky");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "E1", "E2" }),
+                MakeSpawn("E1", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("E2", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); var b = Colonize(map, "B");
+            var e1 = Colonize(map, "E1", 1); var e2 = Colonize(map, "E2", 1);
+            Dock(b, 2);
+            map.Knowledge.Update(map, numPlayers: 2);
+            var assault = new AssaultPlanner(map, 0);
+
+            ok &= Check(assault.ChooseTarget() == e1, "nothing committed: the cheapest path (E1) wins");
+            Dock(e2, 1);
+            ok &= Check(assault.ChooseTarget() == e2, "sticky: a planet with my ships already docked beats a cheaper one");
+            b.UndockShips(Ship.ShipKind.WarShip, 0, 2);
+            ok &= Check(assault.ChooseTarget() == e2,
+                "sticky even when E2 holds ALL my warships (no other holder to path from)");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunAssaultPlanCheck()
+    {
+        var ok = true;
+
+        // Spare ships beyond B's outer garrison (10 - 6 = 4) and all of interior A (5) go to E: cheapest first.
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_AssaultPlan");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            Dock(map.GetPlanet("E"), 4, owner: 1);
+            Dock(map.GetPlanet("B"), 10); Dock(map.GetPlanet("A"), 5);
+            map.Knowledge.Update(map, numPlayers: 2);
+            var assault = new AssaultPlanner(map, 0);
+            var target = assault.ChooseTarget();
+            var transport = ConsolidatePlanner(map, target.PlanetName);
+            var home = transport.Plan();
+            ok &= Check(home.Count == 0, "B's outer garrison is full and A holds none: no home actions");
+
+            var actions = assault.Plan(target, transport.LastStates, home);
+            ok &= Check(actions.Count == 2
+                        && actions.Exists(a => a.Origin == "B" && a.Target == "E" && a.Count == 4)
+                        && actions.Exists(a => a.Origin == "A" && a.Target == "E" && a.Count == 2),
+                "required 6 = B's 4 spare (cheapest path) + 2 of A's 5");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Ships an outer garrison needs are not also committed to the assault.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_AssaultAfterHome");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            Dock(map.GetPlanet("E"), 4, owner: 1);
+            Dock(map.GetPlanet("B"), 3); Dock(map.GetPlanet("A"), 9);
+            map.Knowledge.Update(map, numPlayers: 2);
+            var assault = new AssaultPlanner(map, 0);
+            var target = assault.ChooseTarget();
+            var transport = ConsolidatePlanner(map, target.PlanetName);
+            var home = transport.Plan();
+            ok &= Check(home.Count == 1 && home[0].Origin == "A" && home[0].Target == "B" && home[0].Count == 3,
+                "home first: A sends 3 to fill outer B's garrison of 6");
+
+            var actions = assault.Plan(target, transport.LastStates, home);
+            ok &= Check(actions.Count == 1 && actions[0].Origin == "A" && actions[0].Target == "E" && actions[0].Count == 6,
+                "the assault gets only A's remaining 6 (9 - 3), never the ships home defence claimed");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;

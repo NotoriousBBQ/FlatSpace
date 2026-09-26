@@ -28,4 +28,10 @@ public class GameAIConstants : ScriptableObject
     public int highTrafficConnectionCount = 4;
     // Category-5-only planets take ships only once total warships >= this * colonized planet count.
     public float category5UnlockShipsPerColonizedPlanet = 3f;
+
+    [Header("Assault (Consolidate)")]
+    // Force committed to a known enemy-occupied planet: ceil(enemy known docked warships x this)...
+    public float assaultRatio = 1.5f;
+    // ...but never fewer than this.
+    public int assaultMinimumShips = 3;
 }
