@@ -687,8 +687,16 @@ namespace FlatSpace
             {
                 // Self-checks call this with no Gameboard in the scene.
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+
+                // Nothing is undocked until the orders execute, so a second fleet leaving the same
+                // origin this turn (home defence + assault) must skip the ships the first one takes.
+                var claimedByOrigin = new Dictionary<string, int>();
                 foreach (var action in PlanShipActions(turn))
-                    EmitShipOrders(action, orders);
+                {
+                    claimedByOrigin.TryGetValue(action.Origin, out var claimed);
+                    EmitShipOrders(action, orders, claimed);
+                    claimedByOrigin[action.Origin] = claimed + action.Count;
+                }
             }
 
             private string _lastLoggedAssaultTarget;
@@ -724,10 +732,10 @@ namespace FlatSpace
             /// Emits the standard order trio for a fleet: delayed arrival (carrying each ship's
             /// snapshot), immediate departure from the origin, immediate "incoming" flag at the target.
             /// </summary>
-            public void EmitShipOrders(ShipAction action, List<GameAI.GameAIOrder> orders)
+            public void EmitShipOrders(ShipAction action, List<GameAI.GameAIOrder> orders, int skipShips = 0)
             {
                 var origin = AIMap.GetPlanet(action.Origin);
-                var snapshots = origin.PeekShipSnapshots(action.Kind, Player.playerID, action.Count);
+                var snapshots = origin.PeekShipSnapshots(action.Kind, Player.playerID, action.Count, skipShips);
                 if (snapshots.Count < action.Count)
                 {
                     Debug.LogWarning($"Ship transport {action.Origin}->{action.Target} skipped: " +

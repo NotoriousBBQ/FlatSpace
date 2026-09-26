@@ -896,12 +896,15 @@ public class Planet : MonoBehaviour
         return true;
     }
 
-    // Snapshots of the first `count` docked ships of this kind and owner, in dock order.
-    // UndockShips removes the SAME ships, so a fleet's payload matches the ships that leave.
-    public List<List<string>> PeekShipSnapshots(Ship.ShipKind kind, int owner, int count)
+    // Snapshots of `count` docked ships of this kind and owner, in dock order, after skipping the
+    // first `skip`. UndockShips removes the first ships, so a fleet's payload matches the ships that
+    // leave; `skip` is for a second fleet leaving the same planet the same turn, whose departure
+    // order runs after the first fleet's ships are already gone.
+    public List<List<string>> PeekShipSnapshots(Ship.ShipKind kind, int owner, int count, int skip = 0)
     {
         return DockedShips
             .Where(s => s.Kind == kind && s.Owner == owner)
+            .Skip(skip)
             .Take(count)
             .Select(s => new List<string>(s.ResearchSnapshot))
             .ToList();
@@ -928,12 +931,15 @@ public class Planet : MonoBehaviour
         else DestroyImmediate(ship);
     }
 
-    // Ships of each kind currently in flight toward this planet (planned but not yet arrived).
-    private readonly Dictionary<Ship.ShipKind, int> _incomingShips = new Dictionary<Ship.ShipKind, int>();
-    public int GetIncomingShips(Ship.ShipKind kind)
-        => _incomingShips.TryGetValue(kind, out var n) ? n : 0;
-    public void AddIncomingShips(Ship.ShipKind kind, int delta)
-        => _incomingShips[kind] = System.Math.Max(0, GetIncomingShips(kind) + delta);
+    // Ships of each kind and owning player currently in flight toward this planet (planned but not
+    // yet arrived). Per player: fleets can now target another player's planet, so a shared counter
+    // would let one player's fleet distort another's garrison and assault arithmetic.
+    private readonly Dictionary<(Ship.ShipKind kind, int owner), int> _incomingShips
+        = new Dictionary<(Ship.ShipKind kind, int owner), int>();
+    public int GetIncomingShips(Ship.ShipKind kind, int owner)
+        => _incomingShips.TryGetValue((kind, owner), out var n) ? n : 0;
+    public void AddIncomingShips(Ship.ShipKind kind, int owner, int delta)
+        => _incomingShips[(kind, owner)] = System.Math.Max(0, GetIncomingShips(kind, owner) + delta);
     public void ClearIncomingShips() => _incomingShips.Clear();
 
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)

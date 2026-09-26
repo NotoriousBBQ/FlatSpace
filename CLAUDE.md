@@ -283,7 +283,9 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   `ScoreMatrixDecisionComparer` reports distinct rows as equal when their positive priorities tie.
 - **Reachability** is `2 <= NumNodes <= maxPathNodesForShipTransport`: `PathingSystem.FindPath` does not throw
   when no route exists, it returns a 1-node zero-cost path, which must not be read as a free adjacent trip.
-- **Incoming counter:** `Planet.GetIncomingShips` is derived state, recomputed on load from in-flight orders
+- **Incoming counter:** `Planet.GetIncomingShips(kind, owner)` is counted per owning player (fleets can target
+  another player's planet under Consolidate, so a shared counter would let one player's fleet distort
+  another's garrison and assault arithmetic). It is derived state, recomputed on load from in-flight orders
   (`GameAIMap.RecomputeIncomingShips`), not saved.
 - **Saves:** the fleet rides on `OrderSave.fleetShips` (reusing `GameSave.ShipSave`); a missing/empty list
   (older saves) loads as no fleet.

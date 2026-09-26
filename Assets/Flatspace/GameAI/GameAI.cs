@@ -222,7 +222,7 @@ namespace FlatSpace
             // Immediate: marks ships as on their way so the target's deficit accounts for them.
             public static void ApplyShipTransferInProgress(Planet target, GameAIOrder order)
             {
-                target.AddIncomingShips(FleetKind(order), Convert.ToInt32(order.Data));
+                target.AddIncomingShips(FleetKind(order), order.PlayerId, Convert.ToInt32(order.Data));
             }
 
             // Delayed arrival: docks the fleet for the ORDER's player with the snapshots it left with.
@@ -238,7 +238,7 @@ namespace FlatSpace
                     else
                         target.DockShipRebuiltSnapshot(kind, order.PlayerId);
                 }
-                target.AddIncomingShips(kind, -count);
+                target.AddIncomingShips(kind, order.PlayerId, -count);
             }
 
             private void ProcessNewOrders(List<GameAIOrder> newOrders)

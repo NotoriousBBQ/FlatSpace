@@ -162,7 +162,7 @@ namespace FlatSpace
                     .ToList();
                 // Ships in flight still belong to the player, so they count toward the unlock total.
                 var totalWarships = colonized.Concat(stranded)
-                    .Sum(p => CountWarships(p) + p.GetIncomingShips(Ship.ShipKind.WarShip));
+                    .Sum(p => CountWarships(p) + p.GetIncomingShips(Ship.ShipKind.WarShip, _playerId));
                 var category5Unlocked = totalWarships
                     >= _constants.category5UnlockShipsPerColonizedPlanet * colonized.Count;
 
@@ -176,7 +176,7 @@ namespace FlatSpace
                         Rank     = NoCategory,
                         Garrison = 0,
                         Docked   = CountWarships(planet),
-                        Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
+                        Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });
                 }
                 foreach (var planet in colonized)
@@ -191,7 +191,7 @@ namespace FlatSpace
                             Rank     = NoCategory,
                             Garrison = 0,
                             Docked   = CountWarships(planet),
-                            Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
+                            Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                         });
                         continue;
                     }
@@ -205,7 +205,7 @@ namespace FlatSpace
                         Rank     = TargetRank(planet),
                         Garrison = GarrisonOf(categories),
                         Docked   = CountWarships(planet),
-                        Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
+                        Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });
                 }
 

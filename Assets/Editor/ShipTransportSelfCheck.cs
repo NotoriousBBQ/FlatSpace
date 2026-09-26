@@ -11,6 +11,7 @@ public static class ShipTransportSelfCheck
     [MenuItem("FlatSpace/AI/Run Ship Transport Self-Check")]
     public static void Run()
     {
+        _checkCount = 0;
         var ok = RunMatrixTypesCheck();
         ok &= RunPlanetShipHelpersCheck();
         ok &= RunCategoryCheck();
@@ -22,13 +23,20 @@ public static class ShipTransportSelfCheck
         ok &= RunConsolidatePlannerChecks();
         ok &= RunAssaultChecks();
         ok &= RunConsolidatePlanShipActionsCheck();
+        ok &= RunIncomingPerPlayerCheck();
+        ok &= RunAssaultTargetExcludesOwnPlanetsCheck();
+        ok &= RunSameOriginSnapshotCheck();
         Debug.Log(ok
-            ? "[ShipTransportSelfCheck] ALL PASSED"
-            : "[ShipTransportSelfCheck] FAILURES (see errors above)");
+            ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
+            : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
     }
+
+    // Reported in the summary so a stale run (Unity kept the old assembly after a compile error) is visible.
+    private static int _checkCount;
 
     private static bool Check(bool condition, string label)
     {
+        _checkCount++;
         if (!condition) Debug.LogError($"[ShipTransportSelfCheck] FAIL: {label}");
         return condition;
     }
@@ -126,14 +134,14 @@ public static class ShipTransportSelfCheck
             ok &= Check(a.DockedShips.Exists(s => s.Kind == Ship.ShipKind.ColonyShip), "colony ship is untouched");
             ok &= Check(a.UndockShips(Ship.ShipKind.WarShip, 0, 9) == 1, "undock is capped at available ships");
 
-            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "incoming starts at 0");
-            a.AddIncomingShips(Ship.ShipKind.WarShip, 3);
-            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 3, "incoming adds");
-            a.AddIncomingShips(Ship.ShipKind.WarShip, -5);
-            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "incoming never goes below 0");
-            a.AddIncomingShips(Ship.ShipKind.WarShip, 2);
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 0, "incoming starts at 0");
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 0, 3);
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 3, "incoming adds");
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 0, -5);
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 0, "incoming never goes below 0");
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 0, 2);
             a.ClearIncomingShips();
-            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "ClearIncomingShips resets");
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 0, "ClearIncomingShips resets");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;
@@ -223,7 +231,7 @@ public static class ShipTransportSelfCheck
             ok &= Check(states.Find(s => s.Planet == a).RoundGarrison == 8 && states.Find(s => s.Planet == a).Deficit == 4,
                 "round 2: A's target is 2 x 4 and it is 4 short");
 
-            a.AddIncomingShips(Ship.ShipKind.WarShip, 2);
+            a.AddIncomingShips(Ship.ShipKind.WarShip, 0, 2);
             states = planner.BuildStates();
             ok &= Check(states.Find(s => s.Planet == a).Deficit == 2, "incoming ships count against the deficit");
             a.ClearIncomingShips();
@@ -312,7 +320,7 @@ public static class ShipTransportSelfCheck
                 // Threshold = ratio 2 x colonized planets: 4 planets -> 8, 5 planets -> 10.
                 ok &= Check(!planner.BuildStates().Exists(s => s.Planet.PlanetName == "V"),
                     $"7 ships is below the unlock threshold: V is excluded (extraColonized={extraColonized})");
-                b.AddIncomingShips(Ship.ShipKind.WarShip, 1);   // one ship in flight still counts: 7 + 1
+                b.AddIncomingShips(Ship.ShipKind.WarShip, 0, 1);   // one ship in flight still counts: 7 + 1
                 ok &= Check(planner.BuildStates().Exists(s => s.Planet.PlanetName == "V") == !extraColonized,
                     $"ships in flight count toward the unlock total (extraColonized={extraColonized})");
                 b.ClearIncomingShips();
@@ -517,21 +525,21 @@ public static class ShipTransportSelfCheck
             ok &= Check(a.DockedShips.Count == 1 && a.DockedShips[0].ResearchSnapshot[0] == "z",
                 "departure undocks the first 2 ships (x, y); z stays");
             GameAI.ApplyShipTransferInProgress(b, inProgress);
-            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip) == 2, "in-progress raises the target's incoming count");
+            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 2, "in-progress raises the target's incoming count");
             GameAI.ApplyShipArrival(b, arrival);
             ok &= Check(b.DockedShips.Count == 2, "arrival docks 2 ships");
             ok &= Check(b.DockedShips.All(s => s.Owner == 1 && s.Kind == Ship.ShipKind.WarShip),
                 "arrived ships belong to the ORDER's player, not the planet's owner");
             ok &= Check(b.DockedShips[0].ResearchSnapshot[0] == "x" && b.DockedShips[1].ResearchSnapshot[0] == "y",
                 "arrived ships keep the snapshots they left with");
-            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "arrival clears the incoming count");
+            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 0, "arrival clears the incoming count");
 
             // Recompute from in-flight orders (used after loading a save).
-            b.AddIncomingShips(Ship.ShipKind.WarShip, 7);   // stale value
+            b.AddIncomingShips(Ship.ShipKind.WarShip, 1, 7);   // stale value
             map.RecomputeIncomingShips(new List<GameAI.GameAIOrder> { arrival, departure });
-            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip) == 2,
+            ok &= Check(b.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 2,
                 "recompute counts only in-flight ShipTransport orders and drops stale values");
-            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip) == 0, "other planets are reset to 0");
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 0, "other planets are reset to 0");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;
@@ -852,7 +860,7 @@ public static class ShipTransportSelfCheck
             // Deficit counts my docked ships and incoming ships at the target.
             ok &= Check(assault.Deficit(e) == 6, "nothing committed yet: the deficit is the full 6");
             Dock(e, 2);
-            e.AddIncomingShips(Ship.ShipKind.WarShip, 1);
+            e.AddIncomingShips(Ship.ShipKind.WarShip, 0, 1);
             ok &= Check(assault.Deficit(e) == 3, "2 docked + 1 incoming leaves a deficit of 3");
             Dock(e, 3);
             ok &= Check(assault.Deficit(e) == 0, "5 docked + 1 incoming meets the force: deficit 0");
@@ -1000,6 +1008,148 @@ public static class ShipTransportSelfCheck
             playerAI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
             ok &= Check(!playerAI.PlanShipActions(0).Exists(a => a.Target == "E"),
                 "Expand never targets an enemy-occupied planet");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // Review fix 1: in-flight ships are counted per player, so an enemy fleet heading for its own
+    // planet is not mistaken for mine (sticky target, deficit) and mine does not under-fill its garrison.
+    public static bool RunIncomingPerPlayerCheck()
+    {
+        var ok = true;
+
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_IncomingPerPlayer");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            var e = map.GetPlanet("E");
+            e.AddIncomingShips(Ship.ShipKind.WarShip, 1, 4);
+            ok &= Check(e.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 4
+                        && e.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 0,
+                "incoming ships are counted per owning player");
+
+            var arrival = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                Data = 2, Origin = "B", Target = "E", PlayerId = 0,
+                Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                {
+                    Kind = Ship.ShipKind.WarShip,
+                    Snapshots = new List<List<string>> { new List<string>(), new List<string>() },
+                },
+            };
+            GameAI.ApplyShipTransferInProgress(e, arrival);
+            ok &= Check(e.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 2
+                        && e.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 4,
+                "my fleet's in-progress order raises only MY counter");
+            GameAI.ApplyShipArrival(e, arrival);
+            ok &= Check(e.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 0
+                        && e.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 4,
+                "my fleet's arrival lowers only MY counter");
+
+            map.RecomputeIncomingShips(new List<GameAI.GameAIOrder> { arrival });
+            ok &= Check(e.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 2
+                        && e.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 0,
+                "recompute after load keeps each order's ships under that order's player");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // Two enemy planets off B; enemy ships heading for the dearer one must not make it my sticky target.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_EnemyIncomingTarget");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "E1", "E2" }),
+                MakeSpawn("E1", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("E2", Planet.PlanetType.PlanetTypeNormal));
+            Colonize(map, "A"); var b = Colonize(map, "B");
+            var e1 = Colonize(map, "E1", 1); var e2 = Colonize(map, "E2", 1);
+            Dock(b, 2);
+            e2.AddIncomingShips(Ship.ShipKind.WarShip, 1, 4);
+            map.Knowledge.Update(map, numPlayers: 2);
+            var assault = new AssaultPlanner(map, 0);
+            ok &= Check(assault.ChooseTarget() == e1,
+                "enemy ships in flight to E2 do not make E2 my sticky target: cheapest E1 still wins");
+            ok &= Check(assault.Deficit(e2) == assault.RequiredForce(),
+                "enemy ships in flight do not reduce MY deficit");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // Review fix 2: a planet I hold with a few enemy colonists is not an enemy planet to attack;
+    // otherwise my own garrison there makes it the sticky target and the assault never leaves home.
+    public static bool RunAssaultTargetExcludesOwnPlanetsCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_MixedOwnPlanet");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            var b = map.GetPlanet("B");
+            b.Population.Add(new Planet.Inhabitant { Player = 1 });   // B is mine (Owner 0) but has an enemy colonist
+            Dock(b, 6);
+            map.Knowledge.Update(map, numPlayers: 2);
+
+            var assault = new AssaultPlanner(map, 0);
+            ok &= Check(assault.ChooseTarget() == map.GetPlanet("E"),
+                "the target is the enemy-held E, not my own mixed planet B holding my 6-ship garrison");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // Review fix 3: two fleets leaving one planet in the same turn (home defence + assault) must carry
+    // disjoint ships' research snapshots, matching the ships each departure order actually undocks.
+    public static bool RunSameOriginSnapshotCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("STSelfCheckMap_SameOrigin");
+        var playerGo = new GameObject("STSelfCheckPlayer_SameOrigin");
+        try
+        {
+            var map = BuildAssaultLine(mapGo);
+            Dock(map.GetPlanet("E"), 4, owner: 1);
+            Dock(map.GetPlanet("B"), 3);
+            var a = map.GetPlanet("A");
+            for (var i = 1; i <= 9; i++)
+                a.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "s" + i });
+            map.Knowledge.Update(map, numPlayers: 2);
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+            playerAI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessShipActions(orders);
+
+            var fromA = orders.FindAll(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport && o.Origin == "A");
+            ok &= Check(fromA.Count == 2, "A sends two fleets in one turn (3 home to B, 6 to E)");
+
+            var seen = new HashSet<string>();
+            var total = 0;
+            var distinct = true;
+            foreach (var order in fromA)
+                foreach (var snapshot in order.Fleet.Snapshots)
+                {
+                    total++;
+                    if (!seen.Add(snapshot[0])) distinct = false;
+                }
+            ok &= Check(total == 9 && distinct,
+                "the two fleets carry 9 different ships' snapshots, none duplicated");
         }
         finally
         {

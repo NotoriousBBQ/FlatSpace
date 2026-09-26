@@ -33,6 +33,14 @@ namespace FlatSpace
                 => planet.Population.Exists(p => p.Player != _playerId);
 
             /// <summary>
+            /// A planet I colonize (same test as ShipTransportPlanner.IsColonized). It may still hold a few
+            /// enemy colonists, but it is home ground, not an assault target: my own garrison there would
+            /// otherwise make it the sticky target forever.
+            /// </summary>
+            public bool IsHeldByMe(Planet planet)
+                => planet.Owner == _playerId && planet.Population.Count > 0;
+
+            /// <summary>
             /// Enemy warships docked on planets THIS player knows. Ownerless ships (Owner &lt; 0) are not
             /// an enemy fleet, and unknown planets are outside the AI's view.
             /// </summary>
@@ -56,7 +64,7 @@ namespace FlatSpace
             /// <summary>Ships still needed at the target: required force minus my docked + incoming there.</summary>
             public int Deficit(Planet target)
                 => Math.Max(0, RequiredForce()
-                               - (CountWarships(target) + target.GetIncomingShips(Ship.ShipKind.WarShip)));
+                               - (CountWarships(target) + target.GetIncomingShips(Ship.ShipKind.WarShip, _playerId)));
 
             // Mirrors ShipTransportPlanner.IsUsablePath: FindPath returns a 1-node zero-cost "path"
             // (it does not throw) when no route exists, so NumNodes < 2 means unreachable.
@@ -93,9 +101,9 @@ namespace FlatSpace
                 foreach (var name in _map.Knowledge.KnownPlanets(_playerId).OrderBy(n => n, StringComparer.Ordinal))
                 {
                     var planet = _map.GetPlanet(name);
-                    if (planet == null || !IsEnemyOccupied(planet)) continue;
+                    if (planet == null || !IsEnemyOccupied(planet) || IsHeldByMe(planet)) continue;
 
-                    var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip);
+                    var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId);
                     // Ships already committed make a target valid without needing another holder to path from.
                     var cost = own > 0 ? 0f : CheapestPathCost(holders, planet);
                     if (cost == null) continue;

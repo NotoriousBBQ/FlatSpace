@@ -245,7 +245,7 @@ namespace FlatSpace
                     var target = GetPlanet(order.Target);
                     if (target == null) continue;
                     var kind = order.Fleet != null ? order.Fleet.Kind : Ship.ShipKind.WarShip;
-                    target.AddIncomingShips(kind, System.Convert.ToInt32(order.Data));
+                    target.AddIncomingShips(kind, order.PlayerId, System.Convert.ToInt32(order.Data));
                 }
             }
 
