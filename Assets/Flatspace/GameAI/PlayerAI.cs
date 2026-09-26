@@ -547,13 +547,19 @@ namespace FlatSpace
             }
 
             /// <summary>
-            /// 1 + boost x (shortfall / wanted), where shortfall = max(0, wanted - have). 1 when nothing
-            /// is wanted or the fleet has met it, so the table weight alone applies then.
+            /// Below the wanted fleet: 1 + boost x (shortfall / wanted). From the wanted fleet up to
+            /// wanted x cap: tapers linearly from 1 to 0. At or beyond wanted x cap: 0. 1 when nothing
+            /// is wanted (no basis to shut warships off). A cap at or below 1 cuts off as soon as the
+            /// wanted fleet is met (capFleet then never exceeds wanted, so there is no divide by zero).
             /// </summary>
-            public static float WarshipShortfallMultiplier(int wanted, int have, float boost)
+            public static float WarshipShortfallMultiplier(int wanted, int have, float boost, float cap)
             {
-                if (wanted <= 0 || have >= wanted) return 1f;
-                return 1f + boost * (wanted - have) / wanted;
+                if (wanted <= 0) return 1f;
+                if (have < wanted) return 1f + boost * (wanted - have) / wanted;
+
+                var capFleet = wanted * cap;
+                if (have >= capFleet) return 0f;
+                return 1f - (have - wanted) / (capFleet - wanted);
             }
 
             /// <summary>
@@ -580,7 +586,7 @@ namespace FlatSpace
             {
                 if (strategy != AIStrategy.AIStrategyConsolidate) return 1f;
                 return WarshipShortfallMultiplier(WantedWarships(), OwnedWarships(),
-                    AIMap.GameAIConstants.warshipShortfallBoost);
+                    AIMap.GameAIConstants.warshipShortfallBoost, AIMap.GameAIConstants.warshipFleetCap);
             }
 
             private float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
@@ -661,15 +667,30 @@ namespace FlatSpace
                     (new ScoreMatrixMultipleDecisionComparer());
 
                 // Once per turn, not per choice: it reads every planet.
-                var warshipMultiplier = ComputeWarshipMultiplier(strategy);
+                var warshipMultiplier = 1f;
+                if (strategy == AIStrategy.AIStrategyConsolidate)
+                {
+                    var wanted = WantedWarships();
+                    var have = OwnedWarships();
+                    warshipMultiplier = WarshipShortfallMultiplier(wanted, have,
+                        AIMap.GameAIConstants.warshipShortfallBoost, AIMap.GameAIConstants.warshipFleetCap);
+                    AITuningLogger.LogWarshipBoost(
+                        Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
+                        Player.playerID, wanted, have, warshipMultiplier);
+                }
+                
+                // A zero weight does not remove a choice (all-zero rows are picked uniformly, and weights
+                // are relative), so once the fleet is at the cap Warship is not offered at all.
+                var warshipExcluded = strategy == AIStrategy.AIStrategyConsolidate && warshipMultiplier <= 0f;
 
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
                 {
                     var planetResults = productionCompleteResults.FindAll(x => x.Name == planetName);
                     var planet = AIMap.GetPlanet(planetName);
-                    var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true 
-                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name)) );
+                    var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true
+                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name))
+                        && !(warshipExcluded && x.subType == "Warship"));
 
                     var planetSurplus = surplusResults.FindIndex(x => x.Name == planetName) == -1
                         ? 0f

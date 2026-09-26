@@ -143,6 +143,13 @@ public static class AITuningLogger
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "AssaultTarget", target, requiredForce.ToString()) });
     }
+    public static void LogWarshipBoost(int turnNumber, int playerId, int wanted, int have, float multiplier)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "WarshipBoost",
+            wanted.ToString(), have.ToString(),
+            multiplier.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
 
     private static string FormatLine(int turnNumber, int playerId, string eventCode, params string[] fields)
     {

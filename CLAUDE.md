@@ -311,8 +311,14 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   x shortfall / wanted)`, computed once per turn in `BuildIndustryMatrix` (`PlayerAI.ComputeWarshipMultiplier`).
   Wanted = round-1 garrisons of outer planets + the assault's required force whenever a known enemy planet
   exists (`AssaultPlanner.HasKnownEnemyPlanet`, not `ChooseTarget`, which is null while I hold no warships);
-  have = my docked warships + my own in-flight ships. The multiplier is 1 once met, and ships still in
-  production are not counted, so several planets finishing on the same turn can slightly over-build.
+  have = my docked warships + my own in-flight ships. The multiplier is 1 exactly at the wanted fleet, then
+  tapers linearly to 0 at `wanted x warshipFleetCap` (default 1.5), and from there `BuildIndustryMatrix`
+  removes Warship from every planet's choices entirely: `ScoreMatrix.WeightedPick` treats weights as relative
+  and picks uniformly when every weight is 0, so a zero weight alone does not stop warship production (in a
+  long test run the one-time improvements ran out and warships flooded the queue). A planet left with no
+  choices starts nothing that turn. Nothing wanted (`wanted <= 0`) means no taper. Ships still in production
+  are not counted, so several planets finishing on the same turn can slightly over-build. The
+  `WarshipBoost|wanted|have|multiplier` tuning-log line shows the multiplier each production turn.
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
 
@@ -322,7 +328,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`) for
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own

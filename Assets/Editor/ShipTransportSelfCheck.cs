@@ -60,6 +60,7 @@ public static class ShipTransportSelfCheck
         c.assaultRatio = 1.5f;
         c.assaultMinimumShips = 3;
         c.warshipShortfallBoost = 2f;
+        c.warshipFleetCap = 1.5f;
         return c;
     }
 
@@ -1178,16 +1179,28 @@ public static class ShipTransportSelfCheck
     {
         var ok = true;
 
-        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 0, 2f) == 3f,
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 0, 2f, 1.5f) == 3f,
             "an empty fleet gets the full boost: 1 + 2 x 12/12 = 3");
-        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 6, 2f) == 2f,
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 6, 2f, 1.5f) == 2f,
             "half the wanted fleet gets half the boost");
-        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 12, 2f) == 1f
-                    && PlayerAI.WarshipShortfallMultiplier(12, 20, 2f) == 1f,
-            "a met or exceeded fleet gets no boost");
-        ok &= Check(PlayerAI.WarshipShortfallMultiplier(0, 0, 2f) == 1f,
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 12, 2f, 1.5f) == 1f,
+            "a fleet that exactly meets what is wanted gets a plain multiplier of 1");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(0, 0, 2f, 1.5f) == 1f,
             "nothing wanted: no boost, and no divide by zero");
-        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 0, 0f) == 1f, "a boost of 0 disables it");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 0, 0f, 1.5f) == 1f, "a boost of 0 disables it");
+
+        // Surplus: the multiplier tapers 1 -> 0 between wanted and wanted x cap (12 -> 18), then stays 0.
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 15, 2f, 1.5f) == 0.5f,
+            "halfway between wanted (12) and the cap (18): multiplier 0.5");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 18, 2f, 1.5f) == 0f,
+            "a fleet at the cap gets 0");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 30, 2f, 1.5f) == 0f,
+            "a fleet far beyond the cap stays at 0, never negative");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(0, 50, 2f, 1.5f) == 1f,
+            "nothing wanted: no basis to shut warships off, so no taper either");
+        ok &= Check(PlayerAI.WarshipShortfallMultiplier(12, 12, 2f, 1f) == 0f
+                    && PlayerAI.WarshipShortfallMultiplier(12, 11, 2f, 1f) > 1f,
+            "a cap of 1 cuts off as soon as the wanted fleet is met, without dividing by zero");
 
         var item = ScriptableObject.CreateInstance<Flatspace.Objects.Production.CatalogItem>();
         try
@@ -1225,9 +1238,15 @@ public static class ShipTransportSelfCheck
 
             Dock(b, 6);
             ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 1f,
-                "12 of 12 wanted: no boost");
+                "12 of 12 wanted: multiplier 1");
+            Dock(b, 3);
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 0.5f,
+                "15 of 12 wanted with a cap of 1.5: halfway through the taper");
+            Dock(b, 3);
+            ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 0f,
+                "18 of 12 wanted: at the cap, warship production is cut off");
             ok &= Check(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyExpand) == 1f,
-                "Expand never gets the shortfall boost");
+                "Expand never gets the shortfall boost or the surplus cutoff");
         }
         finally
         {
