@@ -21,6 +21,7 @@ public static class ShipTransportSelfCheck
         ok &= RunPlayerAIShipOrdersCheck();
         ok &= RunConsolidatePlannerChecks();
         ok &= RunAssaultChecks();
+        ok &= RunConsolidatePlanShipActionsCheck();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -967,6 +968,44 @@ public static class ShipTransportSelfCheck
                 "the assault gets only A's remaining 6 (9 - 3), never the ships home defence claimed");
         }
         finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunConsolidatePlanShipActionsCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("STSelfCheckMap_PlanShipActions");
+        var playerGo = new GameObject("STSelfCheckPlayer_PlanShipActions");
+        try
+        {
+            var map = BuildAssaultLine(mapGo);
+            Dock(map.GetPlanet("E"), 4, owner: 1);
+            Dock(map.GetPlanet("B"), 10); Dock(map.GetPlanet("A"), 5);
+            map.Knowledge.Update(map, numPlayers: 2);
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            playerAI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            var actions = playerAI.PlanShipActions(0);
+            ok &= Check(actions.Count == 2
+                        && actions.Exists(a => a.Origin == "B" && a.Target == "E" && a.Count == 4)
+                        && actions.Exists(a => a.Origin == "A" && a.Target == "E" && a.Count == 2),
+                "Consolidate: PlanShipActions sends the assault force to the enemy planet E");
+
+            playerAI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+            ok &= Check(!playerAI.PlanShipActions(0).Exists(a => a.Target == "E"),
+                "Expand never targets an enemy-occupied planet");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
         return ok;
     }
 }

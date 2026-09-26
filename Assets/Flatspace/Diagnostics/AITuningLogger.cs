@@ -138,6 +138,12 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "StrategyChange", from, to) });
     }
 
+    public static void LogAssaultTarget(int turnNumber, int playerId, string target, int requiredForce)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "AssaultTarget", target, requiredForce.ToString()) });
+    }
+
     private static string FormatLine(int turnNumber, int playerId, string eventCode, params string[] fields)
     {
         var parts = new List<string> { $"T{turnNumber}", $"P{playerId}", eventCode };

@@ -680,14 +680,44 @@ namespace FlatSpace
             // ── Ship transport ───────────────────────────────────────────────
 
             /// <summary>
-            /// Moves spare warships toward planets short of their garrison. The decision lives in
-            /// ShipTransportPlanner; this turns each resulting ShipAction into orders.
+            /// Moves warships. The decisions live in ShipTransportPlanner (home garrisons) and, under
+            /// Consolidate, AssaultPlanner; this turns each resulting ShipAction into orders.
             /// </summary>
             public void ProcessShipActions(List<GameAI.GameAIOrder> orders)
             {
-                var planner = new ShipTransportPlanner(AIMap, Player.playerID);
-                foreach (var action in planner.Plan())
+                // Self-checks call this with no Gameboard in the scene.
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                foreach (var action in PlanShipActions(turn))
                     EmitShipOrders(action, orders);
+            }
+
+            private string _lastLoggedAssaultTarget;
+
+            /// <summary>
+            /// Expand: the home garrison plan, unchanged. Consolidate: choose the assault target, plan
+            /// home defence with those ships held out, then send whatever is still spare to the target.
+            /// Public (and free of Gameboard.Instance) so the self-check can drive it directly.
+            /// </summary>
+            public List<ShipAction> PlanShipActions(int turnNumber)
+            {
+                if (Strategy != AIStrategy.AIStrategyConsolidate)
+                    return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
+
+                var assault = new AssaultPlanner(AIMap, Player.playerID);
+                var target = assault.ChooseTarget();
+
+                var targetName = target?.PlanetName;
+                if (targetName != null && targetName != _lastLoggedAssaultTarget)
+                    AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
+                _lastLoggedAssaultTarget = targetName;
+
+                var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
+                {
+                    HeldPlanet = targetName,
+                };
+                var actions = transport.Plan();
+                actions.AddRange(assault.Plan(target, transport.LastStates, actions));
+                return actions;
             }
 
             /// <summary>
