@@ -19,6 +19,7 @@ public static class ShipTransportSelfCheck
         ok &= RunOrderExecutionCheck();
         ok &= RunFleetSaveCheck();
         ok &= RunPlayerAIShipOrdersCheck();
+        ok &= RunConsolidatePlannerChecks();
         Debug.Log(ok
             ? "[ShipTransportSelfCheck] ALL PASSED"
             : "[ShipTransportSelfCheck] FAILURES (see errors above)");
@@ -648,6 +649,159 @@ public static class ShipTransportSelfCheck
         IScoreMatrixChoiceElement iface = a;
         ok &= Check(iface.Cost == 100f && iface.Surplus == 3f && iface.Shortage == 4f,
             "interface Cost/Surplus/Shortage map to PathCost/SpareShips/Deficit");
+        return ok;
+    }
+
+    private static ShipTransportPlanner ConsolidatePlanner(GameAIMap map, string heldPlanet = null)
+        => new ShipTransportPlanner(map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate) { HeldPlanet = heldPlanet };
+
+    public static bool RunConsolidatePlannerChecks()
+    {
+        var ok = RunSharedOuterDefinitionCheck();
+        ok &= RunConsolidateRolesCheck();
+        ok &= RunConsolidateRankCheck();
+        ok &= RunHeldPlanetCheck();
+        return ok;
+    }
+
+    private static bool RunSharedOuterDefinitionCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_SharedOuter");
+        try
+        {
+            // A0 - A1 - E: A0 and A1 are player 0's, E is player 1's.
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A0", Planet.PlanetType.PlanetTypeNormal, new[] { "A1" }),
+                MakeSpawn("A1", Planet.PlanetType.PlanetTypeNormal, new[] { "E" }),
+                MakeSpawn("E", Planet.PlanetType.PlanetTypeNormal));
+            var a0 = Colonize(map, "A0"); var a1 = Colonize(map, "A1");
+            var e = Colonize(map, "E", 1);
+            var planner = new ShipTransportPlanner(map, 0);
+
+            ok &= Check(!planner.IsOuter(a0), "A0's only neighbour is its own colony: not outer");
+            ok &= Check(planner.IsOuter(a1), "A1 borders an enemy-held planet: outer (a neighbour not colonized by me)");
+
+            e.Owner = Planet.NoOwner;   // contested / tied: still not colonized by me
+            ok &= Check(planner.IsOuter(a1), "a contested (ownerless) neighbour also makes A1 outer");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunConsolidateRolesCheck()
+    {
+        var ok = true;
+
+        // I(Farm) - O(Normal) - U(empty): O is outer, I is interior.
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_ConsolidateRoles");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("I", Planet.PlanetType.PlanetTypeFarm, new[] { "O" }),
+                MakeSpawn("O", Planet.PlanetType.PlanetTypeNormal, new[] { "U" }),
+                MakeSpawn("U", Planet.PlanetType.PlanetTypeNormal));
+            var i = Colonize(map, "I"); var o = Colonize(map, "O");
+            Dock(o, 12); Dock(i, 5);
+
+            var consolidate = ConsolidatePlanner(map);
+            var states = consolidate.BuildStates();
+            ok &= Check(consolidate.LastRound == 1, "Consolidate: the round is fixed at 1");
+            var oState = states.Find(s => s.Planet == o);
+            ok &= Check(oState.Garrison == 6 && oState.RoundGarrison == 6 && oState.Spare == 6,
+                "Consolidate: outer O keeps a round-1 garrison of 6 and 12 docked leaves 6 spare");
+            var iState = states.Find(s => s.Planet == i);
+            ok &= Check(iState.Garrison == 0 && iState.Category == ShipTransportPlanner.NoCategory && iState.Spare == 5,
+                "Consolidate: interior I keeps no garrison, so all 5 of its ships are spare");
+
+            var expand = new ShipTransportPlanner(map, 0);
+            var expandStates = expand.BuildStates();
+            ok &= Check(expand.LastRound == 2 && expandStates.Find(s => s.Planet == i).Garrison == 4,
+                "Expand is unchanged: round 2 and I still garrisons 4");
+        }
+        finally { Object.DestroyImmediate(go); }
+
+        // V(Verdant) - O - U: a category-5-only planet is locked under Expand but is a spare-only source under Consolidate.
+        _nextPlanetX = 0f;
+        go = new GameObject("STSelfCheckMap_ConsolidateLocked");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("V", Planet.PlanetType.PlanetTypeVerdant, new[] { "O" }),
+                MakeSpawn("O", Planet.PlanetType.PlanetTypeNormal, new[] { "U" }),
+                MakeSpawn("U", Planet.PlanetType.PlanetTypeNormal));
+            var v = Colonize(map, "V"); Colonize(map, "O");
+            Dock(v, 3);   // 3 warships < 2 x 2 colonized planets, so V is locked under Expand
+
+            ok &= Check(!new ShipTransportPlanner(map, 0).BuildStates().Exists(s => s.Planet == v),
+                "Expand: a locked category-5-only planet is left out");
+            var vState = ConsolidatePlanner(map).BuildStates().Find(s => s.Planet == v);
+            ok &= Check(vState != null && vState.Spare == 3,
+                "Consolidate: the same planet is included and all 3 of its ships are spare");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunConsolidateRankCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Rank");
+        try
+        {
+            // F(Farm, outer via W) - O(Normal, outer via U) - I(Desert, interior).
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("F", Planet.PlanetType.PlanetTypeFarm, new[] { "W", "O" }),
+                MakeSpawn("O", Planet.PlanetType.PlanetTypeNormal, new[] { "U", "I" }),
+                MakeSpawn("I", Planet.PlanetType.PlanetTypeDesert),
+                MakeSpawn("U", Planet.PlanetType.PlanetTypeNormal),
+                MakeSpawn("W", Planet.PlanetType.PlanetTypeNormal));
+            var f = Colonize(map, "F"); var o = Colonize(map, "O"); var i = Colonize(map, "I");
+
+            var expand = new ShipTransportPlanner(map, 0);
+            ok &= Check(expand.TargetRank(f) == 1 && expand.TargetRank(o) == 2 && expand.TargetRank(i) == 1,
+                "Expand: rank equals category (interior Desert is not pushed behind outer Normal)");
+
+            var consolidate = ConsolidatePlanner(map);
+            ok &= Check(consolidate.TargetRank(f) == 1 && consolidate.TargetRank(o) == 2,
+                "Consolidate: outer planets keep their category order (Farm before Normal)");
+            ok &= Check(consolidate.TargetRank(i) == 101 && consolidate.TargetRank(i) > consolidate.TargetRank(o),
+                "Consolidate: an interior planet ranks behind every outer planet");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    private static bool RunHeldPlanetCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_Held");
+        try
+        {
+            // O(mine, outer because of E) - E(enemy). 3 of my warships sit on E; O is 4 short.
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("O", Planet.PlanetType.PlanetTypeNormal, new[] { "E" }),
+                MakeSpawn("E", Planet.PlanetType.PlanetTypeNormal));
+            var o = Colonize(map, "O"); var e = Colonize(map, "E", 1);
+            Dock(o, 2); Dock(e, 3);
+
+            var free = ConsolidatePlanner(map);
+            ok &= Check(free.BuildStates().Exists(s => s.Planet == e && s.Spare == 3),
+                "without a held planet, ships on an enemy planet are stranded (all spare)");
+            ok &= Check(free.Plan().Exists(a => a.Origin == "E" && a.Target == "O" && a.Count == 3),
+                "and would be sent home to fill O's garrison");
+
+            var held = ConsolidatePlanner(map, "E");
+            ok &= Check(!held.BuildStates().Exists(s => s.Planet == e),
+                "with E held, its ships are not a state at all");
+            ok &= Check(!held.Plan().Exists(a => a.Origin == "E"),
+                "and the home plan never moves them");
+        }
+        finally { Object.DestroyImmediate(go); }
         return ok;
     }
 }

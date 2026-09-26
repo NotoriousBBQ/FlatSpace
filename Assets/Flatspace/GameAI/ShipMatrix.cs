@@ -13,6 +13,7 @@ public struct ShipChoiceElement : IScoreMatrixChoiceElement
 {
     public string TargetPlanet { get; set; }
     public int    Category     { get; set; }   // 1 (best) .. 5; int.MaxValue = none
+    public int    Rank         { get; set; }   // sort key, lower first; equals Category except under Consolidate
     public float  PathCost     { get; set; }
     public float  SpareShips   { get; set; }   // ships the source can spare
     public float  Deficit      { get; set; }   // ships the target still needs

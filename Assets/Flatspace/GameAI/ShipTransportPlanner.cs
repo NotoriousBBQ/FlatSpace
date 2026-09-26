@@ -19,12 +19,21 @@ namespace FlatSpace
             private readonly GameAIMap _map;
             private readonly int _playerId;
             private readonly GameAIConstants _constants;
+            private readonly PlayerAI.AIStrategy _strategy;
 
-            public ShipTransportPlanner(GameAIMap map, int playerId)
+            /// <summary>
+            /// Under Consolidate: the assault target. Warships docked there are the assault force, so
+            /// they are not "stranded" (neither sources nor targets of the home plan).
+            /// </summary>
+            public string HeldPlanet { get; set; }
+
+            public ShipTransportPlanner(GameAIMap map, int playerId,
+                PlayerAI.AIStrategy strategy = PlayerAI.AIStrategy.AIStrategyExpand)
             {
                 _map = map;
                 _playerId = playerId;
                 _constants = map.GameAIConstants;
+                _strategy = strategy;
             }
 
             // ── Categories and garrisons ─────────────────────────────────────
@@ -32,17 +41,26 @@ namespace FlatSpace
             public bool IsColonized(Planet planet)
                 => planet.Owner == _playerId && planet.Population.Count > 0;
 
-            // Colonized by this player with at least one uncolonized (no population) neighbour.
+            // Colonized by this player with at least one neighbour that is not colonized by this
+            // player (empty, enemy-held, or contested).
             public bool IsOuter(Planet planet)
             {
                 if (!IsColonized(planet)) return false;
                 foreach (var name in _map.GetNeighbours(planet.PlanetName))
                 {
                     var neighbour = _map.GetPlanet(name);
-                    if (neighbour != null && neighbour.Population.Count == 0) return true;
+                    if (neighbour != null && !IsColonized(neighbour)) return true;
                 }
                 return false;
             }
+
+            /// <summary>
+            /// The seam for garrison policy: does this colonized planet hold a garrison? Every planet
+            /// does under Expand; under Consolidate only outer planets do, so every ship elsewhere is
+            /// spare. To garrison non-outer planets under Consolidate later, change this one method.
+            /// </summary>
+            public bool MaintainsGarrison(Planet planet)
+                => _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate || IsOuter(planet);
 
             /// <summary>Every category (1..5) that applies to the planet.</summary>
             public List<int> ApplicableCategories(Planet planet)
@@ -74,6 +92,18 @@ namespace FlatSpace
                 return categories.Count == 0 ? NoCategory : categories.Min();
             }
 
+            /// <summary>
+            /// Sort key for target choices (lower first). Expand: the category. Consolidate: outer
+            /// planets first (0 + category), everything else behind them (100 + category).
+            /// </summary>
+            public int TargetRank(Planet planet)
+            {
+                var category = Category(planet);
+                if (category == NoCategory || _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate)
+                    return category;
+                return (IsOuter(planet) ? 0 : 100) + category;
+            }
+
             /// <summary>Base garrison: the largest garrison among applicable categories; 0 if none.</summary>
             public int Garrison(Planet planet) => GarrisonOf(ApplicableCategories(planet));
 
@@ -99,6 +129,7 @@ namespace FlatSpace
             {
                 public Planet Planet;
                 public int Category;
+                public int Rank;            // sort key, see TargetRank
                 public int Garrison;        // base garrison
                 public int Docked;
                 public int Incoming;
@@ -109,6 +140,9 @@ namespace FlatSpace
 
             /// <summary>Current garrison round set by the last BuildStates call.</summary>
             public int LastRound { get; private set; } = 1;
+
+            /// <summary>The states built by the last BuildStates/Plan call.</summary>
+            public List<PlanetState> LastStates { get; private set; } = new List<PlanetState>();
 
             public int CountWarships(Planet planet)
                 => planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == _playerId);
@@ -122,7 +156,10 @@ namespace FlatSpace
                 var colonized = _map.PlanetList.Where(IsColonized).ToList();
                 // Planets the player holds ships on but no longer has colonized (ownership can flip
                 // while a fleet is in flight): they are source-only so those ships are not stranded.
-                var stranded = _map.PlanetList.Where(p => !IsColonized(p) && CountWarships(p) > 0).ToList();
+                // The held (assault target) planet is excluded: those ships are the assault force.
+                var stranded = _map.PlanetList
+                    .Where(p => !IsColonized(p) && p.PlanetName != HeldPlanet && CountWarships(p) > 0)
+                    .ToList();
                 // Ships in flight still belong to the player, so they count toward the unlock total.
                 var totalWarships = colonized.Concat(stranded)
                     .Sum(p => CountWarships(p) + p.GetIncomingShips(Ship.ShipKind.WarShip));
@@ -136,6 +173,7 @@ namespace FlatSpace
                     {
                         Planet   = planet,
                         Category = NoCategory,
+                        Rank     = NoCategory,
                         Garrison = 0,
                         Docked   = CountWarships(planet),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
@@ -143,20 +181,37 @@ namespace FlatSpace
                 }
                 foreach (var planet in colonized)
                 {
+                    if (!MaintainsGarrison(planet))
+                    {
+                        // Spare-only: no garrison, no category, every ship here is available.
+                        states.Add(new PlanetState
+                        {
+                            Planet   = planet,
+                            Category = NoCategory,
+                            Rank     = NoCategory,
+                            Garrison = 0,
+                            Docked   = CountWarships(planet),
+                            Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
+                        });
+                        continue;
+                    }
+
                     var categories = ApplicableCategories(planet);
                     if (!category5Unlocked && categories.Count == 1 && categories[0] == 5) continue;
                     states.Add(new PlanetState
                     {
                         Planet   = planet,
                         Category = categories.Count == 0 ? NoCategory : categories.Min(),
+                        Rank     = TargetRank(planet),
                         Garrison = GarrisonOf(categories),
                         Docked   = CountWarships(planet),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip),
                     });
                 }
 
-                LastRound = ComputeRound(states);
+                LastRound = _strategy == PlayerAI.AIStrategy.AIStrategyConsolidate ? 1 : ComputeRound(states);
                 foreach (var state in states) state.RoundGarrison = state.Garrison * LastRound;
+                LastStates = states;
                 return states;
             }
 
@@ -219,7 +274,8 @@ namespace FlatSpace
                         {
                             TargetPlanet = t.Planet.PlanetName,
                             Category     = t.Category,
-                            PathCost     = paths[t.Planet.PlanetName].Cost,
+                            Rank         = t.Rank,
+                            PathCost    = paths[t.Planet.PlanetName].Cost,
                             SpareShips   = source.Spare,
                             Deficit      = t.Deficit,
                         })
@@ -256,8 +312,8 @@ namespace FlatSpace
 
             private static int CompareChoices(ShipChoiceElement a, ShipChoiceElement b)
             {
-                var byCategory = a.Category.CompareTo(b.Category);
-                if (byCategory != 0) return byCategory;
+                var byRank = a.Rank.CompareTo(b.Rank);
+                if (byRank != 0) return byRank;
                 var byCost = a.PathCost.CompareTo(b.PathCost);
                 return byCost != 0 ? byCost : string.CompareOrdinal(a.TargetPlanet, b.TargetPlanet);
             }
