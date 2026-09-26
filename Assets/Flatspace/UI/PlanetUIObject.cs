@@ -216,6 +216,21 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         view.Sprite = spriteObject.AddComponent<Image>();
         view.Sprite.raycastTarget = true;
 
+        // Dark strip along the bottom edge so the white count stays readable on any player color.
+        // (Not a TMP outline: setting outlineWidth needs a font material, which does not exist yet
+        // while this icon is created under an inactive parent.)
+        var plateObject = new GameObject("FleetIconCountPlate");
+        plateObject.transform.SetParent(iconObject.transform, false);
+        var plateRect = plateObject.AddComponent<RectTransform>();
+        plateRect.anchorMin = Vector2.zero;
+        plateRect.anchorMax = new Vector2(1f, 0f);
+        plateRect.pivot = new Vector2(0.5f, 0f);
+        plateRect.sizeDelta = new Vector2(0f, 14f);
+        plateRect.anchoredPosition = Vector2.zero;
+        var plate = plateObject.AddComponent<Image>();
+        plate.color = new Color(0f, 0f, 0f, 0.6f);
+        plate.raycastTarget = false;
+
         var countObject = new GameObject("FleetIconCount");
         countObject.transform.SetParent(iconObject.transform, false);
         var countRect = countObject.AddComponent<RectTransform>();
@@ -224,7 +239,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         countRect.sizeDelta = Vector2.zero;
         view.Count = countObject.AddComponent<TextMeshProUGUI>();
         view.Count.raycastTarget = false;
-        view.Count.fontSize = 14;
+        view.Count.fontSize = 12;
         view.Count.fontStyle = FontStyles.Bold;
         view.Count.alignment = TextAlignmentOptions.BottomRight;
         view.Count.color = Color.white;

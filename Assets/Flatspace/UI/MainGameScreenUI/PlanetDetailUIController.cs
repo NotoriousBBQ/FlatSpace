@@ -119,6 +119,9 @@ public class PlanetDetailUIController : MonoBehaviour
         count.style.fontSize = 10;
         count.style.unityFontStyleAndWeight = FontStyle.Bold;
         count.style.color = new StyleColor(Color.white);
+        // Dark outline so the white number stays readable on any player color.
+        count.style.unityTextOutlineColor = new StyleColor(Color.black);
+        count.style.unityTextOutlineWidth = 1f;
         icon.Add(count);
 
         var owner = group.Owner;
