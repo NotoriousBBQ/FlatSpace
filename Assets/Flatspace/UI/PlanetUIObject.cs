@@ -153,7 +153,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         iconObject.transform.SetParent(_statsCanvas.transform, false);
         _fleetIconRect = iconObject.AddComponent<RectTransform>();
         _fleetIconRect.anchorMin = _fleetIconRect.anchorMax = _fleetIconRect.pivot = new Vector2(0.5f, 0.5f);
-        _fleetIconRect.sizeDelta = new Vector2(16, 16);
+        _fleetIconRect.sizeDelta = new Vector2(32, 32);
         _fleetIconRect.anchoredPosition = _fleetIconBaseAnchoredPosition;
 
         // Background: a plain square tinted with the owning player's color, filling the

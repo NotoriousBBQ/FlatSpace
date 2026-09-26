@@ -1,0 +1,130 @@
+{
+    "planetEntries": [
+        {
+            "name": "Industrial 0",
+            "planetType": 4,
+            "position": {
+                "x": 12.106413841247559,
+                "y": -307.71533203125
+            },
+            "connections": [
+                "Farm 0",
+                "Ocean 0"
+            ]
+        },
+        {
+            "name": "Desert 0",
+            "planetType": 7,
+            "position": {
+                "x": -78.4168472290039,
+                "y": 133.18191528320313
+            },
+            "connections": [
+                "Farm 1",
+                "Normal 1",
+                "Prime 1"
+            ]
+        },
+        {
+            "name": "Prime 0",
+            "planetType": 0,
+            "position": {
+                "x": 262.4353942871094,
+                "y": -304.1630859375
+            },
+            "connections": [
+                "Ocean 0"
+            ]
+        },
+        {
+            "name": "Farm 0",
+            "planetType": 2,
+            "position": {
+                "x": -236.97799682617188,
+                "y": -280.2863464355469
+            },
+            "connections": [
+                "Industrial 0",
+                "Ocean 0"
+            ]
+        },
+        {
+            "name": "Industrial 1",
+            "planetType": 4,
+            "position": {
+                "x": 15.313117027282715,
+                "y": 299.15277099609377
+            },
+            "connections": [
+                "Normal 0",
+                "Normal 1",
+                "Prime 1"
+            ]
+        },
+        {
+            "name": "Normal 0",
+            "planetType": 1,
+            "position": {
+                "x": 206.96511840820313,
+                "y": 185.5299835205078
+            },
+            "connections": [
+                "Farm 1",
+                "Industrial 1"
+            ]
+        },
+        {
+            "name": "Ocean 0",
+            "planetType": 6,
+            "position": {
+                "x": 79.64579772949219,
+                "y": -198.93685913085938
+            },
+            "connections": [
+                "Farm 0",
+                "Farm 1",
+                "Industrial 0",
+                "Prime 0"
+            ]
+        },
+        {
+            "name": "Farm 1",
+            "planetType": 2,
+            "position": {
+                "x": 0.9345492124557495,
+                "y": -29.61167335510254
+            },
+            "connections": [
+                "Desert 0",
+                "Normal 0",
+                "Normal 1",
+                "Ocean 0"
+            ]
+        },
+        {
+            "name": "Normal 1",
+            "planetType": 1,
+            "position": {
+                "x": -203.90684509277345,
+                "y": 94.52751159667969
+            },
+            "connections": [
+                "Desert 0",
+                "Farm 1",
+                "Industrial 1"
+            ]
+        },
+        {
+            "name": "Prime 1",
+            "planetType": 0,
+            "position": {
+                "x": -159.04339599609376,
+                "y": 280.4588317871094
+            },
+            "connections": [
+                "Desert 0",
+                "Industrial 1"
+            ]
+        }
+    ]
+}
