@@ -562,12 +562,13 @@ namespace FlatSpace
                 return _planetDetailUIController.enabled;
             }
 
-            public void ShowFleetUI(string planetName)
+            // Shows the fleet panel for one player's ships on the planet (the clicked fleet icon's owner).
+            public void ShowFleetUI(string planetName, int owner)
             {
                 if (!_fleetUIController) return;
                 _panelClickFrame = Time.frameCount;
                 HidePlanetDetail();
-                _fleetUIController.SetPlanet(GetPlanet(planetName));
+                _fleetUIController.SetPlanet(GetPlanet(planetName), owner);
                 _fleetUIController.enabled = true;
             }
 

@@ -43,7 +43,9 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `[MenuItem]` under `Assets/Editor/` (`FlatSpace → Fog → Run Self-Check` in `Assets/Editor/FogSelfCheck.cs`;
 `FlatSpace → AI → Run Player Knowledge Self-Check` in `Assets/Editor/PlayerKnowledgeSelfCheck.cs`;
 `FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`;
-`FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`) or
+`FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`;
+`FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
+the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
 adding a subsystem that needs regression coverage, extend or add one of these rather than reaching for
 a test framework that isn't set up. A self-check must never depend on `Gameboard.Instance` (build a

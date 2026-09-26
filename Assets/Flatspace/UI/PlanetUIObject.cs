@@ -17,10 +17,24 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     [SerializeField] public TextMeshProUGUI _grotsitsTextField;
     [SerializeField] public TextMeshProUGUI _moraleTextField;
     [SerializeField] public Canvas _statsCanvas;
+    // Container for the per-player fleet icons: carries the shared position and zoom scale
+    // (UIUpdateForScroll) and no Graphic of its own. Its children are the icons.
     private RectTransform _fleetIconRect;
-    private Image _fleetIconBackgroundImage;
-    private Image _fleetIconImage;
     private readonly Vector2 _fleetIconBaseAnchoredPosition = new Vector2(40, -40);
+    private const float FleetIconSize = 32f;
+    private const float FleetIconSpacing = 4f;
+
+    // One icon per player with ships here, side by side; the first sits at the base position and
+    // the rest extend to its right. Created on demand and reused (deactivated when not needed).
+    private class FleetIconView
+    {
+        public RectTransform Rect;
+        public Image Background;
+        public Image Sprite;
+        public TextMeshProUGUI Count;
+        public int Owner;
+    }
+    private readonly List<FleetIconView> _fleetIcons = new List<FleetIconView>();
     public string _planetName;
     public bool _changeColor = false;
     private Color _fogBasePlanetColor = Color.white;
@@ -49,18 +63,27 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         SetOwnerColor(planet.Owner);
         if (_fleetIconRect)
         {
-            if (planet.DockedShips.Count > 0)
+            var groups = FleetSummary.ForPlanet(planet);
+            while (_fleetIcons.Count < groups.Count) _fleetIcons.Add(CreateFleetIconView());
+            for (var i = 0; i < _fleetIcons.Count; i++)
             {
-                _fleetIconImage.sprite = planet.HasDockedShip(Ship.ShipKind.WarShip) ?
-                    planet.GameAIConstants.warShipData.shipIcon : planet.GameAIConstants.colonyShipData.shipIcon;
-                _fleetIconBackgroundImage.color = planet.Owner == Planet.NoOwner
-                    ? Player.NoPlayerColor : Player.PlayerColors[planet.Owner];
-                _fleetIconRect.gameObject.SetActive(true);
+                var view = _fleetIcons[i];
+                if (i >= groups.Count)
+                {
+                    view.Rect.gameObject.SetActive(false);
+                    continue;
+                }
+                var group = groups[i];
+                view.Owner = group.Owner;
+                view.Sprite.sprite = group.IconKind == Ship.ShipKind.WarShip
+                    ? planet.GameAIConstants.warShipData.shipIcon
+                    : planet.GameAIConstants.colonyShipData.shipIcon;
+                view.Background.color = FleetSummary.ColorFor(group.Owner);
+                view.Count.text = group.Count.ToString();
+                view.Rect.anchoredPosition = new Vector2(i * (FleetIconSize + FleetIconSpacing), 0f);
+                view.Rect.gameObject.SetActive(true);
             }
-            else
-            {
-                _fleetIconRect.gameObject.SetActive(false);
-            }
+            _fleetIconRect.gameObject.SetActive(groups.Count > 0);
         }
     }
 
@@ -127,19 +150,22 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        // The fleet icon is a child graphic on the same world-space canvas, so whether the raw
-        // click is picked up by the planet's collider (Physics2DRaycaster) or by the icon's
+        // The fleet icons are child graphics on the same world-space canvas, so whether the raw
+        // click is picked up by the planet's collider (Physics2DRaycaster) or by an icon's
         // Image (GraphicRaycaster) depends on sorting order -- the bubbled click ends here
-        // either way. Disambiguate against the icon's live screen rect so it works regardless
-        // of zoom level or which raycaster won.
+        // either way. Disambiguate against each icon's live screen rect so it works regardless
+        // of zoom level or which raycaster won; the icon clicked decides whose fleet opens.
         if (_fleetIconRect && _fleetIconRect.gameObject.activeSelf)
         {
             var iconCamera = _statsCanvas.worldCamera ? _statsCanvas.worldCamera : Camera.main;
-            if (RectTransformUtility.RectangleContainsScreenPoint(
-                    _fleetIconRect, eventData.position, iconCamera))
+            foreach (var view in _fleetIcons)
             {
-                Gameboard.Instance.ShowFleetUI(_planetName);
-                return;
+                if (!view.Rect.gameObject.activeSelf) continue;
+                if (RectTransformUtility.RectangleContainsScreenPoint(view.Rect, eventData.position, iconCamera))
+                {
+                    Gameboard.Instance.ShowFleetUI(_planetName, view.Owner);
+                    return;
+                }
             }
         }
         Gameboard.Instance.ShowPlanetDetail(_planetName);
@@ -153,31 +179,59 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         iconObject.transform.SetParent(_statsCanvas.transform, false);
         _fleetIconRect = iconObject.AddComponent<RectTransform>();
         _fleetIconRect.anchorMin = _fleetIconRect.anchorMax = _fleetIconRect.pivot = new Vector2(0.5f, 0.5f);
-        _fleetIconRect.sizeDelta = new Vector2(32, 32);
+        _fleetIconRect.sizeDelta = new Vector2(FleetIconSize, FleetIconSize);
         _fleetIconRect.anchoredPosition = _fleetIconBaseAnchoredPosition;
 
-        // Background: a plain square tinted with the owning player's color, filling the
-        // container. Added first so it renders behind the ship-kind sprite added below.
+        iconObject.SetActive(false);
+    }
+
+    // One player's fleet icon: a background square tinted with the ship owner's color, the
+    // ship-kind sprite over it, and the ship count in the bottom-right corner. Positioned by
+    // UIUpdate relative to the shared container's center.
+    private FleetIconView CreateFleetIconView()
+    {
+        var view = new FleetIconView();
+        var iconObject = new GameObject("FleetIconView");
+        iconObject.transform.SetParent(_fleetIconRect.transform, false);
+        view.Rect = iconObject.AddComponent<RectTransform>();
+        view.Rect.anchorMin = view.Rect.anchorMax = view.Rect.pivot = new Vector2(0.5f, 0.5f);
+        view.Rect.sizeDelta = new Vector2(FleetIconSize, FleetIconSize);
+
+        // Added first so it renders behind the sprite and the count.
         var backgroundObject = new GameObject("FleetIconBackground");
         backgroundObject.transform.SetParent(iconObject.transform, false);
         var backgroundRect = backgroundObject.AddComponent<RectTransform>();
         backgroundRect.anchorMin = Vector2.zero;
         backgroundRect.anchorMax = Vector2.one;
         backgroundRect.sizeDelta = Vector2.zero;
-        _fleetIconBackgroundImage = backgroundObject.AddComponent<Image>();
-        _fleetIconBackgroundImage.raycastTarget = false;
+        view.Background = backgroundObject.AddComponent<Image>();
+        view.Background.raycastTarget = false;
 
-        // Sprite: the ship-kind icon (warship/colony ship), also filling the container.
         var spriteObject = new GameObject("FleetIconSprite");
         spriteObject.transform.SetParent(iconObject.transform, false);
         var spriteRect = spriteObject.AddComponent<RectTransform>();
         spriteRect.anchorMin = Vector2.zero;
         spriteRect.anchorMax = Vector2.one;
         spriteRect.sizeDelta = Vector2.zero;
-        _fleetIconImage = spriteObject.AddComponent<Image>();
-        _fleetIconImage.raycastTarget = true;
+        view.Sprite = spriteObject.AddComponent<Image>();
+        view.Sprite.raycastTarget = true;
+
+        var countObject = new GameObject("FleetIconCount");
+        countObject.transform.SetParent(iconObject.transform, false);
+        var countRect = countObject.AddComponent<RectTransform>();
+        countRect.anchorMin = Vector2.zero;
+        countRect.anchorMax = Vector2.one;
+        countRect.sizeDelta = Vector2.zero;
+        view.Count = countObject.AddComponent<TextMeshProUGUI>();
+        view.Count.raycastTarget = false;
+        view.Count.fontSize = 14;
+        view.Count.fontStyle = FontStyles.Bold;
+        view.Count.alignment = TextAlignmentOptions.BottomRight;
+        view.Count.color = Color.white;
+        view.Count.textWrappingMode = TextWrappingModes.NoWrap;
 
         iconObject.SetActive(false);
+        return view;
     }
 
     void Awake()

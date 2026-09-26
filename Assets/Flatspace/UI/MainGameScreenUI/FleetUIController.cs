@@ -10,6 +10,7 @@ public class FleetUIController : MonoBehaviour
     private VisualElement _panelElement;
     private VisualElement _shipListContainer;
     private Planet _planet;
+    private int _owner;
 
     private void OnEnable()
     {
@@ -35,9 +36,11 @@ public class FleetUIController : MonoBehaviour
         enabled = false;
     }
 
-    public void SetPlanet(Planet planet)
+    // Lists only `owner`'s ships docked at the planet (the fleet icon that was clicked).
+    public void SetPlanet(Planet planet, int owner)
     {
         _planet = planet;
+        _owner = owner;
         RefreshShipList();
     }
 
@@ -49,6 +52,7 @@ public class FleetUIController : MonoBehaviour
 
         foreach (var ship in _planet.DockedShips)
         {
+            if (ship.Owner != _owner) continue;
             var row = new Label(
                 $"{ship.Kind} - {ship.Template?.shipName} " +
                 $"(Spd {ship.Template?.shipSpeed:0.#}, " +
