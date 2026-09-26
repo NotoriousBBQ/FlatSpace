@@ -957,8 +957,22 @@ public class Planet : MonoBehaviour
     {
         if (production == null) return;
         CompletedImprovements.Add((production?.Item.itemName, production?.Item.maintenanceCost ?? 0f));
-        var yieldImprovement = 1f + Convert.ToSingle(production?.Item.effect) / 100f;
-        ImprovementYieldModifier[production?.Item.subType] = yieldImprovement;
+        ApplyImprovementYield(production?.Item.subType, Convert.ToSingle(production?.Item.effect));
+    }
+
+    /// <summary>The yield modifier for a resource (1 = no improvement); 1 for an unknown subType.</summary>
+    public float GetImprovementYield(string subType)
+        => ImprovementYieldModifier.TryGetValue(subType, out var yield) ? yield : 1f;
+
+    /// <summary>
+    /// Applies an improvement's percent yield. Never lowers the current modifier: every researched tier
+    /// stays on offer, so a planet can finish a lower tier after a higher one, and a plain assignment
+    /// would silently give the higher tier's yield back.
+    /// </summary>
+    public void ApplyImprovementYield(string subType, float effectPercent)
+    {
+        var yieldImprovement = 1f + effectPercent / 100f;
+        ImprovementYieldModifier[subType] = Math.Max(GetImprovementYield(subType), yieldImprovement);
     }
 
     #endregion

@@ -172,7 +172,12 @@ planets distinct positions, not to touch `FindPath`.
   path: `Application.persistentDataPath/Catalogs/`. `CatalogItem.researched` is a single flag meaning
   "unlocked/completed" for both trees; completing a research item also flips `researched` on production
   items whose `requiredTech` matches. Edit catalogs via the **Save/Load Catalog buttons** added to the
-  `Catalog` component inspector by `Assets/Editor/CatalogEditor.cs`.
+  `Catalog` component inspector by `Assets/Editor/CatalogEditor.cs`. **Caution:** `Catalog.CatalogSaveData`'s
+  `ItemSaveData` has no `tier` or `maintenanceCost` field, so `JsonUtility` drops both on load (every
+  runtime `CatalogItem` has tier 0 and upkeep 0 — improvement maintenance is effectively off) and the
+  **Save Catalog button strips both keys from the JSON**. Prefer editing the JSON by hand until they are loaded.
+  Save games match catalog items by `itemName`, so adding items is safe, but saves do not store a planet's
+  completed improvements, so loading a save resets them.
 
 ### Saves
 
@@ -321,8 +326,14 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   weight alone never removes a choice. Two long test runs showed it: once the one-time improvements ran out
   warships flooded the queue, and after the warship cutoff the same flood moved to colony ships (weight 0
   when the planet already holds one) with nothing left to colonize. A planet left with no choices starts
-  nothing that turn and re-checks the next. Nothing wanted (`wanted <= 0`) means no taper. Ships still in production
-  are not counted, so several planets finishing on the same turn can slightly over-build. The
+  nothing that turn and re-checks the next. The taper is only a *relative* weight: for a planet whose row
+  has nothing else positive (all improvements built, colony ship already docked) any multiplier above 0
+  still picks Warship with certainty, so for those planets it behaves as a step at `wanted x cap` rather than
+  a ramp, and idle planets bank industry, so overshoot past the cap can approach the number of producing
+  planets. Nothing wanted (`wanted <= 0`) means no taper, i.e. no cap at all. Ships still in production
+  are not counted, so several planets finishing on the same turn can slightly over-build. A completed
+  improvement never lowers a planet's yield for its resource (`Planet.ApplyImprovementYield` keeps the
+  maximum), because every researched tier stays on offer. The
   `WarshipBoost|wanted|have|multiplier` tuning-log line shows the multiplier each production turn.
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.

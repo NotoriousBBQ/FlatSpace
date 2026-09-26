@@ -29,6 +29,7 @@ public static class ShipTransportSelfCheck
         ok &= RunWarshipShortfallChecks();
         ok &= RunWarshipCeilingChecks();
         ok &= RunOfferedChoicesCheck();
+        ok &= RunImprovementYieldCheck();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -1350,6 +1351,36 @@ public static class ShipTransportSelfCheck
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
         }
+        return ok;
+    }
+
+    // A planet can finish a lower improvement tier after a higher one (every researched tier stays on offer),
+    // so completing a tier must never LOWER the planet's yield for that resource.
+    public static bool RunImprovementYieldCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_ImprovementYield");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            var a = map.GetPlanet("A");
+
+            ok &= Check(a.GetImprovementYield("Food") == 1f, "a planet starts at a yield modifier of 1");
+
+            a.ApplyImprovementYield("Food", 12f);
+            ok &= Check(Mathf.Approximately(a.GetImprovementYield("Food"), 1.12f), "tier 2 (12%) gives 1.12");
+            a.ApplyImprovementYield("Food", 7f);
+            ok &= Check(Mathf.Approximately(a.GetImprovementYield("Food"), 1.12f),
+                "finishing a lower tier (7%) afterwards must not lower the yield");
+            a.ApplyImprovementYield("Food", 18f);
+            ok &= Check(Mathf.Approximately(a.GetImprovementYield("Food"), 1.18f), "a higher tier (18%) raises it");
+            ok &= Check(a.GetImprovementYield("Industry") == 1f, "another resource is untouched");
+            ok &= Check(a.GetImprovementYield("Unknown") == 1f, "an unknown subType reads as 1 and does not throw");
+        }
+        finally { Object.DestroyImmediate(go); }
         return ok;
     }
 
