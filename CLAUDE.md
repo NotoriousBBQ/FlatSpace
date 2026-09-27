@@ -289,11 +289,15 @@ grotsits shipping.
 - **Affordability** is a situational weight (`GetIndustrySituationalWeightMultiplier`, 0 when unaffordable) backed by
   `Planet.CanAffordImprovement`: max population plus the upkeep after building (the candidate replaces the same
   resource's best tier and adds to the others) must fit within `Planet.GetGrotsitsCapacity()` (base + max population x
-  the grotsits worker rate). A planet whose capacity does not exceed its own maximum population (Farm, Verdant) is an
-  **importer by data** and is exempt: it is meant to run on grotsits shipments. `CanAffordImprovement` is the one
-  seam for future per-type import allowances (goal: Prime/Normal need no or minimal incoming shipments; specialized
-  planets (Desert, Farm, Industrial, Ocean) minimal; super-specialized Desolate (grotsits) and Verdant (food) live on a
-  stream of shipments).
+  the grotsits worker rate) **plus** `PlanetResourceData._grotsitsImportAllowance` — an authored per-type field, default
+  0 (fully self-funding). This is the one seam for per-type import reliance (goal: Prime/Normal need no or minimal
+  incoming shipments; specialized planets (Desert, Farm, Industrial, Ocean) minimal; super-specialized Desolate
+  (grotsits) and Verdant (food) live on a stream of shipments). Currently: 0 for every type except Desolate and
+  Verdant, both set to 30 as a tuning starting point (edit their `NoPopResourceData` assets to retune). An earlier
+  version of this rule instead exempted any planet whose capacity didn't exceed its own population, which gave Farm
+  an accidental full exemption (it never got that far below capacity) while Desolate, whose capacity is large, got
+  none — replaced by this explicit field so the exemption is authored, not an accident of unrelated production
+  numbers.
 - **Saves:** `PlanetSave.completedImprovements` (names) is written by `SaveLoadSystem` and restored in
   `GameAIMap.SetPlanetSimulationStats` through the production catalog and `RecordImprovement`; older saves restore none.
 - **Logging:** every 25 turns each player logs `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>`

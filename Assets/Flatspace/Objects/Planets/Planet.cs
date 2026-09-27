@@ -282,16 +282,15 @@ public class Planet : MonoBehaviour
 
     /// <summary>
     /// Can this planet carry the upkeep of building this improvement? True when its maximum population plus the
-    /// upkeep afterwards fits within its grotsits capacity (the candidate replaces the same resource's best tier and
-    /// adds to every other resource's). A planet whose capacity does not even exceed its own maximum population
-    /// (Farm, Verdant) is an importer by data and is exempt: it is meant to run on grotsits shipments. This is the
-    /// single seam for per-type import allowances (none for Prime/Normal, small for specialized planets, large for
-    /// super-specialized ones).
+    /// upkeep afterwards fits within its grotsits capacity plus its type's import allowance (the candidate replaces
+    /// the same resource's best tier and adds to every other resource's). The allowance
+    /// (PlanetResourceData._grotsitsImportAllowance, authored per planet type asset, default 0 = fully self-funding)
+    /// is the single seam for per-type import reliance: 0 for Prime/Normal/Desert/Industrial/Ocean, and a deliberately
+    /// large value for the super-specialized types (Desolate, Verdant) that are meant to run on grotsits shipments.
     /// </summary>
     public bool CanAffordImprovement(CatalogItem item)
     {
-        var capacity = GetGrotsitsCapacity();
-        if (capacity <= MaxPopulation) return true;
+        var capacity = GetGrotsitsCapacity() + _resourceData._grotsitsImportAllowance;
 
         var upkeepAfter = 0f;
         foreach (var best in _bestImprovement)

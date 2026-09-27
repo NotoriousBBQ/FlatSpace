@@ -1375,13 +1375,43 @@ public static class ShipTransportSelfCheck
 
     // Improvement upkeep: tier and maintenanceCost are loaded from the catalog JSON, each planet is charged only its
     // BEST tier per resource (matching how yield works), superseded tiers are not offered, and an improvement is only
-    // offered when the planet's grotsits capacity can carry its population plus the upkeep after building it, except
-    // for planets that cannot even feed their own population with grotsits (Farm, Verdant), which run on imports.
+    // offered when the planet's grotsits capacity, plus its type's authored import allowance
+    // (PlanetResourceData._grotsitsImportAllowance, default 0 = fully self-funding), can carry its population plus
+    // the upkeep after building it.
     public static bool RunImprovementUpkeepChecks()
     {
         var ok = RunUpkeepCatalogCheck();
         ok &= RunUpkeepChargingCheck();
         ok &= RunUpkeepAffordabilityCheck();
+        ok &= RunImportAllowanceAssetCheck();
+        return ok;
+    }
+
+    // Regression pin on the live per-type assets: Desolate and Verdant (the "super-specialized" types, meant to run
+    // on a stream of grotsits imports) carry an explicit allowance; every other type defaults to 0 (self-funding).
+    private static bool RunImportAllowanceAssetCheck()
+    {
+        var ok = true;
+        const string dir = "Assets/Flatspace/Objects/Planets/ScritpableObjects/ResourceData/";
+        var expected = new (string path, float allowance)[]
+        {
+            (dir + "NoPopResourceData/DesolatePlanetTypeDataNoPop.asset", 30f),
+            (dir + "NoPopResourceData/VerdantPlanetTypeDataNoPop.asset", 30f),
+            (dir + "NoPopResourceData/FarmPlanetTypeDataNoPop.asset", 0f),
+            (dir + "NoPopResourceData/DesertPlanerResourceDataNoPop.asset", 0f),
+            (dir + "NoPopResourceData/IndustrialPlanetTypeDataNoPop.asset", 0f),
+            (dir + "NoPopResourceData/OceanPlanetResourceDataNoPop.asset", 0f),
+            (dir + "NoPopResourceData/NormalPlanetTypeDataNoPop.asset", 0f),
+            (dir + "PrimePlanetTypeData.asset", 0f),
+        };
+        foreach (var (path, allowance) in expected)
+        {
+            var data = AssetDatabase.LoadAssetAtPath<PlanetResourceData>(path);
+            ok &= Check(data != null, $"resource data asset loads: {path}");
+            if (data != null)
+                ok &= Check(data._grotsitsImportAllowance == allowance,
+                    $"{data.name}: _grotsitsImportAllowance is {allowance}");
+        }
         return ok;
     }
 
@@ -1528,8 +1558,13 @@ public static class ShipTransportSelfCheck
                     "exactly at the ceiling (7 + 45 = 52) is affordable");
                 ok &= Check(!pd.CanAffordImprovement(Make("Industry", 5, 92f)),
                     "one step over (7 + 46 = 53 > 52) is not");
-                ok &= Check(pf.CanAffordImprovement(Make("Food", 10, 1000f)),
-                    "a planet whose capacity does not exceed its population is an importer by data: exempt");
+                ok &= Check(!pf.CanAffordImprovement(Make("Food", 10, 1000f)),
+                    "with the default allowance of 0 a planet must fund its own upkeep, even one whose capacity does not exceed its population");
+                f2._resourceData._grotsitsImportAllowance = 20f;
+                ok &= Check(pf.CanAffordImprovement(Make("Industry", 3, 40f)),
+                    "an explicit import allowance of 20 lifts the ceiling: 10 + 40x0.5(=20) <= 10 + 20");
+                ok &= Check(!pf.CanAffordImprovement(Make("Industry", 3, 42f)),
+                    "one step past the allowance (10 + 21 > 30) is not affordable");
 
                 // Replacement, not addition: with Industry tier 8 (63 -> 31.5) built, Industry tier 9 (75 -> 37.5) replaces it.
                 pd.RecordImprovement(Make("Industry", 8, 63f));
@@ -1544,8 +1579,10 @@ public static class ShipTransportSelfCheck
                     "an affordable improvement keeps its weight");
                 ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Research", 9, 200f), "D2") == 0f,
                     "an unaffordable improvement is not offered (weight 0)");
-                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Research", 9, 200f), "F2") == 1f,
-                    "the importer planet may still build it");
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Research", 9, 200f), "F2") == 0f,
+                    "F2 still cannot afford an item beyond even its 20-grotsits allowance");
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Grotsits", 3, 40f), "F2") == 1f,
+                    "but within its allowance (10 + 20 <= 10 + 20) F2 may build, unlike a planet with no allowance");
             }
             finally { Object.DestroyImmediate(map2Go); }
         }

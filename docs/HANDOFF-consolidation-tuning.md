@@ -58,16 +58,20 @@ came afterwards, so re-run before comparing warship, colony ship and improvement
    weight by the number of eligible items of its subType in that row, so adding tiers does not change a
    category's odds. Applies to both rolls; slightly changes Expand's odds. Alternatives: production only, or
    retune weights by hand.
-2. **Improvement upkeep is implemented but unproven** (design and rationale in
+2. **Improvement upkeep is implemented and proven by a 400-turn run** (design and rationale in
    `docs/superpowers/specs/2026-09-26-improvement-upkeep-design.md`, summary in `CLAUDE.md`): catalog `tier` and
    `maintenanceCost` now load, only the best tier per resource is charged x `improvementUpkeepScale` (default 0.15),
-   superseded tiers are not offered, an unaffordable improvement gets weight 0 (Farm/Verdant, whose grotsits capacity
-   does not exceed their population, are exempt and run on imports), planets' improvements are saved, and every 25
-   turns each player logs an `Economy` line. **The next long run is the first test of it**: watch grotsits
-   shipments (31 in the last run), `Economy` shortfalls and morale, completions per turn, and improvement tiers
-   reached, and tune the scale from that. Long-term goals it must serve: Prime/Normal need no or minimal incoming
-   shipments; Desert/Farm/Industrial/Ocean minimal; Desolate and Verdant live on a stream of shipments
-   (`Planet.CanAffordImprovement` is the seam for per-type import allowances).
+   superseded tiers are not offered, planets' improvements are saved, and every 25 turns each player logs an
+   `Economy` line. The test run (`aiTuningLog_2026-09-26_22-58-26.txt`) showed **zero grotsits shortages** the whole
+   match (the affordability gate held) and all three players researching Warship 1 far earlier than before, but
+   grotsits shipments barely moved (32 vs. 31 without upkeep) — at 0.15 no planet ever got close enough to its
+   ceiling to need imports. Affordability now uses an explicit per-type `PlanetResourceData._grotsitsImportAllowance`
+   (default 0, i.e. fully self-funding) rather than the earlier accidental "capacity <= population" exemption; Desolate
+   and Verdant are set to 30 as a starting point, everyone else 0. **Next:** since shortages never happened, either
+   raise `improvementUpkeepScale`, raise Desolate/Verdant's allowance further (or extend it to the "specialized" four
+   with a smaller value), or both — then re-run and watch grotsits shipments, `Economy` shortfalls/morale, and
+   whether the shipment pattern (Desolate exports grotsits/imports food; Farm exports food/imports grotsits, already
+   observed in the test run) strengthens.
 3. Play-mode check of the new research tiers (nobody reached tier 9-10 in 400 turns; production tiers 8-10 never started).
 4. Reviewer minors, deferred: the self-check drives `ComputeWarshipMultiplier`, a copy of the inline block in
    `BuildIndustryMatrix` (nothing asserts the wiring); `wanted <= 0` means warships are never capped; the taper

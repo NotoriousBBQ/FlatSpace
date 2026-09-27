@@ -19,5 +19,9 @@ public class PlanetResourceData : ScriptableObject
     public float _industryProduction;
     public int _maxPopulation;
     public Planet.PlanetStrategy _initialStrategy;
+    // Extra grotsits of headroom (per turn) this planet type is allowed to run its improvement upkeep beyond its own
+    // GetGrotsitsCapacity(), i.e. how much of its upkeep this type may cover by importing grotsits rather than
+    // producing all of it itself. 0 (the default) means fully self-funding. See Planet.CanAffordImprovement.
+    public float _grotsitsImportAllowance;
 }
  

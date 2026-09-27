@@ -24,3 +24,4 @@ MonoBehaviour:
   _industryProduction: 3
   _maxPopulation: 15
   _initialStrategy: 3
+  _grotsitsImportAllowance: 30
