@@ -315,7 +315,11 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   `PlayerAI.PlanShipActions` orchestrates both; ships trickle to the target rather than launching together
   (revisit when combat exists). `assaultRatio` and `assaultMinimumShips` have in-code defaults too.
   **Production:** under Consolidate the Warship industry weight is `table value x (1 + warshipShortfallBoost
-  x shortfall / wanted)`, computed once per turn in `BuildIndustryMatrix` (`PlayerAI.ComputeWarshipMultiplier`).
+  x shortfall / wanted)`. The multiplier is a *situational* weight, so it lives in
+  `GetIndustrySituationalWeightMultiplier` (next to the ColonyShip one); `GetIndustryWeight` is just
+  `GetIndustryStrategyWeight x GetIndustrySituationalWeightMultiplier`. It reads every planet and is logged, so
+  it is computed at most once per production turn (cached in `_warshipMultiplierThisTurn`, reset by
+  `BuildIndustryMatrix`) through `PlayerAI.ComputeWarshipMultiplier`.
   Wanted = round-1 garrisons of outer planets + the assault's required force whenever a known enemy planet
   exists (`AssaultPlanner.HasKnownEnemyPlanet`, not `ChooseTarget`, which is null while I hold no warships);
   have = my docked warships + my own in-flight ships. Wanted is bounded by `warshipsPerColonizedPlanet` (default
@@ -336,7 +340,8 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   are not counted, so several planets finishing on the same turn can slightly over-build. A completed
   improvement never lowers a planet's yield for its resource (`Planet.ApplyImprovementYield` keeps the
   maximum), because every researched tier stays on offer. The
-  `WarshipBoost|wanted|have|multiplier` tuning-log line shows the multiplier each production turn.
+  `WarshipBoost|wanted|have|multiplier` tuning-log line shows the multiplier on each production turn in which
+  a Warship choice is evaluated (i.e. once Warship research is done).
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
 
