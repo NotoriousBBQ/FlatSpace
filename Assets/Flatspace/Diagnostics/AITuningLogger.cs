@@ -151,6 +151,30 @@ public static class AITuningLogger
             multiplier.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>
+    /// The name to log for the board a match runs on: the BoardConfiguration asset's name when there is one,
+    /// otherwise the designer JSON's file name (not its full path), otherwise "unknown". Never contains the
+    /// log's field separator. Pure, so it is self-checked even though the file I/O around it is not.
+    /// </summary>
+    public static string DescribeBoard(string boardConfigName, string boardDesignPath)
+    {
+        string name;
+        if (!string.IsNullOrEmpty(boardConfigName))
+            name = boardConfigName;
+        else if (!string.IsNullOrEmpty(boardDesignPath))
+            name = boardDesignPath.Substring(boardDesignPath.LastIndexOfAny(new[] { '/', '\\' }) + 1);
+        else
+            name = "unknown";
+        return string.IsNullOrEmpty(name) ? "unknown" : name.Replace('|', '_');
+    }
+
+    /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>
+    public static void LogBoardConfig(string boardName)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(0, -1, "BoardConfig", boardName) });
+    }
+
     private static string FormatLine(int turnNumber, int playerId, string eventCode, params string[] fields)
     {
         var parts = new List<string> { $"T{turnNumber}", $"P{playerId}", eventCode };

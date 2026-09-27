@@ -19,6 +19,7 @@ public static class PlayerKnowledgeSelfCheck
         ok &= RunFirstContactChecks();
         ok &= RunConsolidateSwitchCheck();
         ok &= RunConsolidateWeightTablesCheck();
+        ok &= RunColonyShipSituationalCheck();
         Debug.Log(ok
             ? "[PlayerKnowledgeSelfCheck] ALL PASSED"
             : "[PlayerKnowledgeSelfCheck] FAILURES (see errors above)");
@@ -430,5 +431,113 @@ public static class PlayerKnowledgeSelfCheck
             Object.DestroyImmediate(item);
         }
         return ok;
+    }
+
+    // The ColonyShip production multiplier: 0 when a colony ship is docked or nothing is left to colonize (so a
+    // planet stops building useless colony ships), x2 when the planet is ready to colonize, and, under Consolidate
+    // only, x2 while targets remain even if the planet is not ready yet (Expand's weight is not doubled).
+    public static bool RunColonyShipSituationalCheck()
+    {
+        var ok = true;
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.subType = "ColonyShip";
+        try
+        {
+            // Home (max population 5, trigger 0.8 -> ready at 4) - Target (empty, known once Knowledge updates).
+            BuildColonyScenario(out var mapGo, out var playerGo, out var map, out var ai, knowTarget: true);
+            try
+            {
+                var home = map.GetPlanet("Home"); var target = map.GetPlanet("Target");
+                var expand = PlayerAI.AIStrategy.AIStrategyExpand;
+                var consolidate = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+                ai.Strategy = expand;
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 1f,
+                    "Expand, target remains, planet not ready (pop 1 of 5): multiplier 1, unchanged");
+                ai.Strategy = consolidate;
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 2f,
+                    "Consolidate, target remains, planet not ready: x2 while targets remain");
+
+                // Ready = population at or above 5 x 0.8. Use a full planet (5 of 5) rather than exactly 4, which sits
+                // on the float boundary of 5 x 0.8f and made this assertion depend on rounding.
+                for (var i = 0; i < 4; i++) home.Population.Add(new Planet.Inhabitant { Player = 0 });
+                ai.Strategy = expand;
+                var readyMultiplier = ai.GetIndustrySituationalWeightMultiplier(item, "Home");
+                ok &= Check(readyMultiplier == 2f,
+                    $"Expand, planet ready to colonize with a target: x2 (unchanged); got {readyMultiplier} " +
+                    $"(pop {home.Population.Count} of {home.MaxPopulation}, owner {home.Owner})");
+
+                home.DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 0f,
+                    "Expand, a colony ship already docked: 0");
+                ai.Strategy = consolidate;
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 0f,
+                    "Consolidate, a colony ship already docked: 0");
+                home.UndockShip(Ship.ShipKind.ColonyShip);
+
+                for (var i = 0; i < 5; i++) target.Population.Add(new Planet.Inhabitant { Player = 0 });   // full: invalid target
+                ai.Strategy = expand;
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 0f,
+                    "Expand, no valid target left (target is full): 0, so no useless colony ships");
+                ai.Strategy = consolidate;
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 0f,
+                    "Consolidate, no valid target left: 0 as well");
+
+                item.subType = "Food";
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 1f,
+                    "another subType is unaffected by the colony ship rule");
+                item.subType = "ColonyShip";
+            }
+            finally
+            {
+                Object.DestroyImmediate(playerGo);
+                Object.DestroyImmediate(mapGo);
+            }
+
+            // A target the player does not know about yet is not a target: nothing to colonize.
+            BuildColonyScenario(out mapGo, out playerGo, out map, out ai, knowTarget: false);
+            try
+            {
+                ai.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 0f,
+                    "an undiscovered target does not count: 0");
+            }
+            finally
+            {
+                Object.DestroyImmediate(playerGo);
+                Object.DestroyImmediate(mapGo);
+            }
+        }
+        finally
+        {
+            Object.DestroyImmediate(item);
+        }
+        return ok;
+    }
+
+    private static void BuildColonyScenario(out GameObject mapGo, out GameObject playerGo, out GameAIMap map,
+        out PlayerAI ai, bool knowTarget)
+    {
+        _nextPlanetX = 0f;
+        mapGo = new GameObject("PKSelfCheckMap_ColonyShip");
+        playerGo = new GameObject("PKSelfCheckPlayer_ColonyShip");
+        map = mapGo.AddComponent<GameAIMap>();
+        var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants.defaultTravelSpeed = 1f;
+        constants.expandPopulationTrigger = 0.8f;
+        constants.maxPathNodesForResourceDistribution = 10;
+        map.GameAIMapInit(new List<PlanetSpawnData>
+        {
+            MakeSpawn("Home", initialPopulation: 1, connections: new[] { "Target" }),
+            MakeSpawn("Target", initialPopulation: 0),
+        }, constants);
+        map.GetPlanet("Home").Owner = 0;
+
+        var player = playerGo.AddComponent<Player>();
+        ai = playerGo.AddComponent<PlayerAI>();
+        ai.Player = player;
+        ai.AIMap = map;
+        player.playerID = 0;
+        if (knowTarget) map.Knowledge.Update(map, numPlayers: 1);
     }
 }

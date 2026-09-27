@@ -95,18 +95,18 @@ namespace FlatSpace
             }
 
             private bool PlanetCanColonize(string planetName)
-            {
-                if (IsValidColonizer(planetName))
-                { 
-                    var pathMap = AIMap.GetPlanet(planetName).DistanceMapToPathingList;
-                    var validColonizationTargets = pathMap
-                        .Where(t => (
-                            t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
-                            && IsValidColonizationTarget(AIMap.GetPlanet(t.Key)))).ToList();
-                    return validColonizationTargets.Any();
+                => IsValidColonizer(planetName) && PlanetHasColonizationTarget(planetName);
 
-                }
-                return false;
+            /// <summary>
+            /// A known, valid colonization target is within reach of this planet, whether or not the planet is
+            /// ready to colonize yet. Drives whether a planet should be building colony ships at all.
+            /// </summary>
+            private bool PlanetHasColonizationTarget(string planetName)
+            {
+                var pathMap = AIMap.GetPlanet(planetName).DistanceMapToPathingList;
+                return pathMap.Any(t =>
+                    t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
+                    && IsValidColonizationTarget(AIMap.GetPlanet(t.Key)));
             }
 
             private bool IsValidColonizer(string planetName)
@@ -620,14 +620,19 @@ namespace FlatSpace
             // production turn: the first Warship choice evaluated fills it, BuildIndustryMatrix resets it.
             private float? _warshipMultiplierThisTurn;
 
-            private float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            public float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
             {
                 if (item.subType == "ColonyShip")
                 {
                     if (PlanetHasColonyShip(planetName))
                         return 0f;                       // already have one — exclude
-                    if (PlanetCanColonize(planetName))
+                    if (!PlanetHasColonizationTarget(planetName))
+                        return 0f;                       // nothing left to colonize — exclude (no useless colony ships)
+                    if (IsValidColonizer(planetName))
                         return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
+                    if (Strategy == AIStrategy.AIStrategyConsolidate)
+                        return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
                 if (item.subType == "Warship" && Strategy == AIStrategy.AIStrategyConsolidate)
                 {

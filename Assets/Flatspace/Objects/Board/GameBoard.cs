@@ -285,6 +285,10 @@ namespace FlatSpace
             private void InitGame(List<PlanetSpawnData> planetSpawnData)
             {
                 AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
+                // The scene's BoardConfiguration asset, or (InitGameFromDesignerConfig clears that first) the
+                // designer JSON's file name, so a log can be tied back to the board it ran on.
+                AITuningLogger.LogBoardConfig(AITuningLogger.DescribeBoard(
+                    IntialBoardState != null ? IntialBoardState.name : null, _boardDesignPath));
 
                 if (GameAI == null)
                     GameAI = this.AddComponent<GameAI>() as GameAI;

@@ -32,6 +32,7 @@ public static class ShipTransportSelfCheck
         ok &= RunImprovementYieldCheck();
         ok &= RunWorkerRateCheck();
         ok &= RunIndustryBaseRenameCheck();
+        ok &= RunBoardNameCheck();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -1353,6 +1354,26 @@ public static class ShipTransportSelfCheck
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
         }
+        return ok;
+    }
+
+    // The tuning log records which board a match used, so a log can be tied back to its board config. The file
+    // I/O in AITuningLogger has no self-check by design, but the naming decision is a pure function.
+    public static bool RunBoardNameCheck()
+    {
+        var ok = true;
+        ok &= Check(AITuningLogger.DescribeBoard("SampleBoardConfig", null) == "SampleBoardConfig",
+            "a BoardConfiguration asset is named by the asset");
+        ok &= Check(AITuningLogger.DescribeBoard("SampleBoardConfig", @"C:\x\2Player10Planet.json") == "SampleBoardConfig",
+            "an asset name wins if both are somehow set");
+        ok &= Check(AITuningLogger.DescribeBoard(null, @"C:\Projects\FlatSpace\Assets\Flatspace\BoardConfigs\2Player10Planet.json") == "2Player10Planet.json",
+            "a designer JSON is named by its file name, not its full path");
+        ok &= Check(AITuningLogger.DescribeBoard("", "/home/u/boards/Big Map.json") == "Big Map.json",
+            "forward-slash paths and spaces work too");
+        ok &= Check(AITuningLogger.DescribeBoard(null, null) == "unknown" && AITuningLogger.DescribeBoard("", "") == "unknown",
+            "no board information reads as unknown");
+        ok &= Check(!AITuningLogger.DescribeBoard("a|b", null).Contains("|"),
+            "a name can never contain the log's field separator");
         return ok;
     }
 

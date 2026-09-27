@@ -388,6 +388,13 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   maximum), because every researched tier stays on offer. The
   `WarshipBoost|wanted|have|multiplier` tuning-log line shows the multiplier on each production turn in which
   a Warship choice is evaluated (i.e. once Warship research is done).
+  **ColonyShip (also a situational weight):** 0 when a colony ship is already docked; 0 when no known, valid
+  colonization target is within reach of the planet (`PlanetHasColonizationTarget`, independent of the planet's
+  readiness), so planets stop building useless colony ships once the map is full (every strategy); x2
+  (`ColonyShipUrgentBoost`) when the planet is ready to colonize; and, Consolidate only, x2 while targets remain even
+  if the planet is not ready yet, because Consolidate's table weight for ColonyShip is 1.0 and a test run
+  under-expanded (border planets left uncolonized, colony ships used the moment they were ready, so supply and not
+  targets was the limit). Expand's 2.5 weight is not doubled.
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
 
@@ -397,7 +404,9 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`) for
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, and the board the match
+started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
+so a log can be tied back to its board config for map/ownership analysis) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
