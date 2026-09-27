@@ -434,10 +434,10 @@ namespace FlatSpace
 
             }
 
-            private static Color32 ColorForOrderType(GameAI.GameAIOrder.OrderType type)
+            private static Color32 ColorForOrderType(GameAI.GameAIOrder order)
             {
                 Color color;
-                switch (type)
+                switch (order.Type)
                 {
                     case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
                         color = new Color32(0, 255,0, 255 );
@@ -449,7 +449,7 @@ namespace FlatSpace
                         color = new Color32(210, 105, 30, 255);
                         break;
                     case GameAI.GameAIOrder.OrderType.OrderTypeShipTransport:
-                        color = new Color32(255, 0, 255, 255);
+                        color = FleetSummary.ColorFor(order.PlayerId);
                         break;
                     default:
                         color = new Color32(255, 255, 255, 255);
@@ -499,7 +499,7 @@ namespace FlatSpace
                                 Convert.ToSingle(order.TotalDelay - (order.TimingDelay)) /
                                 Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
                         lineDrawObject.SetPath(pathPoints, progressAmount);
-                        lineDrawObject.SetColor(ColorForOrderType(order.Type));
+                        lineDrawObject.SetColor(ColorForOrderType(order));
                         if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
                         {
                             var originPlanet = GetPlanet(order.Origin);
