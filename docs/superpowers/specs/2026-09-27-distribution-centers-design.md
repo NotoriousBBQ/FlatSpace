@@ -86,16 +86,11 @@ real shortages use), merged into the same list `ProcessResourceShipments` alread
 Its `ScoreMatrixDecisionElement.Priority` is a fixed sentinel (e.g. `float.MinValue / 2`, leaving headroom
 so it can't itself underflow), not derived from the gap size — this must hold regardless of whatever sign
 convention real shortages' `Data` turns out to use, so "below the floor" is a concrete constant, not a
-relative comparison. (Aside, discovered while checking this and worth a line here since it directly
-affects whether "real shortages always sort first" is actually true today: `Planet.cs` stores a real food
-shortage's `Data` as the already-negative deficit, e.g. `-20`, but `ScoreMatrixDecisionElement.Priority`
-descending-sorts on that raw signed value — so a `-20` shortage currently sorts *after* a milder `-5`
-one, the opposite of "worse shortage served first." This predates the DC work and isn't touched here; the
-DC sentinel is deliberately an absolute constant so it doesn't inherit that ambiguity, but the underlying
-real-shortage priority ordering may itself want a look someday.) With the sentinel in place, real
-shortages always claim available surplus before a DC's synthetic row does within a round — a DC only
-ever pulls what real shortages didn't need. This reuses the rounds-based shipment loop and per-shipment
-capping exactly as built; no new shipment code path.
+relative comparison (see Future considerations for a related pre-existing ordering wrinkle this sentinel
+is deliberately independent of). With the sentinel in place, real shortages always claim available
+surplus before a DC's synthetic row does within a round — a DC only ever pulls what real shortages didn't
+need. This reuses the rounds-based shipment loop and per-shipment capping exactly as built; no new
+shipment code path.
 
 **Target stock:** a flat tunable, one value each — `distributionCenterFoodTargetStock`,
 `distributionCenterGrotsitsTargetStock` — matching the precedent set by `colonyFoodRider` and every other
@@ -147,6 +142,12 @@ assumed, so three new `AITuningLogger` events are added:
   the flat tunable proves too crude once tested.
 - DCs as strategic targets for enemy warship actions (a natural follow-on once DCs exist as a concept;
   `AssaultPlanner` would need a reason to weight a known DC planet higher than an arbitrary enemy planet).
+- **Real-shortage priority ordering may be backwards.** Discovered while scoping the DC synthetic-demand
+  sentinel, unrelated to and not touched by this feature: `Planet.cs` stores a real shortage's `Data` as
+  the already-negative deficit (e.g. `-20`), but `ScoreMatrixDecisionElement.Priority` descending-sorts on
+  that raw signed value in `BuildResourceMatrix` — so a `-20` shortage currently sorts *after* a milder
+  `-5` one, the opposite of "worse shortage served first." Worth a look someday; the DC sentinel above is
+  deliberately an absolute constant so it doesn't inherit this ambiguity either way.
 
 ## Testing plan (detail left to the implementation plan)
 
