@@ -211,6 +211,43 @@ pair of planets, but not every planet in range is connected, and a single-connec
 no two same-type planets share an edge, Normal excepted). `[ContextMenu("Map Gen: Self Check (50
 seeds)")]` batch-validates the generator across seeds.
 
+### Planet strategy
+
+`Planet.PlanetStrategy` (a per-planet economic focus) is **not** `PlayerAI.AIStrategy` (the player-level
+Expand/Consolidate/Amass). The AI never reads or changes a planet's strategy. Values, in order (the order matters,
+see the lookup below): 0 Balanced, 1 Growth, 2 Food, 3 FocusedFood, 4 Grotsits, 5 FocusedGrotsits, 6 Research,
+7 FocusedResearch, 8 Industry, 9 FocusedIndustry.
+
+- **Origin:** `Planet.Init` sets `CurrentStrategy = _resourceData._initialStrategy`, so it comes from the planet
+  *type's* resource-data asset (Normal 0, Prime 1, Farm 2, Verdant 3, Desolate 5, Ocean 7, Desert 8,
+  Industrial 9; the NoPop/PopTest Prime asset uses 0). Saves store it (`PlanetSave.planetStrategy`) and
+  `GameAIMap.SetPlanetSimulationStats` restores it; nothing else changes it at runtime. The board designer's
+  per-planet `strategy` field (and `PlanetTypeDefaults.StrategyFor`, "Generate Names And Strategies", the map
+  generator's `Strategy`) is **authoring-side only**: `PlanetSpawnData` carries no strategy and `Planet.Init`
+  ignores it, so it never reaches the running simulation.
+- **Effect:** only `AssignWorkForStrategy()` (called first in `UpdatePlanet`, which returns early with no
+  population) depends on it; output is then `(base + workers x rate x ImprovementYieldModifier) x Morale/100`, so
+  strategy changes production only through worker counts. (1) Each `*WorkerRequirement` adds
+  `GameAIConstants.productionModifierLists[(int)CurrentStrategy]`'s modifier for its resource — to
+  `Population.Count` for food/research/industry, to the requirement only while grotsits are short. (2) The
+  `switch (CurrentStrategy)` takes food workers first, clamps the rest to what remains in a strategy-specific
+  priority order (Research strategies: Research, Grotsits, Industry; Industry strategies: Industry, Research,
+  Grotsits; everything else: Grotsits, Industry, Research), and gives leftover workers to the strategy's focus
+  (Balanced splits them between Food and Industry).
+- **The "Focused" variants share their plain variant's switch body exactly**; they differ only through the modifier
+  list (3 instead of 2). Modifiers: Balanced all 1; Growth food 2 and industry 2; plain strategies 2 for their own
+  resource; Focused 3; everything else 1.
+- **Modifier lookup is by enum integer** into `productionModifierLists`, so that list on the active
+  `GameAIConstants` asset must stay in enum order (both existing constants assets do). The list is only
+  null-guarded, so a shorter one throws `IndexOutOfRange`, and the modifier assets' own `planetStrategy` field is
+  never read (FocusedFoodModifierList even says 2 instead of 3). Adding an enum value means inserting an asset in
+  the matching slot; the enum serializes as an int.
+- **Known oddities, not fixed:** Food/FocusedFood add leftover workers with
+  `FoodWorkers += Population.Count - remainingWorkers` (Growth uses `+= remainingWorkers`), which looks like it can
+  exceed the population; `ResourceWorkerRequirement` calls `Math.Clamp(...)` and discards the result; and the
+  Food/Research/Industry requirements use `_resourceData._grotsitsProduction` as their rate (the real production
+  formulas use the proper rates).
+
 ### Player Knowledge
 
 `PlayerKnowledge` (`Assets/Flatspace/GameAI/PlayerKnowledge.cs`, namespace `FlatSpace.AI`) is a
