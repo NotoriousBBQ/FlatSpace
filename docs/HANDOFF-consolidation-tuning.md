@@ -1,7 +1,8 @@
 # Handoff: Consolidation Tuning
 
-Saved from the Claude Code session named **"Consolidation Tuning"**. Resume it with `/resume` (pick it) or
-`claude --resume "Consolidation Tuning"`. This file is the written version so nothing depends on that history.
+Saved from the Claude Code session named **"FlatspaceTuning"** (session ID `fe0e67aa-0dae-4a55-a85f-fd017960a2b5`;
+its auto-generated title is "Feature list"). Resume it with `/resume` (pick it) or
+`claude --resume "FlatspaceTuning"`. This file is the written version so nothing depends on that history.
 
 Read `CLAUDE.md` first (architecture, conventions, the self-check pattern). Specs and plans for the
 first-contact switch and the assault are in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
