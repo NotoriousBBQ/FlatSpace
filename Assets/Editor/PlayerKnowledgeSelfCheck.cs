@@ -399,12 +399,22 @@ public static class PlayerKnowledgeSelfCheck
         return ok;
     }
 
-    // Research: Consolidate still aliases Expand's table. Industry: Consolidate has its own hand-tuned table
-    // (Expand's is unchanged). A missing strategy key silently falls back to a neutral 1.0, so every value is
-    // asserted explicitly, which also catches an accidental edit of either table.
+    // Research and industry: Consolidate has its own hand-tuned table for each (Expand's tables are unchanged).
+    // A missing strategy key silently falls back to a neutral 1.0, so every value is asserted explicitly, which
+    // also catches an accidental edit of any of the four tables.
     public static bool RunConsolidateWeightTablesCheck()
     {
         var ok = true;
+        var expandResearch = new Dictionary<string, float>
+        {
+            { "Food", 3.0f }, { "Industry", 2.0f }, { "Grotsits", 1.0f },
+            { "Research", 1.0f }, { "ColonyShip", 2.5f }, { "Warship", 1.5f },
+        };
+        var consolidateResearch = new Dictionary<string, float>
+        {
+            { "Food", 1.0f }, { "Industry", 3.0f }, { "Grotsits", 2.0f },
+            { "Research", 1.0f }, { "ColonyShip", 0.5f }, { "Warship", 2.5f },
+        };
         var expandIndustry = new Dictionary<string, float>
         {
             { "Food", 2.5f }, { "Industry", 1.5f }, { "Grotsits", 1.0f },
@@ -423,9 +433,11 @@ public static class PlayerKnowledgeSelfCheck
             {
                 item.subType = subType;
                 ok &= Check(
-                    PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) ==
-                    PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyExpand),
-                    $"Consolidate research weight matches Expand for {subType}");
+                    PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyExpand) == expandResearch[subType],
+                    $"Expand research weight for {subType} is {expandResearch[subType]}");
+                ok &= Check(
+                    PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == consolidateResearch[subType],
+                    $"Consolidate research weight for {subType} is {consolidateResearch[subType]}");
                 ok &= Check(
                     PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyExpand) == expandIndustry[subType],
                     $"Expand industry weight for {subType} is {expandIndustry[subType]}");
@@ -433,11 +445,6 @@ public static class PlayerKnowledgeSelfCheck
                     PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == consolidateIndustry[subType],
                     $"Consolidate industry weight for {subType} is {consolidateIndustry[subType]}");
             }
-
-            // Guard against the research alias silently being the neutral default.
-            item.subType = "Food";
-            ok &= Check(PlayerAI.GetResearchWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 3.0f,
-                "Consolidate Food research weight is Expand's 3.0, not the neutral default");
         }
         finally
         {

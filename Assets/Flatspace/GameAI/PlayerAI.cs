@@ -397,12 +397,21 @@ namespace FlatSpace
                     { "ColonyShip",    2.5f },  // ships useful but secondary
                     { "Warship",       1.5f },  // Updated priority
                 };
+            private static readonly Dictionary<string, float> ConsolidateResearchWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          1.0f },  // food upgrades biggest boost
+                    { "Industry",      3.0f },  // useful but secondary
+                    { "Grotsits",      2.0f },  // least useful while expanding
+                    { "Research",      1.0f },  // least useful while expanding
+                    { "ColonyShip",    0.5f },  // ships useful but secondary
+                    { "Warship",       2.5f },  // Updated priority
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     { AIStrategy.AIStrategyExpand,      ExpandResearchWeights },
-                    // Consolidate reuses Expand's weights until it gets its own tuning.
-                    { AIStrategy.AIStrategyConsolidate, ExpandResearchWeights },
+                    { AIStrategy.AIStrategyConsolidate, ConsolidateResearchWeights },
                     // AIStrategyAmass — add when needed
                 };
 

@@ -738,6 +738,10 @@ namespace FlatSpace
                 {
                     SingleUpdate();
                     yield return new WaitForSeconds(waitTime);
+                    if (Gameboard.Instance.TurnNumber == 400)
+                    {
+                        Gameboard.Instance.StopTimedUpdate();
+                    }
                 }
             }
 

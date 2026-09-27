@@ -327,10 +327,12 @@ any known planet holds another player's population or docked ship (read directly
 `Planet.Population`/`DockedShips`, since `Planet.Owner` is `NoOwner` on a population tie).
 `PlayerAI.TryEnterConsolidate` calls it first thing in `ProcessResults` and flips Expand → Consolidate
 one-way; Amass/None are never switched. Consolidate's `ProcessResults` case runs the Expand routine, its
-research weight-table entry aliases Expand's dictionary, and its industry entry is its own hand-tuned table
-(Food 1.0, Industry 2.0, Grotsits 1.5, Research 1.0, ColonyShip 1.0, Warship 2.5, against Expand's 2.5, 1.5,
-1.0, 1.0, 2.5, 1.5); see the Consolidate bullet under Ship Transport for the Warship production boost that
-multiplies the Warship value. A missing strategy key silently falls back to a neutral weight, so a new
+research and industry entries are both their own hand-tuned tables:
+research (Food 1.0, Industry 3.0, Grotsits 2.0, Research 1.0, ColonyShip 0.5, Warship 2.5, against Expand's
+3.0, 2.0, 1.0, 1.0, 2.5, 1.5) and industry (Food 1.0, Industry 2.0, Grotsits 1.5, Research 1.0, ColonyShip 1.0,
+Warship 2.5, against Expand's 2.5, 1.5, 1.0, 1.0, 2.5, 1.5); see the Consolidate bullet under Ship Transport for
+the Warship production boost that multiplies the industry Warship value. A missing strategy key silently
+falls back to a neutral weight, so a new
 strategy must be given entries or it loses Expand's tuning. `PlayerKnowledgeSelfCheck` asserts every value
 of both industry tables explicitly.
 
