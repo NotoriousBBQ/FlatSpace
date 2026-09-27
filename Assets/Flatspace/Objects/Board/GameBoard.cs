@@ -729,7 +729,7 @@ namespace FlatSpace
             public void StartTimedUpdate()
             {
                 _timedUpdateRunning = true;
-                StartCoroutine(TimedUpdate(.25f));
+                StartCoroutine(TimedUpdate(.1f));
             }
 
             IEnumerator TimedUpdate(float waitTime)
