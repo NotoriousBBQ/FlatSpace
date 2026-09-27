@@ -31,6 +31,7 @@ public static class ShipTransportSelfCheck
         ok &= RunWarshipShortfallChecks();
         ok &= RunWarshipCeilingChecks();
         ok &= RunOfferedChoicesCheck();
+        ok &= RunBestTierPerSubtypeCheck();
         ok &= RunImprovementYieldCheck();
         ok &= RunWorkerRateCheck();
         ok &= RunIndustryBaseRenameCheck();
@@ -1705,9 +1706,14 @@ public static class ShipTransportSelfCheck
     }
 
     private static IndustryChoiceElement Choice(string name, float weight)
+        => Choice(name, weight, subType: name, tier: 0);
+
+    private static IndustryChoiceElement Choice(string name, float weight, string subType, int tier)
     {
         var item = ScriptableObject.CreateInstance<Flatspace.Objects.Production.CatalogItem>();
         item.itemName = name;
+        item.subType = subType;
+        item.tier = tier;
         return new IndustryChoiceElement { Item = item, Weight = weight, PlanetName = "P" };
     }
 
@@ -1738,6 +1744,39 @@ public static class ShipTransportSelfCheck
             var allZero = PlayerAI.OfferedChoices(new List<IndustryChoiceElement> { colony, cut });
             ok &= Check(allZero.Count == 0,
                 "an all-zero row offers nothing (so the planet stays idle) instead of falling back to a uniform pick");
+        }
+        finally
+        {
+            foreach (var choice in made) Object.DestroyImmediate(choice.Item);
+        }
+        return ok;
+    }
+
+    // Once several tiers of the same resource are unlocked and affordable, building anything but the best one
+    // is wasted industry (yield/upkeep only ever count a planet's best tier per resource), and a backlog of
+    // same-resource tiers must not out-count Warship/ColonyShip, which only ever have one catalog entry each.
+    public static bool RunBestTierPerSubtypeCheck()
+    {
+        var ok = true;
+        var made = new List<IndustryChoiceElement>();
+        try
+        {
+            var food3 = Choice("Food3", 2.0f, "Food", 3);
+            var food7 = Choice("Food7", 2.0f, "Food", 7);
+            var food5 = Choice("Food5", 2.0f, "Food", 5);
+            var warship = Choice("Warship", 5.5f, "Warship", 1);
+            made.AddRange(new[] { food3, food7, food5, warship });
+
+            var kept = PlayerAI.BestTierPerSubtype(new List<IndustryChoiceElement> { food3, food7, food5, warship });
+            ok &= Check(kept.Count == 2, "one entry survives per subtype (Food, Warship), not one per tier");
+            ok &= Check(kept.Any(c => c.Item.itemName == "Food7"),
+                "the highest researched Food tier (7) is kept, not tier 3 or 5, even though all three carry the same table weight");
+            ok &= Check(kept.Any(c => c.Item.itemName == "Warship"),
+                "Warship (already a single entry) passes through unchanged");
+
+            var singleFood = PlayerAI.BestTierPerSubtype(new List<IndustryChoiceElement> { food3 });
+            ok &= Check(singleFood.Count == 1 && singleFood[0].Item.itemName == "Food3",
+                "a subtype with only one eligible tier is unaffected");
         }
         finally
         {

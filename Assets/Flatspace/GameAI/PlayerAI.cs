@@ -626,6 +626,19 @@ namespace FlatSpace
             public static List<IndustryChoiceElement> OfferedChoices(List<IndustryChoiceElement> choices)
                 => choices.FindAll(c => c.Weight > 0f && !float.IsNaN(c.Weight) && !float.IsInfinity(c.Weight));
 
+            /// <summary>
+            /// Keeps only the highest tier per subtype among the remaining choices. Once several tiers of the
+            /// same resource are unlocked and affordable, building anything but the best one is wasted industry
+            /// (yield and upkeep only ever count a planet's best tier per resource, regardless of build order),
+            /// and a backlog of same-resource tiers would otherwise inflate that resource's share of the roulette
+            /// wheel relative to Warship/ColonyShip, which only ever have one catalog entry each.
+            /// </summary>
+            public static List<IndustryChoiceElement> BestTierPerSubtype(List<IndustryChoiceElement> choices)
+                => choices
+                    .GroupBy(c => c.Item.subType)
+                    .Select(g => g.OrderByDescending(c => c.Item.tier).First())
+                    .ToList();
+
             /// <summary>Planets I own with population (the same test as ShipTransportPlanner.IsColonized).</summary>
             public int ColonizedPlanetCount()
                 => AIMap.PlanetList.Count(p => p.Owner == Player.playerID && p.Population.Count > 0);
@@ -776,6 +789,7 @@ namespace FlatSpace
                     // cap), but ScoreMatrix treats weights as relative and picks uniformly when every
                     // weight is 0, so such choices must be dropped, not just weighted down.
                     entries = OfferedChoices(entries);
+                    entries = BestTierPerSubtype(entries);
                     if(entries.Count == 0) continue;
 
                     // A planet has one production slot, so it gets exactly one new

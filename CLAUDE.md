@@ -286,6 +286,18 @@ grotsits shipping.
   the name list `CompletedImprovements`, applies the yield (never lowering it) and tracks the best tier per resource.
 - **Superseded tiers are not offered:** `BuildIndustryMatrix` drops an improvement whose tier is at or below the
   planet's best for that resource (`Planet.IsImprovementSuperseded`), which also shrinks each planet's choice list.
+- **Dilution: only the best-affordable tier per subtype is offered.** Research often unlocks several tiers of a
+  resource before a planet's production catches up (one item built per turn), so multiple unbuilt tiers of the
+  same resource can be simultaneously eligible, each carrying that resource's full per-subtype table weight —
+  unlike Warship/ColonyShip, which only ever have one catalog entry each. Left unchecked, a resource with a deep
+  backlog drowns out everything else in the roulette wheel purely by entry count (a real symptom: the player with
+  the most researched tiers built the fewest warships despite a 2.2x situational boost). `PlayerAI.BestTierPerSubtype`
+  (called in `BuildIndustryMatrix` right after `OfferedChoices`) collapses each row to one entry per subtype — the
+  highest tier that survived the affordability filter — which fixes the dilution and also stops a planet from ever
+  building a tier it would immediately supersede: yield and upkeep only count a planet's best tier per resource
+  regardless of build order, so building a lower tier when a higher one is already unlocked and affordable was
+  always wasted industry. Research's own roll doesn't have this problem: each tier's `requiredTech` is the
+  previous tier, so only one tier per resource is ever eligible there at a time.
 - **Affordability** is a situational weight (`GetIndustrySituationalWeightMultiplier`, 0 when unaffordable) backed by
   `Planet.CanAffordImprovement`: max population plus the upkeep after building (the candidate replaces the same
   resource's best tier and adds to the others) must fit within `Planet.GetGrotsitsCapacity()` (base + max population x

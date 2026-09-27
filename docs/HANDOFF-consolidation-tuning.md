@@ -54,10 +54,17 @@ came afterwards, so re-run before comparing warship, colony ship and improvement
 
 ## Open items, in the order I would take them
 
-1. **Per-subType normalization of the production and research rolls (recommended, not built).** Divide an item's
-   weight by the number of eligible items of its subType in that row, so adding tiers does not change a
-   category's odds. Applies to both rolls; slightly changes Expand's odds. Alternatives: production only, or
-   retune weights by hand.
+1. ~~Per-subType normalization of the production and research rolls~~ **Done, via a stronger fix than the
+   normalization originally proposed here.** `PlayerAI.BestTierPerSubtype` (called from `BuildIndustryMatrix`,
+   right after `OfferedChoices`) collapses each row to the single highest-tier, still-affordable entry per
+   subtype, rather than dividing weight by backlog count. This fixes the dilution (a resource with several
+   unbuilt tiers no longer out-counts Warship/ColonyShip, which only ever have one catalog entry each) and
+   also stops the wasted-industry case normalization alone would have left in place: since yield and upkeep
+   only ever count a planet's best tier per resource regardless of build order, building a lower tier when a
+   higher one is already unlocked and affordable was always pure waste. Research's roll was confirmed
+   unaffected (each tier's `requiredTech` is the previous tier, so only one tier per resource is ever eligible
+   there today) — no change needed on that side. Covered by `RunBestTierPerSubtypeCheck` in
+   `Assets/Editor/ShipTransportSelfCheck.cs`.
 2. **Improvement upkeep is implemented and proven by a 400-turn run** (design and rationale in
    `docs/superpowers/specs/2026-09-26-improvement-upkeep-design.md`, summary in `CLAUDE.md`): catalog `tier` and
    `maintenanceCost` now load, only the best tier per resource is charged x `improvementUpkeepScale` (default 0.15),
