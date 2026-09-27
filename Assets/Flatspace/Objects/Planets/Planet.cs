@@ -114,6 +114,9 @@ public class Planet : MonoBehaviour
     /// Data-driven: no planet type is named.
     /// </summary>
     public bool NeedsColonyFoodRider => _resourceData._baseFoodProduction + _resourceData._foodProduction < 1f;
+
+    /// <summary>Whether the last turn's grotsits stock could not cover the planet's requirement (population plus upkeep).</summary>
+    public bool GrotsitsShort { get; private set; }
     
     public float Food { get; set; } = 0.0f;
     public float FoodProduced { get; set; } = 0.0f;
@@ -139,6 +142,10 @@ public class Planet : MonoBehaviour
     public bool GrotsitsShipmentIncoming = false;
 
     public List<(string, float)> CompletedImprovements = new List<(string, float)>();
+    // The best (highest-tier) improvement built per resource: the only one charged upkeep and the only one whose yield
+    // applies. Kept alongside CompletedImprovements, which stays the full list of names.
+    private readonly Dictionary<string, (int tier, float maintenance)> _bestImprovement
+        = new Dictionary<string, (int tier, float maintenance)>();
     private Dictionary<string, float> ImprovementYieldModifier = new Dictionary<string, float>
     {
         {"Food", 1f},
@@ -240,14 +247,60 @@ public class Planet : MonoBehaviour
         return Population.Count + GetImprovementMaintenanceCost();
     }
 
-    private float GetImprovementMaintenanceCost()
+    /// <summary>
+    /// Grotsits per turn spent on improvements: the catalog maintenanceCost of the BEST tier built for each resource,
+    /// times GameAIConstants.improvementUpkeepScale (0 switches upkeep off). Only the best tier is charged because only
+    /// the best tier's yield applies.
+    /// </summary>
+    public float GetImprovementMaintenanceCost()
     {
-        var totalImprovementCost = 0f;
-        foreach (var improvement in CompletedImprovements)
-        {
-            totalImprovementCost += improvement.Item2;
-        }
-        return totalImprovementCost;
+        var total = 0f;
+        foreach (var best in _bestImprovement.Values)
+            total += best.maintenance;
+        return total * UpkeepScale();
+    }
+
+    private float UpkeepScale() => GameAIConstants != null ? GameAIConstants.improvementUpkeepScale : 0f;
+
+    /// <summary>The highest tier built for a resource; -1 when none.</summary>
+    public int GetBestImprovementTier(string subType)
+        => _bestImprovement.TryGetValue(subType, out var best) ? best.tier : -1;
+
+    /// <summary>
+    /// An improvement whose tier is at or below the best already built for its resource: it would add nothing (the
+    /// higher tier's yield already applies), so it is not worth offering. Only improvements can be superseded.
+    /// </summary>
+    public bool IsImprovementSuperseded(CatalogItem item)
+        => item.type == "Improvement" && item.tier <= GetBestImprovementTier(item.subType);
+
+    /// <summary>
+    /// The most grotsits this planet could make per turn with every inhabitant staffed at its maximum population:
+    /// base production plus maximum population times the grotsits worker rate (improvements included).
+    /// </summary>
+    public float GetGrotsitsCapacity()
+        => _resourceData._baseGrotsitsProduction + MaxPopulation * GetWorkerRate("Grotsits");
+
+    /// <summary>
+    /// Can this planet carry the upkeep of building this improvement? True when its maximum population plus the
+    /// upkeep afterwards fits within its grotsits capacity (the candidate replaces the same resource's best tier and
+    /// adds to every other resource's). A planet whose capacity does not even exceed its own maximum population
+    /// (Farm, Verdant) is an importer by data and is exempt: it is meant to run on grotsits shipments. This is the
+    /// single seam for per-type import allowances (none for Prime/Normal, small for specialized planets, large for
+    /// super-specialized ones).
+    /// </summary>
+    public bool CanAffordImprovement(CatalogItem item)
+    {
+        var capacity = GetGrotsitsCapacity();
+        if (capacity <= MaxPopulation) return true;
+
+        var upkeepAfter = 0f;
+        foreach (var best in _bestImprovement)
+            if (best.Key != item.subType) upkeepAfter += best.Value.maintenance;
+        var candidate = item.maintenanceCost;
+        if (_bestImprovement.TryGetValue(item.subType, out var same))
+            candidate = Math.Max(candidate, same.maintenance);
+        upkeepAfter = (upkeepAfter + candidate) * UpkeepScale();
+        return MaxPopulation + upkeepAfter <= capacity;
     }
     private bool GrotsitsWorkerRequirement(out int grotsitsWorkers)
     {
@@ -605,7 +658,8 @@ public class Planet : MonoBehaviour
 
         var grotsitsShort = 0.0f;
         var grotsitsRequired = GetMaintenanceCost();
-        if (Grotsits < grotsitsRequired) 
+        GrotsitsShort = Grotsits < grotsitsRequired;   // for the tuning log's economy line
+        if (Grotsits < grotsitsRequired)
         { 
             // Can't give everyone goods
             grotsitsShort += Grotsits - grotsitsRequired;
@@ -962,8 +1016,20 @@ public class Planet : MonoBehaviour
     private void AddActiveImprovement(ProductionItem? production)
     {
         if (production == null) return;
-        CompletedImprovements.Add((production?.Item.itemName, production?.Item.maintenanceCost ?? 0f));
-        ApplyImprovementYield(production?.Item.subType, Convert.ToSingle(production?.Item.effect));
+        RecordImprovement(production.Value.Item);
+    }
+
+    /// <summary>
+    /// Records a finished improvement: remembers its name (production choices and saves use the list), applies its
+    /// yield (never lowering it) and tracks the best tier per resource for upkeep. Also used to restore improvements
+    /// when a save is loaded.
+    /// </summary>
+    public void RecordImprovement(CatalogItem item)
+    {
+        CompletedImprovements.Add((item.itemName, item.maintenanceCost));
+        ApplyImprovementYield(item.subType, Convert.ToSingle(item.effect));
+        if (!_bestImprovement.TryGetValue(item.subType, out var best) || item.tier >= best.tier)
+            _bestImprovement[item.subType] = (item.tier, item.maintenanceCost);
     }
 
     /// <summary>

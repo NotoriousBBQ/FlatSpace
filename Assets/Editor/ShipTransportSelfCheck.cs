@@ -3,6 +3,8 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using FlatSpace.AI;
+using CatalogItem = Flatspace.Objects.Production.CatalogItem;
+using ProductionCatalog = Flatspace.Objects.Production.Catalog;
 
 public static class ShipTransportSelfCheck
 {
@@ -33,6 +35,7 @@ public static class ShipTransportSelfCheck
         ok &= RunWorkerRateCheck();
         ok &= RunIndustryBaseRenameCheck();
         ok &= RunBoardNameCheck();
+        ok &= RunImprovementUpkeepChecks();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -68,6 +71,7 @@ public static class ShipTransportSelfCheck
         c.warshipShortfallBoost = 2f;
         c.warshipFleetCap = 1.5f;
         c.warshipsPerColonizedPlanet = 100f;   // generous: the ceiling checks lower it explicitly
+        c.improvementUpkeepScale = 0.5f;       // easy arithmetic in the upkeep checks
         return c;
     }
 
@@ -1353,6 +1357,203 @@ public static class ShipTransportSelfCheck
         {
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    private static CatalogItem Improvement(string name, string subType, int tier, float maintenance, float effect)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.itemName = name;
+        item.type = "Improvement";
+        item.subType = subType;
+        item.tier = tier;
+        item.maintenanceCost = maintenance;
+        item.effect = effect.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return item;
+    }
+
+    // Improvement upkeep: tier and maintenanceCost are loaded from the catalog JSON, each planet is charged only its
+    // BEST tier per resource (matching how yield works), superseded tiers are not offered, and an improvement is only
+    // offered when the planet's grotsits capacity can carry its population plus the upkeep after building it, except
+    // for planets that cannot even feed their own population with grotsits (Farm, Verdant), which run on imports.
+    public static bool RunImprovementUpkeepChecks()
+    {
+        var ok = RunUpkeepCatalogCheck();
+        ok &= RunUpkeepChargingCheck();
+        ok &= RunUpkeepAffordabilityCheck();
+        return ok;
+    }
+
+    private static bool RunUpkeepCatalogCheck()
+    {
+        var ok = true;
+        var item = Improvement("Food3Production", "Food", 3, 18f, 18f);
+        var go = new GameObject("STSelfCheck_Catalog");
+        try
+        {
+            var back = JsonUtility.FromJson<ProductionCatalog.CatalogSaveData.ItemSaveData>(
+                JsonUtility.ToJson(new ProductionCatalog.CatalogSaveData.ItemSaveData(item)));
+            ok &= Check(back.tier == 3 && back.maintenanceCost == 18f,
+                "an item's tier and maintenanceCost survive the catalog save format");
+
+            var catalog = go.AddComponent<ProductionCatalog>();
+            catalog.CreateCatalogFromCatalogSaveData(
+                "{\"catalogName\":\"Production Catalog\",\"catalogType\":\"Production\",\"items\":[" +
+                "{\"itemName\":\"Food3Production\",\"subType\":\"Food\",\"type\":\"Improvement\",\"tier\":3," +
+                "\"maintenanceCost\":18.0,\"cost\":950.0,\"effect\":\"18\",\"requiredTech\":\"Food Improvement 3\"," +
+                "\"researched\":false}]}");
+            var loaded = catalog.GetItem("Food3Production");
+            ok &= Check(loaded != null && loaded.tier == 3 && loaded.maintenanceCost == 18f,
+                "loading a catalog JSON sets tier and maintenanceCost on the runtime item (they used to be dropped)");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(item);
+        }
+        return ok;
+    }
+
+    private static bool RunUpkeepChargingCheck()
+    {
+        var ok = true;
+        var made = new List<CatalogItem>();
+        CatalogItem Make(string name, string sub, int tier, float maintenance)
+        {
+            var i = Improvement(name, sub, tier, maintenance, maintenance);
+            made.Add(i);
+            return i;
+        }
+
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_UpkeepCharging");
+        try
+        {
+            var map = BuildMap(go, NewConstants(),
+                MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" }),
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            var a = map.GetPlanet("A");   // upkeep scale is 0.5 in NewConstants
+
+            ok &= Check(a.GetImprovementMaintenanceCost() == 0f, "a planet with no improvements pays no upkeep");
+            a.RecordImprovement(Make("Food1", "Food", 1, 7f));
+            ok &= Check(a.GetImprovementMaintenanceCost() == 3.5f, "tier 1 food (7) x scale 0.5 = 3.5");
+            a.RecordImprovement(Make("Food3", "Food", 3, 18f));
+            ok &= Check(a.GetImprovementMaintenanceCost() == 9f,
+                "tier 3 REPLACES tier 1 for the same resource: 18 x 0.5 = 9, not 7 + 18");
+            a.RecordImprovement(Make("Grotsits0", "Grotsits", 0, 3f));
+            ok &= Check(a.GetImprovementMaintenanceCost() == 10.5f, "another resource adds its own best tier: (18 + 3) x 0.5");
+            a.RecordImprovement(Make("Food1b", "Food", 1, 7f));
+            ok &= Check(a.GetImprovementMaintenanceCost() == 10.5f,
+                "a lower tier completed after a higher one changes nothing (still charged for tier 3)");
+            ok &= Check(Mathf.Approximately(a.GetImprovementYield("Food"), 1.07f) == false
+                        && Mathf.Approximately(a.GetImprovementYield("Food"), 1.18f),
+                "and its yield stays at tier 3's 18%");
+            ok &= Check(a.GetBestImprovementTier("Food") == 3 && a.GetBestImprovementTier("Grotsits") == 0
+                        && a.GetBestImprovementTier("Research") == -1,
+                "best tier per resource: Food 3, Grotsits 0, Research none (-1)");
+
+            ok &= Check(a.IsImprovementSuperseded(Make("f1", "Food", 1, 7f)), "Food tier 1 is superseded by tier 3");
+            ok &= Check(a.IsImprovementSuperseded(Make("f3", "Food", 3, 18f)), "Food tier 3 itself is already built");
+            ok &= Check(!a.IsImprovementSuperseded(Make("f4", "Food", 4, 25f)), "Food tier 4 is still on offer");
+            ok &= Check(!a.IsImprovementSuperseded(Make("g1", "Grotsits", 1, 7f)), "Grotsits tier 1 is above its best (0)");
+            ok &= Check(!a.IsImprovementSuperseded(Make("r0", "Research", 0, 3f)), "an unbuilt resource offers its tier 0");
+            var ship = Make("ship", "Warship", 1, 5f);
+            ship.type = "Ship";
+            ok &= Check(!a.IsImprovementSuperseded(ship), "only improvements can be superseded, never ships");
+
+            map.GameAIConstants.improvementUpkeepScale = 0f;
+            ok &= Check(a.GetImprovementMaintenanceCost() == 0f, "an upkeep scale of 0 switches upkeep off entirely");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
+            foreach (var i in made) Object.DestroyImmediate(i);
+        }
+        return ok;
+    }
+
+    private static bool RunUpkeepAffordabilityCheck()
+    {
+        var ok = true;
+        var made = new List<CatalogItem>();
+        CatalogItem Make(string sub, int tier, float maintenance)
+        {
+            var i = Improvement(sub + tier, sub, tier, maintenance, maintenance);
+            made.Add(i);
+            return i;
+        }
+
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("STSelfCheckMap_UpkeepAfford");
+        var playerGo = new GameObject("STSelfCheckPlayer_UpkeepAfford");
+        try
+        {
+            // D: a Desolate-like grotsits factory (3 + 7 per worker, max pop 7 -> capacity 52).
+            // F: a Farm-like planet (grotsits 0 + 1 per worker, max pop 10 -> capacity 10 = its own population).
+            var d = MakeSpawn("D", Planet.PlanetType.PlanetTypeNormal, new[] { "F" });
+            d._resourceData._baseGrotsitsProduction = 3f;
+            d._resourceData._grotsitsProduction = 7f;
+            d._resourceData._maxPopulation = 7;
+            var f = MakeSpawn("F", Planet.PlanetType.PlanetTypeNormal);
+            f._resourceData._baseGrotsitsProduction = 0f;
+            f._resourceData._grotsitsProduction = 1f;
+            f._resourceData._maxPopulation = 10;
+            var map = BuildMap(mapGo, NewConstants(), d, f);
+            var planetD = map.GetPlanet("D"); var planetF = map.GetPlanet("F");
+
+            ok &= Check(planetD.GetGrotsitsCapacity() == 52f, "capacity = base 3 + max pop 7 x rate 7 = 52");
+            ok &= Check(planetF.GetGrotsitsCapacity() == 10f, "the Farm-like planet's capacity is 10");
+            planetD.ApplyImprovementYield("Grotsits", 50f);
+            ok &= Check(Mathf.Approximately(planetD.GetGrotsitsCapacity(), 76.5f),
+                "a grotsits improvement raises capacity: 3 + 7 x (7 x 1.5) = 76.5");
+            // Fresh planets for the boundary cases so the yield above does not interfere (and one map alive at a time).
+            Object.DestroyImmediate(mapGo);
+            var map2Go = new GameObject("STSelfCheckMap_UpkeepAfford2");
+            _nextPlanetX = 0f;
+            var d2 = MakeSpawn("D2", Planet.PlanetType.PlanetTypeNormal, new[] { "F2" });
+            d2._resourceData._baseGrotsitsProduction = 3f;
+            d2._resourceData._grotsitsProduction = 7f;
+            d2._resourceData._maxPopulation = 7;
+            var f2 = MakeSpawn("F2", Planet.PlanetType.PlanetTypeNormal);
+            f2._resourceData._baseGrotsitsProduction = 0f;
+            f2._resourceData._grotsitsProduction = 1f;
+            f2._resourceData._maxPopulation = 10;
+            try
+            {
+                var map2 = BuildMap(map2Go, NewConstants(), d2, f2);
+                var pd = map2.GetPlanet("D2"); var pf = map2.GetPlanet("F2");
+                // headroom = 52 - 7 = 45 of upkeep; the scale is 0.5, so an item of maintenance 90 costs exactly 45.
+                ok &= Check(pd.CanAffordImprovement(Make("Industry", 5, 90f)),
+                    "exactly at the ceiling (7 + 45 = 52) is affordable");
+                ok &= Check(!pd.CanAffordImprovement(Make("Industry", 5, 92f)),
+                    "one step over (7 + 46 = 53 > 52) is not");
+                ok &= Check(pf.CanAffordImprovement(Make("Food", 10, 1000f)),
+                    "a planet whose capacity does not exceed its population is an importer by data: exempt");
+
+                // Replacement, not addition: with Industry tier 8 (63 -> 31.5) built, Industry tier 9 (75 -> 37.5) replaces it.
+                pd.RecordImprovement(Make("Industry", 8, 63f));
+                ok &= Check(pd.CanAffordImprovement(Make("Industry", 9, 75f)),
+                    "the next tier of the same resource replaces the built one: 37.5 + 7 <= 52");
+                ok &= Check(!pd.CanAffordImprovement(Make("Research", 8, 63f)),
+                    "a second resource ADDS its upkeep: 31.5 + 31.5 + 7 = 70 > 52");
+
+                // The situational production weight follows affordability.
+                var ai = MakeAI(playerGo, map2, PlayerAI.AIStrategy.AIStrategyConsolidate);
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Industry", 9, 75f), "D2") == 1f,
+                    "an affordable improvement keeps its weight");
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Research", 9, 200f), "D2") == 0f,
+                    "an unaffordable improvement is not offered (weight 0)");
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(Make("Research", 9, 200f), "F2") == 1f,
+                    "the importer planet may still build it");
+            }
+            finally { Object.DestroyImmediate(map2Go); }
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+            foreach (var i in made) Object.DestroyImmediate(i);
         }
         return ok;
     }

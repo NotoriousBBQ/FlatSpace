@@ -46,6 +46,10 @@ namespace Flatspace.Objects.Production
                 public string description;
                 public string type;
                 public string subType;
+                // tier and maintenanceCost were in the JSON but not here, so JsonUtility dropped them on load (upkeep
+                // was silently 0) and the Save Catalog button stripped them from the file.
+                public int tier;
+                public float maintenanceCost;
                 public float cost;
                 public string effect;
                 public string requiredTech;
@@ -57,6 +61,8 @@ namespace Flatspace.Objects.Production
                     description = item.description;
                     type = item.type;
                     subType = item.subType;
+                    tier = item.tier;
+                    maintenanceCost = item.maintenanceCost;
                     cost = item.cost;
                     effect = item.effect;
                     requiredTech = item.requiredTech;
@@ -111,7 +117,8 @@ namespace Flatspace.Objects.Production
             }
         }
 
-        private void CreateCatalogFromCatalogSaveData(string jsonData)
+        // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+        public void CreateCatalogFromCatalogSaveData(string jsonData)
         {
             var loadConfig = JsonUtility.FromJson<CatalogSaveData>(jsonData);
             catalogName = loadConfig.catalogName;
@@ -125,6 +132,8 @@ namespace Flatspace.Objects.Production
                 catalogItem.description = itemData.description;
                 catalogItem.type = itemData.type;
                 catalogItem.subType = itemData.subType;
+                catalogItem.tier = itemData.tier;
+                catalogItem.maintenanceCost = itemData.maintenanceCost;
                 catalogItem.cost = itemData.cost;
                 catalogItem.effect = itemData.effect;
                 catalogItem.requiredTech = itemData.requiredTech;

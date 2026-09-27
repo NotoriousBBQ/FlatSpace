@@ -69,6 +69,9 @@ public class SaveLoadSystem : MonoBehaviour
             public bool foodTransferInProgress;
             public bool grotsitsTransferInProgress;
             public List<GameSave.ShipSave> dockedShips;
+            // Names of the improvements the planet has completed (restored through the production catalog, which
+            // rebuilds yields and upkeep). Older saves have none and load with no improvements, as before.
+            public List<string> completedImprovements;
         }
 
         [Serializable]
@@ -172,7 +175,8 @@ public class SaveLoadSystem : MonoBehaviour
                     foodTransferInProgress = planet.FoodShipmentIncoming,
                     grotsitsTransferInProgress = planet.GrotsitsShipmentIncoming,
                     population = new int[Gameboard.Instance.players.Count],
-                    dockedShips = new List<GameSave.ShipSave>()
+                    dockedShips = new List<GameSave.ShipSave>(),
+                    completedImprovements = planet.CompletedImprovements.ConvertAll(c => c.Item1)
                 };
 
                 foreach (var ship in planet.DockedShips)

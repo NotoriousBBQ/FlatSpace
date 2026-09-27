@@ -186,12 +186,10 @@ planets distinct positions, not to touch `FindPath`.
   path: `Application.persistentDataPath/Catalogs/`. `CatalogItem.researched` is a single flag meaning
   "unlocked/completed" for both trees; completing a research item also flips `researched` on production
   items whose `requiredTech` matches. Edit catalogs via the **Save/Load Catalog buttons** added to the
-  `Catalog` component inspector by `Assets/Editor/CatalogEditor.cs`. **Caution:** `Catalog.CatalogSaveData`'s
-  `ItemSaveData` has no `tier` or `maintenanceCost` field, so `JsonUtility` drops both on load (every
-  runtime `CatalogItem` has tier 0 and upkeep 0 — improvement maintenance is effectively off) and the
-  **Save Catalog button strips both keys from the JSON**. Prefer editing the JSON by hand until they are loaded.
-  Save games match catalog items by `itemName`, so adding items is safe, but saves do not store a planet's
-  completed improvements, so loading a save resets them.
+  `Catalog` component inspector by `Assets/Editor/CatalogEditor.cs`. `Catalog.CatalogSaveData.ItemSaveData` carries `tier` and `maintenanceCost` (they were missing, so `JsonUtility`
+dropped them on load and the Save Catalog button stripped them from the JSON; both fixed). Save games match catalog
+items by `itemName`, so adding items is safe, and saves now store each planet's completed improvements by name (see
+Improvement upkeep).
 
 ### Saves
 
@@ -270,6 +268,37 @@ see the lookup below): 0 Balanced, 1 Growth, 2 Food, 3 FocusedFood, 4 Grotsits, 
   every planet, so economy numbers from before are not comparable. The field was renamed from
   `_baseIndustrialProduction` (see the rename precedent under Conventions). The designer strategy disconnect above
   is tracked in `FUTURE_FEATURES.md`.
+
+### Improvement upkeep
+
+Improvements cost **grotsits every turn**, on top of the population's own consumption:
+`Planet.GetMaintenanceCost() = Population.Count + GetImprovementMaintenanceCost()`, used by `ConsumeGrotsits` (a
+shortfall zeroes the stock and lowers `Morale`, which scales all production) and by `GrotsitsWorkerRequirement`
+(upkeep moves workers onto grotsits and off food/industry/research). So upkeep is an economy-wide tax and drives
+grotsits shipping.
+
+- **What is charged:** only the **best (highest-tier) improvement per resource**, matching how yield works (only the
+  best tier's yield applies), times `GameAIConstants.improvementUpkeepScale` (default 0.15; 0 switches upkeep off).
+  The catalog `maintenanceCost` values equal the improvements' effect percentages (3, 7, 12 ... 88), far too high at
+  face value: a replay of a long run put a mid-game planet at 88% and an end-game planet at 245% of its whole grotsits
+  capacity at scale 1.0, and roughly 0.1-0.2 keeps the median burden near 10-40%. Tune the scale, not the 44 items.
+- **Recording:** `Planet.RecordImprovement(CatalogItem)` (called when production completes and when a save loads) keeps
+  the name list `CompletedImprovements`, applies the yield (never lowering it) and tracks the best tier per resource.
+- **Superseded tiers are not offered:** `BuildIndustryMatrix` drops an improvement whose tier is at or below the
+  planet's best for that resource (`Planet.IsImprovementSuperseded`), which also shrinks each planet's choice list.
+- **Affordability** is a situational weight (`GetIndustrySituationalWeightMultiplier`, 0 when unaffordable) backed by
+  `Planet.CanAffordImprovement`: max population plus the upkeep after building (the candidate replaces the same
+  resource's best tier and adds to the others) must fit within `Planet.GetGrotsitsCapacity()` (base + max population x
+  the grotsits worker rate). A planet whose capacity does not exceed its own maximum population (Farm, Verdant) is an
+  **importer by data** and is exempt: it is meant to run on grotsits shipments. `CanAffordImprovement` is the one
+  seam for future per-type import allowances (goal: Prime/Normal need no or minimal incoming shipments; specialized
+  planets (Desert, Farm, Industrial, Ocean) minimal; super-specialized Desolate (grotsits) and Verdant (food) live on a
+  stream of shipments).
+- **Saves:** `PlanetSave.completedImprovements` (names) is written by `SaveLoadSystem` and restored in
+  `GameAIMap.SetPlanetSimulationStats` through the production catalog and `RecordImprovement`; older saves restore none.
+- **Logging:** every 25 turns each player logs `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>`
+  (`GameAI.LogEconomySummary`). Incoming shipments per planet type can be measured from the existing
+  `FoodShip`/`GrotsitsShip` targets.
 
 ### Player Knowledge
 
@@ -423,7 +452,7 @@ started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's n
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
 ship's food rider as `ColonyRider|<origin>-><target>|<amount>`, and colony failures as `PopulationLoss|<planet>`
-plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it)) for
+plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), and every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own

@@ -660,6 +660,8 @@ namespace FlatSpace
                     if (Strategy == AIStrategy.AIStrategyConsolidate)
                         return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
+                if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
+                    return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
                 if (item.subType == "Warship" && Strategy == AIStrategy.AIStrategyConsolidate)
                 {
                     if (_warshipMultiplierThisTurn == null)
@@ -747,7 +749,8 @@ namespace FlatSpace
                     var planetResults = productionCompleteResults.FindAll(x => x.Name == planetName);
                     var planet = AIMap.GetPlanet(planetName);
                     var potentialProduction = ProductionCatalog.catalogItems.FindAll(x => x.researched == true
-                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name)) );
+                        && !(planet.CompletedImprovements.Select(y => y.Item1).ToList().Contains(x.name))
+                        && !planet.IsImprovementSuperseded(x));   // a lower tier than the best already built adds nothing
 
                     var planetSurplus = surplusResults.FindIndex(x => x.Name == planetName) == -1
                         ? 0f

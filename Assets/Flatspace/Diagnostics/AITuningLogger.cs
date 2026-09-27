@@ -180,6 +180,15 @@ public static class AITuningLogger
         return string.IsNullOrEmpty(name) ? "unknown" : name.Replace('|', '_');
     }
 
+    /// <summary>One player's economy every 25 turns: T&lt;turn&gt;|P&lt;id&gt;|Economy|planets|planetsShortOfGrotsits|meanMorale|totalUpkeep.</summary>
+    public static void LogEconomy(int turnNumber, int playerId, int planets, int planetsShort, float meanMorale, float totalUpkeep)
+    {
+        if (_currentLogPath == null) return;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Economy", planets.ToString(),
+            planetsShort.ToString(), meanMorale.ToString("0.#", inv), totalUpkeep.ToString("0.#", inv)) });
+    }
+
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>
     public static void LogBoardConfig(string boardName)
     {

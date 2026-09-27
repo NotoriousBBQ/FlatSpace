@@ -114,11 +114,27 @@ namespace FlatSpace
                 planetUpdateResults.Clear();
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
+                LogEconomySummary(Gameboard.Instance.TurnNumber, Gameboard.Instance.players.Count);
                 GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count);
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
+            }
+
+            // Every 25 turns, one line per player: how many planets it owns, how many were short of grotsits,
+            // their mean morale, and the total improvement upkeep, so upkeep and grotsits shipping can be tuned from logs.
+            private void LogEconomySummary(int turnNumber, int playerCount)
+            {
+                if (turnNumber % 25 != 0) return;
+                for (var player = 0; player < playerCount; player++)
+                {
+                    var owned = GameAIMap.PlanetList.FindAll(p => p.Owner == player && p.Population.Count > 0);
+                    if (owned.Count == 0) continue;
+                    AITuningLogger.LogEconomy(turnNumber, player, owned.Count,
+                        owned.Count(p => p.GrotsitsShort), owned.Average(p => p.Morale),
+                        owned.Sum(p => p.GetImprovementMaintenanceCost()));
+                }
             }
 
             private void ProcessCurrentOrders()

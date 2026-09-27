@@ -47,6 +47,13 @@ public class GameAIConstants : ScriptableObject
     // assaultRatio x the enemies' known fleets) chases the enemies, who chase mine, and grows without limit.
     public float warshipsPerColonizedPlanet = 8f;
 
+    [Header("Improvement upkeep")]
+    // Multiplies each improvement's catalog maintenanceCost when it is charged (grotsits per turn, on top of the
+    // population's own consumption). Only the BEST tier per resource is charged. 0 switches upkeep off. The catalog
+    // values equal the improvements' effect percentages, which are far too high to charge at face value (a replay of
+    // a long run put a mid-game planet at 88% and an end-game planet at 245% of its whole grotsits capacity at 1.0).
+    public float improvementUpkeepScale = 0.15f;
+
     [Header("Colonization")]
     // Food a colony ship carries to a planet that produces no food (e.g. Desolate), so the colony survives long
     // enough for the food shipping system to notice its shortage. The origin pays it and must hold at least this

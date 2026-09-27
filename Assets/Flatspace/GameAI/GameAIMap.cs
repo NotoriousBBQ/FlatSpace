@@ -278,6 +278,14 @@ namespace FlatSpace
                             });
                         }
                     }
+                    // Rebuild the planet's improvements (yields and upkeep) from the catalog by name; unknown names
+                    // (a catalog that no longer has the item) are skipped. A missing list (older save) restores none.
+                    if (planetStatus.completedImprovements != null)
+                        foreach (var improvementName in planetStatus.completedImprovements)
+                        {
+                            var improvement = catalog.GetItem(improvementName);
+                            if (improvement != null) planet.RecordImprovement(improvement);
+                        }
                     planet.Owner = planetStatus.owner;
                     planet.FoodShipmentIncoming = planetStatus.foodTransferInProgress;
                     planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;

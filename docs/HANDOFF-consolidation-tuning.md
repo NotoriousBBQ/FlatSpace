@@ -58,23 +58,36 @@ came afterwards, so re-run before comparing warship, colony ship and improvement
    weight by the number of eligible items of its subType in that row, so adding tiers does not change a
    category's odds. Applies to both rolls; slightly changes Expand's odds. Alternatives: production only, or
    retune weights by hand.
-2. **Decide about improvement upkeep.** `Catalog.CatalogSaveData.ItemSaveData` has no `tier`/`maintenanceCost`
-   (`Catalog.cs`), so both are dropped on load: upkeep is effectively 0 and the values in the catalog JSON are
-   dead data. The inspector's **Save Catalog button strips them from the JSON**. Loading them would turn upkeep
-   on, and `CompletedImprovements` charges every completed tier (tier 0-10 of one category = 418 per turn) while only the
-   best tier's yield applies, so it would also need "charge only the best tier per subType" and a re-tune. All
-   tuning so far ran with upkeep off.
+2. **Improvement upkeep is implemented but unproven** (design and rationale in
+   `docs/superpowers/specs/2026-09-26-improvement-upkeep-design.md`, summary in `CLAUDE.md`): catalog `tier` and
+   `maintenanceCost` now load, only the best tier per resource is charged x `improvementUpkeepScale` (default 0.15),
+   superseded tiers are not offered, an unaffordable improvement gets weight 0 (Farm/Verdant, whose grotsits capacity
+   does not exceed their population, are exempt and run on imports), planets' improvements are saved, and every 25
+   turns each player logs an `Economy` line. **The next long run is the first test of it**: watch grotsits
+   shipments (31 in the last run), `Economy` shortfalls and morale, completions per turn, and improvement tiers
+   reached, and tune the scale from that. Long-term goals it must serve: Prime/Normal need no or minimal incoming
+   shipments; Desert/Farm/Industrial/Ocean minimal; Desolate and Verdant live on a stream of shipments
+   (`Planet.CanAffordImprovement` is the seam for per-type import allowances).
 3. Play-mode check of the new research tiers (nobody reached tier 9-10 in 400 turns; production tiers 8-10 never started).
 4. Reviewer minors, deferred: the self-check drives `ComputeWarshipMultiplier`, a copy of the inline block in
    `BuildIndustryMatrix` (nothing asserts the wiring); `wanted <= 0` means warships are never capped; the taper
    is a step for rows whose only positive choice is Warship, and ships in production are not counted in `have`
    (an option is a per-planet probabilistic offer of Warship).
-5. Pre-existing issues noticed, not touched: saves do not store `CompletedImprovements`/yield modifiers (loading
-   a save resets improvements); the worker-requirement rate copy-paste (`_grotsitsProduction` used for Food,
+5. Pre-existing issues noticed, not touched: (saves now store completed improvements; older saves restore none); the worker-requirement rate copy-paste (`_grotsitsProduction` used for Food,
    Research and Industry) is now fixed via `Planet.GetWorkerRate`, which changes worker counts, so re-baseline
    any economy numbers taken before it; player builds load catalogs from
    `persistentDataPath/Catalogs/` and nothing copies them there; the same improvement can be queued and completed
    twice; a stale comment on `NumChoices` in `BuildIndustryMatrix`.
+6. **Observed live, not chased down:** on a fresh match, planet Prime 0's `CompletedImprovements` held two entries
+   each for `BaseGrotsitsProduction` and `BaseResearchImprovement` (both tier-0, `requiredTech: ""`, so eligible from
+   turn 1). Confirmed harmless to upkeep and yield: `RecordImprovement` keys `_bestImprovement` by resource, so
+   recording the same tier twice just overwrites it with the same value; `CompletedImprovements` itself is otherwise
+   only used for the "already built" name filter and for saves, where a duplicate name is likewise inert. Working
+   theory, unverified (`ScoreMatrix.GenerateActionList` was checked and correctly can't pick the same catalog item
+   twice within one call): `IndustryProductionQueueEmpty` fires every turn a planet is idle, and a cheap item (cost
+   50) could complete the instant it is scheduled if Industry had already banked up while idle, opening a window for
+   the same item to be queued twice before its first completion lands in `CompletedImprovements`. A self-check that
+   drives the turn-by-turn scheduling sequence directly would confirm or rule this out.
 
 ## Reading a tuning log
 
