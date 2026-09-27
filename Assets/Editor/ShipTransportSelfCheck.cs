@@ -30,6 +30,7 @@ public static class ShipTransportSelfCheck
         ok &= RunWarshipCeilingChecks();
         ok &= RunOfferedChoicesCheck();
         ok &= RunImprovementYieldCheck();
+        ok &= RunWorkerRateCheck();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -1351,6 +1352,39 @@ public static class ShipTransportSelfCheck
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
         }
+        return ok;
+    }
+
+    // The worker requirements for Food, Research and Industry used the GROTSITS rate (a copy-paste), so a planet
+    // asked for the wrong number of workers whenever its resource rates differ. Each resource must use its own
+    // per-worker rate, scaled by its improvement yield.
+    public static bool RunWorkerRateCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_WorkerRate");
+        try
+        {
+            var spawn = MakeSpawn("A", Planet.PlanetType.PlanetTypeNormal, new[] { "B" });
+            spawn._resourceData._foodProduction = 2f;
+            spawn._resourceData._grotsitsProduction = 3f;
+            spawn._resourceData._researchProduction = 5f;
+            spawn._resourceData._industryProduction = 7f;
+            var map = BuildMap(go, NewConstants(), spawn,
+                MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal));
+            var a = map.GetPlanet("A");
+
+            ok &= Check(a.GetWorkerRate("Food") == 2f, "the Food rate is the food production rate, not the grotsits one");
+            ok &= Check(a.GetWorkerRate("Grotsits") == 3f, "the Grotsits rate is the grotsits production rate");
+            ok &= Check(a.GetWorkerRate("Research") == 5f, "the Research rate is the research production rate");
+            ok &= Check(a.GetWorkerRate("Industry") == 7f, "the Industry rate is the industry production rate");
+
+            a.ApplyImprovementYield("Food", 50f);
+            ok &= Check(Mathf.Approximately(a.GetWorkerRate("Food"), 3f), "improvements scale the rate: 2 x 1.5 = 3");
+            ok &= Check(a.GetWorkerRate("Research") == 5f, "another resource's rate is untouched by a Food improvement");
+            ok &= Check(a.GetWorkerRate("Unknown") == 0f, "an unknown resource has no rate");
+        }
+        finally { Object.DestroyImmediate(go); }
         return ok;
     }
 

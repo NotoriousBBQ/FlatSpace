@@ -242,11 +242,17 @@ see the lookup below): 0 Balanced, 1 Growth, 2 Food, 3 FocusedFood, 4 Grotsits, 
   null-guarded, so a shorter one throws `IndexOutOfRange`, and the modifier assets' own `planetStrategy` field is
   never read (FocusedFoodModifierList even says 2 instead of 3). Adding an enum value means inserting an asset in
   the matching slot; the enum serializes as an int.
-- **Known oddities, not fixed:** Food/FocusedFood add leftover workers with
-  `FoodWorkers += Population.Count - remainingWorkers` (Growth uses `+= remainingWorkers`), which looks like it can
-  exceed the population; `ResourceWorkerRequirement` calls `Math.Clamp(...)` and discards the result; and the
-  Food/Research/Industry requirements use `_resourceData._grotsitsProduction` as their rate (the real production
-  formulas use the proper rates).
+- **Food and FocusedFood over-assign food workers on purpose:** they add leftover workers with
+  `FoodWorkers += Population.Count - remainingWorkers` (Growth uses `+= remainingWorkers`), which can exceed the
+  population. That is the intended design, not a bug.
+- **Worker rates:** each `*WorkerRequirement` gets its per-worker rate from `Planet.GetWorkerRate(resource)` (that
+  resource's own production rate x its improvement yield). The Food, Research and Industry requirements used to
+  use `_grotsitsProduction` for every resource (a copy-paste), so worker counts changed when this was corrected.
+  `ResourceWorkerRequirement` no longer has a discarded `Math.Clamp` (it had no effect).
+- **Still unresolved, not verified:** `UpdatePlanet` computes industry as
+  `(_industryProduction + workers x _industryProduction x yield)`, so the base term reuses the per-worker rate
+  even though `PlanetResourceData` has a `_baseIndustrialProduction` field (the other resources use their `_base*`
+  fields). Also, the designer strategy disconnect above is tracked in `FUTURE_FEATURES.md`.
 
 ### Player Knowledge
 

@@ -70,8 +70,9 @@ came afterwards, so re-run before comparing warship, colony ship and improvement
    is a step for rows whose only positive choice is Warship, and ships in production are not counted in `have`
    (an option is a per-planet probabilistic offer of Warship).
 5. Pre-existing issues noticed, not touched: saves do not store `CompletedImprovements`/yield modifiers (loading
-   a save resets improvements); `Planet.cs` uses `_grotsitsProduction` as the rate for Food, Research and
-   Industry worker requirements (lines ~227, 272, 284; looks like copy-paste); player builds load catalogs from
+   a save resets improvements); the worker-requirement rate copy-paste (`_grotsitsProduction` used for Food,
+   Research and Industry) is now fixed via `Planet.GetWorkerRate`, which changes worker counts, so re-baseline
+   any economy numbers taken before it; player builds load catalogs from
    `persistentDataPath/Catalogs/` and nothing copies them there; the same improvement can be queued and completed
    twice; a stale comment on `NumChoices` in `BuildIndustryMatrix`.
 

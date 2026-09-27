@@ -6,4 +6,5 @@
 - **Ship to ship combat** — warships engaging each other.
 - **Blockade planet with docked ships** — ships docked at a planet can blockade it.
 - **Planetary invasion** — taking over another player's planet.
+- **Board designer strategy disconnect** — the designer's per-planet `strategy` field (and `PlanetTypeDefaults.StrategyFor`, "Generate Names And Strategies", the map generator's `Strategy`) never reaches the running game: `PlanetSpawnData` carries no strategy and `Planet.Init` takes `CurrentStrategy` from the planet type's resource-data asset (`_initialStrategy`). Carry the designer's strategy through the board save into `PlanetSpawnData` and `Planet.Init`, or drop the field. Note the defaults already disagree (`StrategyFor(Prime)` is Balanced, Prime's resource data says Growth).
 - **Multi-fleet planet icons** — the planet UI shows a single fleet icon today; once assault fleets sit on enemy planets it needs to show more than one, at most one per player.

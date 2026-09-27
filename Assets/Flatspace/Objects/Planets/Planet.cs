@@ -224,7 +224,7 @@ public class Planet : MonoBehaviour
             return false;
         if (Food > 3 * populationAdjustedForPlanetType)
             populationAdjustedForPlanetType = Population.Count;
-        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Food"];
+        var productionRate = GetWorkerRate("Food");
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out foodWorkers);
     }
 
@@ -255,7 +255,7 @@ public class Planet : MonoBehaviour
         var shortfall = Grotsits - grotsitsRequirement;
         if (shortfall <= 0.0f)
             grotsitsRequirement += -shortfall + strategyPopulationModifier;
-        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Grotsits"];
+        var productionRate = GetWorkerRate("Grotsits");
         return ResourceWorkerRequirement(grotsitsRequirement, productionRate, out grotsitsWorkers);
     }
 
@@ -269,7 +269,7 @@ public class Planet : MonoBehaviour
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
         if(populationAdjustedForPlanetType <= 0.0f)
             return false;
-        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Research"];
+        var productionRate = GetWorkerRate("Research");
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out researchWorkers);
     }
 
@@ -281,8 +281,8 @@ public class Planet : MonoBehaviour
         if (modifierData != null)
             strategyPopulationModifier = modifierData.industryModifier;
         var populationAdjustedForPlanetType = Population.Count + strategyPopulationModifier;
-        var productionRate = _resourceData._grotsitsProduction * ImprovementYieldModifier["Industry"];
-        return populationAdjustedForPlanetType > 0.0f 
+        var productionRate = GetWorkerRate("Industry");
+        return populationAdjustedForPlanetType > 0.0f
                && ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out industryWorkers);
     }
 
@@ -294,7 +294,6 @@ public class Planet : MonoBehaviour
         var moraleModifier = Morale / 100.0f;
         var actualProductionRate = productionRate * moraleModifier;
         requiredWorkers = Convert.ToInt32(Math.Ceiling(requirement / actualProductionRate));
-        Math.Clamp(requiredWorkers, 0, Population.Count);
         return true;
     }
     
@@ -958,6 +957,25 @@ public class Planet : MonoBehaviour
         if (production == null) return;
         CompletedImprovements.Add((production?.Item.itemName, production?.Item.maintenanceCost ?? 0f));
         ApplyImprovementYield(production?.Item.subType, Convert.ToSingle(production?.Item.effect));
+    }
+
+    /// <summary>
+    /// The per-worker production rate for a resource ("Food", "Grotsits", "Research", "Industry"): that resource's
+    /// own production rate from the planet type's resource data times its improvement yield; 0 for anything else.
+    /// Used by the worker-requirement calculations.
+    /// </summary>
+    public float GetWorkerRate(string resource)
+    {
+        float rate;
+        switch (resource)
+        {
+            case "Food":     rate = _resourceData._foodProduction; break;
+            case "Grotsits": rate = _resourceData._grotsitsProduction; break;
+            case "Research": rate = _resourceData._researchProduction; break;
+            case "Industry": rate = _resourceData._industryProduction; break;
+            default:         return 0f;
+        }
+        return rate * GetImprovementYield(resource);
     }
 
     /// <summary>The yield modifier for a resource (1 = no improvement); 1 for an unknown subType.</summary>
