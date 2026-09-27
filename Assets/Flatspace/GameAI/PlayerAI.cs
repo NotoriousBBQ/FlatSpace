@@ -515,10 +515,17 @@ namespace FlatSpace
                     { "ColonyShip",    2.5f },  // colony ships needed
                     { "Warship",       1.5f },  // Updated priority
                 };
-            // Consolidate's own copy, starting at Expand's values, so it can be retuned without
-            // touching Expand. Must be declared after ExpandIndustryWeights (static init order).
+
             private static readonly Dictionary<string, float> ConsolidateIndustryWeights =
-                new Dictionary<string, float>(ExpandIndustryWeights);
+                new Dictionary<string, float>
+                {
+                    { "Food",          1.0f },  // not as growth focused
+                    { "Industry",      2.0f },  // building focused
+                    { "Grotsits",      1.5f },  // support
+                    { "Research",      1.0f },  // research can slack off a bit
+                    { "ColonyShip",    1.0f },  // colony ships needed as much
+                    { "Warship",       2.5f },  // highest priority
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {

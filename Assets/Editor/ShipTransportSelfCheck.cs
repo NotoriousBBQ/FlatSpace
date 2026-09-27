@@ -1210,9 +1210,9 @@ public static class ShipTransportSelfCheck
         try
         {
             item.subType = "Warship";
-            ok &= Check(PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 1.5f
+            ok &= Check(PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 2.5f
                         && PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyExpand) == 1.5f,
-                "Consolidate's own Warship table entry starts at Expand's baseline of 1.5");
+                "Consolidate's own Warship table entry is 2.5 (the highest baseline); Expand's stays 1.5");
         }
         finally { Object.DestroyImmediate(item); }
 

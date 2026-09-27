@@ -19,6 +19,7 @@ economy-scaled fleet. Everything below is verified by the Editor self-checks and
 | Outer garrisons | Consolidate garrisons only outer planets (a neighbour not colonized by me), round 1; every other ship is spare | `ShipTransportPlanner` (`MaintainsGarrison`, `TargetRank`, `HeldPlanet`) |
 | Assault | one sticky target, force = `max(assaultMinimumShips, ceil(known enemy docked warships x assaultRatio))` | `AssaultPlanner`, `PlayerAI.PlanShipActions` |
 | Production weight | Warship weight x shortfall multiplier, tapering to 0 at `wanted x warshipFleetCap` | `PlayerAI.WarshipShortfallMultiplier`, `WantedWarships`, `OwnedWarships` |
+| Consolidate industry table | own hand-tuned weights: Food 1.0, Industry 2.0, Grotsits 1.5, Research 1.0, ColonyShip 1.0, Warship 2.5 (Expand: 2.5, 1.5, 1.0, 1.0, 2.5, 1.5) | `PlayerAI.ConsolidateIndustryWeights` |
 | Fleet ceiling | `wanted` is bounded by `warshipsPerColonizedPlanet` x my colonized planets | `PlayerAI.WantedWarships` |
 | Zero-weight exclusion | any production choice without a positive finite weight is dropped (all strategies) | `PlayerAI.OfferedChoices` |
 | Per-player incoming ships | in-flight ship counters keyed by (kind, owner) | `Planet.GetIncomingShips(kind, owner)` |
@@ -39,6 +40,9 @@ economy-scaled fleet. Everything below is verified by the Editor self-checks and
 The `assaultRatio` above 1 makes wanted chase the enemies' fleets (an arms race); the ceiling is what bounds it.
 
 ## What the long runs showed
+
+(All three long runs used Consolidate's industry table as a copy of Expand's values; the hand-tuned table above
+came afterwards, so re-run before comparing warship, colony ship and improvement counts against these numbers.)
 
 - Warship control works: 238 zero-multiplier player-turns had 0 warship starts; fleets stop near 1.5-1.6 x wanted.
 - The colony-ship flood after the warship cutoff was a zero-weight bug (an all-zero row is picked uniformly);
