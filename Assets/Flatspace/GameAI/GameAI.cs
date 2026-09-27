@@ -35,7 +35,10 @@ namespace FlatSpace
                     OrderTypeRemoveShip,
                     OrderTypeShipTransport,
                     OrderTypeShipDeparture,
-                    OrderTypeShipTransferInProgress
+                    OrderTypeShipTransferInProgress,
+                    // Appended last: OrderType serializes as an int. Delayed; Data is the food a colony ship
+                    // carries, added to the target planet when the colonist lands.
+                    OrderTypeColonyFoodRider
                 }
 
                 public enum OrderTimingType
@@ -204,6 +207,9 @@ namespace FlatSpace
                     case GameAIOrder.OrderType.OrderTypeShipTransferInProgress:
                         ApplyShipTransferInProgress(targetPlanet, executableOrder);
                         break;
+                    case GameAIOrder.OrderType.OrderTypeColonyFoodRider:
+                        ApplyColonyFoodRider(targetPlanet, executableOrder);
+                        break;
                     default:
                         break;
                 }
@@ -212,6 +218,13 @@ namespace FlatSpace
 
             private static Ship.ShipKind FleetKind(GameAIOrder order)
                 => order.Fleet != null ? order.Fleet.Kind : Ship.ShipKind.WarShip;
+
+            // Delayed: the food a colony ship carried lands with the colonist. Deliberately its own order, separate
+            // from the food shipping system (no FoodShipmentIncoming flag), so neither system has to know the other.
+            public static void ApplyColonyFoodRider(Planet target, GameAIOrder order)
+            {
+                target.Food += Convert.ToSingle(order.Data);
+            }
 
             // Immediate: takes the fleet's ships off the origin planet (same first-N ships the payload was read from).
             public static void ApplyShipDeparture(Planet origin, GameAIOrder order)

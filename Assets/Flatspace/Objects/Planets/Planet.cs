@@ -107,6 +107,13 @@ public class Planet : MonoBehaviour
     public static float MaxGrotsitsStorage = 600f;
     public int Owner = NoOwner;
     public int MaxPopulation => _resourceData._maxPopulation;
+
+    /// <summary>
+    /// True for a planet that cannot feed even one colonist by itself (its base food plus one worker's food is below
+    /// 1, e.g. Desolate). A colonist there starves the turn it lands, so the colony ship must bring a food rider.
+    /// Data-driven: no planet type is named.
+    /// </summary>
+    public bool NeedsColonyFoodRider => _resourceData._baseFoodProduction + _resourceData._foodProduction < 1f;
     
     public float Food { get; set; } = 0.0f;
     public float FoodProduced { get; set; } = 0.0f;

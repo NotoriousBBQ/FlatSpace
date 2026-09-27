@@ -66,6 +66,10 @@ public static class AITuningLogger
                     lines.Add(FormatLine(turnNumber, order.PlayerId, "ShipMove",
                         $"{order.Origin}->{order.Target}", order.Data.ToString()));
                     break;
+                case GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider:
+                    lines.Add(FormatLine(turnNumber, order.PlayerId, "ColonyRider",
+                        $"{order.Origin}->{order.Target}", order.Data.ToString()));
+                    break;
             }
         }
         AppendLines(lines);
@@ -114,6 +118,14 @@ public static class AITuningLogger
                     break;
                 case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonizerReady", result.Name));
+                    break;
+                // Colony failures: a lost inhabitant (with its player) and, when the last one goes, a dead planet
+                // (the dead result carries no player, so it logs as P-1; pair it with the PopulationLoss before it).
+                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationLoss:
+                    lines.Add(FormatLine(turnNumber, result.PlayerID, "PopulationLoss", result.Name));
+                    break;
+                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeDead:
+                    lines.Add(FormatLine(turnNumber, result.PlayerID, "PlanetDead", result.Name));
                     break;
             }
         }

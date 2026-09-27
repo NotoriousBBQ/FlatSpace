@@ -20,10 +20,20 @@ public static class PlayerKnowledgeSelfCheck
         ok &= RunConsolidateSwitchCheck();
         ok &= RunConsolidateWeightTablesCheck();
         ok &= RunColonyShipSituationalCheck();
+        ok &= RunColonyFoodRiderCheck();
         Debug.Log(ok
             ? "[PlayerKnowledgeSelfCheck] ALL PASSED"
             : "[PlayerKnowledgeSelfCheck] FAILURES (see errors above)");
+        Debug.Log($"[PlayerKnowledgeSelfCheck] float probe (informational, not an assertion): " +
+                  $"4 >= 5 * 0.8f is {FloatProbe(4, 5, 0.8f)} " +
+                  "(True = the product is single precision; False = this runtime evaluates it wider than float, " +
+                  "so a trigger whose product with MaxPopulation is a whole number can be off by one)");
     }
+
+    // The game's readiness test is `Population.Count >= MaxPopulation * expandPopulationTrigger`. Exact-in-decimal
+    // intent says 4 of 5 at 0.8 is ready; whether the runtime agrees depends on the precision of the product.
+    private static bool FloatProbe(int population, int maxPopulation, float trigger)
+        => population >= maxPopulation * trigger;
 
     private static bool Check(bool condition, string label)
     {
@@ -31,12 +41,15 @@ public static class PlayerKnowledgeSelfCheck
         return condition;
     }
 
+    // Test planets feed themselves by default (base food 1). `sterile` = a Desolate-like planet that produces no
+    // food at all, which is what makes a colony there need a food rider.
     private static PlanetSpawnData MakeSpawn(string name, int initialPopulation,
-        IEnumerable<string> connections = null)
+        IEnumerable<string> connections = null, bool sterile = false)
     {
         var resourceData = ScriptableObject.CreateInstance<PlanetResourceData>();
         resourceData._initialPopulation = initialPopulation;
         resourceData._maxPopulation = 5;
+        resourceData._baseFoodProduction = sterile ? 0f : 1f;
 
         var spawn = ScriptableObject.CreateInstance<PlanetSpawnData>();
         spawn._planetName = name;
@@ -516,7 +529,7 @@ public static class PlayerKnowledgeSelfCheck
     }
 
     private static void BuildColonyScenario(out GameObject mapGo, out GameObject playerGo, out GameAIMap map,
-        out PlayerAI ai, bool knowTarget)
+        out PlayerAI ai, bool knowTarget, bool sterileTarget = false)
     {
         _nextPlanetX = 0f;
         mapGo = new GameObject("PKSelfCheckMap_ColonyShip");
@@ -529,7 +542,7 @@ public static class PlayerKnowledgeSelfCheck
         map.GameAIMapInit(new List<PlanetSpawnData>
         {
             MakeSpawn("Home", initialPopulation: 1, connections: new[] { "Target" }),
-            MakeSpawn("Target", initialPopulation: 0),
+            MakeSpawn("Target", initialPopulation: 0, sterile: sterileTarget),
         }, constants);
         map.GetPlanet("Home").Owner = 0;
 
@@ -539,5 +552,109 @@ public static class PlayerKnowledgeSelfCheck
         ai.AIMap = map;
         player.playerID = 0;
         if (knowTarget) map.Knowledge.Update(map, numPlayers: 1);
+    }
+
+    // A colony on a planet that produces no food (Desolate) starves the turn it lands. The colony ship therefore
+    // carries a food rider as its OWN order (not part of the food shipping system): the origin pays it, the target
+    // receives it with the colonist, and a target is only viable from an origin that can afford it. Colonies are
+    // still allowed to fail afterwards (nothing here guarantees survival).
+    public static bool RunColonyFoodRiderCheck()
+    {
+        var ok = true;
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.subType = "ColonyShip";
+        try
+        {
+            BuildColonyScenario(out var mapGo, out var playerGo, out var map, out var ai,
+                knowTarget: true, sterileTarget: true);
+            try
+            {
+                var home = map.GetPlanet("Home"); var target = map.GetPlanet("Target");
+                for (var i = 0; i < 4; i++) home.Population.Add(new Planet.Inhabitant { Player = 0 });   // 5 of 5: ready
+                ai.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+                ok &= Check(target.NeedsColonyFoodRider, "a planet that produces no food needs a food rider");
+                ok &= Check(!home.NeedsColonyFoodRider, "a planet with base food does not");
+
+                home.Food = 5f;
+                ok &= Check(!ai.CanSupportColony(home, target), "an origin with 5 food cannot afford the 10-food rider");
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 0f,
+                    "so no viable target is in reach and the planet stops building colony ships");
+                home.Food = 10f;
+                ok &= Check(ai.CanSupportColony(home, target), "an origin with exactly 10 food can afford it");
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(item, "Home") == 2f,
+                    "and the target is viable again: colony ships are wanted");
+                ok &= Check(ai.CanSupportColony(target, home),
+                    "a target that can feed itself needs no rider, whatever the origin holds");
+
+                // Orders: the usual four, plus a delayed rider that lands with the colonist and an immediate payment.
+                var results = new List<Planet.PlanetUpdateResult>
+                {
+                    new Planet.PlanetUpdateResult("Home",
+                        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+                };
+                var orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(results, orders);
+
+                var colonist = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+                var rider = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider);
+                ok &= Check(colonist != null, "the colony ship still sends its colonist");
+                ok &= Check(rider != null && rider.Origin == "Home" && rider.Target == "Target"
+                            && rider.TimingType == GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed
+                            && System.Convert.ToSingle(rider.Data) == 10f,
+                    "a separate delayed order carries the 10-food rider from Home to Target");
+                ok &= Check(rider != null && colonist != null && rider.TimingDelay == colonist.TimingDelay
+                            && rider.TotalDelay == colonist.TotalDelay,
+                    "the rider takes exactly as long as the colonist, so they land together");
+                var payment = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodChange
+                                               && o.Origin == "Home");
+                ok &= Check(payment != null && payment.TimingType == GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate
+                            && System.Convert.ToSingle(payment.Data) == -10f,
+                    "the origin pays the rider immediately (an existing food change of -10, not a food shipment)");
+                ok &= Check(!orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport),
+                    "the food shipping order type is not involved");
+
+                // Arrival adds the rider to the target's food.
+                target.Food = 0f;
+                GameAI.ApplyColonyFoodRider(target, rider);
+                ok &= Check(target.Food == 10f, "arrival adds the rider to the target's food");
+            }
+            finally
+            {
+                Object.DestroyImmediate(playerGo);
+                Object.DestroyImmediate(mapGo);
+            }
+
+            // A target that feeds itself gets no rider at all.
+            BuildColonyScenario(out mapGo, out playerGo, out map, out ai, knowTarget: true, sterileTarget: false);
+            try
+            {
+                var home = map.GetPlanet("Home");
+                for (var i = 0; i < 4; i++) home.Population.Add(new Planet.Inhabitant { Player = 0 });
+                home.Food = 50f;
+                var orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(new List<Planet.PlanetUpdateResult>
+                {
+                    new Planet.PlanetUpdateResult("Home",
+                        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+                }, orders);
+                ok &= Check(orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport),
+                    "a normal target is colonized as before");
+                ok &= Check(!orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider),
+                    "and needs no rider");
+                ok &= Check(!orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodChange),
+                    "and the origin pays nothing");
+            }
+            finally
+            {
+                Object.DestroyImmediate(playerGo);
+                Object.DestroyImmediate(mapGo);
+            }
+        }
+        finally
+        {
+            Object.DestroyImmediate(item);
+        }
+        return ok;
     }
 }

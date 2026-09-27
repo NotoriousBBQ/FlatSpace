@@ -103,11 +103,20 @@ namespace FlatSpace
             /// </summary>
             private bool PlanetHasColonizationTarget(string planetName)
             {
-                var pathMap = AIMap.GetPlanet(planetName).DistanceMapToPathingList;
-                return pathMap.Any(t =>
+                var origin = AIMap.GetPlanet(planetName);
+                return origin.DistanceMapToPathingList.Any(t =>
                     t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
-                    && IsValidColonizationTarget(AIMap.GetPlanet(t.Key)));
+                    && IsValidColonizationTarget(AIMap.GetPlanet(t.Key))
+                    && CanSupportColony(origin, AIMap.GetPlanet(t.Key)));
             }
+
+            /// <summary>
+            /// A target that cannot feed a colonist by itself (Planet.NeedsColonyFoodRider) is only viable from an
+            /// origin that can pay the colony ship's food rider; any other target needs nothing. Public for the
+            /// self-check.
+            /// </summary>
+            public bool CanSupportColony(Planet origin, Planet target)
+                => !target.NeedsColonyFoodRider || origin.Food >= AIMap.GameAIConstants.colonyFoodRider;
 
             private bool IsValidColonizer(string planetName)
             {
@@ -128,7 +137,8 @@ namespace FlatSpace
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
                 return planet.PlayerWithMostPopulation() != Player.playerID;
             }
-            private void ProcessColonizers(
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            public void ProcessColonizers(
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
@@ -145,11 +155,13 @@ namespace FlatSpace
                 int colonizerIndex = 0;
                 foreach (var colonizer in colonizers)
                 {
-                    var pathMap = AIMap.GetPlanet(colonizer.Name).DistanceMapToPathingList;
+                    var colonizerPlanet = AIMap.GetPlanet(colonizer.Name);
+                    var pathMap = colonizerPlanet.DistanceMapToPathingList;
                     var entries = targets
                         .Where(t => pathMap.ContainsKey(t.PlanetName)
                                  && pathMap[t.PlanetName].NumNodes
-                                        <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                                        <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
+                                 && CanSupportColony(colonizerPlanet, t))
                         .Select(t => new ScoreMatrixChoiceElement
                         {
                             Surplus  = 1.0f,
@@ -200,7 +212,21 @@ namespace FlatSpace
                     orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeRemoveShip,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                         0, 0, 1, action.Origin, action.Origin));
-                    
+
+                    // A target that cannot feed a colonist gets a food rider as its own order: paid by the origin
+                    // now (an existing food change), delivered with the colonist (same delay), and unrelated to the
+                    // food shipping system. It bridges the gap until a shortage can be answered; it does not
+                    // guarantee survival.
+                    if (AIMap.GetPlanet(action.Target).NeedsColonyFoodRider)
+                    {
+                        var rider = AIMap.GameAIConstants.colonyFoodRider;
+                        orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider,
+                            GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                            delay, delay, rider, action.Origin, action.Target));
+                        orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
+                            GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                            0, 0, rider * -1.0f, action.Origin, action.Origin));
+                    }
                 }
             }
 

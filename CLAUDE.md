@@ -124,6 +124,20 @@ least 1 turn: a `Delayed` order with `TimingDelay <= 0` is both queued and execu
 `ProcessNewOrders`, which would dock the fleet twice. Because `OrderType` serializes as a `JsonUtility`
 int, new values must always be appended last, never inserted.
 
+Colonization (`PlayerAI.ProcessColonizers`) emits four orders per colony ship: `OrderTypePopulationTransport`
+(delayed arrival of the colonist), `OrderTypePopulationChange` (immediate, takes the colonist from the origin),
+`OrderTypePopulationTransferInProgress` and `OrderTypeRemoveShip`. When the target planet cannot feed a colonist
+(`Planet.NeedsColonyFoodRider`: base food plus one worker's food below 1, i.e. Desolate, data-driven with no type
+named) it also emits a **food rider as its own pair, separate from the food shipping system**: a delayed
+`OrderTypeColonyFoodRider` (same delay as the colonist; `GameAI.ApplyColonyFoodRider` adds `Data` food to the
+target on arrival, no `FoodShipmentIncoming` flag) and an immediate `OrderTypeFoodChange` of minus the amount at
+the origin. The amount is `GameAIConstants.colonyFoodRider` (default 10). Viability is per origin:
+`PlayerAI.CanSupportColony(origin, target)` requires such a target's origin to hold at least the rider, in
+`ProcessColonizers` and in `PlanetHasColonizationTarget` (which drives colony ship production). Without it a
+colonist starved the turn it landed (`Planet.ConsumeFood`), before any shortage could be answered, so the same
+Desolate planets were colonized and lost over and over (44% of one test run's colonizations). The rider is a bridge,
+not a guarantee: colonies can still fail, and that is intended (a lower failure rate, not zero).
+
 ### Decision-making: `ScoreMatrix`
 
 `PlayerAI` makes every choice through the generic
@@ -165,7 +179,7 @@ planets distinct positions, not to touch `FindPath`.
   `PlanetResourceData` / `PlanetTypeData`, `GameAIConstants` (travel speed, morale step, expansion
   trigger, per-strategy `ModifierListForPlanetStrategy`, per-type resource data), `CatalogItem`,
   `MapGenSettings` (procedural board generator params — see Board designer), and `FogOfWarSettings`
-  (fog-of-war tunables — see Fog of war). `Assets/GameAIConstants4ProductionTypes.asset` is the active
+  (fog-of-war tunables — see Fog of war). `Assets/GameAIConstantsProductionTypes.asset` is the active
   constants asset.
 - **Catalogs** (`Catalog.cs`): the Research and Production tech/build trees, loaded from JSON at runtime
   (not from ScriptableObjects). Editor path: `Assets/Flatspace/Catalogs/{Research,Production}/`; runtime
@@ -406,7 +420,10 @@ events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
 colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
-so a log can be tied back to its board config for map/ownership analysis) for
+so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
+the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
+ship's food rider as `ColonyRider|<origin>-><target>|<amount>`, and colony failures as `PopulationLoss|<planet>`
+plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it)) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
@@ -460,6 +477,14 @@ from the `.inputactions` asset rather than editing it by hand.
   `rootVisualElement.Q<VisualElement>("PlanetDetailElement")`) and test its `worldBound` instead.
 - Generated / large directories are git-ignored: `Library/`, `Temp/`, `obj/`, `Logs/`, `UserSettings/`,
   `Recordings/`, and all `*.csproj` / `*.sln` files.
+- **Float thresholds are evaluated wider than single precision in this Editor runtime.** The self-check's float
+  probe (`PlayerKnowledgeSelfCheck`) reports `4 >= 5 * 0.8f` as **False**: `5 * 0.8f` becomes 4.0000000596, so a
+  comparison against `MaxPopulation * expandPopulationTrigger` (`PlayerAI.IsValidColonizer`,
+  `Planet.CheckColonizationReady`) is off by one whenever that product is a whole number in decimal (0.8 or 0.6 with
+  a max population of 5 or 10, say). The active trigger is 0.35 (`Assets/GameAIConstantsProductionTypes.asset`) with
+  max populations 7, 10 and 15, none of which hits a whole number, and binary-exact triggers (0.75, 0.5) are safe,
+  so today's data is unaffected; check the product before tuning the trigger, and never write a self-check that
+  puts a planet exactly on such a boundary.
 - **A method a self-check needs to call directly is made `public`, not `internal`.** `Assets/Editor/`
   is a separate assembly (`Assembly-CSharp-Editor`) with no `InternalsVisibleTo` configured against the
   runtime assembly, so `internal` is invisible to it. `FogOfWarSystem.InitForTest` and

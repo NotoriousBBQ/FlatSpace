@@ -46,4 +46,11 @@ public class GameAIConstants : ScriptableObject
     // Ceiling on the wanted fleet: this x my colonized planets. Without it the wanted fleet (garrisons +
     // assaultRatio x the enemies' known fleets) chases the enemies, who chase mine, and grows without limit.
     public float warshipsPerColonizedPlanet = 8f;
+
+    [Header("Colonization")]
+    // Food a colony ship carries to a planet that produces no food (e.g. Desolate), so the colony survives long
+    // enough for the food shipping system to notice its shortage. The origin pays it and must hold at least this
+    // much, otherwise that target is not viable from that origin. It is a bridge, not a guarantee: colonies can
+    // still fail.
+    public float colonyFoodRider = 10f;
 }
