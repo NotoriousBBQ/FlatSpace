@@ -14,7 +14,8 @@ public class PlanetResourceData : ScriptableObject
     public float _grotsitsProduction;
     public float _baseResearchProduction;
     public float _researchProduction;
-    public float _baseIndustrialProduction;
+    [FormerlySerializedAs("_baseIndustrialProduction")]
+    public float _baseIndustryProduction;
     public float _industryProduction;
     public int _maxPopulation;
     public Planet.PlanetStrategy _initialStrategy;

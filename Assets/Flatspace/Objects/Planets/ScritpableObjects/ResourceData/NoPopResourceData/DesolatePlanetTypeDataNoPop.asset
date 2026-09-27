@@ -20,7 +20,7 @@ MonoBehaviour:
   _grotsitsProduction: 7
   _baseResearchProduction: 1
   _researchProduction: 3
-  _baseIndustrialProduction: 2
+  _baseIndustryProduction: 2
   _industryProduction: 5
   _maxPopulation: 7
   _initialStrategy: 5

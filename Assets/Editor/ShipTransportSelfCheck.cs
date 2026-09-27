@@ -31,6 +31,7 @@ public static class ShipTransportSelfCheck
         ok &= RunOfferedChoicesCheck();
         ok &= RunImprovementYieldCheck();
         ok &= RunWorkerRateCheck();
+        ok &= RunIndustryBaseRenameCheck();
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -1351,6 +1352,32 @@ public static class ShipTransportSelfCheck
         {
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // _baseIndustrialProduction was renamed _baseIndustryProduction (with [FormerlySerializedAs] and the asset keys
+    // updated). If either step were missed the serialized value would silently reset to 0, so pin real values.
+    public static bool RunIndustryBaseRenameCheck()
+    {
+        var ok = true;
+        const string dir = "Assets/Flatspace/Objects/Planets/ScritpableObjects/ResourceData/";
+        var expected = new (string path, float baseIndustry, float industry)[]
+        {
+            (dir + "NoPopResourceData/DesertPlanerResourceDataNoPop.asset", 3f, 7f),
+            (dir + "NoPopResourceData/NormalPlanetTypeDataNoPop.asset", 1f, 4f),
+            (dir + "NoPopResourceData/IndustrialPlanetTypeDataNoPop.asset", 3f, 7f),
+            (dir + "PrimePlanetTypeData.asset", 2f, 3f),
+        };
+        foreach (var (path, baseIndustry, industry) in expected)
+        {
+            var data = AssetDatabase.LoadAssetAtPath<PlanetResourceData>(path);
+            ok &= Check(data != null, $"resource data asset loads: {path}");
+            if (data == null) continue;
+            ok &= Check(data._baseIndustryProduction == baseIndustry,
+                $"{data.name}: _baseIndustryProduction kept its serialized value {baseIndustry}");
+            ok &= Check(data._industryProduction == industry,
+                $"{data.name}: _industryProduction is still {industry}");
         }
         return ok;
     }

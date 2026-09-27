@@ -249,10 +249,13 @@ see the lookup below): 0 Balanced, 1 Growth, 2 Food, 3 FocusedFood, 4 Grotsits, 
   resource's own production rate x its improvement yield). The Food, Research and Industry requirements used to
   use `_grotsitsProduction` for every resource (a copy-paste), so worker counts changed when this was corrected.
   `ResourceWorkerRequirement` no longer has a discarded `Math.Clamp` (it had no effect).
-- **Still unresolved, not verified:** `UpdatePlanet` computes industry as
-  `(_industryProduction + workers x _industryProduction x yield)`, so the base term reuses the per-worker rate
-  even though `PlanetResourceData` has a `_baseIndustrialProduction` field (the other resources use their `_base*`
-  fields). Also, the designer strategy disconnect above is tracked in `FUTURE_FEATURES.md`.
+- **Industry base:** `UpdatePlanet` computes industry as
+  `(_baseIndustryProduction + workers x _industryProduction x yield) x Morale/100`, like the other resources. It
+  used to reuse the per-worker `_industryProduction` for the base term, so every planet's free base industry was
+  2-6 points higher than the data intended; correcting it lowers industry (and therefore production pace) on
+  every planet, so economy numbers from before are not comparable. The field was renamed from
+  `_baseIndustrialProduction` (see the rename precedent under Conventions). The designer strategy disconnect above
+  is tracked in `FUTURE_FEATURES.md`.
 
 ### Player Knowledge
 
@@ -433,7 +436,8 @@ from the `.inputactions` asset rather than editing it by hand.
   UnityEvent — are safe to fix normally; `PlayerAI.CompleteResearch`, `Planet.GetMaintenanceCost`, and
   `Gameboard.InitGameFromSave` (was `InitGameFromGaveSave`) were such fixes. A serialized-field rename
   is fine too when it carries a `[FormerlySerializedAs]` and the `.asset` YAML keys are updated to match:
-  `PlanetResourceData._grotsitsProduction` (was `_grotsitProduction`) was done that way.
+  `PlanetResourceData._grotsitsProduction` (was `_grotsitProduction`) and `._baseIndustryProduction` (was
+  `_baseIndustrialProduction`) were done that way.
 - `Planet.UpdatePlanet` mutates shared `Planet` state and appends to the passed result list; it is not
   pure. The AI reads planet state back out during `ProcessResults` in the same turn.
 - "Grotsits" is the game's consumer-goods resource; low grotsits lowers `Morale`, which scales all

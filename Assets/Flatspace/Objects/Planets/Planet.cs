@@ -471,7 +471,7 @@ public class Planet : MonoBehaviour
         Grotsits += GrotsitsProduced;
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         // produce industry
-        IndustryProduced =  (_resourceData._industryProduction + (IndustryWorkers * _resourceData._industryProduction * ImprovementYieldModifier["Industry"])) * (Morale/100.0f);
+        IndustryProduced =  (_resourceData._baseIndustryProduction +(IndustryWorkers * _resourceData._industryProduction * ImprovementYieldModifier["Industry"])) * (Morale/100.0f);
         Industry += IndustryProduced;
         // produce research
         ResearchProduced = (_resourceData._baseResearchProduction + (ResearchWorkers * _resourceData._researchProduction * ImprovementYieldModifier["Research"])) * (Morale/100.0f);
