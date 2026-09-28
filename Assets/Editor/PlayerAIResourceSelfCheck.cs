@@ -375,9 +375,9 @@ public static class PlayerAIResourceSelfCheck
                 "gap-derived — a regressed, un-sentineled implementation would rank the DC's -1 above the " +
                 "real shortage's -5 and serve the DC first instead, leaving the real shortage only 4");
 
-            var toDC = orders.Find(o =>
-                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "DC");
-            ok &= Check(toDC.Origin == null, "nothing is left over for the DC once the real shortage is served");
+            ok &= Check(!orders.Exists(o =>
+                    o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "DC"),
+                "nothing is left over for the DC once the real shortage is served");
         }
         finally
         {
@@ -605,9 +605,8 @@ public static class PlayerAIResourceSelfCheck
             ok &= Check(toSevere.Origin == "Source" && Mathf.Approximately(Convert.ToSingle(toSevere.Data), 5f),
                 "the worse shortage (-20) claims the source's entire surplus (5) ahead of the milder one");
 
-            var toMild = orders.Find(o =>
-                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Mild");
-            ok &= Check(toMild.Origin == null,
+            ok &= Check(!orders.Exists(o =>
+                    o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Mild"),
                 "nothing is left over for the milder shortage once the worse one is served first");
         }
         finally
