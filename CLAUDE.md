@@ -326,9 +326,18 @@ ship) or a direct neighbour of one — both facts come from two shared queries o
 `GetVisionSourcePlanets(playerId)` and `GetNeighbours(planetName)` (the latter a symmetrized view of
 `Planet.Connections`, built once in `GameAIMapInit`), also consumed by `FogOfWarSystem` (below) so
 the two systems never independently re-derive the same fact. Knowledge is sticky (never un-learned)
-and grows outward one hop per turn as new planets are colonized. `GameAIMap.Knowledge.Update(...)`
-runs once per turn in `GameAI.GameAIUpdate()`, between `UpdateAllPlanets()` and `ProcessResults()`, so
-this turn's arrivals are known before this turn's AI decisions run. The first consumer is
+and grows via a breadth-first search out to `maxPathNodesForKnowledge` hops (default 2, i.e. direct
+neighbours only — widen it to give newly-colonized frontier planets a head start on Distribution Center
+coverage, below) from every vision source, each time `Update` runs. Each source's own walk tracks a
+`visited` set kept separate from the player's permanent known set, so it can pass *through* a planet
+already known (from an earlier turn, or from a different, closer source) to reach genuinely new
+territory beyond it — gating the walk on the permanent set alone made a source's BFS stop dead the
+instant it touched known territory, silently undermining the whole point of a growing empire's known
+frontier keeping pace with colonization (a real bug, fixed by the final whole-branch review for this
+feature; see `RunKnowledgeBfsPassesThroughKnownTerritoryCheck` in `PlayerKnowledgeSelfCheck`).
+`GameAIMap.Knowledge.Update(...)` runs once per turn in `GameAI.GameAIUpdate()`, between
+`UpdateAllPlanets()` and `ProcessResults()`, so this turn's arrivals are known before this turn's AI
+decisions run. The first consumer is
 `PlayerAI.IsValidColonizationTarget` (`public` — see Conventions below — so both `ProcessColonizers`
 and `PlanetCanColonize`/`GetIndustrySituationalWeightMultiplier` are gated by the one guard clause).
 Persisted per player as `GameSave.PlayerSave.knownPlanets`. `Assets/Editor/PlayerKnowledgeSelfCheck.cs`
@@ -458,6 +467,66 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   targets was the limit). Expand's 2.5 weight is not doubled.
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
+
+### Distribution Centers
+
+A Distribution Center (DC) is a sticky, per-player, per-resource role (`PlayerAI.FoodDistributionCenters`
+/ `GrotsitsDistributionCenters`, each a `List<string>` of planet names, not a flag on `Planet`) assigned
+by `PlayerAI.UpdateDistributionCenters` once per turn, ahead of `ProcessResults`. It exists so that
+resource shipping — which otherwise only reacts to a planet's own reported shortage — keeps a forward
+stockpile topped up near the player's frontier, shortening the path a real shortage's shipment has to
+travel once one is reported nearby. This matters because colonization already reaches farther than
+shipping: `ProcessColonizers` gates on its own `maxPathNodesForColonization`, separate from
+`maxPathNodesForResourceDistribution`, so a newly colonized planet can easily land beyond a single
+producer's shipping range — a DC gives that territory something closer to resupply from. How many DC
+slots a player is allowed (0, 1 or 2) is gated by two
+board-size tunables on `GameAIConstants`, `minPlanetsForDistributionCenters` and
+`minPlanetsForSecondDistributionCenter`, both counted against the WHOLE board's colonized planet total
+(every player, not just this one) via `GameAIMap.TotalColonizedPlanetCount()` — small boards get none.
+A lost DC (no longer owned/populated by this player) is pruned and logged (`DCLost`) before a
+replacement is considered.
+
+**Selection** (`PlayerAI.SelectDistributionCenter`) is coverage-maximizing, not simply "closest to a
+producer": among this player's colonized, not-yet-DC planets reachable from at least one current
+surplus-reporting planet (a "producer", within `maxPathNodesForResourceDistribution`), it scores each
+candidate by how many OTHER colonized, non-producer planets it would newly reach that no producer
+already reaches directly — i.e. it picks the planet that extends supply coverage the furthest, not the
+cheapest one to supply. Ties break by supply distance (farther from its own supplying producer wins,
+so it plants the DC further out), then by cheapest path cost to that producer. A choice sticks
+(`DCSelected` logged) until lost.
+
+**Synthetic demand:** once selected, a DC below its per-resource target stock
+(`distributionCenterFoodTargetStock` / `distributionCenterGrotsitsTargetStock`, default 50) that has no
+real shortage reported for it this turn gets a synthetic shortage-shaped entry added to the same list
+`ProcessResourceShipments` already ships against, so it rides the exact same rounds-based capping
+and order-emission path as a real shortage. It uses a fixed, very low priority sentinel
+(`DistributionCenterPrioritySentinel = float.MinValue / 2f`), not a gap-derived priority, so a real
+shortage anywhere always outranks and claims surplus before a DC's synthetic demand does. The synthetic
+list (`syntheticShortageNames`) is tracked separately from DC-ownership (`distributionCenters`)
+precisely because a DC can ALSO report a genuine real shortage the same turn — that real shortage must
+keep its own normal, gap-derived priority instead of being wrongly demoted to the sentinel just because
+the planet happens to hold a DC role (`RunNoDuplicateRowForDCWithRealShortageCheck`).
+
+`PlayerAI.IsCoverageGap` is a one-turn-stale diagnostic (using the last-known, cached surplus/DC lists,
+since it runs from order execution before this turn's `PlanetUpdateResult`s exist) that flags a newly
+colonized planet with no path to any surplus planet or DC at all; it drives the `DCCoverageGap` log
+line. Saves persist each player's DC lists (`PlayerAI.SetDistributionCenters`); an older save with no
+field restores an empty list, i.e. "select fresh."
+
+**Two bugs from the final whole-branch review, both fixed, are worth knowing about because they explain
+otherwise-odd-looking code nearby:** (1) `PlayerAI.BuildResourceMatrix`'s surplus-source filter now
+checks `s.Name != shortage.Name` before any `pathMap` lookup — `Planet.DistanceMapToPathingList` never
+contains a planet's own name, so a DC that is simultaneously a real surplus source (a routine state
+while its stock is above its own small population-based need but still below its much larger target)
+used to throw `KeyNotFoundException` the moment it checked distance to itself. (2) `PlayerKnowledge.Update`'s
+BFS-through-known-territory fix, described under Player Knowledge above, was found by the same review and
+exists for the same reason: DCs are only useful once the known frontier can outrun a one-hop-per-source
+walk as an empire grows.
+
+`FlatSpace → AI → Run Distribution Center Self-Check` (`Assets/Editor/DistributionCenterSelfCheck.cs`) is
+this feature's own self-check; the two regressions above are additionally covered by
+`RunDistributionCenterAlsoReportsSurplusCheck` in `PlayerAIResourceSelfCheck` and
+`RunKnowledgeBfsPassesThroughKnownTerritoryCheck` in `PlayerKnowledgeSelfCheck`.
 
 ### AI Tuning Log
 
