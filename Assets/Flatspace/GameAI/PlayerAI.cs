@@ -76,6 +76,7 @@ namespace FlatSpace
                 ref List<GameAI.GameAIOrder>    orders)
             {
                 ProcessColonizers(results, orders);
+                UpdateDistributionCenters(results, Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
                 ProcessFoodShortage(results, orders);
                 ProcessGrotsitsShortage(results, orders);
                 ProcessResearch(results, orders);
@@ -117,6 +118,137 @@ namespace FlatSpace
             /// </summary>
             public bool CanSupportColony(Planet origin, Planet target)
                 => !target.NeedsColonyFoodRider || origin.Food >= AIMap.GameAIConstants.colonyFoodRider;
+
+            // ── Distribution Centers ────────────────────────────────────────
+
+            public List<string> FoodDistributionCenters { get; private set; } = new List<string>();
+            public List<string> GrotsitsDistributionCenters { get; private set; } = new List<string>();
+
+            /// <summary>The player's own surplus-reporting planets as of the last UpdateDistributionCenters
+            /// call — one turn stale by the time an order executes, since order execution runs before this
+            /// turn's PlanetUpdateResults exist. Used by IsCoverageGap (Task 7).</summary>
+            public List<string> LastFoodSurplusPlanets { get; private set; } = new List<string>();
+            public List<string> LastGrotsitsSurplusPlanets { get; private set; } = new List<string>();
+
+            /// <summary>Restores a saved DC list; a missing/older field passes an empty list here, i.e.
+            /// "no DC yet, select fresh." Public for SaveLoadSystem/GameBoard restore.</summary>
+            public void SetDistributionCenters(string resource, List<string> names)
+            {
+                if (resource == "Food") FoodDistributionCenters = names ?? new List<string>();
+                else if (resource == "Grotsits") GrotsitsDistributionCenters = names ?? new List<string>();
+            }
+
+            /// <summary>
+            /// Sticky, per-resource DC selection and pruning, once per turn. Public and free of
+            /// Gameboard.Instance so the self-check can drive it directly.
+            /// </summary>
+            public void UpdateDistributionCenters(List<Planet.PlanetUpdateResult> results, int turnNumber)
+            {
+                LastFoodSurplusPlanets = results
+                    .Where(x => x.PlayerID == Player.playerID
+                             && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus)
+                    .Select(x => x.Name).ToList();
+                LastGrotsitsSurplusPlanets = results
+                    .Where(x => x.PlayerID == Player.playerID
+                             && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus)
+                    .Select(x => x.Name).ToList();
+
+                UpdateDistributionCentersForResource(turnNumber, "Food", LastFoodSurplusPlanets, FoodDistributionCenters);
+                UpdateDistributionCentersForResource(turnNumber, "Grotsits", LastGrotsitsSurplusPlanets, GrotsitsDistributionCenters);
+            }
+
+            private void UpdateDistributionCentersForResource(
+                int turnNumber, string resource, List<string> producers, List<string> current)
+            {
+                for (var i = current.Count - 1; i >= 0; i--)
+                {
+                    var planet = AIMap.GetPlanet(current[i]);
+                    if (planet != null && planet.Owner == Player.playerID && planet.Population.Count > 0) continue;
+                    AITuningLogger.LogDCLost(turnNumber, Player.playerID, current[i], resource);
+                    current.RemoveAt(i);
+                }
+
+                var allowedSlots = AllowedDistributionCenterSlots();
+                if (current.Count >= allowedSlots) return;
+
+                var colonized = AIMap.PlanetList.Where(p => p.Owner == Player.playerID && p.Population.Count > 0).ToList();
+                var candidates = colonized.Where(p => !current.Contains(p.PlanetName)).ToList();
+
+                var chosen = SelectDistributionCenter(candidates, colonized, producers);
+                if (chosen == null) return;
+
+                current.Add(chosen);
+                AITuningLogger.LogDCSelected(turnNumber, Player.playerID, chosen, resource);
+            }
+
+            /// <summary>
+            /// 0 below minPlanetsForDistributionCenters, 1 below minPlanetsForSecondDistributionCenter, else
+            /// 2. Counts colonized planets on the WHOLE BOARD (every player), matching the topology probe
+            /// this design is based on — not this player's own colonized count.
+            /// </summary>
+            private int AllowedDistributionCenterSlots()
+            {
+                var totalColonized = AIMap.TotalColonizedPlanetCount();
+                if (totalColonized < AIMap.GameAIConstants.minPlanetsForDistributionCenters) return 0;
+                return totalColonized < AIMap.GameAIConstants.minPlanetsForSecondDistributionCenter ? 1 : 2;
+            }
+
+            /// <summary>
+            /// Coverage-maximizing DC candidate selection. A candidate must be reachable
+            /// (NumNodes &lt;= maxPathNodesForResourceDistribution) from at least one producer to be
+            /// eligible at all. Scored by how many OTHER colonized, non-producer planets it would newly
+            /// reach that no producer already reaches; tied scores are broken by being furthest (in
+            /// NumNodes) from whichever producer supplies the candidate, then by the cheapest path cost to
+            /// that producer. Returns null if no candidate is reachable from any producer.
+            /// </summary>
+            private string SelectDistributionCenter(List<Planet> candidates, List<Planet> allColonized, List<string> producers)
+            {
+                string best = null;
+                var bestScore = -1;
+                var bestSupplyDistance = -1;
+                var bestSupplyCost = float.MaxValue;
+                var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
+
+                foreach (var candidate in candidates)
+                {
+                    var pathMap = candidate.DistanceMapToPathingList;
+
+                    var supplyingProducers = producers
+                        .Where(p => pathMap.ContainsKey(p) && pathMap[p].NumNodes <= maxNodes)
+                        .ToList();
+                    if (supplyingProducers.Count == 0) continue;
+
+                    var supplyDistance = supplyingProducers.Max(p => pathMap[p].NumNodes);
+                    var supplyCost = supplyingProducers.Min(p => pathMap[p].Cost);
+
+                    var score = 0;
+                    foreach (var other in allColonized)
+                    {
+                        if (other.PlanetName == candidate.PlanetName) continue;
+                        if (producers.Contains(other.PlanetName)) continue; // a producer trivially reaches itself
+                        if (!pathMap.ContainsKey(other.PlanetName) || pathMap[other.PlanetName].NumNodes > maxNodes) continue;
+
+                        var otherPathMap = other.DistanceMapToPathingList;
+                        var reachedByProducer = producers.Any(p =>
+                            otherPathMap.ContainsKey(p) && otherPathMap[p].NumNodes <= maxNodes);
+                        if (reachedByProducer) continue;
+
+                        score++;
+                    }
+
+                    var better = score > bestScore
+                        || (score == bestScore && supplyDistance > bestSupplyDistance)
+                        || (score == bestScore && supplyDistance == bestSupplyDistance && supplyCost < bestSupplyCost);
+                    if (!better) continue;
+
+                    best = candidate.PlanetName;
+                    bestScore = score;
+                    bestSupplyDistance = supplyDistance;
+                    bestSupplyCost = supplyCost;
+                }
+
+                return best;
+            }
 
             private bool IsValidColonizer(string planetName)
             {

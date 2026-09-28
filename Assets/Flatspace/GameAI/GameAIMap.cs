@@ -39,6 +39,12 @@ namespace FlatSpace
                 get { return _planets.Values.ToList(); }
             }
 
+            /// <summary>
+            /// Colonized planets across the WHOLE board, every owner — used to gate board-size-dependent AI
+            /// features (Distribution Centers) that key off overall board scale, not one player's territory.
+            /// </summary>
+            public int TotalColonizedPlanetCount() => PlanetList.Count(p => p.Population.Count > 0);
+
             public Vector2 PlanetAILocation(string planetName)
             {
                 return _planets[planetName].Position;
