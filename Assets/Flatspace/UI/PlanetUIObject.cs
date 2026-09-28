@@ -23,6 +23,8 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     private readonly Vector2 _fleetIconBaseAnchoredPosition = new Vector2(40, -40);
     private const float FleetIconSize = 32f;
     private const float FleetIconSpacing = 4f;
+    private Outline _foodDCOutline;
+    private Outline _grotsitsDCOutline;
 
     // One icon per player with ships here, side by side; the first sits at the base position and
     // the rest extend to its right. Created on demand and reused (deactivated when not needed).
@@ -61,6 +63,13 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         _grotsitsTextField.text = Math.Floor(planet.Grotsits).ToString();
         _moraleTextField.text = Math.Floor(planet.Morale).ToString();
         SetOwnerColor(planet.Owner);
+
+        var owner = planet.Owner;
+        var ownerAI = owner != Planet.NoOwner && owner < Gameboard.Instance.players.Count
+            ? Gameboard.Instance.players[owner].playerAI : null;
+        SetDistributionCenterIndicator(
+            ownerAI != null && ownerAI.FoodDistributionCenters.Contains(_planetName),
+            ownerAI != null && ownerAI.GrotsitsDistributionCenters.Contains(_planetName));
         if (_fleetIconRect)
         {
             var groups = FleetSummary.ForPlanet(planet);
@@ -120,6 +129,31 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
             else
                 statsPanelImage.color = Player.PlayerColors[owner];
         }
+    }
+
+    /// <summary>
+    /// Green outline for a Food DC, brown for a Grotsits DC, both together for a planet that holds both
+    /// roles (a second, larger-offset outline rather than inventing a third "mixed" color).
+    /// </summary>
+    public void SetDistributionCenterIndicator(bool isFoodDC, bool isGrotsitsDC)
+    {
+        var statsPanelImage = GetComponentInChildren<Image>();
+        if (!statsPanelImage) return;
+
+        if (_foodDCOutline == null)
+        {
+            _foodDCOutline = statsPanelImage.gameObject.AddComponent<Outline>();
+            _foodDCOutline.effectColor = new Color(0f, 0.6f, 0f, 1f);
+            _foodDCOutline.effectDistance = new Vector2(2f, -2f);
+        }
+        if (_grotsitsDCOutline == null)
+        {
+            _grotsitsDCOutline = statsPanelImage.gameObject.AddComponent<Outline>();
+            _grotsitsDCOutline.effectColor = new Color(0.55f, 0.27f, 0.07f, 1f);
+            _grotsitsDCOutline.effectDistance = new Vector2(4f, -4f);
+        }
+        _foodDCOutline.enabled = isFoodDC;
+        _grotsitsDCOutline.enabled = isGrotsitsDC;
     }
 
     public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
