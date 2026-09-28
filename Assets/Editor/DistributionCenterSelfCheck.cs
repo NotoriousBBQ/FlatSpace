@@ -16,6 +16,7 @@ public static class DistributionCenterSelfCheck
         ok &= RunNoReachableCandidateCheck();
         ok &= RunStickySelectionCheck();
         ok &= RunPruningCheck();
+        ok &= RunCoverageGapCheck();
         Debug.Log(ok
             ? "[DistributionCenterSelfCheck] ALL PASSED"
             : "[DistributionCenterSelfCheck] FAILURES (see errors above)");
@@ -364,6 +365,52 @@ public static class DistributionCenterSelfCheck
         {
             Object.DestroyImmediate(built.playerGo);
             Object.DestroyImmediate(built.mapGo);
+        }
+        return ok;
+    }
+
+    public static bool RunCoverageGapCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("DCSelfCheckMap7");
+        var playerGo = new GameObject("DCSelfCheckPlayer7");
+        try
+        {
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 2;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Home", 1, new[] { "Near" }),
+                MakeSpawn("Near", 1, new[] { "Home", "Far" }),
+                MakeSpawn("Far", 1, new[] { "Near" }), // 2 hops (NumNodes 3) from Home, out of range 2
+            };
+            var map = mapGo.AddComponent<GameAIMap>();
+            map.GameAIMapInit(spawns, constants);
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var homeAsSource = new List<string> { "Home" };
+            var noDCs = new List<string>();
+
+            ok &= Check(!playerAI.IsCoverageGap(map.GetPlanet("Near"), homeAsSource, noDCs),
+                "Near (within range of Home) is not a coverage gap");
+            ok &= Check(playerAI.IsCoverageGap(map.GetPlanet("Far"), homeAsSource, noDCs),
+                "Far (out of range of Home, and no DC) IS a coverage gap");
+
+            var withDCAtNear = new List<string> { "Near" };
+            ok &= Check(!playerAI.IsCoverageGap(map.GetPlanet("Far"), homeAsSource, withDCAtNear),
+                "Far is no longer a coverage gap once a DC at Near (within Far's range) exists");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
         }
         return ok;
     }

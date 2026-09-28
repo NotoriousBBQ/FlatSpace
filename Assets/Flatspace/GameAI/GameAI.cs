@@ -169,6 +169,16 @@ namespace FlatSpace
                             targetPlanet.SetPopulationTransferInProgress(executableOrder.PlayerId, false);
                         }
 
+                        var arrivingPlayerAI = Gameboard.Instance.players[executableOrder.PlayerId].playerAI;
+                        if (arrivingPlayerAI.IsCoverageGap(targetPlanet,
+                                arrivingPlayerAI.LastFoodSurplusPlanets, arrivingPlayerAI.FoodDistributionCenters))
+                            AITuningLogger.LogDCCoverageGap(Gameboard.Instance.TurnNumber, executableOrder.PlayerId,
+                                targetPlanet.PlanetName, "Food");
+                        if (arrivingPlayerAI.IsCoverageGap(targetPlanet,
+                                arrivingPlayerAI.LastGrotsitsSurplusPlanets, arrivingPlayerAI.GrotsitsDistributionCenters))
+                            AITuningLogger.LogDCCoverageGap(Gameboard.Instance.TurnNumber, executableOrder.PlayerId,
+                                targetPlanet.PlanetName, "Grotsits");
+
                         break;
                     case GameAIOrder.OrderType.OrderTypePopulationChange:
                         var changeAmount = Convert.ToInt32(executableOrder.Data);

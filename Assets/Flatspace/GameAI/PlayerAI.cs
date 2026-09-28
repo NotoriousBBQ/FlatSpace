@@ -260,6 +260,27 @@ namespace FlatSpace
                 return best;
             }
 
+            /// <summary>
+            /// True when the given planet is unreachable, for one resource, from EVERY planet in
+            /// lastKnownSurplusPlanets AND every planet in distributionCenters — i.e. sticky DC selection
+            /// isn't giving this planet any path to get resupplied. Uses the CACHED last-known surplus set
+            /// (LastFoodSurplusPlanets/LastGrotsitsSurplusPlanets), not this turn's live results, because
+            /// order execution (where this is called from) runs before this turn's PlanetUpdateResults
+            /// exist — one turn stale, acceptable for a diagnostic. Public and free of Gameboard.Instance
+            /// so the self-check can drive it directly.
+            /// </summary>
+            public bool IsCoverageGap(Planet planet, List<string> lastKnownSurplusPlanets, List<string> distributionCenters)
+            {
+                var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
+                var pathMap = planet.DistanceMapToPathingList;
+                // NumNodes >= 2: PathingSystem.FindPath returns a 1-node, zero-cost stub for an
+                // unreachable destination rather than throwing (see SelectDistributionCenter's
+                // IsUsablePath for the full explanation) — a bare "<= maxNodes" would misread that stub
+                // as reachable and never report a real gap.
+                return !lastKnownSurplusPlanets.Concat(distributionCenters)
+                    .Any(s => pathMap.ContainsKey(s) && pathMap[s].NumNodes >= 2 && pathMap[s].NumNodes <= maxNodes);
+            }
+
             private bool IsValidColonizer(string planetName)
             {
                 var planet = AIMap.GetPlanet(planetName);
