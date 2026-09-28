@@ -56,6 +56,6 @@ MonoBehaviour:
   maxPathNodesForColonization: 6
   maxPathNodesForKnowledge: 6
   minPlanetsForDistributionCenters: 30
-  minPlanetsForSecondDistributionCenter: 10000
+  minPlanetsForSecondDistributionCenter: 60
   distributionCenterFoodTargetStock: 50
   distributionCenterGrotsitsTargetStock: 50

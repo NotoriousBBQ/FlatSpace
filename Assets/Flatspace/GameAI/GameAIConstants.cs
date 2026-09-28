@@ -77,9 +77,12 @@ public class GameAIConstants : ScriptableObject
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
     // AI may designate one Distribution Center per resource (Food and/or Grotsits).
     public int minPlanetsForDistributionCenters = 30;
-    // At or above this many (whole board), up to two DCs per resource. Left far above any tested board size for
-    // now so only the one-DC-per-resource tier is exercised; lower it once that tier is validated.
-    public int minPlanetsForSecondDistributionCenter = 10000;
+    // At or above this many (whole board), up to two DCs per resource. Was left far above any tested board size
+    // so only the one-DC-per-resource tier was exercised; the one-DC tier's tuning-log data (test2.json and the
+    // larger 4p.json, 100 planets) showed chronic coverage gaps on Desolate/Verdant-type frontier planets even as
+    // a single player's territory grew past 30-39 colonized planets, so a second DC is now reachable partway
+    // between the first threshold and a board's full-colonization point (~100 on 4p.json).
+    public int minPlanetsForSecondDistributionCenter = 60;
     // Flat target stock a Food DC tries to accumulate before its synthetic demand drops to zero. Starting point,
     // not deeply tuned yet — retune via a /tuning-log pass once the mechanism itself is validated.
     public float distributionCenterFoodTargetStock = 50f;
