@@ -105,7 +105,7 @@ namespace FlatSpace
             {
                 var origin = AIMap.GetPlanet(planetName);
                 return origin.DistanceMapToPathingList.Any(t =>
-                    t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
+                    t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForColonization
                     && IsValidColonizationTarget(AIMap.GetPlanet(t.Key))
                     && CanSupportColony(origin, AIMap.GetPlanet(t.Key)));
             }
@@ -160,7 +160,7 @@ namespace FlatSpace
                     var entries = targets
                         .Where(t => pathMap.ContainsKey(t.PlanetName)
                                  && pathMap[t.PlanetName].NumNodes
-                                        <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution
+                                        <= AIMap.GameAIConstants.maxPathNodesForColonization
                                  && CanSupportColony(colonizerPlanet, t))
                         .Select(t => new ScoreMatrixChoiceElement
                         {
@@ -236,23 +236,14 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                var matrix = BuildResourceMatrix(results,
+                ProcessResourceShipments(results,
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).FoodShipmentIncoming,
-                    out var surplusResults);
-
-                if (matrix == null) return;
-
-                foreach (var action in matrix.GenerateActionList(
-                             actionFactory: (origin, element) => new ResourceAction {ChosenChoiceElement = element},
-                             ChoiceCompare:       null)
-                             )
-                EmitResourceOrders(action, surplusResults,
-                        GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
-                        GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
-                        GameAI.GameAIOrder.OrderType.OrderTypeFoodTransportInProgress,
-                        orders);
+                    GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
+                    GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
+                    GameAI.GameAIOrder.OrderType.OrderTypeFoodTransportInProgress,
+                    orders);
             }
 
             // ── Grotsits ─────────────────────────────────────────────────────
@@ -261,52 +252,92 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                var matrix = BuildResourceMatrix(results,
+                ProcessResourceShipments(results,
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage,
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).GrotsitsShipmentIncoming,
-                    out var surplusResults);
-
-                if (matrix == null) return;
-
-                foreach (var action in matrix.GenerateActionList(
-                             actionFactory: (origin, element) => new ResourceAction {ChosenChoiceElement = element},
-                             ChoiceCompare:       null))
-                    EmitResourceOrders(action, surplusResults,
-                        GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
-                        GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsChange,
-                        GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress,
-                        orders);
+                    GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
+                    GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsChange,
+                    GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress,
+                    orders);
             }
 
             /// <summary>
-            /// Shared matrix-building logic for any surplus→shortage resource.
-            /// Returns null if there is nothing to do.
+            /// Shared shipment logic for any surplus -> shortage resource. A shipment is capped at
+            /// min(source's remaining surplus, target's remaining shortfall) rather than always draining
+            /// the source's entire surplus, so an overshoot no longer silently turns the target into an
+            /// accidental new source next turn. Because a source can therefore have surplus left over
+            /// after serving one shortage, the matrix is rebuilt and re-run in rounds against the
+            /// remaining balances, letting a single source serve multiple shortages within the same turn
+            /// (each round strictly zeroes out at least one side, so this always terminates within
+            /// shortages.Count + surpluses.Count rounds).
             /// </summary>
-            private ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction> BuildResourceMatrix(
+            private void ProcessResourceShipments(
                 List<Planet.PlanetUpdateResult>                  results,
                 Planet.PlanetUpdateResult.PlanetUpdateResultType shortageType,
                 Planet.PlanetUpdateResult.PlanetUpdateResultType surplusType,
                 Func<string, bool>                               incomingCheck,
-                out List<Planet.PlanetUpdateResult>              surplusResults)
+                GameAI.GameAIOrder.OrderType                     transportType,
+                GameAI.GameAIOrder.OrderType                     changeType,
+                GameAI.GameAIOrder.OrderType                     inProgressType,
+                List<GameAI.GameAIOrder>                         orders)
             {
-                surplusResults = null;
-
                 var shortages = results.FindAll(x =>
                     x.Result == shortageType && x.PlayerID == Player.playerID && !incomingCheck(x.Name));
-                if (shortages.Count == 0) return null;
+                if (shortages.Count == 0) return;
 
-                surplusResults = results.FindAll(x => x.PlayerID == Player.playerID && x.Result == surplusType);
-                if (surplusResults.Count == 0) return null;
+                var surplusResults = results.FindAll(x => x.PlayerID == Player.playerID && x.Result == surplusType);
+                if (surplusResults.Count == 0) return;
 
+                // Real PlanetUpdatePlanet shortages carry a negative Data; the magnitude is what matters here.
+                var remainingShortage = shortages.ToDictionary(s => s.Name, s => Mathf.Abs(Convert.ToSingle(s.Data)));
+                var remainingSurplus = surplusResults.ToDictionary(s => s.Name,
+                    s => Convert.ToSingle(s.Data) * AIMap.GetPlanet(s.Name).GetPopulationFraction(Player.playerID));
+
+                var maxRounds = shortages.Count + surplusResults.Count;
+                for (var round = 0; round < maxRounds; round++)
+                {
+                    var matrix = BuildResourceMatrix(shortages, surplusResults, remainingShortage, remainingSurplus);
+                    if (matrix == null) break;
+
+                    var actions = matrix.GenerateActionList(
+                        actionFactory: (origin, element) => new ResourceAction { ChosenChoiceElement = element },
+                        ChoiceCompare: null);
+                    if (actions.Count == 0) break;
+
+                    foreach (var action in actions)
+                    {
+                        var amount = Mathf.Min(remainingSurplus[action.Origin], remainingShortage[action.Target]);
+                        if (amount <= 0f) continue;
+
+                        EmitResourceOrders(action, amount, transportType, changeType, inProgressType, orders);
+                        remainingSurplus[action.Origin]  -= amount;
+                        remainingShortage[action.Target] -= amount;
+                    }
+                }
+            }
+
+            /// <summary>
+            /// Builds one decision row per shortage still owed resource, offering every reachable
+            /// surplus planet that still has some left. Returns null if nothing remains to match.
+            /// </summary>
+            private ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction> BuildResourceMatrix(
+                List<Planet.PlanetUpdateResult> shortages,
+                List<Planet.PlanetUpdateResult> surplusResults,
+                Dictionary<string, float>       remainingShortage,
+                Dictionary<string, float>       remainingSurplus)
+            {
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
                     (new ScoreMatrixDecisionComparer());
 
                 foreach (var shortage in shortages)
                 {
+                    if (remainingShortage[shortage.Name] <= 0f) continue;
+
                     var pathMap = AIMap.GetPlanet(shortage.Name).DistanceMapToPathingList;
                     var entries = surplusResults
-                        .Where(s => pathMap[s.Name].NumNodes
+                        .Where(s => remainingSurplus[s.Name] > 0f
+                                    && pathMap[s.Name].NumNodes
                                     <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
                         .Select(s => new ResourceChoiceElement
                         {
@@ -338,28 +369,21 @@ namespace FlatSpace
                     }
                 }
 
-                return matrix;
+                return matrix.MatrixElements.Count == 0 ? null : matrix;
             }
 
             /// <summary>
-            /// Emits the three standard orders (transport, deduct, in-progress)
-            /// for a resource shipment action.
+            /// Emits the three standard orders (transport, deduct, in-progress) for a resource shipment
+            /// action, for a caller-computed amount (already capped at the target's remaining need).
             /// </summary>
             private void EmitResourceOrders(
-                ResourceAction              action,
-                List<Planet.PlanetUpdateResult> surplusResults,
-                GameAI.GameAIOrder.OrderType    transportType,
-                GameAI.GameAIOrder.OrderType    changeType,
-                GameAI.GameAIOrder.OrderType    inProgressType,
-                List<GameAI.GameAIOrder>        orders)
+                ResourceAction               action,
+                float                        amount,
+                GameAI.GameAIOrder.OrderType transportType,
+                GameAI.GameAIOrder.OrderType changeType,
+                GameAI.GameAIOrder.OrderType inProgressType,
+                List<GameAI.GameAIOrder>     orders)
             {
-                var originPlanet = AIMap.GetPlanet(action.Origin);
-                var amount       = Convert.ToSingle(
-                    surplusResults.Find(x => x.Name == action.Origin).Data)
-                    * originPlanet.GetPopulationFraction(Player.playerID);
-
-                if (amount <= 0.0f) return;
-
                 var delay = Convert.ToInt32(action.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
 
                 orders.Add(MakeOrder(transportType,

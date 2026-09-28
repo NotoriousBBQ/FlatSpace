@@ -15,6 +15,7 @@ public static class PlayerKnowledgeSelfCheck
         var ok = RunGameAIMapSharedQueriesCheck();
         ok &= RunPlayerKnowledgeChecks();
         ok &= RunColonizationKnowledgeGateCheck();
+        ok &= RunColonizationUsesOwnRangeCheck();
         ok &= RunKnownPlanetsSaveRoundTripCheck();
         ok &= RunFirstContactChecks();
         ok &= RunConsolidateSwitchCheck();
@@ -238,6 +239,64 @@ public static class PlayerKnowledgeSelfCheck
 
             ok &= Check(playerAI.IsValidColonizationTarget(target),
                 "the same planet becomes valid once PlayerKnowledge marks it known");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // Colonization must use its OWN range constant, not maxPathNodesForResourceDistribution — a
+    // prerequisite for Distribution Centers to ever have territory beyond direct shipping range to serve.
+    // Home -- Mid -- Target (2 hops from Home). maxPathNodesForResourceDistribution is set too small to
+    // reach Target at all; maxPathNodesForColonization is generous. Knowledge is set directly (bypassing
+    // the knowledge gate, which is covered by RunColonizationKnowledgeGateCheck) so only the distance
+    // constant is under test.
+    public static bool RunColonizationUsesOwnRangeCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PKSelfCheckMap_ColonizationRange");
+        var playerGo = new GameObject("PKSelfCheckPlayer_ColonizationRange");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.expandPopulationTrigger = 0.1f;
+            constants.maxPathNodesForResourceDistribution = 1; // too small to reach even a direct neighbour
+            constants.maxPathNodesForColonization = 5;         // generous
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Home", initialPopulation: 5, connections: new[] { "Mid" }),
+                MakeSpawn("Mid", initialPopulation: 0, connections: new[] { "Target" }),
+                MakeSpawn("Target", initialPopulation: 0),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.Knowledge.SetKnownPlanets(0, new List<string> { "Home", "Mid", "Target" });
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Home",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady,
+                    1, playerID: 0),
+            };
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessColonizers(results, orders);
+
+            ok &= Check(orders.Exists(o =>
+                    o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport &&
+                    o.Origin == "Home" && o.Target == "Target"),
+                "a target 2 hops away is colonized when maxPathNodesForColonization allows it, even though " +
+                "maxPathNodesForResourceDistribution alone would have excluded it");
         }
         finally
         {
