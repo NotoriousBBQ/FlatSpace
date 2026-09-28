@@ -15,6 +15,7 @@ public static class PlayerAIResourceSelfCheck
         ok &= RunDistributionCenterPullsSurplusCheck();
         ok &= RunRealShortageOutranksSyntheticDemandCheck();
         ok &= RunNoDuplicateRowForDCWithRealShortageCheck();
+        ok &= RunDistributionCenterAlsoReportsSurplusCheck();
         Debug.Log(ok
             ? "[PlayerAIResourceSelfCheck] ALL PASSED"
             : "[PlayerAIResourceSelfCheck] FAILURES (see errors above)");
@@ -463,6 +464,83 @@ public static class PlayerAIResourceSelfCheck
                 "DC's real shortage (-8) correctly outranks Other's worse real shortage (-20) and claims " +
                 "the source's only surplus, proving DC's row kept its normal priority instead of being " +
                 "wrongly demoted to the DC sentinel");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // A DC's stock can sit above its own small population-based need (a real surplus, per
+    // Planet.UpdatePlanet) while still below its much larger target stock (synthetic demand) — the same
+    // planet then appears in BOTH shortages and surplusResults the same turn. This is the routine case,
+    // not an edge case, and must not throw or cause the DC to ship to itself.
+    public static bool RunDistributionCenterAlsoReportsSurplusCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC4");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC4");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            constants.distributionCenterFoodTargetStock = 50f;
+            constants.minPlanetsForDistributionCenters = 0;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "DC" }),
+                MakeSpawn("DC"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("Source").Owner = 0;
+            map.GetPlanet("DC").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC").Owner = 0;
+            map.GetPlanet("DC").Food = 20f; // below the 50 target (synthetic demand), but this self-check
+            // hand-constructs results directly (bypassing Planet.UpdatePlanet), so DC's real-surplus
+            // status below is asserted explicitly rather than derived from this stock value.
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    30f, playerID: 0),
+                // DC is ALSO a real surplus source this turn, independent of its synthetic demand below.
+                new Planet.PlanetUpdateResult("DC",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    5f, playerID: 0),
+            };
+
+            playerAI.UpdateDistributionCenters(results, turnNumber: 1); // designates "DC"
+            var orders = new List<GameAI.GameAIOrder>();
+            var threw = false;
+            try
+            {
+                playerAI.ProcessResults(results, orders);
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
+
+            ok &= Check(!threw,
+                "a DC that is ALSO a real surplus source the same turn (routine: stock above its own " +
+                "population's need but below its much larger target) does not throw KeyNotFoundException");
+            ok &= Check(!orders.Exists(o =>
+                    o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport &&
+                    o.Origin == "DC" && o.Target == "DC"),
+                "the DC never ships to itself");
         }
         finally
         {

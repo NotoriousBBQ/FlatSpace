@@ -55,14 +55,22 @@ namespace FlatSpace
                     foreach (var source in map.GetVisionSourcePlanets(p))
                     {
                         set.Add(source.Planet.PlanetName);
+                        // Tracks this SOURCE's own traversal, separate from the permanent known set, so
+                        // the BFS can pass through a planet already known (from an earlier turn or a
+                        // different source) to reach genuinely new territory beyond it — a version gated
+                        // on the permanent set alone stops dead the instant it touches known territory.
+                        var visited = new HashSet<string> { source.Planet.PlanetName };
                         var frontier = new List<string> { source.Planet.PlanetName };
                         for (var hop = 0; hop < hops && frontier.Count > 0; hop++)
                         {
                             var next = new List<string>();
                             foreach (var name in frontier)
                                 foreach (var neighbourName in map.GetNeighbours(name))
-                                    if (set.Add(neighbourName))
+                                    if (visited.Add(neighbourName))
+                                    {
+                                        set.Add(neighbourName);
                                         next.Add(neighbourName);
+                                    }
                             frontier = next;
                         }
                     }

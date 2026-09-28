@@ -540,15 +540,25 @@ namespace FlatSpace
                     if (remainingShortage[shortage.Name] <= 0f) continue;
 
                     var pathMap = AIMap.GetPlanet(shortage.Name).DistanceMapToPathingList;
+                    var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
+                    // s.Name != shortage.Name: DistanceMapToPathingList never contains a planet's own
+                    // name, so a planet that is BOTH this shortage row (e.g. a DC's synthetic demand) AND
+                    // a real surplus source the same turn (routine — see this task's own comment above)
+                    // would otherwise throw KeyNotFoundException on pathMap[s.Name] below. NumNodes >= 2:
+                    // the same pathing-stub floor as SelectDistributionCenter's IsUsablePath — this
+                    // filter previously lacked it (a pre-existing gap from before this plan, now folded
+                    // into the same fix since it's the identical line).
                     var entries = surplusResults
-                        .Where(s => remainingSurplus[s.Name] > 0f
-                                    && pathMap[s.Name].NumNodes
-                                    <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                        .Where(s => s.Name != shortage.Name
+                                    && remainingSurplus[s.Name] > 0f
+                                    && pathMap.ContainsKey(s.Name)
+                                    && pathMap[s.Name].NumNodes >= 2
+                                    && pathMap[s.Name].NumNodes <= maxNodes)
                         .Select(s => new ResourceChoiceElement
                         {
                             SurplusResult = s,
                             ShortageResult = shortage,
-                            Cost =  pathMap[s.Name].Cost
+                            Cost = pathMap[s.Name].Cost
                         })
                         .ToList();
 

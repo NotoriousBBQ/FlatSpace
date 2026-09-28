@@ -17,6 +17,7 @@ public static class PlayerKnowledgeSelfCheck
         ok &= RunColonizationKnowledgeGateCheck();
         ok &= RunColonizationUsesOwnRangeCheck();
         ok &= RunKnowledgeWideningCheck();
+        ok &= RunKnowledgeBfsPassesThroughKnownTerritoryCheck();
         ok &= RunKnownPlanetsSaveRoundTripCheck();
         ok &= RunFirstContactChecks();
         ok &= RunConsolidateSwitchCheck();
@@ -342,6 +343,55 @@ public static class PlayerKnowledgeSelfCheck
             wide.Update(map, numPlayers: 1, maxPathNodesForKnowledge: 3);
             ok &= Check(wide.IsKnown(0, "Target"),
                 "the same planet becomes known once maxPathNodesForKnowledge widens to 3");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // A second vision source's BFS must be able to pass THROUGH planets already known (from an earlier
+    // call or a different source) to reach genuinely new territory beyond them. H-P1-P2-...-P8, a straight
+    // chain. The first call (source H only) reveals up to P5 (5 hops). Colonizing P3 makes it a second
+    // source; its own 5-hop BFS must reach P8 (3 hops further out than P5), passing through the
+    // already-known P2/P4 on the way — a version that only expands the frontier through NEWLY-discovered
+    // planets would stop dead at P2/P4 and never reach P6-P8.
+    public static bool RunKnowledgeBfsPassesThroughKnownTerritoryCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PKSelfCheckMap_BFSFrontier");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("H", initialPopulation: 1, connections: new[] { "P1" }),
+                MakeSpawn("P1", initialPopulation: 0, connections: new[] { "P2" }),
+                MakeSpawn("P2", initialPopulation: 0, connections: new[] { "P3" }),
+                MakeSpawn("P3", initialPopulation: 0, connections: new[] { "P4" }),
+                MakeSpawn("P4", initialPopulation: 0, connections: new[] { "P5" }),
+                MakeSpawn("P5", initialPopulation: 0, connections: new[] { "P6" }),
+                MakeSpawn("P6", initialPopulation: 0, connections: new[] { "P7" }),
+                MakeSpawn("P7", initialPopulation: 0, connections: new[] { "P8" }),
+                MakeSpawn("P8", initialPopulation: 0),
+            };
+            map.GameAIMapInit(spawns, constants);
+
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 1, maxPathNodesForKnowledge: 6); // hops=5, reveals H..P5
+
+            ok &= Check(knowledge.IsKnown(0, "P5") && !knowledge.IsKnown(0, "P6"),
+                "first call from H alone reveals exactly 5 hops out (through P5, not P6)");
+
+            // Colonize P3 (a second vision source) and update again with the SAME sticky instance.
+            map.GetPlanet("P3").Population.Add(new Planet.Inhabitant { Player = 0 });
+            knowledge.Update(map, numPlayers: 1, maxPathNodesForKnowledge: 6);
+
+            ok &= Check(knowledge.IsKnown(0, "P8"),
+                "a second source's BFS must pass THROUGH already-known planets (P2, P4) to reach " +
+                "genuinely new territory (P6, P7, P8) up to 5 hops from P3");
         }
         finally
         {
