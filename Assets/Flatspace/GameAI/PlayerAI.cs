@@ -174,7 +174,13 @@ namespace FlatSpace
                 var colonized = AIMap.PlanetList.Where(p => p.Owner == Player.playerID && p.Population.Count > 0).ToList();
                 var candidates = colonized.Where(p => !current.Contains(p.PlanetName)).ToList();
 
-                var chosen = SelectDistributionCenter(candidates, colonized, producers);
+                // Treat already-selected DCs as producers for scoring purposes (empty on the first slot, so
+                // this only affects a second+ slot): SelectDistributionCenter excludes anything a producer
+                // already reaches from a candidate's coverage score, so without this a second DC could score
+                // just as well sitting redundantly next to the first as it would reaching genuinely new
+                // territory -- this makes it correctly score near zero instead, pushing selection outward.
+                var scoringProducers = producers.Union(current).ToList();
+                var chosen = SelectDistributionCenter(candidates, colonized, scoringProducers, current);
                 if (chosen == null) return;
 
                 current.Add(chosen);
@@ -197,14 +203,18 @@ namespace FlatSpace
             /// Coverage-maximizing DC candidate selection. A candidate must be reachable
             /// (NumNodes &lt;= maxPathNodesForResourceDistribution) from at least one producer to be
             /// eligible at all. Scored by how many OTHER colonized, non-producer planets it would newly
-            /// reach that no producer already reaches; tied scores are broken by being furthest (in
-            /// NumNodes) from whichever producer supplies the candidate, then by the cheapest path cost to
+            /// reach that no producer already reaches; tied scores are broken by being farthest (in
+            /// NumNodes) from the nearest already-selected DC for this resource (so a second+ slot that
+            /// ties on coverage prefers spreading out over clustering near an existing DC), then by being
+            /// furthest from whichever producer supplies the candidate, then by the cheapest path cost to
             /// that producer. Returns null if no candidate is reachable from any producer.
             /// </summary>
-            private string SelectDistributionCenter(List<Planet> candidates, List<Planet> allColonized, List<string> producers)
+            private string SelectDistributionCenter(
+                List<Planet> candidates, List<Planet> allColonized, List<string> producers, List<string> existingDCs)
             {
                 string best = null;
                 var bestScore = -1;
+                var bestDcDistance = -1;
                 var bestSupplyDistance = -1;
                 var bestSupplyCost = float.MaxValue;
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
@@ -231,6 +241,17 @@ namespace FlatSpace
                     var supplyDistance = supplyingProducers.Max(p => pathMap[p].NumNodes);
                     var supplyCost = supplyingProducers.Min(p => pathMap[p].Cost);
 
+                    // Hops to the nearest already-selected DC for this resource. int.MaxValue (and so,
+                    // via the "farther is better" comparison below, treated as the best possible value)
+                    // when there are no existing DCs yet, or none are within range -- this tie-break is
+                    // inert for the first slot and never penalizes a candidate outside every existing DC's
+                    // reach, since that candidate is unambiguously independent of them.
+                    var dcDistance = existingDCs
+                        .Where(dc => pathMap.ContainsKey(dc) && IsUsablePath(pathMap[dc]))
+                        .Select(dc => pathMap[dc].NumNodes)
+                        .DefaultIfEmpty(int.MaxValue)
+                        .Min();
+
                     var score = 0;
                     foreach (var other in allColonized)
                     {
@@ -247,12 +268,15 @@ namespace FlatSpace
                     }
 
                     var better = score > bestScore
-                        || (score == bestScore && supplyDistance > bestSupplyDistance)
-                        || (score == bestScore && supplyDistance == bestSupplyDistance && supplyCost < bestSupplyCost);
+                        || (score == bestScore && dcDistance > bestDcDistance)
+                        || (score == bestScore && dcDistance == bestDcDistance && supplyDistance > bestSupplyDistance)
+                        || (score == bestScore && dcDistance == bestDcDistance && supplyDistance == bestSupplyDistance
+                            && supplyCost < bestSupplyCost);
                     if (!better) continue;
 
                     best = candidate.PlanetName;
                     bestScore = score;
+                    bestDcDistance = dcDistance;
                     bestSupplyDistance = supplyDistance;
                     bestSupplyCost = supplyCost;
                 }

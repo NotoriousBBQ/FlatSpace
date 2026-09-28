@@ -17,6 +17,8 @@ public static class PlayerAIResourceSelfCheck
         ok &= RunNoDuplicateRowForDCWithRealShortageCheck();
         ok &= RunDistributionCenterAlsoReportsSurplusCheck();
         ok &= RunWorseShortageServedFirstCheck();
+        ok &= RunDCToDCShippingCheck();
+        ok &= RunSecondDCPrefersDistanceFromFirstOnTieCheck();
         Debug.Log(ok
             ? "[PlayerAIResourceSelfCheck] ALL PASSED"
             : "[PlayerAIResourceSelfCheck] FAILURES (see errors above)");
@@ -608,6 +610,140 @@ public static class PlayerAIResourceSelfCheck
             ok &= Check(!orders.Exists(o =>
                     o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Mild"),
                 "nothing is left over for the milder shortage once the worse one is served first");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // Verifies a DC can ship to another DC under the current structure: DC1 is a real surplus source
+    // this turn, DC2 has no real result at all (its only demand is the synthetic DC gap), and both are
+    // pre-set as sticky DCs (bypassing selection, which is not what this test is about). This is
+    // independent of the SelectDistributionCenter scoring change (producers.Union(current)) -- that
+    // only affects which planet gets picked as a DC, never whether a DC can ship to another DC, since
+    // ProcessResourceShipments/BuildResourceMatrix (the shipping path) never calls SelectDistributionCenter.
+    public static bool RunDCToDCShippingCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC5");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC5");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            constants.distributionCenterFoodTargetStock = 20f;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("DC1", connections: new[] { "DC2" }),
+                MakeSpawn("DC2"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("DC1").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC1").Owner = 0;
+            map.GetPlanet("DC2").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC2").Owner = 0;
+            map.GetPlanet("DC2").Food = 0f; // below the 20 target stock, no real shortage reported below
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            // Both already sticky-selected as Food DCs; this test is about shipping, not selection.
+            playerAI.SetDistributionCenters("Food", new List<string> { "DC1", "DC2" });
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("DC1",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    30f, playerID: 0),
+                // DC2 reports nothing real -- its only demand is the synthetic DC-gap entry.
+            };
+
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toDC2 = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "DC2");
+            ok &= Check(toDC2.Origin == "DC1" && Mathf.Approximately(Convert.ToSingle(toDC2.Data), 20f),
+                "DC1 (a real surplus source this turn) ships to DC2's synthetic gap (target 20, current 0), " +
+                "capped at the gap (20) not DC1's whole surplus (30) -- confirms DC-to-DC shipping works " +
+                "under the current structure, independent of how either DC was selected");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // Verifies the new dcDistance tie-break specifically, not just "a second DC gets picked somewhere
+    // reasonable". Near and Far each uniquely reach one otherwise-unreachable satellite (equal coverage
+    // score, 1 each), and are deliberately built to ALSO tie on the older supplyDistance tie-break (both
+    // supplied only by Source, at the same distance) -- so only the new "farther from the existing DC"
+    // criterion can be what decides it. Near sits one hop from the existing DC1; Far is unreachable from
+    // DC1 at all within maxPathNodesForResourceDistribution. Far must win.
+    public static bool RunSecondDCPrefersDistanceFromFirstOnTieCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC6");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC6");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 2; // direct connections only
+            constants.minPlanetsForDistributionCenters = 0;
+            constants.minPlanetsForSecondDistributionCenter = 0; // allow a second slot immediately
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "Near", "Far" }),
+                MakeSpawn("Near", connections: new[] { "NearSat", "DC1" }),
+                MakeSpawn("Far", connections: new[] { "FarSat" }),
+                MakeSpawn("NearSat"),
+                MakeSpawn("FarSat"),
+                MakeSpawn("DC1"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            foreach (var name in new[] { "Source", "Near", "Far", "NearSat", "FarSat", "DC1" })
+            {
+                map.GetPlanet(name).Population.Add(new Planet.Inhabitant { Player = 0 });
+                map.GetPlanet(name).Owner = 0;
+            }
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            playerAI.SetDistributionCenters("Food", new List<string> { "DC1" });
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    30f, playerID: 0),
+            };
+
+            playerAI.UpdateDistributionCenters(results, turnNumber: 1);
+
+            ok &= Check(playerAI.FoodDistributionCenters.Contains("Far"),
+                "the second DC picks Far (unreachable from the existing DC1 within range) over Near (one " +
+                "hop from DC1), even though both tie on coverage score (1 satellite each) and on the older " +
+                "supplyDistance tie-break (both supplied by Source at the same distance)");
+            ok &= Check(!playerAI.FoodDistributionCenters.Contains("Near"),
+                "Near, despite tying on every older criterion, loses purely for being closer to the existing DC");
         }
         finally
         {
