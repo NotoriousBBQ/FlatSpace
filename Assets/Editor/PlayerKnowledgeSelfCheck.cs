@@ -16,6 +16,7 @@ public static class PlayerKnowledgeSelfCheck
         ok &= RunPlayerKnowledgeChecks();
         ok &= RunColonizationKnowledgeGateCheck();
         ok &= RunColonizationUsesOwnRangeCheck();
+        ok &= RunKnowledgeWideningCheck();
         ok &= RunKnownPlanetsSaveRoundTripCheck();
         ok &= RunFirstContactChecks();
         ok &= RunConsolidateSwitchCheck();
@@ -306,6 +307,44 @@ public static class PlayerKnowledgeSelfCheck
         finally
         {
             Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // Home -- Mid -- Target (Target is 2 hops / NumNodes 3 from Home). With the default parameter
+    // (unwidened, matching today's behavior), Target must stay unknown. Passing a wider
+    // maxPathNodesForKnowledge must reveal it. Two fresh PlayerKnowledge instances so the sticky,
+    // never-forgets nature of one doesn't leak into the other's assertion.
+    public static bool RunKnowledgeWideningCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PKSelfCheckMap_Widening");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Home", initialPopulation: 1, connections: new[] { "Mid" }),
+                MakeSpawn("Mid", initialPopulation: 0, connections: new[] { "Target" }),
+                MakeSpawn("Target", initialPopulation: 0),
+            };
+            map.GameAIMapInit(spawns, constants);
+
+            var narrow = new PlayerKnowledge();
+            narrow.Update(map, numPlayers: 1); // default maxPathNodesForKnowledge: 2
+            ok &= Check(narrow.IsKnown(0, "Mid"), "a direct neighbour is still known with the default (2)");
+            ok &= Check(!narrow.IsKnown(0, "Target"),
+                "a planet 2 hops out stays unknown with the default (2), matching today's behavior");
+
+            var wide = new PlayerKnowledge();
+            wide.Update(map, numPlayers: 1, maxPathNodesForKnowledge: 3);
+            ok &= Check(wide.IsKnown(0, "Target"),
+                "the same planet becomes known once maxPathNodesForKnowledge widens to 3");
+        }
+        finally
+        {
             Object.DestroyImmediate(mapGo);
         }
         return ok;

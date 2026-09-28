@@ -115,7 +115,8 @@ namespace FlatSpace
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogEconomySummary(Gameboard.Instance.TurnNumber, Gameboard.Instance.players.Count);
-                GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count);
+                GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count,
+                    GameAIMap.GameAIConstants.maxPathNodesForKnowledge);
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);

@@ -38,8 +38,15 @@ namespace FlatSpace
                 return false;
             }
 
-            public void Update(GameAIMap map, int numPlayers)
+            /// <summary>
+            /// Grants knowledge out to maxPathNodesForKnowledge path nodes from each vision source: a BFS
+            /// over GetNeighbours' graph adjacency, converting NumNodes to a hop count (NumNodes - 1). The
+            /// default of 2 reproduces this method's original behavior (source + direct neighbours only),
+            /// so every existing call site that only passes (map, numPlayers) is unaffected.
+            /// </summary>
+            public void Update(GameAIMap map, int numPlayers, int maxPathNodesForKnowledge = 2)
             {
+                var hops = Math.Max(0, maxPathNodesForKnowledge - 1);
                 for (var p = 0; p < numPlayers; p++)
                 {
                     if (!_known.TryGetValue(p, out var set))
@@ -48,8 +55,16 @@ namespace FlatSpace
                     foreach (var source in map.GetVisionSourcePlanets(p))
                     {
                         set.Add(source.Planet.PlanetName);
-                        foreach (var neighbourName in map.GetNeighbours(source.Planet.PlanetName))
-                            set.Add(neighbourName);
+                        var frontier = new List<string> { source.Planet.PlanetName };
+                        for (var hop = 0; hop < hops && frontier.Count > 0; hop++)
+                        {
+                            var next = new List<string>();
+                            foreach (var name in frontier)
+                                foreach (var neighbourName in map.GetNeighbours(name))
+                                    if (set.Add(neighbourName))
+                                        next.Add(neighbourName);
+                            frontier = next;
+                        }
                     }
                 }
             }
