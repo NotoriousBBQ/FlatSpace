@@ -163,6 +163,31 @@ public static class AITuningLogger
             multiplier.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>Logged the turn a Distribution Center is designated for a resource.</summary>
+    public static void LogDCSelected(int turnNumber, int playerId, string planetName, string resource)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "DCSelected", planetName, resource) });
+    }
+
+    /// <summary>Logged the turn a Distribution Center designation clears (captured or population died out).</summary>
+    public static void LogDCLost(int turnNumber, int playerId, string planetName, string resource)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "DCLost", planetName, resource) });
+    }
+
+    /// <summary>
+    /// Logged on a newly-colonized planet's arrival, once per resource, when that planet is unreachable
+    /// from both every currently-surplus-reporting planet and every currently-designated DC for that
+    /// resource — evidence for whether sticky single-DC selection is giving good enough coverage.
+    /// </summary>
+    public static void LogDCCoverageGap(int turnNumber, int playerId, string planetName, string resource)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "DCCoverageGap", planetName, resource) });
+    }
+
     /// <summary>
     /// The name to log for the board a match runs on: the BoardConfiguration asset's name when there is one,
     /// otherwise the designer JSON's file name (not its full path), otherwise "unknown". Never contains the
