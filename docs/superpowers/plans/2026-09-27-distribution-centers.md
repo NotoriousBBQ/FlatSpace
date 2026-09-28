@@ -941,12 +941,22 @@ In `Assets/Flatspace/GameAI/PlayerAI.cs`, add these members (a reasonable spot i
                 var bestSupplyCost = float.MaxValue;
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
 
+                // A path's NumNodes lower bound is 2 (a real 2-planet-minimum route), matching the
+                // reachability convention already established by ShipTransportPlanner.IsUsablePath and
+                // AssaultPlanner.IsUsablePath: PathingSystem.FindPath does not throw when no route
+                // exists, it returns a 1-node, zero-cost stub (ConstructPath's while loop never runs
+                // because the destination's ParentName was never set), which must not be read as a free
+                // adjacent trip. GameAIMap precomputes DistanceMapToPathingList for every pair
+                // unconditionally, including disconnected ones, so this check is required here too.
+                bool IsUsablePath(GameAIMap.DestinationToPathingListEntry entry)
+                    => entry.NumNodes >= 2 && entry.NumNodes <= maxNodes;
+
                 foreach (var candidate in candidates)
                 {
                     var pathMap = candidate.DistanceMapToPathingList;
 
                     var supplyingProducers = producers
-                        .Where(p => pathMap.ContainsKey(p) && pathMap[p].NumNodes <= maxNodes)
+                        .Where(p => pathMap.ContainsKey(p) && IsUsablePath(pathMap[p]))
                         .ToList();
                     if (supplyingProducers.Count == 0) continue;
 
@@ -958,11 +968,11 @@ In `Assets/Flatspace/GameAI/PlayerAI.cs`, add these members (a reasonable spot i
                     {
                         if (other.PlanetName == candidate.PlanetName) continue;
                         if (producers.Contains(other.PlanetName)) continue; // a producer trivially reaches itself
-                        if (!pathMap.ContainsKey(other.PlanetName) || pathMap[other.PlanetName].NumNodes > maxNodes) continue;
+                        if (!pathMap.ContainsKey(other.PlanetName) || !IsUsablePath(pathMap[other.PlanetName])) continue;
 
                         var otherPathMap = other.DistanceMapToPathingList;
                         var reachedByProducer = producers.Any(p =>
-                            otherPathMap.ContainsKey(p) && otherPathMap[p].NumNodes <= maxNodes);
+                            otherPathMap.ContainsKey(p) && IsUsablePath(otherPathMap[p]));
                         if (reachedByProducer) continue;
 
                         score++;
@@ -1543,8 +1553,12 @@ In `Assets/Flatspace/GameAI/PlayerAI.cs`, add this method in the Distribution Ce
             {
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
                 var pathMap = planet.DistanceMapToPathingList;
+                // NumNodes >= 2: PathingSystem.FindPath returns a 1-node, zero-cost stub for an
+                // unreachable destination rather than throwing (see SelectDistributionCenter's
+                // IsUsablePath for the full explanation) — a bare "<= maxNodes" would misread that stub
+                // as reachable and never report a real gap.
                 return !lastKnownSurplusPlanets.Concat(distributionCenters)
-                    .Any(s => pathMap.ContainsKey(s) && pathMap[s].NumNodes <= maxNodes);
+                    .Any(s => pathMap.ContainsKey(s) && pathMap[s].NumNodes >= 2 && pathMap[s].NumNodes <= maxNodes);
             }
 ```
 
