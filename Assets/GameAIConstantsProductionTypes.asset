@@ -53,3 +53,9 @@ MonoBehaviour:
   warshipsPerColonizedPlanet: 8
   improvementUpkeepScale: 0.5
   colonyFoodRider: 10
+  maxPathNodesForColonization: 6
+  maxPathNodesForKnowledge: 6
+  minPlanetsForDistributionCenters: 30
+  minPlanetsForSecondDistributionCenter: 10000
+  distributionCenterFoodTargetStock: 50
+  distributionCenterGrotsitsTargetStock: 50

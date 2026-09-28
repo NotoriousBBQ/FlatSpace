@@ -60,4 +60,28 @@ public class GameAIConstants : ScriptableObject
     // much, otherwise that target is not viable from that origin. It is a bridge, not a guarantee: colonies can
     // still fail.
     public float colonyFoodRider = 10f;
+    // Longest trip (path node count) a colony ship may take, independent of maxPathNodesForResourceDistribution
+    // so an empire's frontier can outrun direct shipping range (a prerequisite for Distribution Centers to have
+    // any territory to serve). Requires maxPathNodesForKnowledge to be at least this large, otherwise knowledge
+    // becomes the tighter gate again and this constant has no effect.
+    public int maxPathNodesForColonization = 6;
+
+    [Header("Knowledge")]
+    // PlayerKnowledge.Update grants knowledge out to this many path nodes from each vision source (2 = source +
+    // direct neighbours only, the behavior every existing call site keeps by default). Should be >= the largest
+    // of maxPathNodesForColonization/maxPathNodesForResourceDistribution, otherwise it becomes the real gate
+    // underneath whichever of those is wider.
+    public int maxPathNodesForKnowledge = 6;
+
+    [Header("Distribution Centers")]
+    // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
+    // AI may designate one Distribution Center per resource (Food and/or Grotsits).
+    public int minPlanetsForDistributionCenters = 30;
+    // At or above this many (whole board), up to two DCs per resource. Left far above any tested board size for
+    // now so only the one-DC-per-resource tier is exercised; lower it once that tier is validated.
+    public int minPlanetsForSecondDistributionCenter = 10000;
+    // Flat target stock a Food DC tries to accumulate before its synthetic demand drops to zero. Starting point,
+    // not deeply tuned yet — retune via a /tuning-log pass once the mechanism itself is validated.
+    public float distributionCenterFoodTargetStock = 50f;
+    public float distributionCenterGrotsitsTargetStock = 50f;
 }
