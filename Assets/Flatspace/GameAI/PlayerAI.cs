@@ -209,12 +209,22 @@ namespace FlatSpace
                 var bestSupplyCost = float.MaxValue;
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
 
+                // A path's NumNodes lower bound is 2 (a real 2-planet-minimum route), matching the
+                // reachability convention already established by ShipTransportPlanner.IsUsablePath and
+                // AssaultPlanner.IsUsablePath: PathingSystem.FindPath does not throw when no route
+                // exists, it returns a 1-node, zero-cost stub (ConstructPath's while loop never runs
+                // because the destination's ParentName was never set), which must not be read as a free
+                // adjacent trip. GameAIMap precomputes DistanceMapToPathingList for every pair
+                // unconditionally, including disconnected ones, so this check is required here too.
+                bool IsUsablePath(GameAIMap.DestinationToPathingListEntry entry)
+                    => entry.NumNodes >= 2 && entry.NumNodes <= maxNodes;
+
                 foreach (var candidate in candidates)
                 {
                     var pathMap = candidate.DistanceMapToPathingList;
 
                     var supplyingProducers = producers
-                        .Where(p => pathMap.ContainsKey(p) && pathMap[p].NumNodes <= maxNodes)
+                        .Where(p => pathMap.ContainsKey(p) && IsUsablePath(pathMap[p]))
                         .ToList();
                     if (supplyingProducers.Count == 0) continue;
 
@@ -226,11 +236,11 @@ namespace FlatSpace
                     {
                         if (other.PlanetName == candidate.PlanetName) continue;
                         if (producers.Contains(other.PlanetName)) continue; // a producer trivially reaches itself
-                        if (!pathMap.ContainsKey(other.PlanetName) || pathMap[other.PlanetName].NumNodes > maxNodes) continue;
+                        if (!pathMap.ContainsKey(other.PlanetName) || !IsUsablePath(pathMap[other.PlanetName])) continue;
 
                         var otherPathMap = other.DistanceMapToPathingList;
                         var reachedByProducer = producers.Any(p =>
-                            otherPathMap.ContainsKey(p) && otherPathMap[p].NumNodes <= maxNodes);
+                            otherPathMap.ContainsKey(p) && IsUsablePath(otherPathMap[p]));
                         if (reachedByProducer) continue;
 
                         score++;
