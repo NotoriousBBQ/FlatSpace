@@ -16,6 +16,7 @@ public static class PlayerAIResourceSelfCheck
         ok &= RunRealShortageOutranksSyntheticDemandCheck();
         ok &= RunNoDuplicateRowForDCWithRealShortageCheck();
         ok &= RunDistributionCenterAlsoReportsSurplusCheck();
+        ok &= RunWorseShortageServedFirstCheck();
         Debug.Log(ok
             ? "[PlayerAIResourceSelfCheck] ALL PASSED"
             : "[PlayerAIResourceSelfCheck] FAILURES (see errors above)");
@@ -392,13 +393,13 @@ public static class PlayerAIResourceSelfCheck
     // must never be added in the first place, not merely be caught later.
     //
     // This also proves the DC's real shortage keeps its own normal, gap-derived priority rather than
-    // being wrongly demoted to the DC sentinel: Source has just enough surplus (8) for ONE of DC's (-8)
-    // or Other's (-20) real shortages, not both, forcing a genuine priority contest instead of both being
-    // served across rounds. Other's shortage is WORSE (more negative) than DC's, so under normal priority
-    // ordering (higher/less-negative processes first) DC's -8 must win and claim the surplus. If DC's row
-    // were wrongly given the low-priority sentinel instead, Other would win instead and DC would get
-    // nothing — an earlier version of this test had only one shortage row, so priority ordering was never
-    // actually exercised and this regression would have gone undetected.
+    // being wrongly demoted to the DC sentinel: Source has just enough surplus (8) for ONE of DC's (-20)
+    // or Other's (-8) real shortages, not both, forcing a genuine priority contest instead of both being
+    // served across rounds. DC's shortage is WORSE (more negative) than Other's, so under correct priority
+    // ordering (worse shortage processed first) DC's -20 must win and claim the surplus. If DC's row were
+    // wrongly given the low-priority sentinel instead, Other would win instead and DC would get nothing —
+    // an earlier version of this test had only one shortage row, so priority ordering was never actually
+    // exercised and this regression would have gone undetected.
     public static bool RunNoDuplicateRowForDCWithRealShortageCheck()
     {
         var ok = true;
@@ -442,10 +443,10 @@ public static class PlayerAIResourceSelfCheck
                 // DC ALSO has a real shortage this turn.
                 new Planet.PlanetUpdateResult("DC",
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
-                    -8f, playerID: 0),
+                    -20f, playerID: 0),
                 new Planet.PlanetUpdateResult("Other",
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
-                    -20f, playerID: 0),
+                    -8f, playerID: 0),
             };
 
             playerAI.UpdateDistributionCenters(results, turnNumber: 1); // designates "DC"
@@ -458,12 +459,12 @@ public static class PlayerAIResourceSelfCheck
                 o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Other");
 
             ok &= Check(toDC.Count == 1 && Mathf.Approximately(Convert.ToSingle(toDC[0].Data), 8f),
-                "exactly one shipment reaches the DC, sized to the REAL shortage (8), not a second synthetic " +
-                "entry stacked on top of it");
+                "exactly one shipment reaches the DC, capped at the source's surplus (8), not a second " +
+                "synthetic entry stacked on top of it");
             ok &= Check(toOther.Count == 0,
-                "DC's real shortage (-8) correctly outranks Other's worse real shortage (-20) and claims " +
-                "the source's only surplus, proving DC's row kept its normal priority instead of being " +
-                "wrongly demoted to the DC sentinel");
+                "DC's worse real shortage (-20) correctly outranks Other's milder real shortage (-8) and " +
+                "claims the source's only surplus, proving DC's row kept its normal, gap-derived priority " +
+                "instead of being wrongly demoted to the DC sentinel (which would let Other, or neither, win)");
         }
         finally
         {
@@ -541,6 +542,73 @@ public static class PlayerAIResourceSelfCheck
                     o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport &&
                     o.Origin == "DC" && o.Target == "DC"),
                 "the DC never ships to itself");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // BuildResourceMatrix's row Priority is -Data, so a worse (more negative) shortage sorts first and
+    // gets first claim on scarce surplus. Source has only enough surplus (5) to fully cover ONE of
+    // Mild's (-5) or Severe's (-20) shortage, forcing a genuine contest instead of both being served.
+    // Before the fix, Priority was the raw signed Data, so Mild's -5 (numerically greater than -20)
+    // outranked and was served first, leaving the worse-off planet with nothing.
+    public static bool RunWorseShortageServedFirstCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_Order1");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_Order1");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "Mild", "Severe" }),
+                MakeSpawn("Mild"),
+                MakeSpawn("Severe"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("Source").Owner = 0;
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    5f, playerID: 0),
+                new Planet.PlanetUpdateResult("Mild",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -5f, playerID: 0),
+                new Planet.PlanetUpdateResult("Severe",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -20f, playerID: 0),
+            };
+
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toSevere = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Severe");
+            ok &= Check(toSevere.Origin == "Source" && Mathf.Approximately(Convert.ToSingle(toSevere.Data), 5f),
+                "the worse shortage (-20) claims the source's entire surplus (5) ahead of the milder one");
+
+            var toMild = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Mild");
+            ok &= Check(toMild.Origin == null,
+                "nothing is left over for the milder shortage once the worse one is served first");
         }
         finally
         {

@@ -431,9 +431,9 @@ namespace FlatSpace
                     orders);
             }
 
-            // Below any real shortage's priority regardless of sign convention (see the design spec's
-            // Future Considerations note on ScoreMatrixDecisionElement.Priority's existing sign ambiguity,
-            // which this sentinel is deliberately independent of).
+            // Below any real shortage's priority: real shortages' Priority is -Data (a positive magnitude,
+            // worse shortage sorts first), so an ordinary fixed negative constant is enough to always lose
+            // to every real shortage regardless of magnitude.
             private const float DistributionCenterPrioritySentinel = float.MinValue / 2f;
 
             /// <summary>
@@ -567,9 +567,15 @@ namespace FlatSpace
                         var decision = new ScoreMatrixDecisionElement
                         {
                             Target = shortage.Name,
+                            // shortage.Data is the already-negative deficit (e.g. -20). Negate it so a worse
+                            // shortage (more negative Data, larger magnitude) sorts to a HIGHER priority --
+                            // ScoreMatrixDecisionComparer processes descending, and rows are processed in
+                            // order with each claiming its best choice before the next row runs, so priority
+                            // order is who gets first pick of scarce surplus. Un-negated, a mild -5 shortage
+                            // outranked a severe -20 one and got served first; this was backwards.
                             Priority = syntheticShortageNames.Contains(shortage.Name)
                                 ? DistributionCenterPrioritySentinel
-                                : Convert.ToSingle(shortage.Data),
+                                : -Convert.ToSingle(shortage.Data),
                         };
 
                         if (matrix.MatrixElements.ContainsKey(decision))

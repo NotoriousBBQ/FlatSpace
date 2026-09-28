@@ -173,12 +173,10 @@ assumed, so three new `AITuningLogger` events are added:
   the flat tunable proves too crude once tested.
 - DCs as strategic targets for enemy warship actions (a natural follow-on once DCs exist as a concept;
   `AssaultPlanner` would need a reason to weight a known DC planet higher than an arbitrary enemy planet).
-- **Real-shortage priority ordering may be backwards.** Discovered while scoping the DC synthetic-demand
-  sentinel, unrelated to and not touched by this feature: `Planet.cs` stores a real shortage's `Data` as
-  the already-negative deficit (e.g. `-20`), but `ScoreMatrixDecisionElement.Priority` descending-sorts on
-  that raw signed value in `BuildResourceMatrix` — so a `-20` shortage currently sorts *after* a milder
-  `-5` one, the opposite of "worse shortage served first." Worth a look someday; the DC sentinel above is
-  deliberately an absolute constant so it doesn't inherit this ambiguity either way.
+- ~~**Real-shortage priority ordering may be backwards.**~~ Fixed 2026-09-28: `BuildResourceMatrix` now
+  sets `Priority = -Convert.ToSingle(shortage.Data)`, so a worse (more negative) shortage sorts first
+  instead of last. Covered by `PlayerAIResourceSelfCheck.RunWorseShortageServedFirstCheck`; the DC
+  sentinel was already an absolute constant so it needed no change.
 - **Scouting: time-based knowledge reveal instead of static widening.** Raised alongside the
   `PlayerKnowledge` widening above: instead of instantly granting knowledge out to a fixed hop count, a
   planet could become known only after a delay representing scout travel time — reveal delay = the
