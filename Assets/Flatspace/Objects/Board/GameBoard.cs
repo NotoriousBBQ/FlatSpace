@@ -39,6 +39,10 @@ namespace FlatSpace
 
             [SerializeField] private FlatSpace.Fog.FogOfWarSettings _fogOfWarSettings;
             [SerializeField] private bool _logAIEvents = false;
+            // Testing toggle, same precedent as _logAIEvents: when set, pressing Start Run on the
+            // Flatspace scene's own IntialBoardState runs the full 400-turn match 3 times in a row,
+            // resetting to the initial board state between runs so each gets its own tuning log.
+            [SerializeField] private bool _repeatRunThreeTimes = false;
             private FlatSpace.Fog.FogOfWarSystem _fogOfWarSystem;
             public FlatSpace.Fog.FogOfWarSystem FogOfWar => _fogOfWarSystem;
 
@@ -286,8 +290,20 @@ namespace FlatSpace
                 }
             }
 
+            // The planetSpawnData actually used to start the current match, regardless of whether it came
+            // from the scene's own IntialBoardState or a designer/file-loaded board (which nulls
+            // IntialBoardState -- see InitGameFromDesignerConfig). Repeat-run resets read this instead of
+            // IntialBoardState directly so they work for either entry point.
+            private List<PlanetSpawnData> _lastInitPlanetSpawnData;
+
             private void InitGame(List<PlanetSpawnData> planetSpawnData)
             {
+                _lastInitPlanetSpawnData = planetSpawnData;
+                // A fresh match always starts at turn 1. TurnNumber has no other reset path (only
+                // SingleUpdate increments it, or a save load sets it explicitly), so without this a
+                // repeated run here -- or a designer-board reload mid-session -- would carry over the
+                // previous match's turn count instead of starting over.
+                TurnNumber = 1;
                 AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
                 // The scene's BoardConfiguration asset, or (InitGameFromDesignerConfig clears that first) the
                 // designer JSON's file name, so a log can be tied back to the board it ran on.
@@ -729,9 +745,12 @@ namespace FlatSpace
             }
 
             private bool _timedUpdateRunning = false;
+            private const int RepeatRunCount = 3;
+            private int _repeatRunsStarted;
 
             public void StartTimedUpdate()
             {
+                _repeatRunsStarted = 1;
                 _timedUpdateRunning = true;
                 StartCoroutine(TimedUpdate(.1f));
             }
@@ -744,7 +763,20 @@ namespace FlatSpace
                     yield return new WaitForSeconds(waitTime);
                     if (Gameboard.Instance.TurnNumber == 400)
                     {
-                        Gameboard.Instance.StopTimedUpdate();
+                        // Continue the SAME coroutine loop for the next run rather than starting a new
+                        // one, so there's never a risk of two TimedUpdate coroutines running at once.
+                        if (_repeatRunThreeTimes && _repeatRunsStarted < RepeatRunCount && _lastInitPlanetSpawnData != null)
+                        {
+                            _repeatRunsStarted++;
+                            ClearExistingGameState();
+                            InitGame(_lastInitPlanetSpawnData);
+                            PlanetaryUIUpdate();
+                            BoardUIUpdate();
+                        }
+                        else
+                        {
+                            Gameboard.Instance.StopTimedUpdate();
+                        }
                     }
                 }
             }
