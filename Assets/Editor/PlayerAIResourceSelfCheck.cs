@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -9,6 +10,8 @@ public static class PlayerAIResourceSelfCheck
     public static void Run()
     {
         var ok = RunFoodShortageScopingCheck();
+        ok &= RunPartialShipmentRoundsCheck();
+        ok &= RunShipmentCappedAtSurplusCheck();
         Debug.Log(ok
             ? "[PlayerAIResourceSelfCheck] ALL PASSED"
             : "[PlayerAIResourceSelfCheck] FAILURES (see errors above)");
@@ -111,9 +114,129 @@ public static class PlayerAIResourceSelfCheck
         }
         finally
         {
-            Object.DestroyImmediate(p1Go);
-            Object.DestroyImmediate(p0Go);
-            Object.DestroyImmediate(mapGo);
+            UnityEngine.Object.DestroyImmediate(p1Go);
+            UnityEngine.Object.DestroyImmediate(p0Go);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // A shipment is capped at min(source's remaining surplus, target's remaining shortfall), rebuilding
+    // and re-running the matrix in rounds so a source with leftover surplus can serve a second shortage
+    // in the same turn instead of dumping its entire surplus on whichever shortage claims it first.
+    public static bool RunPartialShipmentRoundsCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap3");
+        var playerGo = new GameObject("PAResSelfCheckPlayer3");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "ShortageA", "ShortageB" }),
+                MakeSpawn("ShortageA"),
+                MakeSpawn("ShortageB"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("ShortageA",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -10f, playerID: 0),
+                new Planet.PlanetUpdateResult("ShortageB",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -15f, playerID: 0),
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    30f, playerID: 0),
+            };
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toA = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "ShortageA");
+            var toB = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "ShortageB");
+
+            ok &= Check(toA.Origin == "Source" && Mathf.Approximately(Convert.ToSingle(toA.Data), 10f),
+                "ShortageA (need 10) gets exactly 10 from Source's 30 surplus, not the whole 30");
+            ok &= Check(toB.Origin == "Source" && Mathf.Approximately(Convert.ToSingle(toB.Data), 15f),
+                "with 20 left after serving A, Source also serves ShortageB (need 15) in the same turn");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // When total demand exceeds what a source has, the shipment still caps at the source's remaining
+    // surplus rather than overshipping — this behavior already held before the partial-shipment change
+    // and must keep holding now that the amount is computed by the round-robin loop instead of inline.
+    public static bool RunShipmentCappedAtSurplusCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap4");
+        var playerGo = new GameObject("PAResSelfCheckPlayer4");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("SmallSource", connections: new[] { "BigShortage" }),
+                MakeSpawn("BigShortage"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("SmallSource").Population.Add(new Planet.Inhabitant { Player = 0 });
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("BigShortage",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -50f, playerID: 0),
+                new Planet.PlanetUpdateResult("SmallSource",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    5f, playerID: 0),
+            };
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toShortage = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "BigShortage");
+
+            ok &= Check(toShortage.Origin == "SmallSource" && Mathf.Approximately(Convert.ToSingle(toShortage.Data), 5f),
+                "a shortfall (50) bigger than the source's surplus (5) still only ships the 5 available");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
         }
         return ok;
     }
