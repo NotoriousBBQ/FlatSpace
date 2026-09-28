@@ -166,10 +166,17 @@ public static class DistributionCenterSelfCheck
             constants.minPlanetsForDistributionCenters = 0;
             constants.minPlanetsForSecondDistributionCenter = 10000;
 
+            // HomeNeighbor exists only to force PathingSystem into explicit-connection mode
+            // (InitializePathMap's useExplicit check is true the moment ANY planet declares a
+            // connection). Without it, two planets with empty Connections lists both fall back to
+            // BuildDistanceConnections, which auto-connects any pair within 400 units — and MakeSpawn's
+            // 100-unit spacing would silently connect Home to "Isolated" anyway, defeating this test.
+            // Neither Home nor HomeNeighbor names "Isolated", so under explicit mode it gets zero edges.
             var spawns = new List<PlanetSpawnData>
             {
-                MakeSpawn("Home", 1),
-                MakeSpawn("Isolated", 1), // no connections at all
+                MakeSpawn("Home", 1, new[] { "HomeNeighbor" }),
+                MakeSpawn("HomeNeighbor", 0),
+                MakeSpawn("Isolated", 1), // no connections at all, and nothing points at it either
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap3", "DCSelfCheckPlayer3");
 
