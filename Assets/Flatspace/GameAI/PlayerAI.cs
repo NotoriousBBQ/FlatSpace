@@ -382,6 +382,9 @@ namespace FlatSpace
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).FoodShipmentIncoming,
+                    FoodDistributionCenters,
+                    AIMap.GameAIConstants.distributionCenterFoodTargetStock,
+                    currentStockSelector: p => p.Food,
                     GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
                     GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
                     GameAI.GameAIOrder.OrderType.OrderTypeFoodTransportInProgress,
@@ -398,11 +401,19 @@ namespace FlatSpace
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage,
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).GrotsitsShipmentIncoming,
+                    GrotsitsDistributionCenters,
+                    AIMap.GameAIConstants.distributionCenterGrotsitsTargetStock,
+                    currentStockSelector: p => p.Grotsits,
                     GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport,
                     GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsChange,
                     GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransportInProgress,
                     orders);
             }
+
+            // Below any real shortage's priority regardless of sign convention (see the design spec's
+            // Future Considerations note on ScoreMatrixDecisionElement.Priority's existing sign ambiguity,
+            // which this sentinel is deliberately independent of).
+            private const float DistributionCenterPrioritySentinel = float.MinValue / 2f;
 
             /// <summary>
             /// Shared shipment logic for any surplus -> shortage resource. A shipment is capped at
@@ -413,23 +424,48 @@ namespace FlatSpace
             /// remaining balances, letting a single source serve multiple shortages within the same turn
             /// (each round strictly zeroes out at least one side, so this always terminates within
             /// shortages.Count + surpluses.Count rounds).
+            ///
+            /// A designated Distribution Center below its target stock, with no REAL shortage already
+            /// reported for it this turn, gets a synthetic shortage-shaped entry added to the same list —
+            /// same rounds-based capping, same shipment orders — at a fixed low-priority sentinel so real
+            /// shortages always claim surplus first.
             /// </summary>
             private void ProcessResourceShipments(
                 List<Planet.PlanetUpdateResult>                  results,
                 Planet.PlanetUpdateResult.PlanetUpdateResultType shortageType,
                 Planet.PlanetUpdateResult.PlanetUpdateResultType surplusType,
                 Func<string, bool>                               incomingCheck,
+                List<string>                                     distributionCenters,
+                float                                             distributionCenterTargetStock,
+                Func<Planet, float>                               currentStockSelector,
                 GameAI.GameAIOrder.OrderType                     transportType,
                 GameAI.GameAIOrder.OrderType                     changeType,
                 GameAI.GameAIOrder.OrderType                     inProgressType,
                 List<GameAI.GameAIOrder>                         orders)
             {
-                var shortages = results.FindAll(x =>
-                    x.Result == shortageType && x.PlayerID == Player.playerID && !incomingCheck(x.Name));
-                if (shortages.Count == 0) return;
-
                 var surplusResults = results.FindAll(x => x.PlayerID == Player.playerID && x.Result == surplusType);
                 if (surplusResults.Count == 0) return;
+
+                var shortages = results.FindAll(x =>
+                    x.Result == shortageType && x.PlayerID == Player.playerID && !incomingCheck(x.Name));
+
+                // Tracks ONLY the entries this call synthesizes below — deliberately not the same list as
+                // distributionCenters, because a DC can also have a genuine real shortage the same turn
+                // (see the guard just below), and that real shortage must keep its normal, gap-derived
+                // priority rather than being demoted just because the planet happens to hold a DC role.
+                var syntheticShortageNames = new List<string>();
+                foreach (var dcName in distributionCenters)
+                {
+                    if (shortages.Exists(s => s.Name == dcName)) continue; // a real shortage already covers it
+                    var dcPlanet = AIMap.GetPlanet(dcName);
+                    if (dcPlanet == null) continue;
+                    var gap = distributionCenterTargetStock - currentStockSelector(dcPlanet);
+                    if (gap <= 0f) continue;
+                    shortages.Add(new Planet.PlanetUpdateResult(dcName, shortageType, -gap, Player.playerID));
+                    syntheticShortageNames.Add(dcName);
+                }
+
+                if (shortages.Count == 0) return;
 
                 // Real PlanetUpdatePlanet shortages carry a negative Data; the magnitude is what matters here.
                 var remainingShortage = shortages.ToDictionary(s => s.Name, s => Mathf.Abs(Convert.ToSingle(s.Data)));
@@ -439,7 +475,7 @@ namespace FlatSpace
                 var maxRounds = shortages.Count + surplusResults.Count;
                 for (var round = 0; round < maxRounds; round++)
                 {
-                    var matrix = BuildResourceMatrix(shortages, surplusResults, remainingShortage, remainingSurplus);
+                    var matrix = BuildResourceMatrix(shortages, surplusResults, remainingShortage, remainingSurplus, syntheticShortageNames);
                     if (matrix == null) break;
 
                     var actions = matrix.GenerateActionList(
@@ -461,13 +497,18 @@ namespace FlatSpace
 
             /// <summary>
             /// Builds one decision row per shortage still owed resource, offering every reachable
-            /// surplus planet that still has some left. Returns null if nothing remains to match.
+            /// surplus planet that still has some left. A row whose name is in syntheticShortageNames
+            /// (this call's own synthetic Distribution Center entries — NOT every DC-owned planet; a DC's
+            /// genuine real shortage keeps its normal priority) uses a fixed low-priority sentinel instead
+            /// of its gap size, so it never outranks a real shortage. Returns null if nothing remains to
+            /// match.
             /// </summary>
             private ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction> BuildResourceMatrix(
                 List<Planet.PlanetUpdateResult> shortages,
                 List<Planet.PlanetUpdateResult> surplusResults,
                 Dictionary<string, float>       remainingShortage,
-                Dictionary<string, float>       remainingSurplus)
+                Dictionary<string, float>       remainingSurplus,
+                List<string>                    syntheticShortageNames)
             {
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
                     (new ScoreMatrixDecisionComparer());
@@ -494,7 +535,9 @@ namespace FlatSpace
                         var decision = new ScoreMatrixDecisionElement
                         {
                             Target = shortage.Name,
-                            Priority = Convert.ToSingle(shortage.Data),
+                            Priority = syntheticShortageNames.Contains(shortage.Name)
+                                ? DistributionCenterPrioritySentinel
+                                : Convert.ToSingle(shortage.Data),
                         };
 
                         if (matrix.MatrixElements.ContainsKey(decision))
@@ -503,10 +546,7 @@ namespace FlatSpace
                         }
                         else
                         {
-                            matrix.MatrixElements.Add(
-                                decision,
-                                entries);
-
+                            matrix.MatrixElements.Add(decision, entries);
                         }
                     }
                 }

@@ -12,6 +12,9 @@ public static class PlayerAIResourceSelfCheck
         var ok = RunFoodShortageScopingCheck();
         ok &= RunPartialShipmentRoundsCheck();
         ok &= RunShipmentCappedAtSurplusCheck();
+        ok &= RunDistributionCenterPullsSurplusCheck();
+        ok &= RunRealShortageOutranksSyntheticDemandCheck();
+        ok &= RunNoDuplicateRowForDCWithRealShortageCheck();
         Debug.Log(ok
             ? "[PlayerAIResourceSelfCheck] ALL PASSED"
             : "[PlayerAIResourceSelfCheck] FAILURES (see errors above)");
@@ -232,6 +235,203 @@ public static class PlayerAIResourceSelfCheck
 
             ok &= Check(toShortage.Origin == "SmallSource" && Mathf.Approximately(Convert.ToSingle(toShortage.Data), 5f),
                 "a shortfall (50) bigger than the source's surplus (5) still only ships the 5 available");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // A DC below its target stock, with NO real shortage anywhere, must still pull surplus toward it —
+    // proving the synthetic demand path actually reaches the shipment pipeline.
+    public static bool RunDistributionCenterPullsSurplusCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC1");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC1");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            constants.distributionCenterFoodTargetStock = 20f;
+            constants.minPlanetsForDistributionCenters = 0; // default (30) would block selection on this 2-planet map
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "DC" }),
+                MakeSpawn("DC"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            // Owner is only ever set by Planet's private SetPlanetOwnership() during a real UpdatePlanet()
+            // tick, which this self-check never runs — it must be assigned explicitly, or UpdateDistribution-
+            // Centers' Owner-filtered "colonized planets" query would never see "DC" as a valid candidate.
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("Source").Owner = 0;
+            map.GetPlanet("DC").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC").Owner = 0;
+            map.GetPlanet("DC").Food = 5f; // 15 short of its 20 target
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    30f, playerID: 0),
+            };
+
+            playerAI.UpdateDistributionCenters(results, turnNumber: 1); // designates "DC" as the Food DC
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toDC = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "DC");
+            ok &= Check(toDC.Origin == "Source" && Mathf.Approximately(Convert.ToSingle(toDC.Data), 15f),
+                "the DC pulls exactly its 15-unit gap (target 20 minus current 5), not the source's whole 30 surplus");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // A real shortage and a DC's synthetic demand compete for the same single unit of surplus. The real
+    // shortage must win even though the DC's gap is far larger in magnitude.
+    public static bool RunRealShortageOutranksSyntheticDemandCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC2");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC2");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            constants.distributionCenterFoodTargetStock = 1000f; // huge synthetic gap
+            constants.minPlanetsForDistributionCenters = 0; // default (30) would block selection on this small map
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "DC", "Shortage" }),
+                MakeSpawn("DC", connections: new[] { "Source" }),
+                MakeSpawn("Shortage", connections: new[] { "Source" }),
+            };
+            map.GameAIMapInit(spawns, constants);
+            // See the note in RunDistributionCenterPullsSurplusCheck: Owner must be set explicitly. Only
+            // Source and DC need it (DC must be a valid candidate); Shortage stays uncolonized-for-DC-
+            // purposes on purpose, so it can't itself be considered as a DC candidate and complicate the
+            // scoring this test is checking.
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("Source").Owner = 0;
+            map.GetPlanet("DC").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC").Owner = 0;
+            map.GetPlanet("DC").Food = 0f;
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    5f, playerID: 0),
+                new Planet.PlanetUpdateResult("Shortage",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -5f, playerID: 0),
+            };
+
+            playerAI.UpdateDistributionCenters(results, turnNumber: 1); // designates "DC"
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toShortage = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Shortage");
+            ok &= Check(toShortage.Origin == "Source" && Mathf.Approximately(Convert.ToSingle(toShortage.Data), 5f),
+                "the real shortage (5) claims the source's entire surplus (5) even though the DC's synthetic " +
+                "gap (1000) is vastly larger, because the DC's priority is a fixed low sentinel, not gap-derived");
+
+            var toDC = orders.Find(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "DC");
+            ok &= Check(toDC.Origin == null, "nothing is left over for the DC once the real shortage is served");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // A DC that ALSO reports a real shortage the same turn must not create two decision rows for the same
+    // planet+resource (BuildResourceMatrix logs an error and drops the duplicate rather than crashing, but
+    // the synthetic entry must never be added in the first place).
+    public static bool RunNoDuplicateRowForDCWithRealShortageCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC3");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC3");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            constants.distributionCenterFoodTargetStock = 100f;
+            constants.minPlanetsForDistributionCenters = 0; // default (30) would block selection on this 2-planet map
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "DC" }),
+                MakeSpawn("DC"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            // See the note in RunDistributionCenterPullsSurplusCheck: Owner must be set explicitly.
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("Source").Owner = 0;
+            map.GetPlanet("DC").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC").Owner = 0;
+            map.GetPlanet("DC").Food = 0f;
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    20f, playerID: 0),
+                // DC ALSO has a real shortage this turn.
+                new Planet.PlanetUpdateResult("DC",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                    -8f, playerID: 0),
+            };
+
+            playerAI.UpdateDistributionCenters(results, turnNumber: 1); // designates "DC"
+            var orders = new List<GameAI.GameAIOrder>();
+            playerAI.ProcessResults(results, orders);
+
+            var toDC = orders.FindAll(o =>
+                o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "DC");
+            ok &= Check(toDC.Count == 1 && Mathf.Approximately(Convert.ToSingle(toDC[0].Data), 8f),
+                "exactly one shipment reaches the DC, sized to the REAL shortage (8), not a second synthetic " +
+                "entry stacked on top of it");
         }
         finally
         {
