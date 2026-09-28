@@ -405,8 +405,12 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   `category5UnlockShipsPerColonizedPlanet` x colonized planet count.
 - **Matrix:** one row per source (largest spare first), choices are reachable targets sorted by category then
   path cost, `count = min(spare, deficit)`. `ShipChoiceElement` equality is on the *target planet only* so
-  `ScoreMatrix` removes a claimed target from every other row. Row priorities are unique ranks because
-  `ScoreMatrixDecisionComparer` reports distinct rows as equal when their positive priorities tie.
+  `ScoreMatrix` removes a claimed target from every other row. Row priorities are unique ranks as a defensive
+  habit, not a requirement: `ScoreMatrixDecisionComparer`'s tie-break used to compare the Target-name diff
+  against `Priority` itself instead of returning it directly, so two genuinely different rows tied at a
+  Priority that happened to numerically match the small integer `string.CompareTo` returns (most commonly
+  `Priority == 1`, from two distinct planets each short by exactly 1) were wrongly reported as equal — a real
+  "Duplicate Key in Build Resource Matrix" crash, fixed 2026-09-28. Ties now correctly break by Target name.
 - **Reachability** is `2 <= NumNodes <= maxPathNodesForShipTransport`: `PathingSystem.FindPath` does not throw
   when no route exists, it returns a 1-node zero-cost path, which must not be read as a free adjacent trip.
 - **Incoming counter:** `Planet.GetIncomingShips(kind, owner)` is counted per owning player (fleets can target

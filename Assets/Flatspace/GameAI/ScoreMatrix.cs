@@ -30,9 +30,14 @@ public interface IScoreMatrixAction
 // ── Generic ScoreMatrix ──────────────────────────────────────────────────────
 public class ScoreMatrixDecisionComparer : IComparer<ScoreMatrixDecisionElement>
 {
+    // Higher Priority sorts first; a tie breaks by Target name. The tie-break must return
+    // x.Target.CompareTo(y.Target) directly -- comparing it against x.Priority (as a previous
+    // version did) reports two DIFFERENT-named rows as equal (a SortedDictionary "duplicate key")
+    // whenever Priority happens to numerically coincide with the -1/0/+1 that string.CompareTo
+    // returns, e.g. two distinct planets both landing on a shortage of exactly magnitude 1.
     public int Compare(ScoreMatrixDecisionElement x, ScoreMatrixDecisionElement y)
     {
-        return (x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority).CompareTo(x.Priority);
+        return x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority.CompareTo(x.Priority);
     }
 }
 
@@ -40,7 +45,7 @@ public class ScoreMatrixMultipleDecisionComparer : IComparer<ScoreMatrixMultiple
 {
     public int Compare(ScoreMatrixMultipleDecisionElement x, ScoreMatrixMultipleDecisionElement y)
     {
-        return (x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority).CompareTo(x.Priority);
+        return x.Priority == y.Priority ? x.Target.CompareTo(y.Target) : y.Priority.CompareTo(x.Priority);
     }
 }
 
