@@ -277,6 +277,11 @@ public static class PlayerKnowledgeSelfCheck
             map.GameAIMapInit(spawns, constants);
             map.Knowledge.SetKnownPlanets(0, new List<string> { "Home", "Mid", "Target" });
 
+            // Give Mid a population owned by player 0, which makes it an invalid colonization target
+            // (IsValidColonizationTarget rejects planets where PlayerWithMostPopulation() == this player).
+            // This leaves Target as the only valid, reachable choice, so ProcessColonizers will colonize it.
+            map.GetPlanet("Mid").Population.Add(new Planet.Inhabitant { Player = 0 });
+
             var player = playerGo.AddComponent<Player>();
             var playerAI = playerGo.AddComponent<PlayerAI>();
             playerAI.Player = player;
