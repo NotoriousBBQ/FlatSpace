@@ -74,6 +74,37 @@ surplus/shortage `PlanetUpdateResult`s):
    the original ask).
 4. Highest score wins; ties broken by path cost.
 
+## Prerequisite: colonization must be able to outrun direct shipping range
+
+Criterion 2 needs a colonized planet that's within the *candidate DC's* range but outside *every current
+producer's* range. That gap can't reliably exist today, for two compounding reasons discovered while
+scoping this:
+
+- **Colonization itself is gated to the same range as shipping.** Both `PlanetHasColonizationTarget` and
+  `ProcessColonizers`'s target filter require `NumNodes <= maxPathNodesForResourceDistribution` between
+  the colonizing planet and its target. Since every colonized planet's parent is, by construction, within
+  shipping range of it, a new colony only escapes producer range if its specific parent wasn't itself a
+  producer at the time — a matter of luck in colonization-chain composition, not something the design can
+  rely on.
+- **Knowledge is the tighter constraint anyway.** `IsValidColonizationTarget` requires
+  `AIMap.Knowledge.IsKnown(...)` before distance is even considered, and `PlayerKnowledge.Update` only
+  grants knowledge to a vision source's *direct graph neighbors* (`GetNeighbours`, one edge, `NumNodes`
+  reach of 2) — tighter than today's `maxPathNodesForResourceDistribution` of 3. So the path-node check
+  on colonization is currently vacuous: knowledge rejects a target before range ever would.
+
+Fix, both parts required:
+
+1. **New tunable `maxPathNodesForColonization`** (separate from `maxPathNodesForResourceDistribution`,
+   defaulted higher — e.g. matching the DC's effective `2 x maxPathNodesForResourceDistribution` reach),
+   used in place of `maxPathNodesForResourceDistribution` at both `PlanetHasColonizationTarget` and
+   `ProcessColonizers`'s target filter.
+2. **Widen `PlayerKnowledge.Update`'s growth rule** from "direct neighbors of a vision source" to a BFS
+   out to a new tunable hop count (large enough to clear `maxPathNodesForColonization`), so knowledge
+   isn't the tighter gate underneath the wider colonization range. Accepted side effect: `HasContact`
+   (first-contact, Expand -> Consolidate) scans all known planets, so it will also trigger from farther
+   away — the AI sees further in every direction, not just toward colonization targets. This is a
+   deliberate trade, not an oversight.
+
 ## Synthetic demand
 
 Each turn, for each designated DC below its target stock and **with no real shortage already reported
@@ -148,10 +179,27 @@ assumed, so three new `AITuningLogger` events are added:
   that raw signed value in `BuildResourceMatrix` — so a `-20` shortage currently sorts *after* a milder
   `-5` one, the opposite of "worse shortage served first." Worth a look someday; the DC sentinel above is
   deliberately an absolute constant so it doesn't inherit this ambiguity either way.
+- **Scouting: time-based knowledge reveal instead of static widening.** Raised alongside the
+  `PlayerKnowledge` widening above: instead of instantly granting knowledge out to a fixed hop count, a
+  planet could become known only after a delay representing scout travel time — reveal delay = the
+  shortest-path travel time (`Cost / defaultTravelSpeed`, already precomputed for all pairs in
+  `DistanceMapToPathingList`) from whichever currently-known planet is nearest to it. Checked for
+  feasibility: the expensive-looking part is free (all-pairs cost is already memoized), but it's a real
+  second subsystem, not a bigger BFS — it needs new persisted per-player state (a reveal countdown per
+  not-yet-known planet, saved/restored), a design decision on whether a pending countdown *shortens* when
+  a closer source later appears (dynamic, continuously-relaxing — cheap given precomputed costs, but
+  genuinely recurring work) versus locking in the delay at first detection (simpler, but a scout already
+  "in transit" never benefits from a shortcut that opens up later), and a judgment call on what happens to
+  a countdown whose only qualifying source planet is later captured or dies (today's sticky-forever
+  invariant only covers planets already known, not planets mid-countdown). Recorded as a future
+  refinement once static widening's simpler version has been proven out, not built now.
 
 ## Testing plan (detail left to the implementation plan)
 
 Extend the Editor self-check pattern (no `Gameboard.Instance` dependency): coverage-heuristic scoring on
 a small synthetic map, sticky selection surviving a turn with no changes, reselection after a DC is lost,
 synthetic-demand priority never outranking a real shortage in the same round, the real-shortage/synthetic
-duplicate-row guard, and the three new log events firing at the right moments.
+duplicate-row guard, the three new log events firing at the right moments, and the colonization/knowledge
+prerequisite itself: a planet beyond the old `maxPathNodesForResourceDistribution` but within the new
+`maxPathNodesForColonization` becomes both known and a valid colonization target once the wider
+`PlayerKnowledge` growth rule is in place, and does not before it.
