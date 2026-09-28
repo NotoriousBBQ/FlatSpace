@@ -22,6 +22,7 @@ public class PlanetDetailUIController : MonoBehaviour
     private Label _researchProduction;
     private Label _productionItem;
     private Label _productionProgress;
+    private Label _distributionCenterStatus;
     public Sprite desertIcon;
     public Sprite desolateIcon;
     public Sprite farmIcon;
@@ -154,6 +155,7 @@ public class PlanetDetailUIController : MonoBehaviour
         _researchProduction = _element.Q<Label>("ResearchProduction");
         _productionItem = _element.Q<Label>("ProductionItem");
         _productionProgress = _element.Q<Label>("ProductionProgress");
+        _distributionCenterStatus = _element.Q<Label>("DistributionCenterStatus");
         // The UXML "FleetIcon" element is a row container for the per-player fleet icons, which
         // are added from code (UpdatePlanetDetail). It ignores picking itself; each icon is pickable.
         _fleetIcon = _element.Q<VisualElement>("FleetIcon");
@@ -200,6 +202,19 @@ public class PlanetDetailUIController : MonoBehaviour
             foreach (var group in groups)
                 _fleetIcon.Add(CreateFleetIconElement(group));
             _fleetIcon.style.display = groups.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+        if (_distributionCenterStatus != null)
+        {
+            var owner = _planet.Owner;
+            var ownerAI = owner != Planet.NoOwner && owner < Gameboard.Instance.players.Count
+                ? Gameboard.Instance.players[owner].playerAI : null;
+            var isFoodDC = ownerAI != null && ownerAI.FoodDistributionCenters.Contains(_planet.PlanetName);
+            var isGrotsitsDC = ownerAI != null && ownerAI.GrotsitsDistributionCenters.Contains(_planet.PlanetName);
+
+            if (isFoodDC && isGrotsitsDC) _distributionCenterStatus.text = "Distribution Center: Food, Grotsits";
+            else if (isFoodDC) _distributionCenterStatus.text = "Distribution Center: Food";
+            else if (isGrotsitsDC) _distributionCenterStatus.text = "Distribution Center: Grotsits";
+            else _distributionCenterStatus.text = "";
         }
     }
 
