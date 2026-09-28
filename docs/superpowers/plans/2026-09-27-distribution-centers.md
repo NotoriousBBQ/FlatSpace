@@ -1956,3 +1956,315 @@ Ask the user to focus the Editor, enter Play mode on a board large enough to cro
 git add Assets/Flatspace/UI/MainGameScreenUI/PlanetDetailUI.uxml Assets/Flatspace/UI/MainGameScreenUI/PlanetDetailUIController.cs
 git commit -m "feat(ui): show Distribution Center status text on the planet detail panel"
 ```
+
+---
+
+## Post-implementation: final whole-branch review fixes
+
+All 10 tasks above landed and were individually reviewed clean. The final whole-branch review (after all
+tasks were done) found two additional defects that no single task's self-checks could have caught, because
+they only manifest from the INTERACTION of multiple tasks' code, not from any one task in isolation. Both
+verified directly against the code before fixing.
+
+### Fix A (Critical): `BuildResourceMatrix` throws `KeyNotFoundException` when a DC is also a surplus source
+
+`Planet.DistanceMapToPathingList` never contains a planet's own name (`GameAIMap` only builds pairs
+between DIFFERENT planets). `Planet.UpdatePlanet` reports a real Food/Grotsits surplus whenever
+`stock > projectedPopulation` — a SMALL, population-sized threshold, completely independent of a DC's
+much larger `distributionCenterFoodTargetStock`/`GrotsitsTargetStock` (default 50). This means a DC
+sitting anywhere between "enough for its own population" and "its full target stock" reports BOTH a real
+surplus (from `Planet.UpdatePlanet`'s perspective) AND has synthetic demand (from the DC gap) in the SAME
+turn — routine, not an edge case, since that's the normal state of a DC while it's still filling up.
+
+When `BuildResourceMatrix` builds that DC's shortage row and then filters `surplusResults` for reachable
+sources, if the DC itself appears in `surplusResults` (it does, per above), the `.Where` clause's
+`pathMap[s.Name]` — where `s.Name == shortage.Name`, i.e. the DC checking distance to itself — throws,
+because that key was never populated. This aborts `GameAIUpdate` for that turn and every turn after, the
+first time any board reaches the DC threshold and a DC's stock lands in the normal "filling up" range.
+
+None of the self-checks caught this because every hand-built `results` list in every self-check placed
+the DC at `Food = 0` (or otherwise below its own population's need), so it never simultaneously appeared
+in both `shortages` and `surplusResults`.
+
+In `Assets/Flatspace/GameAI/PlayerAI.cs`, `BuildResourceMatrix`, replace:
+
+```csharp
+                    var pathMap = AIMap.GetPlanet(shortage.Name).DistanceMapToPathingList;
+                    var entries = surplusResults
+                        .Where(s => remainingSurplus[s.Name] > 0f
+                                    && pathMap[s.Name].NumNodes
+                                    <= AIMap.GameAIConstants.maxPathNodesForResourceDistribution)
+                        .Select(s => new ResourceChoiceElement
+                        {
+                            SurplusResult = s,
+                            ShortageResult = shortage,
+                            Cost =  pathMap[s.Name].Cost
+                        })
+                        .ToList();
+```
+
+with:
+
+```csharp
+                    var pathMap = AIMap.GetPlanet(shortage.Name).DistanceMapToPathingList;
+                    var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
+                    // s.Name != shortage.Name: DistanceMapToPathingList never contains a planet's own
+                    // name, so a planet that is BOTH this shortage row (e.g. a DC's synthetic demand) AND
+                    // a real surplus source the same turn (routine — see this task's own comment above)
+                    // would otherwise throw KeyNotFoundException on pathMap[s.Name] below. NumNodes >= 2:
+                    // the same pathing-stub floor as SelectDistributionCenter's IsUsablePath — this
+                    // filter previously lacked it (a pre-existing gap from before this plan, now folded
+                    // into the same fix since it's the identical line).
+                    var entries = surplusResults
+                        .Where(s => s.Name != shortage.Name
+                                    && remainingSurplus[s.Name] > 0f
+                                    && pathMap.ContainsKey(s.Name)
+                                    && pathMap[s.Name].NumNodes >= 2
+                                    && pathMap[s.Name].NumNodes <= maxNodes)
+                        .Select(s => new ResourceChoiceElement
+                        {
+                            SurplusResult = s,
+                            ShortageResult = shortage,
+                            Cost = pathMap[s.Name].Cost
+                        })
+                        .ToList();
+```
+
+**New self-check**, add to `Assets/Editor/PlayerAIResourceSelfCheck.cs` (register in `Run()` after the
+existing DC checks):
+
+```csharp
+    // A DC's stock can sit above its own small population-based need (a real surplus, per
+    // Planet.UpdatePlanet) while still below its much larger target stock (synthetic demand) — the same
+    // planet then appears in BOTH shortages and surplusResults the same turn. This is the routine case,
+    // not an edge case, and must not throw or cause the DC to ship to itself.
+    public static bool RunDistributionCenterAlsoReportsSurplusCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMap_DC4");
+        var playerGo = new GameObject("PAResSelfCheckPlayer_DC4");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            constants.distributionCenterFoodTargetStock = 50f;
+            constants.minPlanetsForDistributionCenters = 0;
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "DC" }),
+                MakeSpawn("DC"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("Source").Owner = 0;
+            map.GetPlanet("DC").Population.Add(new Planet.Inhabitant { Player = 0 });
+            map.GetPlanet("DC").Owner = 0;
+            map.GetPlanet("DC").Food = 20f; // below the 50 target (synthetic demand), but this self-check
+            // hand-constructs results directly (bypassing Planet.UpdatePlanet), so DC's real-surplus
+            // status below is asserted explicitly rather than derived from this stock value.
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Source",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    30f, playerID: 0),
+                // DC is ALSO a real surplus source this turn, independent of its synthetic demand below.
+                new Planet.PlanetUpdateResult("DC",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    5f, playerID: 0),
+            };
+
+            playerAI.UpdateDistributionCenters(results, turnNumber: 1); // designates "DC"
+            var orders = new List<GameAI.GameAIOrder>();
+            var threw = false;
+            try
+            {
+                playerAI.ProcessResults(results, orders);
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
+
+            ok &= Check(!threw,
+                "a DC that is ALSO a real surplus source the same turn (routine: stock above its own " +
+                "population's need but below its much larger target) does not throw KeyNotFoundException");
+            ok &= Check(!orders.Exists(o =>
+                    o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport &&
+                    o.Origin == "DC" && o.Target == "DC"),
+                "the DC never ships to itself");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+```
+
+### Fix B (Important): `PlayerKnowledge.Update`'s BFS stops expanding the moment it touches already-known territory
+
+The widened BFS gates frontier expansion on `set.Add(neighbourName)` — `set` is the player's PERMANENT,
+cross-turn, cross-source known set. A neighbour already known (from an earlier turn, or a different,
+closer source) makes `set.Add` return `false`, and the loop never adds it to `next`, so that source's own
+traversal cannot continue PAST it to reach genuinely new territory beyond, even though this source's own
+hop budget has plenty of hops left. This only manifests with multiple sources or across multiple calls —
+`RunKnowledgeWideningCheck` (a single source, a single call, on a fresh instance) cannot see it, since
+nothing is pre-known in that scenario.
+
+Concretely: on a line graph H-1-2-3-4-5-6-7-8 with `maxPathNodesForKnowledge = 6`, turn 1 from H reveals
+1-5. Colonizing planet 3 makes it a new vision source; a naive re-run from 3 tries to expand through 2 and
+4 (both already known from turn 1) and immediately stops, never reaching 6-8 even though they're within 5
+hops of 3. This directly weakens the whole point of Task 3: letting a growing empire's known frontier keep
+pace with colonization, not just do a one-time initial reveal.
+
+Fix: track visited-by-THIS-source's-own-traversal separately from the permanent known set, so the BFS can
+traverse through already-known planets without re-adding them, while still recording every planet it
+passes as known.
+
+In `Assets/Flatspace/GameAI/PlayerKnowledge.cs`, replace:
+
+```csharp
+            public void Update(GameAIMap map, int numPlayers, int maxPathNodesForKnowledge = 2)
+            {
+                var hops = Math.Max(0, maxPathNodesForKnowledge - 1);
+                for (var p = 0; p < numPlayers; p++)
+                {
+                    if (!_known.TryGetValue(p, out var set))
+                        _known[p] = set = new HashSet<string>();
+
+                    foreach (var source in map.GetVisionSourcePlanets(p))
+                    {
+                        set.Add(source.Planet.PlanetName);
+                        var frontier = new List<string> { source.Planet.PlanetName };
+                        for (var hop = 0; hop < hops && frontier.Count > 0; hop++)
+                        {
+                            var next = new List<string>();
+                            foreach (var name in frontier)
+                                foreach (var neighbourName in map.GetNeighbours(name))
+                                    if (set.Add(neighbourName))
+                                        next.Add(neighbourName);
+                            frontier = next;
+                        }
+                    }
+                }
+            }
+```
+
+with:
+
+```csharp
+            public void Update(GameAIMap map, int numPlayers, int maxPathNodesForKnowledge = 2)
+            {
+                var hops = Math.Max(0, maxPathNodesForKnowledge - 1);
+                for (var p = 0; p < numPlayers; p++)
+                {
+                    if (!_known.TryGetValue(p, out var set))
+                        _known[p] = set = new HashSet<string>();
+
+                    foreach (var source in map.GetVisionSourcePlanets(p))
+                    {
+                        set.Add(source.Planet.PlanetName);
+                        // Tracks this SOURCE's own traversal, separate from the permanent known set, so
+                        // the BFS can pass through a planet already known (from an earlier turn or a
+                        // different source) to reach genuinely new territory beyond it — a version gated
+                        // on the permanent set alone stops dead the instant it touches known territory.
+                        var visited = new HashSet<string> { source.Planet.PlanetName };
+                        var frontier = new List<string> { source.Planet.PlanetName };
+                        for (var hop = 0; hop < hops && frontier.Count > 0; hop++)
+                        {
+                            var next = new List<string>();
+                            foreach (var name in frontier)
+                                foreach (var neighbourName in map.GetNeighbours(name))
+                                    if (visited.Add(neighbourName))
+                                    {
+                                        set.Add(neighbourName);
+                                        next.Add(neighbourName);
+                                    }
+                            frontier = next;
+                        }
+                    }
+                }
+            }
+```
+
+**New self-check**, add to `Assets/Editor/PlayerKnowledgeSelfCheck.cs` (register in `Run()` after
+`RunKnowledgeWideningCheck`):
+
+```csharp
+    // A second vision source's BFS must be able to pass THROUGH planets already known (from an earlier
+    // call or a different source) to reach genuinely new territory beyond them. H-P1-P2-...-P8, a straight
+    // chain. The first call (source H only) reveals up to P5 (5 hops). Colonizing P3 makes it a second
+    // source; its own 5-hop BFS must reach P8 (3 hops further out than P5), passing through the
+    // already-known P2/P4 on the way — a version that only expands the frontier through NEWLY-discovered
+    // planets would stop dead at P2/P4 and never reach P6-P8.
+    public static bool RunKnowledgeBfsPassesThroughKnownTerritoryCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PKSelfCheckMap_BFSFrontier");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("H", initialPopulation: 1, connections: new[] { "P1" }),
+                MakeSpawn("P1", initialPopulation: 0, connections: new[] { "P2" }),
+                MakeSpawn("P2", initialPopulation: 0, connections: new[] { "P3" }),
+                MakeSpawn("P3", initialPopulation: 0, connections: new[] { "P4" }),
+                MakeSpawn("P4", initialPopulation: 0, connections: new[] { "P5" }),
+                MakeSpawn("P5", initialPopulation: 0, connections: new[] { "P6" }),
+                MakeSpawn("P6", initialPopulation: 0, connections: new[] { "P7" }),
+                MakeSpawn("P7", initialPopulation: 0, connections: new[] { "P8" }),
+                MakeSpawn("P8", initialPopulation: 0),
+            };
+            map.GameAIMapInit(spawns, constants);
+
+            var knowledge = new PlayerKnowledge();
+            knowledge.Update(map, numPlayers: 1, maxPathNodesForKnowledge: 6); // hops=5, reveals H..P5
+
+            ok &= Check(knowledge.IsKnown(0, "P5") && !knowledge.IsKnown(0, "P6"),
+                "first call from H alone reveals exactly 5 hops out (through P5, not P6)");
+
+            // Colonize P3 (a second vision source) and update again with the SAME sticky instance.
+            map.GetPlanet("P3").Population.Add(new Planet.Inhabitant { Player = 0 });
+            knowledge.Update(map, numPlayers: 1, maxPathNodesForKnowledge: 6);
+
+            ok &= Check(knowledge.IsKnown(0, "P8"),
+                "a second source's BFS must pass THROUGH already-known planets (P2, P4) to reach " +
+                "genuinely new territory (P6, P7, P8) up to 5 hops from P3");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+```
+
+### Fix C (Important): `Assets/Editor/DistributionCenterSelfCheck.cs.meta` still doesn't exist
+
+Unity generates this the moment the Editor focuses/imports the new script — it hasn't happened yet in
+this session. **This requires the user, not an agent**: focus the Unity Editor once, then `git status` and
+commit the generated `.meta` file. Cannot be scripted or delegated to a subagent.
+
+### Fix D (Important): CLAUDE.md is stale
+
+It still describes `PlayerKnowledge` as granting only direct-neighbour knowledge, and doesn't mention the
+Distribution Centers feature at all: the new tunables (`maxPathNodesForColonization`,
+`maxPathNodesForKnowledge`, `minPlanetsForDistributionCenters`, `minPlanetsForSecondDistributionCenter`,
+`distributionCenterFoodTargetStock`/`GrotsitsTargetStock`), the new log events (`DCSelected`, `DCLost`,
+`DCCoverageGap`), or the new `FlatSpace → AI → Run Distribution Center Self-Check` menu item. Update the
+"Player Knowledge" section's growth-rule description, and add a new "### Distribution Centers" section
+(matching the style of the existing "### Ship Transport" section) summarizing the mechanism, the
+selection heuristic, the synthetic-demand priority sentinel, and the two bugs fixed above.
