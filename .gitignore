@@ -78,3 +78,7 @@ crashlytics-build.properties
 
 # AI tuning logs (generated per match, developer-only)
 /AITuningLogs/
+
+# Ad-hoc save files from manual Play-mode testing (existing tracked fixtures, e.g.
+# CameraSaveTest.json, are unaffected -- .gitignore only applies to untracked files)
+/Assets/Flatspace/GameSaves/
