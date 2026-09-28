@@ -268,8 +268,13 @@ public static class DistributionCenterSelfCheck
         return ok;
     }
 
-    // Calling UpdateDistributionCenters a second time, with an equally-scoring alternate candidate
-    // available, must not replace the first call's choice.
+    // Calling UpdateDistributionCenters a second time, after the board has changed in a way that would
+    // make a fresh re-score prefer a DIFFERENT candidate, must not replace the first call's choice.
+    // (An earlier version of this test used two arms that scored equally from the start, tie-broken by
+    // path cost alone — that tie-break is deterministic regardless of stickiness, so it passed even
+    // against a non-sticky "clear and re-select every turn" implementation. Consumer3 is added between
+    // the two calls specifically to flip which candidate WOULD win a fresh score, so this test actually
+    // discriminates sticky from non-sticky.)
     public static bool RunStickySelectionCheck()
     {
         var ok = true;
@@ -282,15 +287,17 @@ public static class DistributionCenterSelfCheck
             constants.minPlanetsForDistributionCenters = 0;
             constants.minPlanetsForSecondDistributionCenter = 10000;
 
-            // Two equally-scoring arms (Consumer1 behind FarB, Consumer2 behind FarC) so a naive
-            // re-score on the second call would have a real alternative to (wrongly) switch to.
+            // FarB (score 1, cost 100) beats FarC (score 1, cost 300) on the first call. Consumer3
+            // starts uncolonized so it doesn't count yet; giving it population before the second call
+            // brings FarC's score to 2, which would beat FarB's 1 outright under a fresh re-score.
             var spawns = new List<PlanetSpawnData>
             {
                 MakeSpawn("Home", 1, new[] { "FarB", "FarC" }),
                 MakeSpawn("FarB", 1, new[] { "Home", "Consumer1" }),
                 MakeSpawn("Consumer1", 1),
-                MakeSpawn("FarC", 1, new[] { "Home", "Consumer2" }),
+                MakeSpawn("FarC", 1, new[] { "Home", "Consumer2", "Consumer3" }),
                 MakeSpawn("Consumer2", 1),
+                MakeSpawn("Consumer3", 0),
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap5", "DCSelfCheckPlayer5");
 
@@ -298,13 +305,18 @@ public static class DistributionCenterSelfCheck
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
             var firstChoice = built.playerAI.FoodDistributionCenters.Count == 1
                 ? built.playerAI.FoodDistributionCenters[0] : null;
+            ok &= Check(firstChoice == "FarB", "FarB (cost 100) is selected over FarC (cost 300) on the first call");
+
+            // Owner must be set explicitly (see BuildPlayer's note) — this planet was uncolonized at
+            // GameAIMapInit time, so BuildPlayer's own pass over the map never touched it.
+            built.map.GetPlanet("Consumer3").Population.Add(new Planet.Inhabitant { Player = 0 });
+            built.map.GetPlanet("Consumer3").Owner = 0;
 
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 2);
 
-            ok &= Check(firstChoice != null, "a DC was selected on the first call");
             ok &= Check(built.playerAI.FoodDistributionCenters.Count == 1
-                        && built.playerAI.FoodDistributionCenters[0] == firstChoice,
-                "the second call keeps the same DC rather than re-scoring");
+                        && built.playerAI.FoodDistributionCenters[0] == "FarB",
+                "the second call keeps FarB even though FarC would now score higher (2 vs 1) on a fresh re-score");
         }
         finally
         {
