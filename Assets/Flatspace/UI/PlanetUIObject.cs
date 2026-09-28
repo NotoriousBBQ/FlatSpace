@@ -23,8 +23,9 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     private readonly Vector2 _fleetIconBaseAnchoredPosition = new Vector2(40, -40);
     private const float FleetIconSize = 32f;
     private const float FleetIconSpacing = 4f;
-    private Outline _foodDCOutline;
-    private Outline _grotsitsDCOutline;
+    private GameObject _foodDCBorder;
+    private GameObject _grotsitsDCBorder;
+    private const float DCBorderThickness = 3f;
 
     // One icon per player with ships here, side by side; the first sits at the base position and
     // the rest extend to its right. Created on demand and reused (deactivated when not needed).
@@ -132,28 +133,61 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
     }
 
     /// <summary>
-    /// Green outline for a Food DC, brown for a Grotsits DC, both together for a planet that holds both
-    /// roles (a second, larger-offset outline rather than inventing a third "mixed" color).
+    /// Green border for a Food DC, brown for a Grotsits DC, both together for a planet that holds both
+    /// roles (a second, larger ring rather than inventing a third "mixed" color). Built from four thin
+    /// Image strips rather than UnityEngine.UI.Outline: Outline duplicates the graphic's WHOLE mesh offset
+    /// by a few pixels, which only reads as a border on a graphic with real transparent gaps (text, icon
+    /// cutouts) -- on this panel's translucent owner-color fill (the same Image SetOwnerColor tints) the
+    /// duplicate showed through across nearly the entire panel instead of just the edge.
     /// </summary>
     public void SetDistributionCenterIndicator(bool isFoodDC, bool isGrotsitsDC)
     {
         var statsPanelImage = GetComponentInChildren<Image>();
         if (!statsPanelImage) return;
 
-        if (_foodDCOutline == null)
-        {
-            _foodDCOutline = statsPanelImage.gameObject.AddComponent<Outline>();
-            _foodDCOutline.effectColor = new Color(0f, 0.6f, 0f, 1f);
-            _foodDCOutline.effectDistance = new Vector2(2f, -2f);
-        }
-        if (_grotsitsDCOutline == null)
-        {
-            _grotsitsDCOutline = statsPanelImage.gameObject.AddComponent<Outline>();
-            _grotsitsDCOutline.effectColor = new Color(0.55f, 0.27f, 0.07f, 1f);
-            _grotsitsDCOutline.effectDistance = new Vector2(4f, -4f);
-        }
-        _foodDCOutline.enabled = isFoodDC;
-        _grotsitsDCOutline.enabled = isGrotsitsDC;
+        if (_foodDCBorder == null)
+            _foodDCBorder = CreateBorderRing(statsPanelImage.rectTransform, 0f, new Color(0f, 0.6f, 0f, 1f));
+        if (_grotsitsDCBorder == null)
+            _grotsitsDCBorder = CreateBorderRing(statsPanelImage.rectTransform, 6f, new Color(0.55f, 0.27f, 0.07f, 1f));
+
+        _foodDCBorder.SetActive(isFoodDC);
+        _grotsitsDCBorder.SetActive(isGrotsitsDC);
+    }
+
+    private static GameObject CreateBorderRing(RectTransform parent, float outwardOffset, Color color)
+    {
+        var container = new GameObject("DCBorderRing", typeof(RectTransform));
+        var containerRect = (RectTransform)container.transform;
+        containerRect.SetParent(parent, false);
+        containerRect.anchorMin = Vector2.zero;
+        containerRect.anchorMax = Vector2.one;
+        containerRect.offsetMin = new Vector2(-outwardOffset, -outwardOffset);
+        containerRect.offsetMax = new Vector2(outwardOffset, outwardOffset);
+
+        CreateBorderStrip(containerRect, color, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, DCBorderThickness)); // top
+        CreateBorderStrip(containerRect, color, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, DCBorderThickness)); // bottom
+        CreateBorderStrip(containerRect, color, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f),
+            new Vector2(DCBorderThickness, 0f)); // left
+        CreateBorderStrip(containerRect, color, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f),
+            new Vector2(DCBorderThickness, 0f)); // right
+
+        return container;
+    }
+
+    private static void CreateBorderStrip(RectTransform parent, Color color, Vector2 anchorMin, Vector2 anchorMax,
+        Vector2 pivot, Vector2 sizeDelta)
+    {
+        var strip = new GameObject("Strip", typeof(RectTransform), typeof(Image));
+        var rect = (RectTransform)strip.transform;
+        rect.SetParent(parent, false);
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.sizeDelta = sizeDelta;
+        rect.anchoredPosition = Vector2.zero;
+        strip.GetComponent<Image>().color = color;
     }
 
     public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
