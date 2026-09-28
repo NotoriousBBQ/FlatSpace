@@ -239,6 +239,10 @@ namespace FlatSpace
                             .Find(x => x.itemName == playerSave.currentResearchItem);
                     GameAI.GameAIMap.Knowledge.SetKnownPlanets(
                         playerSave.playerId, playerSave.knownPlanets ?? new List<string>());
+                    players[playerSave.playerId].playerAI.SetDistributionCenters(
+                        "Food", playerSave.foodDistributionCenters ?? new List<string>());
+                    players[playerSave.playerId].playerAI.SetDistributionCenters(
+                        "Grotsits", playerSave.grotsitsDistributionCenters ?? new List<string>());
 
                 }
                 GameAI.SetSimulationStats(gameSave);

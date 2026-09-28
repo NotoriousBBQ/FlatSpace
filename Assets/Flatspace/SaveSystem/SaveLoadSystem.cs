@@ -103,6 +103,8 @@ public class SaveLoadSystem : MonoBehaviour
             public int exploredCols;
             public int exploredRows;
             public List<string> knownPlanets;
+            public List<string> foodDistributionCenters;
+            public List<string> grotsitsDistributionCenters;
         }
 
         [Serializable]
@@ -153,6 +155,8 @@ public class SaveLoadSystem : MonoBehaviour
                         exploredCols = Gameboard.Instance.FogOfWar != null ? Gameboard.Instance.FogOfWar.GridCols : 0,
                         exploredRows = Gameboard.Instance.FogOfWar != null ? Gameboard.Instance.FogOfWar.GridRows : 0,
                         knownPlanets = new List<string>(gameAI.GameAIMap.Knowledge.KnownPlanets(i)),
+                        foodDistributionCenters = new List<string>(Gameboard.Instance.players[i].playerAI.FoodDistributionCenters),
+                        grotsitsDistributionCenters = new List<string>(Gameboard.Instance.players[i].playerAI.GrotsitsDistributionCenters),
                     });
             }
             

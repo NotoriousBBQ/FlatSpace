@@ -17,6 +17,7 @@ public static class DistributionCenterSelfCheck
         ok &= RunStickySelectionCheck();
         ok &= RunPruningCheck();
         ok &= RunCoverageGapCheck();
+        ok &= RunSaveRoundTripCheck();
         Debug.Log(ok
             ? "[DistributionCenterSelfCheck] ALL PASSED"
             : "[DistributionCenterSelfCheck] FAILURES (see errors above)");
@@ -406,6 +407,47 @@ public static class DistributionCenterSelfCheck
             var withDCAtNear = new List<string> { "Near" };
             ok &= Check(!playerAI.IsCoverageGap(map.GetPlanet("Far"), homeAsSource, withDCAtNear),
                 "Far is no longer a coverage gap once a DC at Near (within Far's range) exists");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
+    // Simulates the save/restore round trip directly on PlayerAI (SetDistributionCenters is exactly what
+    // GameBoard.InitGameFromSave calls), including the older-save case where the field is missing (null).
+    public static bool RunSaveRoundTripCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("DCSelfCheckMap8");
+        var playerGo = new GameObject("DCSelfCheckPlayer8");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            var spawns = new List<PlanetSpawnData> { MakeSpawn("A", 1) };
+            map.GameAIMapInit(spawns, constants);
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            playerAI.SetDistributionCenters("Food", new List<string> { "A" });
+            ok &= Check(playerAI.FoodDistributionCenters.Count == 1 && playerAI.FoodDistributionCenters[0] == "A",
+                "SetDistributionCenters restores a saved list");
+
+            playerAI.SetDistributionCenters("Food", null); // simulates an older save's missing field
+            ok &= Check(playerAI.FoodDistributionCenters.Count == 0,
+                "a null (older-save) list restores as empty, not a crash");
+
+            playerAI.SetDistributionCenters("Grotsits", new List<string> { "A" });
+            ok &= Check(playerAI.GrotsitsDistributionCenters.Count == 1
+                        && playerAI.FoodDistributionCenters.Count == 0,
+                "Food and Grotsits DC lists are independent");
         }
         finally
         {
