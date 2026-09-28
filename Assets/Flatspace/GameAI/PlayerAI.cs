@@ -457,6 +457,7 @@ namespace FlatSpace
                 foreach (var dcName in distributionCenters)
                 {
                     if (shortages.Exists(s => s.Name == dcName)) continue; // a real shortage already covers it
+                    if (incomingCheck(dcName)) continue; // a shipment (real or synthetic) is already en route
                     var dcPlanet = AIMap.GetPlanet(dcName);
                     if (dcPlanet == null) continue;
                     var gap = distributionCenterTargetStock - currentStockSelector(dcPlanet);
