@@ -214,10 +214,15 @@ namespace FlatSpace
                         targetPlanet.Industry += Convert.ToSingle(executableOrder.Data);
                         break;
                     case GameAIOrder.OrderType.OrderTypeIndustrySetProduction:
-                        var newProductionItem = 
-                            Gameboard.Instance.players[executableOrder.PlayerId].playerAI.ProductionCatalog.catalogItems
-                                .Find(x => x.itemName == executableOrder.Data.ToString());
-                        targetPlanet.ScheduleProductionItem(newProductionItem);
+                        var productionAI = Gameboard.Instance.players[executableOrder.PlayerId].playerAI;
+                        var newProductionItem = productionAI.ProductionCatalog.catalogItems
+                            .Find(x => x.itemName == executableOrder.Data.ToString());
+                        var baseWarship = productionAI.ProductionCatalog.catalogItems.Find(x => x.subType == "Warship");
+                        var fixedCost = WarshipCosts.ProductionCost(newProductionItem, targetPlanet,
+                            executableOrder.PlayerId, productionAI.ResearchCatalog.catalogItems,
+                            baseWarship != null ? baseWarship.cost : 0f,
+                            GameAIMap.GameAIConstants.warshipImprovementCostFactor);
+                        targetPlanet.ScheduleProductionItem(newProductionItem, fixedCost);
                         break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
                         targetPlanet.Research += Convert.ToSingle(executableOrder.Data);

@@ -15,6 +15,7 @@ public static class WarshipSelfCheck
     {
         _nextPlanetX = 0f;
         var ok = RunStatsCheck();
+        ok &= RunCostCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
             : "[WarshipSelfCheck] FAILURES (see errors above)");
@@ -64,6 +65,49 @@ public static class WarshipSelfCheck
     private static void DestroyAll(List<CatalogItem> items)
     {
         foreach (var i in items) Object.DestroyImmediate(i);
+    }
+
+    private static CatalogItem ProductionItem(string name, string subType, float cost)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.itemName = name; item.name = name; item.type = "Ship"; item.subType = subType; item.cost = cost;
+        return item;
+    }
+
+    public static bool RunCostCheck()
+    {
+        var ok = true;
+        ok &= Check(Near(WarshipCosts.BuildCost(100f, 0.1f, 0), 100f), "no improvements: base cost");
+        ok &= Check(Near(WarshipCosts.BuildCost(100f, 0.1f, 15), 250f), "15 improvements at 0.1: 2.5x base");
+        ok &= Check(Near(WarshipCosts.BuildCost(100f, 0f, 15), 100f), "a factor of 0 switches the surcharge off");
+        ok &= Check(Near(WarshipCosts.UpdateCost(100f, 0.1f, 5), 50f)
+                    && Near(WarshipCosts.UpdateCost(100f, 0.1f, 5),
+                            WarshipCosts.BuildCost(100f, 0.1f, 15) - WarshipCosts.BuildCost(100f, 0.1f, 10)),
+            "update cost = fully upgraded cost - the ship's own cost");
+        ok &= Check(Near(WarshipCosts.UpdateCost(100f, 0f, 5), 1f), "an update never costs less than 1");
+
+        var research = MakeResearch(3);   // 9 researched warship improvements
+        var warship = ProductionItem("Warship", "Warship", 100f);
+        var colony = ProductionItem("Colony Ship Production", "ColonyShip", 20f);
+        try
+        {
+            ok &= Check(Near(WarshipCosts.ProductionCost(warship, null, 0, research, 100f, 0.1f), 190f),
+                "a Warship built with 9 researched improvements costs 100 x (1 + 0.1 x 9)");
+            ok &= Check(Near(WarshipCosts.ProductionCost(colony, null, 0, research, 100f, 0.1f), 20f),
+                "a ColonyShip keeps its catalog cost");
+
+            var withFixed = new Planet.ProductionItem(warship, 190f);
+            var without = new Planet.ProductionItem(warship);
+            ok &= Check(Near(withFixed.Cost, 190f) && Near(without.Cost, 100f),
+                "ProductionItem.Cost is the fixed cost when set, else the catalog cost");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(warship);
+            Object.DestroyImmediate(colony);
+        }
+        return ok;
     }
 
     public static bool RunStatsCheck()

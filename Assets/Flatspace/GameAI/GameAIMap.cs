@@ -271,6 +271,7 @@ namespace FlatSpace
                         planet.CurrentProduction = new Planet.ProductionItem
                         {
                             Progress = planetStatus.currentProduction?.Progress ?? 0.0f,
+                            FixedCost = planetStatus.currentProduction?.FixedCost ?? 0.0f,
                             Item = catalog.catalogItems.Find(x => x.itemName ==  planetStatus.currentProduction?.Name)
                         };
                     if (planetStatus.productionQueue.Count > 0)
@@ -280,6 +281,7 @@ namespace FlatSpace
                             planet.ProductionQueue.Add(new Planet.ProductionItem
                             {
                                 Progress = 0.0f,
+                                FixedCost = production.FixedCost,
                                 Item = catalog.catalogItems.Find(x => x.itemName ==  production.Name)
                             });
                         }

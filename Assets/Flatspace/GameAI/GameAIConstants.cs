@@ -47,6 +47,11 @@ public class GameAIConstants : ScriptableObject
     // assaultRatio x the enemies' known fleets) chases the enemies, who chase mine, and grows without limit.
     public float warshipsPerColonizedPlanet = 8f;
 
+    [Header("Warships")]
+    // Each researched Warship improvement a ship carries adds this fraction of the base cost to building it
+    // (0.1 with 15 improvements = 2.5x). Update Warship costs base x this x the improvements the ship is missing.
+    public float warshipImprovementCostFactor = 0.1f;
+
     [Header("Improvement upkeep")]
     // Multiplies each improvement's catalog maintenanceCost when it is charged (grotsits per turn, on top of the
     // population's own consumption). Only the BEST tier per resource is charged. 0 switches upkeep off. The catalog

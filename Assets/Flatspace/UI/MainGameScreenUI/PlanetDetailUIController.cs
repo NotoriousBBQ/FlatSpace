@@ -192,7 +192,7 @@ public class PlanetDetailUIController : MonoBehaviour
         _researchProduction.text = _planet.ResearchProduced.ToString();
         _productionItem.text = _planet.CurrentProduction?.Item.itemName ?? "None";
         _productionProgress.text = string.Format("{0}/{1}", _planet.CurrentProduction?.Progress.ToString() ?? "0",
-            _planet.CurrentProduction?.Item.cost.ToString() ?? "X");
+            _planet.CurrentProduction?.Cost.ToString() ?? "X");
         if (_fleetIcon != null)
         {
             // Rebuilt every update: a handful of icons at most, and it keeps each icon's click

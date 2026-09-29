@@ -814,11 +814,16 @@ public class Planet : MonoBehaviour
     {
         public float Progress;
         public CatalogItem Item;
+        // Cost fixed when the item was scheduled (0 = use the catalog cost). Research finishing mid-build must not
+        // move the goalposts, so warship costs are fixed here rather than read from Item.cost each turn.
+        public float FixedCost;
+        public float Cost => FixedCost > 0f ? FixedCost : Item.cost;
 
-        public ProductionItem(CatalogItem item)
+        public ProductionItem(CatalogItem item, float fixedCost = 0f)
         {
             Item = item;
             Progress = 0.0f;
+            FixedCost = fixedCost;
         }
 
     }
@@ -826,9 +831,9 @@ public class Planet : MonoBehaviour
     public ProductionItem? CurrentProduction { get; set; } = null;
     public List<ProductionItem> ProductionQueue = new List<ProductionItem>();
 
-    public void ScheduleProductionItem(CatalogItem productionItem)
+    public void ScheduleProductionItem(CatalogItem productionItem, float fixedCost = 0f)
     {
-        ProductionQueue.Add(new ProductionItem(productionItem));
+        ProductionQueue.Add(new ProductionItem(productionItem, fixedCost));
         if (CurrentProduction == null)
         {
             UpdateProduction();
@@ -872,7 +877,7 @@ public class Planet : MonoBehaviour
         currentProduction.Progress += Industry;
         Industry = 0f;
         CurrentProduction = currentProduction;
-        if (CurrentProduction?.Progress >= CurrentProduction?.Item.cost)
+        if (CurrentProduction?.Progress >= CurrentProduction?.Cost)
         {
             CompleteProduction(resultList);
         }
@@ -883,7 +888,7 @@ public class Planet : MonoBehaviour
         StageCompletedProductionItem(resultList);
         resultList?.Add(new PlanetUpdateResult(PlanetName,
             ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
-        var excessIndustry = CurrentProduction?.Progress - CurrentProduction?.Item.cost;
+        var excessIndustry = CurrentProduction?.Progress - CurrentProduction?.Cost;
         Industry = excessIndustry ?? 0.0f;
         CurrentProduction = null;
         if (UpdateProductionQueue(resultList))
