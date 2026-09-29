@@ -44,6 +44,8 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `FlatSpace → AI → Run Player Knowledge Self-Check` in `Assets/Editor/PlayerKnowledgeSelfCheck.cs`;
 `FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`;
 `FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`;
+`FlatSpace → AI → Run Warship Self-Check` in `Assets/Editor/WarshipSelfCheck.cs`;
+`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
 `FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
 the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
@@ -296,8 +298,11 @@ grotsits shipping.
   highest tier that survived the affordability filter — which fixes the dilution and also stops a planet from ever
   building a tier it would immediately supersede: yield and upkeep only count a planet's best tier per resource
   regardless of build order, so building a lower tier when a higher one is already unlocked and affordable was
-  always wasted industry. Research's own roll doesn't have this problem: each tier's `requiredTech` is the
-  previous tier, so only one tier per resource is ever eligible there at a time.
+  always wasted industry. That holds for resource improvements in the research roll: each tier's `requiredTech` is the
+  previous tier, so only one tier per resource is ever eligible at a time. Warship is the exception, with three
+  parallel research lines (Weapons, Armor, Shields), so `ChooseNewResearch`'s matrix divides each choice's weight
+  by the number of eligible choices in its subtype (`PlayerAI.NormalizeResearchWeightsBySubtype`); subtypes with
+  one eligible choice are unaffected.
 - **Affordability** is a situational weight (`GetIndustrySituationalWeightMultiplier`, 0 when unaffordable) backed by
   `Planet.CanAffordImprovement`: max population plus the upkeep after building (the candidate replaces the same
   resource's best tier and adds to the others) must fit within `Planet.GetGrotsitsCapacity()` (base + max population x
@@ -472,6 +477,42 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 
 `Assets/Editor/ShipTransportSelfCheck.cs` is this subsystem's self-check.
 
+### Warships and Blockade
+
+`WarshipStats`, `WarshipCosts` and `BlockadeSystem` (`Assets/Flatspace/GameAI/`, namespace `FlatSpace.AI`) are pure
+(no `Gameboard.Instance`), so `Assets/Editor/WarshipSelfCheck.cs` drives them directly.
+
+- **Stats:** `WarshipStats` derives a warship's Offense/Health/Defense from its `ShipData` template plus its
+  `ResearchSnapshot`: base value + (tiers carried in that stat's research line) x `(Max - base) / tiers in the line`.
+  A line is the "Ship Improvement"/"Warship" catalog items whose `effect` is `Warship Offense`, `Warship Health` or
+  `Warship Defense`; a stat with no line stays at its base. The formula lives only in `WarshipStats`.
+- **Cost:** a Warship costs `base x (1 + warshipImprovementCostFactor x improvements researched)` (`GameAIConstants`,
+  in-code default 0.1). It is fixed when production is scheduled (the `IndustrySetProduction` case in `GameAI`) into
+  `Planet.ProductionItem.FixedCost` (0 = use the catalog cost; `ProductionItem.Cost` picks one), saved as
+  `ProductionSave.FixedCost`. Accepted quirk: if research completes mid-build, the ship is stamped with the newer
+  improvement on completion but was paid at the older cost. `IndustryMatrix.Cost` still holds the catalog cost.
+- **Update Warship:** a `"WarshipUpdate"` production item (subtype string is load-bearing). On completion
+  (`Planet.ApplyWarshipUpdate`) the docked own warship missing the most researched improvements
+  (`FindWarshipUpdateTarget`) gets every improvement it lacks. Cost is `base warship cost x factor x missing`
+  (minimum 1), fixed at scheduling like the Warship cost, falling back to the catalog cost when no docked ship needs an update then. Its industry table weights equal Warship's, and its
+  situational weight is 0 when nothing docked at the planet needs an upgrade.
+- **Blockade:** at a planet the value against an order's owner is the largest single *other* player's docked warship
+  offense minus the owner's own docked offense there; only a positive value counts, and only docked ships count.
+  `GameAI.ProcessCurrentOrders` applies it once per turn (`ApplyBlockades`), after delays are decremented and before
+  orders execute, to `OrderTypePopulationTransport`, `OrderTypeFoodTransport` and `OrderTypeGrotsitsTransport`.
+  The route comes from `GameAIMap.GetPath`; each node's fraction is its cumulative edge cost / total cost, and an
+  order passes a node in the turn its progress (`1 - TimingDelay / TotalDelay`) first reaches that fraction (the
+  target on arrival). The origin is never checked. A blockaded colony order is removed together with its food rider
+  (colonist and rider are lost) and the target's population-transfer flag cleared; a food/grotsits shipment loses the
+  blockade value at each blockaded node and is removed (incoming flag cleared) once its amount is <= 0.
+  Research: Warship has three parallel research lines, so the research roll divides each choice's weight by the
+  number of eligible choices in its subtype (`PlayerAI.NormalizeResearchWeightsBySubtype`) to keep Warship's share
+  of the wheel at its table weight.
+  Limitation: `ProcessNewOrders` both queues and executes a zero-delay `Delayed` order (a pre-existing double
+  execution), so its first delivery is never blockaded, but the stale queued copy (`TotalDelay` 0, so
+  `PassedNodes` treats the whole route as passed) can be reduced or removed by a blockade on the next turn. The AI
+  does not yet avoid blockaded routes or move warships to blockade (see `FUTURE_FEATURES.md`).
+
 ### Distribution Centers
 
 A Distribution Center (DC) is a sticky, per-player, per-resource role (`PlayerAI.FoodDistributionCenters`
@@ -538,7 +579,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony

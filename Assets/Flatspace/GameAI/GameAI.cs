@@ -145,6 +145,8 @@ namespace FlatSpace
                     gameAIOrder.TimingDelay--;
                 }
 
+                ApplyBlockades();
+
                 var executableOrders = CurrentAIOrders.FindAll(x => x.TimingDelay <= 0);
                 Gameboard.Instance.CreateNotificationsForExecutingOrders(executableOrders);
                 AITuningLogger.LogExecutingOrders(Gameboard.Instance.TurnNumber, executableOrders);
@@ -154,6 +156,16 @@ namespace FlatSpace
                 }
 
                 CurrentAIOrders.RemoveAll(x => x.TimingDelay <= 0);
+            }
+
+            // Every player's research catalog holds the same items, so any player's supplies the stat lines.
+            private void ApplyBlockades()
+            {
+                // Null on the first turn of a repeat run: the new Players exist but their PlayerAI is built in
+                // Player.Start next frame. No orders are in flight then (ClearGameAI emptied them), so skipping is safe.
+                var research = BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players);
+                if (research == null) return;
+                new BlockadeSystem(GameAIMap, research).Apply(CurrentAIOrders, Gameboard.Instance.TurnNumber);
             }
 
             private void ExecuteOrder(GameAIOrder executableOrder)
@@ -214,10 +226,15 @@ namespace FlatSpace
                         targetPlanet.Industry += Convert.ToSingle(executableOrder.Data);
                         break;
                     case GameAIOrder.OrderType.OrderTypeIndustrySetProduction:
-                        var newProductionItem = 
-                            Gameboard.Instance.players[executableOrder.PlayerId].playerAI.ProductionCatalog.catalogItems
-                                .Find(x => x.itemName == executableOrder.Data.ToString());
-                        targetPlanet.ScheduleProductionItem(newProductionItem);
+                        var productionAI = Gameboard.Instance.players[executableOrder.PlayerId].playerAI;
+                        var newProductionItem = productionAI.ProductionCatalog.catalogItems
+                            .Find(x => x.itemName == executableOrder.Data.ToString());
+                        var baseWarship = productionAI.ProductionCatalog.catalogItems.Find(x => x.subType == "Warship");
+                        var fixedCost = WarshipCosts.ProductionCost(newProductionItem, targetPlanet,
+                            executableOrder.PlayerId, productionAI.ResearchCatalog.catalogItems,
+                            baseWarship != null ? baseWarship.cost : 0f,
+                            GameAIMap.GameAIConstants.warshipImprovementCostFactor);
+                        targetPlanet.ScheduleProductionItem(newProductionItem, fixedCost);
                         break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
                         targetPlanet.Research += Convert.ToSingle(executableOrder.Data);

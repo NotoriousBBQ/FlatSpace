@@ -8,7 +8,9 @@ public static class DistributionCenterSelfCheck
     private static float _nextPlanetX;
 
     [MenuItem("FlatSpace/AI/Run Distribution Center Self-Check")]
-    public static void Run()
+    public static void Run() => RunChecks();
+
+    public static bool RunChecks()
     {
         var ok = RunBoardSizeGatingCheck();
         ok &= RunCoverageMaximizingSelectionCheck();
@@ -21,6 +23,7 @@ public static class DistributionCenterSelfCheck
         Debug.Log(ok
             ? "[DistributionCenterSelfCheck] ALL PASSED"
             : "[DistributionCenterSelfCheck] FAILURES (see errors above)");
+        return ok;
     }
 
     private static bool Check(bool condition, string label)

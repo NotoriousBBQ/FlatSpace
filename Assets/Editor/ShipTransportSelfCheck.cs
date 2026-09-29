@@ -11,7 +11,9 @@ public static class ShipTransportSelfCheck
     private static float _nextPlanetX;
 
     [MenuItem("FlatSpace/AI/Run Ship Transport Self-Check")]
-    public static void Run()
+    public static void Run() => RunChecks();
+
+    public static bool RunChecks()
     {
         _checkCount = 0;
         var ok = RunMatrixTypesCheck();
@@ -40,6 +42,7 @@ public static class ShipTransportSelfCheck
         Debug.Log(ok
             ? $"[ShipTransportSelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[ShipTransportSelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
+        return ok;
     }
 
     // Reported in the summary so a stale run (Unity kept the old assembly after a compile error) is visible.

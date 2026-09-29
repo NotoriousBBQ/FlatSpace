@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ebcb0eb244e73be40996030808c356ef, type: 3}
   m_Name: WarShip
   m_EditorClassIdentifier: Assembly-CSharp::ShipData
-  shipName: 
-  shipSpeed: 0
-  shipHealth: 0
-  shipHealthMax: 0
-  shipDefense: 0
-  shipDefenseMax: 0
-  shipOffense: 0
-  shipOffenseMax: 0
+  shipName: Warship
+  shipSpeed: 150
+  shipHealth: 100
+  shipHealthMax: 200
+  shipDefense: 5
+  shipDefenseMax: 15
+  shipOffense: 10
+  shipOffenseMax: 30
   shipIcon: {fileID: -121797934, guid: 8a7eaf1f6f21bc04b81b8cecf959e874, type: 3}

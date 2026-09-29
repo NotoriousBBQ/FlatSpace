@@ -34,11 +34,14 @@ public class SaveLoadSystem : MonoBehaviour
         {
             public string Name;
             public float Progress;
+            // 0 (also what an older save reads back as) means "use the catalog cost".
+            public float FixedCost;
 
             public ProductionSave(Planet.ProductionItem? productionItem)
             {
                 Name = productionItem?.Item.itemName;
                 Progress = productionItem?.Progress ?? 0.0f;
+                FixedCost = productionItem?.FixedCost ?? 0.0f;
             }
         }
     
