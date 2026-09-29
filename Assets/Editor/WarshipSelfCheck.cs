@@ -22,6 +22,7 @@ public static class WarshipSelfCheck
         ok &= RunBlockadeRouteCheck();
         ok &= RunBlockadeEffectsCheck();
         ok &= RunResearchItemsLookupCheck();
+        ok &= RunFleetRowCheck();
         ok &= RunResearchWeightNormalizationCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
@@ -457,6 +458,55 @@ public static class WarshipSelfCheck
 
             var fast = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 0, "A", "C", 0, 1, 30f);
             ok &= Check(blockade.PassedNodes(fast).Count == 2, "a 1-turn trip passes every node in that one turn");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    // The fleet panel row shows a warship's effective stats (template + research it carries), not the raw template.
+    public static bool RunFleetRowCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("WarshipSelfCheckMap_FleetRow");
+        var template = MakeTemplate();
+        template.shipName = "Warship";
+        var constants = MakeConstants(template);
+        var research = MakeResearch();
+        try
+        {
+            var map = BuildMap(go, constants, MakeSpawn("A"));
+            var planet = map.GetPlanet("A");
+
+            DockWarships(planet, 0, 1, "Off 1", "Hp 1");
+            var upgraded = planet.DockedShips[0];
+            ok &= Check(FleetUIController.FormatShipRow(upgraded, research)
+                        == "WarShip - Warship (Spd 150, HP 120, Off 14, Def 5)",
+                "a warship row shows effective stats: Off 10+4, HP 100+20, Def and Spd at base");
+            ok &= Check(FleetUIController.FormatShipRow(upgraded, null)
+                        == "WarShip - Warship (Spd 150, HP 100, Off 10, Def 5)",
+                "with no research items available (no AI yet) the row falls back to base stats");
+
+            DockWarships(planet, 0, 1);
+            ok &= Check(FleetUIController.FormatShipRow(planet.DockedShips[1], research)
+                        == "WarShip - Warship (Spd 150, HP 100, Off 10, Def 5)",
+                "an un-upgraded ship reads differently from the upgraded one");
+
+            planet.DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            ok &= Check(FleetUIController.FormatShipRow(planet.DockedShips[2], research) == "ColonyShip",
+                "a colony ship (no template here) shows just its kind, with no combat stats");
+
+            constants.warShipData = null;   // a warship docked with no template: no stats, no crash
+            DockWarships(planet, 0, 1);
+            constants.warShipData = template;
+            ok &= Check(FleetUIController.FormatShipRow(planet.DockedShips[3], research) == "WarShip",
+                "a warship with a null template shows just its kind, no crash");
         }
         finally
         {
