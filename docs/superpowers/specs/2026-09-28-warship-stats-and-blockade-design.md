@@ -41,7 +41,7 @@ Decisions agreed with the user during brainstorming:
   costs 2.5x base).
 - The cost is fixed into the scheduled production item when it is scheduled, so research completing mid-build does
   not change it. Every place that reads `Item.cost` for a production item (`Planet.ContinueProduction`,
-  `CompleteProduction`, the industry matrix's `Cost`, the planet detail UI) must read the fixed cost instead.
+  `CompleteProduction`, the planet detail UI) must read the fixed cost instead.
   ColonyShip and all other items keep their catalog cost.
   `IndustryMatrix.Cost` keeps the catalog cost.
 - New warships carry every Warship improvement the owner has researched at the moment of completion (the existing
@@ -52,7 +52,8 @@ Decisions agreed with the user during brainstorming:
 - New production catalog item, subType `WarshipUpdate`, unlocked with "Warship 1". Effect: bring one docked
   warship owned by the planet's owner up to date by adding every researched Warship improvement it lacks.
 - Cost = cost of a fully upgraded warship (per the owner's current research) - cost of that ship (from its own
-  snapshot count). Fixed at scheduling time.
+  snapshot count). Fixed at scheduling time, with a minimum of 1; when no docked ship needs an update at
+  scheduling time it falls back to the catalog cost.
 - Target: the docked warship, owned by the planet's owner, with the most missing improvements. It is only offered
   when such a ship exists. If the chosen ship has left by completion, the planet retargets to another docked ship
   that needs it; if none, the item is spent with no effect.
@@ -73,7 +74,8 @@ Decisions agreed with the user during brainstorming:
 **Routes.** Routes come from `GameAIMap.GetPath`, which already returns the ordered node list; no precompute
 change.
 
-**Evaluation.** Each turn, in `ProcessCurrentOrders` before delays are applied, each in-flight blockade-sensitive order computes its progress = 1 - `TimingDelay` / `TotalDelay`. A node
+**Evaluation.** Each turn, in `ProcessCurrentOrders` after the in-flight `TimingDelay` decrement and before orders
+execute, each in-flight blockade-sensitive order computes its progress = 1 - `TimingDelay` / `TotalDelay`. A node
 "is passed" when its cumulative cost / total cost is at most the progress and it was not passed the previous turn
 (the target is passed on arrival). The origin is never checked. Each newly passed node is checked with that turn's
 `BlockadeSystem.Value`. Progress is derived, so nothing new is saved.
@@ -95,7 +97,8 @@ warships either (no new orders); it acts on whatever is docked.
 
 **Logging.** New `AITuningLogger` lines, no toggle checks at call sites:
 `Blockade|<planet>|<blockerPlayer>|<value>` (when a node is first checked with a positive value that turn) and
-`OrderBlocked|<orderType>|<planet>|<amountRemaining>` (removal or reduction).
+`OrderBlocked|<orderType>|<planet>|<amountRemaining>` (removal or reduction; a removed colony order logs
+remaining 0).
 
 ## 5. Saves
 

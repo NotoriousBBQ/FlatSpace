@@ -491,7 +491,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 - **Update Warship:** a `"WarshipUpdate"` production item (subtype string is load-bearing). On completion
   (`Planet.ApplyWarshipUpdate`) the docked own warship missing the most researched improvements
   (`FindWarshipUpdateTarget`) gets every improvement it lacks. Cost is `base warship cost x factor x missing`
-  (minimum 1), fixed at scheduling like the Warship cost. Its industry table weights equal Warship's, and its
+  (minimum 1), fixed at scheduling like the Warship cost, falling back to the catalog cost when no docked ship needs an update then. Its industry table weights equal Warship's, and its
   situational weight is 0 when nothing docked at the planet needs an upgrade.
 - **Blockade:** at a planet the value against an order's owner is the largest single *other* player's docked warship
   offense minus the owner's own docked offense there; only a positive value counts, and only docked ships count.
