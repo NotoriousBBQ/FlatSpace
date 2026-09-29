@@ -10,7 +10,9 @@ public static class PlayerKnowledgeSelfCheck
     private static float _nextPlanetX;
 
     [MenuItem("FlatSpace/AI/Run Player Knowledge Self-Check")]
-    public static void Run()
+    public static void Run() => RunChecks();
+
+    public static bool RunChecks()
     {
         var ok = RunGameAIMapSharedQueriesCheck();
         ok &= RunPlayerKnowledgeChecks();
@@ -31,6 +33,7 @@ public static class PlayerKnowledgeSelfCheck
                   $"4 >= 5 * 0.8f is {FloatProbe(4, 5, 0.8f)} " +
                   "(True = the product is single precision; False = this runtime evaluates it wider than float, " +
                   "so a trigger whose product with MaxPopulation is a whole number can be off by one)");
+        return ok;
     }
 
     // The game's readiness test is `Population.Count >= MaxPopulation * expandPopulationTrigger`. Exact-in-decimal

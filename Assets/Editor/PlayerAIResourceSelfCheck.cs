@@ -7,7 +7,9 @@ using FlatSpace.AI;
 public static class PlayerAIResourceSelfCheck
 {
     [MenuItem("FlatSpace/AI/Run PlayerAI Resource Self-Check")]
-    public static void Run()
+    public static void Run() => RunChecks();
+
+    public static bool RunChecks()
     {
         var ok = RunFoodShortageScopingCheck();
         ok &= RunPartialShipmentRoundsCheck();
@@ -22,6 +24,7 @@ public static class PlayerAIResourceSelfCheck
         Debug.Log(ok
             ? "[PlayerAIResourceSelfCheck] ALL PASSED"
             : "[PlayerAIResourceSelfCheck] FAILURES (see errors above)");
+        return ok;
     }
 
     private static bool Check(bool condition, string label)
