@@ -21,6 +21,7 @@ public static class WarshipSelfCheck
         ok &= RunBlockadeValueCheck();
         ok &= RunBlockadeRouteCheck();
         ok &= RunBlockadeEffectsCheck();
+        ok &= RunResearchItemsLookupCheck();
         ok &= RunResearchWeightNormalizationCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
@@ -463,6 +464,39 @@ public static class WarshipSelfCheck
             Object.DestroyImmediate(go);
             Object.DestroyImmediate(constants);
             Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    // Regression: a repeat run (turn 400 -> InitGame) creates fresh Players whose PlayerAI is only built in Player.Start
+    // next frame, yet the loop calls SingleUpdate at once. The blockade hook must find no research items and skip;
+    // it used to dereference players[0].playerAI and throw a NullReferenceException.
+    public static bool RunResearchItemsLookupCheck()
+    {
+        var ok = true;
+        var noAiGo = new GameObject("WarshipSelfCheck_NoAIPlayer");
+        var aiGo = new GameObject("WarshipSelfCheck_AIPlayer");
+        var research = MakeResearch();
+        try
+        {
+            var noAi = noAiGo.AddComponent<Player>();   // Player.Start has not run: playerAI is null
+            ok &= Check(BlockadeSystem.ResearchItemsFrom(new List<Player>()) == null, "no players: no research items");
+            ok &= Check(BlockadeSystem.ResearchItemsFrom(new List<Player> { noAi }) == null,
+                "a player whose PlayerAI is not built yet gives no research items (no null dereference)");
+
+            var withAi = aiGo.AddComponent<Player>();
+            withAi.playerAI = aiGo.AddComponent<PlayerAI>();
+            withAi.playerAI.ResearchCatalog = aiGo.AddComponent<Catalog>();
+            withAi.playerAI.ResearchCatalog.catalogItems = research;
+            ok &= Check(ReferenceEquals(
+                    BlockadeSystem.ResearchItemsFrom(new List<Player> { null, noAi, withAi }), research),
+                "the first player that has an AI and research catalog supplies the items, skipping null and AI-less players");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(noAiGo);
+            Object.DestroyImmediate(aiGo);
         }
         return ok;
     }

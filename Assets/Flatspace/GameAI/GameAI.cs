@@ -158,11 +158,13 @@ namespace FlatSpace
                 CurrentAIOrders.RemoveAll(x => x.TimingDelay <= 0);
             }
 
-            // Every player's research catalog holds the same items, so player 0's supplies the stat lines.
+            // Every player's research catalog holds the same items, so any player's supplies the stat lines.
             private void ApplyBlockades()
             {
-                if (Gameboard.Instance.players.Count == 0) return;
-                var research = Gameboard.Instance.players[0].playerAI.ResearchCatalog.catalogItems;
+                // Null on the first turn of a repeat run: the new Players exist but their PlayerAI is built in
+                // Player.Start next frame. No orders are in flight then (ClearGameAI emptied them), so skipping is safe.
+                var research = BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players);
+                if (research == null) return;
                 new BlockadeSystem(GameAIMap, research).Apply(CurrentAIOrders, Gameboard.Instance.TurnNumber);
             }
 

@@ -29,6 +29,20 @@ namespace FlatSpace.AI
             _stats = new WarshipStats(researchItems);
         }
 
+        /// <summary>
+        /// The research items to derive warship stats from: the first player whose AI and research catalog exist, or
+        /// null when none does. A new match creates fresh Player components whose PlayerAI is only built in
+        /// Player.Start (next frame), yet the repeat-run loop calls SingleUpdate again straight away, so callers must
+        /// be ready for "no AI yet" and skip.
+        /// </summary>
+        public static List<CatalogItem> ResearchItemsFrom(IEnumerable<Player> players)
+        {
+            foreach (var player in players)
+                if (player && player.playerAI && player.playerAI.ResearchCatalog)
+                    return player.playerAI.ResearchCatalog.catalogItems;
+            return null;
+        }
+
         public float DockedOffense(Planet planet, int owner)
         {
             var sum = 0f;
