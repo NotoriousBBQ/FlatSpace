@@ -145,6 +145,8 @@ namespace FlatSpace
                     gameAIOrder.TimingDelay--;
                 }
 
+                ApplyBlockades();
+
                 var executableOrders = CurrentAIOrders.FindAll(x => x.TimingDelay <= 0);
                 Gameboard.Instance.CreateNotificationsForExecutingOrders(executableOrders);
                 AITuningLogger.LogExecutingOrders(Gameboard.Instance.TurnNumber, executableOrders);
@@ -154,6 +156,14 @@ namespace FlatSpace
                 }
 
                 CurrentAIOrders.RemoveAll(x => x.TimingDelay <= 0);
+            }
+
+            // Every player's research catalog holds the same items, so player 0's supplies the stat lines.
+            private void ApplyBlockades()
+            {
+                if (Gameboard.Instance.players.Count == 0) return;
+                var research = Gameboard.Instance.players[0].playerAI.ResearchCatalog.catalogItems;
+                new BlockadeSystem(GameAIMap, research).Apply(CurrentAIOrders, Gameboard.Instance.TurnNumber);
             }
 
             private void ExecuteOrder(GameAIOrder executableOrder)

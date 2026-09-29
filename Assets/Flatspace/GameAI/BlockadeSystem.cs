@@ -111,5 +111,74 @@ namespace FlatSpace.AI
                 .Where(n => n.Fraction > previous + Epsilon && n.Fraction <= now + Epsilon)
                 .ToList();
         }
+
+        /// <summary>
+        /// Once per turn, after in-flight delays were decremented and before orders execute: applies blockades to the
+        /// orders that passed a planet this turn. Colony orders are removed (colonist and food rider are lost, the
+        /// origin already paid for them); food and grotsits shipments lose the blockade value at every blockaded
+        /// node they pass and are removed when nothing is left.
+        /// </summary>
+        public void Apply(List<GameAI.GameAIOrder> orders, int turnNumber)
+        {
+            foreach (var order in orders.ToList())
+            {
+                if (!orders.Contains(order)) continue;   // already removed with its twin
+                switch (order.Type)
+                {
+                    case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
+                        ApplyToColony(orders, order, turnNumber);
+                        break;
+                    case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
+                    case GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
+                        ApplyToShipment(orders, order, turnNumber);
+                        break;
+                }
+            }
+        }
+
+        private void ApplyToColony(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber)
+        {
+            foreach (var node in PassedNodes(order))
+            {
+                var value = Value(_map.GetPlanet(node.Name), order.PlayerId, out var blocker);
+                if (value <= 0f) continue;
+
+                AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
+                orders.RemoveAll(o => o.PlayerId == order.PlayerId && o.Origin == order.Origin && o.Target == order.Target
+                    && (o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
+                        || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider));
+                _map.GetPlanet(order.Target)?.SetPopulationTransferInProgress(order.PlayerId, false);
+                AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name, 0f);
+                return;
+            }
+        }
+
+        private void ApplyToShipment(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber)
+        {
+            foreach (var node in PassedNodes(order))
+            {
+                var value = Value(_map.GetPlanet(node.Name), order.PlayerId, out var blocker);
+                if (value <= 0f) continue;
+
+                AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
+                var remaining = System.Convert.ToSingle(order.Data) - value;
+                AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name,
+                    System.Math.Max(0f, remaining));
+                if (remaining <= 0f)
+                {
+                    orders.Remove(order);
+                    var target = _map.GetPlanet(order.Target);
+                    if (target != null)
+                    {
+                        if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport)
+                            target.FoodShipmentIncoming = false;
+                        else
+                            target.GrotsitsShipmentIncoming = false;
+                    }
+                    return;
+                }
+                order.Data = remaining;
+            }
+        }
     }
 }

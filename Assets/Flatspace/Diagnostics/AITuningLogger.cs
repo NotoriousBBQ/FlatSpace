@@ -163,6 +163,22 @@ public static class AITuningLogger
             multiplier.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A blockade was found at a planet an order passed: T&lt;turn&gt;|P&lt;order owner&gt;|Blockade|planet|blocker|value.</summary>
+    public static void LogBlockade(int turnNumber, int playerId, string planetName, int blocker, float value)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Blockade", planetName, blocker.ToString(),
+            value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
+    public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "OrderBlocked", orderType, planetName,
+            remaining.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
     /// <summary>Logged the turn a Distribution Center is designated for a resource.</summary>
     public static void LogDCSelected(int turnNumber, int playerId, string planetName, string resource)
     {

@@ -20,6 +20,7 @@ public static class WarshipSelfCheck
         ok &= RunUpdateWarshipAIWeightCheck();
         ok &= RunBlockadeValueCheck();
         ok &= RunBlockadeRouteCheck();
+        ok &= RunBlockadeEffectsCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
             : "[WarshipSelfCheck] FAILURES (see errors above)");
@@ -409,6 +410,109 @@ public static class WarshipSelfCheck
 
             var fast = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 0, "A", "C", 0, 1, 30f);
             ok &= Check(blockade.PassedNodes(fast).Count == 2, "a 1-turn trip passes every node in that one turn");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    public static bool RunBlockadeEffectsCheck()
+    {
+        var ok = true;
+        var go = new GameObject("WarshipSelfCheckMap_BlockadeEffects");
+        var template = MakeTemplate();
+        var constants = MakeConstants(template);
+        var research = MakeResearch();
+        try
+        {
+            var map = BuildLine(go, constants);
+            var a = map.GetPlanet("A"); var b = map.GetPlanet("B"); var c = map.GetPlanet("C");
+            var blockade = new BlockadeSystem(map, research);
+            var colonyType = GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport;
+            var riderType = GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider;
+            var foodType = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport;
+
+            // Colony ship A -> C, B passed this turn (2 of 4 turns left). Player 1 holds B with 2 warships (20).
+            DockWarships(b, 1, 2);
+            var orders = new List<GameAI.GameAIOrder>
+            {
+                MakeOrder(colonyType, 0, "A", "C", 2, 4, 1),
+                MakeOrder(riderType, 0, "A", "C", 2, 4, 10f),
+            };
+            c.SetPopulationTransferInProgress(0);
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0, "a positive blockade at a passed node removes the colonist and its food rider");
+            ok &= Check(!c.IsPopulationTransferInProgress(0), "and clears the target's population-transfer flag");
+
+            // The owner's own ships cancel it: player 0 also has 2 warships at B.
+            DockWarships(b, 0, 2);
+            orders = new List<GameAI.GameAIOrder> { MakeOrder(colonyType, 0, "A", "C", 2, 4, 1) };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 1, "equal docked offense of the order owner: no blockade");
+
+            // A blockade only at the ORIGIN never affects the order.
+            var go2 = new GameObject("WarshipSelfCheckMap_BlockadeOrigin");
+            try
+            {
+                var map2 = BuildLine(go2, constants);
+                DockWarships(map2.GetPlanet("A"), 1, 5);
+                var blockade2 = new BlockadeSystem(map2, research);
+                orders = new List<GameAI.GameAIOrder>
+                {
+                    MakeOrder(colonyType, 0, "A", "C", 2, 4, 1),
+                    MakeOrder(foodType, 0, "A", "C", 2, 4, 30f),
+                };
+                blockade2.Apply(orders, 1);
+                ok &= Check(orders.Count == 2, "a blockade at the origin does not stop what is leaving it");
+
+                // A node already passed on an earlier turn is not checked again (1 turn left: progress .75, B at .5).
+                var go3 = new GameObject("WarshipSelfCheckMap_BlockadePassed");
+                try
+                {
+                    var map3 = BuildLine(go3, constants);
+                    DockWarships(map3.GetPlanet("B"), 1, 5);
+                    var blockade3 = new BlockadeSystem(map3, research);
+                    orders = new List<GameAI.GameAIOrder> { MakeOrder(colonyType, 0, "A", "C", 1, 4, 1) };
+                    blockade3.Apply(orders, 1);
+                    ok &= Check(orders.Count == 1, "a node passed on an earlier turn is not blockaded retroactively");
+                }
+                finally { Object.DestroyImmediate(go3); }
+            }
+            finally { Object.DestroyImmediate(go2); }
+
+            // Food: 30 shipped A -> C. Player 1 has 20 at B (passed now) then 20 at C (arrival).
+            var go4 = new GameObject("WarshipSelfCheckMap_BlockadeFood");
+            try
+            {
+                var map4 = BuildLine(go4, constants);
+                DockWarships(map4.GetPlanet("B"), 1, 2);
+                DockWarships(map4.GetPlanet("C"), 1, 2);
+                map4.GetPlanet("C").FoodShipmentIncoming = true;
+                var blockade4 = new BlockadeSystem(map4, research);
+                var food = MakeOrder(foodType, 0, "A", "C", 2, 4, 30f);
+                var grot = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport, 0, "A", "C", 2, 4, 15f);
+                var ship = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, 0, "A", "C", 2, 4, 3);
+                orders = new List<GameAI.GameAIOrder> { food, grot, ship };
+                map4.GetPlanet("C").GrotsitsShipmentIncoming = true;
+
+                blockade4.Apply(orders, 1);
+                ok &= Check(orders.Contains(food) && Near(System.Convert.ToSingle(food.Data), 10f),
+                    "food is reduced by the blockade value at each passed node: 30 - 20 = 10");
+                ok &= Check(!orders.Contains(grot) && !map4.GetPlanet("C").GrotsitsShipmentIncoming,
+                    "grotsits 15 - 20 <= 0: the order is removed and the incoming flag cleared");
+                ok &= Check(orders.Contains(ship), "ship transport orders are unaffected");
+
+                food.TimingDelay = 0;   // arrival turn: C is passed, and player 1's 20 there exceeds the remaining 10
+                blockade4.Apply(orders, 2);
+                ok &= Check(!orders.Contains(food) && !map4.GetPlanet("C").FoodShipmentIncoming,
+                    "the remaining 10 - 20 <= 0 at the target: removed, food flag cleared");
+            }
+            finally { Object.DestroyImmediate(go4); }
         }
         finally
         {
