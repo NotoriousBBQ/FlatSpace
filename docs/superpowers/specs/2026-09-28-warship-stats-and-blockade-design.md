@@ -43,6 +43,7 @@ Decisions agreed with the user during brainstorming:
   not change it. Every place that reads `Item.cost` for a production item (`Planet.ContinueProduction`,
   `CompleteProduction`, the industry matrix's `Cost`, the planet detail UI) must read the fixed cost instead.
   ColonyShip and all other items keep their catalog cost.
+  `IndustryMatrix.Cost` keeps the catalog cost.
 - New warships carry every Warship improvement the owner has researched at the moment of completion (the existing
   `BuildResearchSnapshot`).
 
@@ -69,12 +70,10 @@ Decisions agreed with the user during brainstorming:
   the maximum, subtract the sum for `orderOwner`; return it if positive, else 0.
 - Only docked ships count. Ships in flight or incoming do not.
 
-**Routes.** Orders carry only origin and target. `GameAIMap`'s all-pairs precompute is extended to keep each route's
-node list and cumulative cost alongside the existing `DistanceMapToPathingList` cost/count. This is planet
-names only, computed once at init and recomputed the same way on load.
+**Routes.** Routes come from `GameAIMap.GetPath`, which already returns the ordered node list; no precompute
+change.
 
-**Evaluation.** Each turn, in `ProcessCurrentOrders` before delays are applied, and once more when a new order is
-created, each in-flight blockade-sensitive order computes its progress = 1 - `TimingDelay` / `TotalDelay`. A node
+**Evaluation.** Each turn, in `ProcessCurrentOrders` before delays are applied, each in-flight blockade-sensitive order computes its progress = 1 - `TimingDelay` / `TotalDelay`. A node
 "is passed" when its cumulative cost / total cost is at most the progress and it was not passed the previous turn
 (the target is passed on arrival). The origin is never checked. Each newly passed node is checked with that turn's
 `BlockadeSystem.Value`. Progress is derived, so nothing new is saved.
@@ -133,8 +132,6 @@ the AI-avoids-blockade follow-up). New scripts' `.meta` files are committed with
 
 ## Risks
 
-- Extending the all-pairs precompute to keep node lists costs memory (N^2 x path length); fine for current boards,
-  worth measuring on the 100-planet board.
 - Removing orders must clear every flag the order set created, or planets stay stuck "incoming"; the self-check
   asserts the flags.
 - Production items caching cost changes a struct several places read; a missed read would silently use the base
