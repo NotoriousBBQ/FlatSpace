@@ -23,6 +23,7 @@ public static class WarshipSelfCheck
         ok &= RunBlockadeEffectsCheck();
         ok &= RunResearchItemsLookupCheck();
         ok &= RunFleetRowCheck();
+        ok &= RunProductionSaveRoundTripCheck();
         ok &= RunResearchWeightNormalizationCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
@@ -466,6 +467,45 @@ public static class WarshipSelfCheck
             Object.DestroyImmediate(constants);
             Object.DestroyImmediate(template);
         }
+        return ok;
+    }
+
+    // Regression: PlanetSave.currentProduction used to be a Nullable<ProductionSave>, which JsonUtility silently skips, so
+    // a planet's in-progress production (and its FixedCost) was never in any save file and every load lost it.
+    public static bool RunProductionSaveRoundTripCheck()
+    {
+        var ok = true;
+        var item = ProductionItem("Warship", "Warship", 100f);
+        try
+        {
+            var current = new Planet.ProductionItem(item, 190f);
+            current.Progress = 42f;
+            var withProduction = new SaveLoadSystem.GameSave.PlanetSave
+            {
+                name = "A",
+                hasCurrentProduction = true,
+                currentProduction = new SaveLoadSystem.GameSave.ProductionSave(current),
+                productionQueue = new List<SaveLoadSystem.GameSave.ProductionSave>(),
+            };
+            var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>(JsonUtility.ToJson(withProduction));
+            ok &= Check(loaded.hasCurrentProduction && loaded.currentProduction.Name == "Warship"
+                        && Near(loaded.currentProduction.Progress, 42f) && Near(loaded.currentProduction.FixedCost, 190f),
+                "an in-progress production item survives a JsonUtility round trip (name, progress, fixed cost)");
+
+            var idle = new SaveLoadSystem.GameSave.PlanetSave
+            {
+                name = "B",
+                hasCurrentProduction = false,
+                currentProduction = new SaveLoadSystem.GameSave.ProductionSave(null),
+                productionQueue = new List<SaveLoadSystem.GameSave.ProductionSave>(),
+            };
+            var loadedIdle = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>(JsonUtility.ToJson(idle));
+            ok &= Check(!loadedIdle.hasCurrentProduction, "a planet with nothing in production loads with no current production");
+
+            var oldSave = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>("{\"name\":\"C\",\"productionQueue\":[]}");
+            ok &= Check(!oldSave.hasCurrentProduction, "an older save with no currentProduction key loads with none");
+        }
+        finally { Object.DestroyImmediate(item); }
         return ok;
     }
 

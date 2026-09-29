@@ -64,7 +64,10 @@ public class SaveLoadSystem : MonoBehaviour
             public float grotsits;
             public float research;
             public float industry;
-            public GameSave.ProductionSave? currentProduction;
+            // Not `ProductionSave?`: JsonUtility silently skips Nullable<T> fields, so the in-progress item was never
+            // written and every load lost it. A plain struct plus a flag round-trips; older saves read the flag as false.
+            public bool hasCurrentProduction;
+            public GameSave.ProductionSave currentProduction;
             [NotNull] public List<GameSave.ProductionSave> productionQueue;
             public float morale;
             public int owner;
@@ -174,7 +177,8 @@ public class SaveLoadSystem : MonoBehaviour
                     grotsits = planet.Grotsits,
                     research = planet.Research,
                     industry = planet.Industry,
-                    currentProduction = planet.CurrentProduction == null? null : new GameSave.ProductionSave(planet.CurrentProduction),
+                    hasCurrentProduction = planet.CurrentProduction != null,
+                    currentProduction = new GameSave.ProductionSave(planet.CurrentProduction),
                     productionQueue = new List<GameSave.ProductionSave>(),
                     morale = planet.Morale,
                     owner = planet.Owner,

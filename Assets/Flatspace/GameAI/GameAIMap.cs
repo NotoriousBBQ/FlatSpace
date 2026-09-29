@@ -267,13 +267,18 @@ namespace FlatSpace
                     planet.Grotsits = planetStatus.grotsits;
                     planet.Research = planetStatus.research;
                     planet.Industry = planetStatus.industry;
-                    if (planetStatus.currentProduction != null)
-                        planet.CurrentProduction = new Planet.ProductionItem
-                        {
-                            Progress = planetStatus.currentProduction?.Progress ?? 0.0f,
-                            FixedCost = planetStatus.currentProduction?.FixedCost ?? 0.0f,
-                            Item = catalog.catalogItems.Find(x => x.itemName ==  planetStatus.currentProduction?.Name)
-                        };
+                    if (planetStatus.hasCurrentProduction)
+                    {
+                        // An item the catalog no longer has is skipped: a ProductionItem with a null Item would throw on Cost.
+                        var currentItem = catalog.catalogItems.Find(x => x.itemName == planetStatus.currentProduction.Name);
+                        if (currentItem != null)
+                            planet.CurrentProduction = new Planet.ProductionItem
+                            {
+                                Progress = planetStatus.currentProduction.Progress,
+                                FixedCost = planetStatus.currentProduction.FixedCost,
+                                Item = currentItem
+                            };
+                    }
                     if (planetStatus.productionQueue.Count > 0)
                     {
                         foreach (var production in planetStatus.productionQueue)
