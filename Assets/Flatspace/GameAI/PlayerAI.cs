@@ -775,11 +775,11 @@ namespace FlatSpace
 
                 var matrix  = new ScoreMatrix<ScoreMatrixDecisionElement, ResearchChoiceElement, ResearchAction>
                     (new ScoreMatrixDecisionComparer());
-                var entries = choices.Select(item => new ResearchChoiceElement
+                var entries = NormalizeResearchWeightsBySubtype(choices.Select(item => new ResearchChoiceElement
                 {
                     Item   = item,
                     Weight = GetResearchWeight(item, strategy),
-                }).ToList();
+                }).ToList());
 
                 matrix.MatrixElements.Add(new ScoreMatrixDecisionElement
                 {
@@ -787,6 +787,24 @@ namespace FlatSpace
                     Priority = 0f
                 }, entries);
                 return matrix;
+            }
+
+            /// <summary>
+            /// Divides each research choice's weight by the number of choices sharing its subtype, so a subtype's
+            /// total weight stays its table weight however many of its items are eligible at once (Warship has three
+            /// parallel research lines: Weapons, Armor, Shields). A subtype with one choice is unchanged.
+            /// </summary>
+            public static List<ResearchChoiceElement> NormalizeResearchWeightsBySubtype(List<ResearchChoiceElement> choices)
+            {
+                var counts = choices
+                    .GroupBy(c => c.Item.subType ?? string.Empty)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                return choices.Select(c =>
+                {
+                    var normalized = c;
+                    normalized.Weight = c.Weight / counts[c.Item.subType ?? string.Empty];
+                    return normalized;
+                }).ToList();
             }
 
             /// <summary>

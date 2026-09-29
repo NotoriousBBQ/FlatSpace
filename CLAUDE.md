@@ -298,8 +298,11 @@ grotsits shipping.
   highest tier that survived the affordability filter — which fixes the dilution and also stops a planet from ever
   building a tier it would immediately supersede: yield and upkeep only count a planet's best tier per resource
   regardless of build order, so building a lower tier when a higher one is already unlocked and affordable was
-  always wasted industry. Research's own roll doesn't have this problem: each tier's `requiredTech` is the
-  previous tier, so only one tier per resource is ever eligible there at a time.
+  always wasted industry. That holds for resource improvements in the research roll: each tier's `requiredTech` is the
+  previous tier, so only one tier per resource is ever eligible at a time. Warship is the exception, with three
+  parallel research lines (Weapons, Armor, Shields), so `ChooseNewResearch`'s matrix divides each choice's weight
+  by the number of eligible choices in its subtype (`PlayerAI.NormalizeResearchWeightsBySubtype`); subtypes with
+  one eligible choice are unaffected.
 - **Affordability** is a situational weight (`GetIndustrySituationalWeightMultiplier`, 0 when unaffordable) backed by
   `Planet.CanAffordImprovement`: max population plus the upkeep after building (the candidate replaces the same
   resource's best tier and adds to the others) must fit within `Planet.GetGrotsitsCapacity()` (base + max population x
@@ -502,8 +505,13 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   target on arrival). The origin is never checked. A blockaded colony order is removed together with its food rider
   (colonist and rider are lost) and the target's population-transfer flag cleared; a food/grotsits shipment loses the
   blockade value at each blockaded node and is removed (incoming flag cleared) once its amount is <= 0.
-  Limitation: a delayed order with zero delay executed by `ProcessNewOrders` is never blockaded. The AI does not yet
-  avoid blockaded routes or move warships to blockade (see `FUTURE_FEATURES.md`).
+  Research: Warship has three parallel research lines, so the research roll divides each choice's weight by the
+  number of eligible choices in its subtype (`PlayerAI.NormalizeResearchWeightsBySubtype`) to keep Warship's share
+  of the wheel at its table weight.
+  Limitation: `ProcessNewOrders` both queues and executes a zero-delay `Delayed` order (a pre-existing double
+  execution), so its first delivery is never blockaded, but the stale queued copy (`TotalDelay` 0, so
+  `PassedNodes` treats the whole route as passed) can be reduced or removed by a blockade on the next turn. The AI
+  does not yet avoid blockaded routes or move warships to blockade (see `FUTURE_FEATURES.md`).
 
 ### Distribution Centers
 

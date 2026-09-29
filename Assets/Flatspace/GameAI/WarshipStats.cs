@@ -50,6 +50,9 @@ namespace FlatSpace.AI
         public float Defense(ShipData template, ICollection<string> snapshot)
             => template == null ? 0f : Stat(template.shipDefense, template.shipDefenseMax, DefenseKey, snapshot);
 
+        /// <summary>Speed has no research line: it stays the template's fixed value.</summary>
+        public float Speed(ShipData template) => template == null ? 0f : template.shipSpeed;
+
         /// <summary>Names of the warship improvements already researched, in catalog order.</summary>
         public static List<string> ResearchedNames(IEnumerable<CatalogItem> researchItems)
             => researchItems == null

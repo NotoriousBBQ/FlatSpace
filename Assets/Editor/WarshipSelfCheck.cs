@@ -21,6 +21,7 @@ public static class WarshipSelfCheck
         ok &= RunBlockadeValueCheck();
         ok &= RunBlockadeRouteCheck();
         ok &= RunBlockadeEffectsCheck();
+        ok &= RunResearchWeightNormalizationCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
             : "[WarshipSelfCheck] FAILURES (see errors above)");
@@ -115,6 +116,47 @@ public static class WarshipSelfCheck
         return ok;
     }
 
+    private static ResearchChoiceElement ResearchChoice(string name, string subType, float weight)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.itemName = name; item.name = name; item.subType = subType;
+        return new ResearchChoiceElement { Item = item, Weight = weight };
+    }
+
+    public static bool RunResearchWeightNormalizationCheck()
+    {
+        var ok = true;
+        var all = new List<ResearchChoiceElement>
+        {
+            ResearchChoice("Weapons 1", "Warship", 1.5f),
+            ResearchChoice("Armor 1", "Warship", 1.5f),
+            ResearchChoice("Shields 1", "Warship", 1.5f),
+            ResearchChoice("Colony", "ColonyShip", 2f),
+            ResearchChoice("Food 1", "Food", 1f),
+            ResearchChoice("Food 2", "Food", 1f),
+        };
+        try
+        {
+            var lone = PlayerAI.NormalizeResearchWeightsBySubtype(new List<ResearchChoiceElement> { all[3] });
+            ok &= Check(lone.Count == 1 && Near(lone[0].Weight, 2f), "a lone choice keeps its weight");
+
+            var three = PlayerAI.NormalizeResearchWeightsBySubtype(all.GetRange(0, 3));
+            ok &= Check(three.Count == 3 && Near(three[0].Weight, 0.5f) && Near(three[1].Weight, 0.5f)
+                        && Near(three[2].Weight, 0.5f), "three Warship choices of 1.5 each become 0.5 (sum stays 1.5)");
+
+            var mixed = PlayerAI.NormalizeResearchWeightsBySubtype(all);
+            ok &= Check(mixed.Count == 6 && Near(mixed[0].Weight, 0.5f) && Near(mixed[3].Weight, 2f)
+                        && Near(mixed[4].Weight, 0.5f) && Near(mixed[5].Weight, 0.5f),
+                "a mixed list normalizes each subtype independently");
+            ok &= Check(Near(all[0].Weight, 1.5f), "the input list is not mutated");
+        }
+        finally
+        {
+            foreach (var c in all) Object.DestroyImmediate(c.Item);
+        }
+        return ok;
+    }
+
     public static bool RunStatsCheck()
     {
         var ok = true;
@@ -131,9 +173,13 @@ public static class WarshipSelfCheck
             ok &= Check(Near(stats.Health(template, new List<string> { "Off 1", "Off 2" }), 100f)
                         && Near(stats.Defense(template, new List<string> { "Off 1", "Off 2" }), 5f),
                 "offense tiers do not change health or defense");
-            ok &= Check(Near(stats.Health(template, new List<string> { "Hp 3" }), 160f)
+            ok &= Check(Near(stats.Health(template, new List<string> { "Hp 1", "Hp 2", "Hp 3" }), 160f)
                         && Near(stats.Defense(template, new List<string> { "Def 2", "Def 5" }), 9f),
-                "health and defense lines scale independently (+20 and +2 per tier)");
+                "health and defense lines scale independently (3 health tiers x +20, 2 defense tiers x +2)");
+            ok &= Check(Near(stats.Health(template, new List<string> { "Hp 3" }), 120f),
+                "health counts tiers carried, not tier numbers: one tier is +20");
+            ok &= Check(Near(stats.Speed(template), 150f) && stats.Speed(null) == 0f,
+                "speed is the template's fixed value; a null template has 0 speed");
             ok &= Check(Near(stats.Offense(template, null), 10f), "a null snapshot is treated as no improvements");
             ok &= Check(stats.Offense(null, new List<string>()) == 0f, "a null template has 0 offense, no crash");
 
