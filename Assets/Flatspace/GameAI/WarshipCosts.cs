@@ -29,6 +29,14 @@ namespace FlatSpace.AI
             {
                 case "Warship":
                     return BuildCost(item.cost, factor, WarshipStats.ResearchedNames(research).Count);
+                case "WarshipUpdate":
+                {
+                    var researched = WarshipStats.ResearchedNames(research);
+                    var target = planet != null ? planet.FindWarshipUpdateTarget(owner, researched) : null;
+                    if (target == null) return item.cost;   // nothing to upgrade right now: fall back to the catalog cost
+                    var missing = researched.Count(n => !target.ResearchSnapshot.Contains(n));
+                    return UpdateCost(baseWarshipCost, factor, missing);
+                }
                 default:
                     return item.cost;
             }

@@ -159,6 +159,18 @@
             "maintenanceCost": 5.0
         },
         {
+            "itemName": "Update Warship",
+            "description": "Add every researched improvement a docked warship is missing",
+            "type": "Ship",
+            "subType" : "WarshipUpdate",
+            "tier" : 1,
+            "cost": 50.0,
+            "effect": "UpdateWarship",
+            "requiredTech": "Warship 1",
+            "researched": false,
+            "maintenanceCost": 0.0
+        },
+        {
           "itemName": "BaseGrotsitsProduction",
           "description": "Base Grotsits improvement",
           "type": "Improvement",

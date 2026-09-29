@@ -910,11 +910,50 @@ public class Planet : MonoBehaviour
         {
             DockNewShip(Ship.ShipKind.WarShip);
         }
+        else if (CurrentProduction?.Item.subType == "WarshipUpdate")
+        {
+            // Needs Gameboard.Instance, like DockNewShip's snapshot; the self-check calls ApplyWarshipUpdate directly.
+            if (Owner >= 0 && Owner < Gameboard.Instance.players.Count)
+                ApplyWarshipUpdate(Owner, WarshipStats.ResearchedNames(
+                    Gameboard.Instance.players[Owner].playerAI.ResearchCatalog.catalogItems));
+        }
     }
 
     public bool HasDockedShip(Ship.ShipKind kind)
     {
         return DockedShips.Exists(s => s.Kind == kind);
+    }
+
+    /// <summary>
+    /// The docked warship this owner should upgrade next: the one missing the most of the researched warship
+    /// improvements. Null when every owned warship already has them all (or there are none).
+    /// </summary>
+    public Ship FindWarshipUpdateTarget(int owner, ICollection<string> researchedNames)
+    {
+        Ship best = null;
+        var bestMissing = 0;
+        foreach (var ship in DockedShips)
+        {
+            if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner != owner) continue;
+            var missing = researchedNames.Count(n => !ship.ResearchSnapshot.Contains(n));
+            if (missing > bestMissing)
+            {
+                best = ship;
+                bestMissing = missing;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Adds every researched improvement the target ship lacks. False when no ship needed it.</summary>
+    public bool ApplyWarshipUpdate(int owner, ICollection<string> researchedNames)
+    {
+        var ship = FindWarshipUpdateTarget(owner, researchedNames);
+        if (ship == null) return false;
+        foreach (var name in researchedNames)
+            if (!ship.ResearchSnapshot.Contains(name))
+                ship.ResearchSnapshot.Add(name);
+        return true;
     }
 
     private Ship CreateShip(Ship.ShipKind kind, int owner)

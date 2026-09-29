@@ -16,6 +16,8 @@ public static class WarshipSelfCheck
         _nextPlanetX = 0f;
         var ok = RunStatsCheck();
         ok &= RunCostCheck();
+        ok &= RunUpdateWarshipCheck();
+        ok &= RunUpdateWarshipAIWeightCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
             : "[WarshipSelfCheck] FAILURES (see errors above)");
@@ -148,6 +150,147 @@ public static class WarshipSelfCheck
         finally
         {
             DestroyAll(research);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    private static PlanetSpawnData MakeSpawn(string name, IEnumerable<string> connections = null)
+    {
+        var resourceData = ScriptableObject.CreateInstance<PlanetResourceData>();
+        resourceData._initialPopulation = 1;
+        resourceData._maxPopulation = 5;
+        var spawn = ScriptableObject.CreateInstance<PlanetSpawnData>();
+        spawn._planetName = name;
+        spawn._planetPosition = new Vector3(_nextPlanetX, 0f, 0f);
+        _nextPlanetX += 100f;
+        spawn._planetType = Planet.PlanetType.PlanetTypeNormal;
+        spawn._resourceData = resourceData;
+        spawn._connections = connections != null ? new List<string>(connections) : new List<string>();
+        return spawn;
+    }
+
+    private static GameAIConstants MakeConstants(ShipData warship)
+    {
+        var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants.defaultTravelSpeed = 1f;
+        constants.warShipData = warship;
+        return constants;
+    }
+
+    private static GameAIMap BuildMap(GameObject go, GameAIConstants constants, params PlanetSpawnData[] spawns)
+    {
+        var map = go.AddComponent<GameAIMap>();
+        map.GameAIMapInit(new List<PlanetSpawnData>(spawns), constants);
+        return map;
+    }
+
+    private static void DockWarships(Planet planet, int owner, int count, params string[] snapshot)
+    {
+        for (var i = 0; i < count; i++)
+            planet.DockShipFromSave(Ship.ShipKind.WarShip, owner, new List<string>(snapshot));
+    }
+
+    public static bool RunUpdateWarshipCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("WarshipSelfCheckMap_Update");
+        var template = MakeTemplate();
+        var constants = MakeConstants(template);
+        var research = MakeResearch(2);   // 6 researched: Off 1-2, Hp 1-2, Def 1-2
+        var warshipItem = ProductionItem("Warship", "Warship", 100f);
+        var updateItem = ProductionItem("Update Warship", "WarshipUpdate", 50f);
+        try
+        {
+            var map = BuildMap(go, constants, MakeSpawn("A"));
+            var planet = map.GetPlanet("A");
+            var researched = WarshipStats.ResearchedNames(research);
+
+            ok &= Check(planet.FindWarshipUpdateTarget(0, researched) == null, "no ships docked: nothing to update");
+
+            planet.DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            DockWarships(planet, 1, 1);                                        // another player's ship, missing everything
+            DockWarships(planet, 0, 1, "Off 1", "Off 2", "Hp 1", "Hp 2", "Def 1", "Def 2");   // up to date
+            DockWarships(planet, 0, 1, "Off 1");                               // missing 5
+            DockWarships(planet, 0, 1);                                        // missing 6
+            var target = planet.FindWarshipUpdateTarget(0, researched);
+            ok &= Check(target != null && target.ResearchSnapshot.Count == 0,
+                "the target is my warship with the most missing improvements (not a colony ship, not another player's)");
+
+            ok &= Check(Near(WarshipCosts.ProductionCost(updateItem, planet, 0, research, 100f, 0.1f), 60f),
+                "Update Warship costs base x factor x missing = 100 x 0.1 x 6");
+
+            ok &= Check(planet.ApplyWarshipUpdate(0, researched) && target.ResearchSnapshot.Count == 6,
+                "applying the update gives the target every researched improvement");
+            var next = planet.FindWarshipUpdateTarget(0, researched);
+            ok &= Check(next != null && next.ResearchSnapshot.Count == 1, "the next target is the ship missing 5");
+            planet.ApplyWarshipUpdate(0, researched);
+            ok &= Check(planet.FindWarshipUpdateTarget(0, researched) == null && !planet.ApplyWarshipUpdate(0, researched),
+                "with every owned ship up to date there is no target and applying does nothing");
+            ok &= Check(Near(WarshipCosts.ProductionCost(updateItem, planet, 0, research, 100f, 0.1f), 50f),
+                "with no target the cost falls back to the catalog cost");
+            ok &= Check(planet.DockedShips.FindAll(s => s.Owner == 1)[0].ResearchSnapshot.Count == 0,
+                "another player's ship is never touched");
+
+            var newlyResearched = MakeResearch(3);
+            try
+            {
+                ok &= Check(planet.FindWarshipUpdateTarget(0, WarshipStats.ResearchedNames(newlyResearched)) != null,
+                    "research finishing later makes the ships upgradable again");
+            }
+            finally { DestroyAll(newlyResearched); }
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(warshipItem);
+            Object.DestroyImmediate(updateItem);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    public static bool RunUpdateWarshipAIWeightCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var mapGo = new GameObject("WarshipSelfCheckMap_UpdateAI");
+        var playerGo = new GameObject("WarshipSelfCheckPlayer_UpdateAI");
+        var template = MakeTemplate();
+        var constants = MakeConstants(template);
+        var research = MakeResearch(1);
+        var updateItem = ProductionItem("Update Warship", "WarshipUpdate", 50f);
+        try
+        {
+            var map = BuildMap(mapGo, constants, MakeSpawn("A"));
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+            playerAI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+            playerAI.ResearchCatalog = playerGo.AddComponent<Catalog>();
+            playerAI.ResearchCatalog.catalogItems = research;
+
+            ok &= Check(playerAI.GetIndustrySituationalWeightMultiplier(updateItem, "A") == 0f,
+                "no docked warship: Update Warship is not offered");
+            DockWarships(map.GetPlanet("A"), 0, 1);
+            ok &= Check(playerAI.GetIndustrySituationalWeightMultiplier(updateItem, "A") == 1f,
+                "a docked warship missing a researched improvement: offered at the plain multiplier");
+            ok &= Check(PlayerAI.GetIndustryStrategyWeight(updateItem, PlayerAI.AIStrategy.AIStrategyExpand) == 1.5f
+                        && PlayerAI.GetIndustryStrategyWeight(updateItem, PlayerAI.AIStrategy.AIStrategyConsolidate) == 2.5f,
+                "Update Warship has Warship's table weights (Expand 1.5, Consolidate 2.5)");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(updateItem);
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+            Object.DestroyImmediate(constants);
             Object.DestroyImmediate(template);
         }
         return ok;

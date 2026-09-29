@@ -598,6 +598,13 @@ public static class PlayerKnowledgeSelfCheck
                     PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == consolidateIndustry[subType],
                     $"Consolidate industry weight for {subType} is {consolidateIndustry[subType]}");
             }
+            item.subType = "WarshipUpdate";
+            ok &= Check(
+                PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyExpand) == 1.5f,
+                "Expand industry weight for WarshipUpdate is 1.5");
+            ok &= Check(
+                PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyConsolidate) == 2.5f,
+                "Consolidate industry weight for WarshipUpdate is 2.5");
         }
         finally
         {

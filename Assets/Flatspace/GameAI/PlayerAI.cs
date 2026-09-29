@@ -817,6 +817,7 @@ namespace FlatSpace
                     { "Research",      1.0f },  // build the base
                     { "ColonyShip",    2.5f },  // colony ships needed
                     { "Warship",       1.5f },  // Updated priority
+                    { "WarshipUpdate", 1.5f },  // same as Warship
                 };
 
             private static readonly Dictionary<string, float> ConsolidateIndustryWeights =
@@ -828,6 +829,7 @@ namespace FlatSpace
                     { "Research",      1.0f },  // research can slack off a bit
                     { "ColonyShip",    1.0f },  // colony ships needed as much
                     { "Warship",       2.5f },  // highest priority
+                    { "WarshipUpdate", 2.5f },  // same as Warship
                 };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
@@ -952,6 +954,10 @@ namespace FlatSpace
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
+                if (item.subType == "WarshipUpdate"
+                    && AIMap.GetPlanet(planetName).FindWarshipUpdateTarget(
+                        Player.playerID, WarshipStats.ResearchedNames(ResearchCatalog.catalogItems)) == null)
+                    return 0f;                           // nothing docked here is missing an improvement — do not offer it
                 if (item.subType == "Warship" && Strategy == AIStrategy.AIStrategyConsolidate)
                 {
                     if (_warshipMultiplierThisTurn == null)
