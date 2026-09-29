@@ -18,6 +18,8 @@ public static class WarshipSelfCheck
         ok &= RunCostCheck();
         ok &= RunUpdateWarshipCheck();
         ok &= RunUpdateWarshipAIWeightCheck();
+        ok &= RunBlockadeValueCheck();
+        ok &= RunBlockadeRouteCheck();
         Debug.Log(ok
             ? "[WarshipSelfCheck] ALL PASSED"
             : "[WarshipSelfCheck] FAILURES (see errors above)");
@@ -290,6 +292,128 @@ public static class WarshipSelfCheck
             Object.DestroyImmediate(updateItem);
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    private static GameAI.GameAIOrder MakeOrder(GameAI.GameAIOrder.OrderType type, int player, string origin,
+        string target, int timingDelay, int totalDelay, object data)
+        => new GameAI.GameAIOrder
+        {
+            Type = type,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+            TimingDelay = timingDelay, TotalDelay = totalDelay,
+            Data = data, Origin = origin, Target = target, PlayerId = player,
+        };
+
+    // Line A - B - C, planets 100 apart. Returns the map; the caller destroys `go`.
+    private static GameAIMap BuildLine(GameObject go, GameAIConstants constants)
+    {
+        _nextPlanetX = 0f;
+        return BuildMap(go, constants,
+            MakeSpawn("A", new[] { "B" }),
+            MakeSpawn("B", new[] { "A", "C" }),
+            MakeSpawn("C", new[] { "B" }));
+    }
+
+    public static bool RunBlockadeValueCheck()
+    {
+        var ok = true;
+        var go = new GameObject("WarshipSelfCheckMap_BlockadeValue");
+        var template = MakeTemplate();   // offense 10 per ship with no research
+        var constants = MakeConstants(template);
+        var research = MakeResearch();
+        try
+        {
+            var map = BuildLine(go, constants);
+            var b = map.GetPlanet("B");
+            var blockade = new BlockadeSystem(map, research);
+
+            ok &= Check(blockade.Value(b, 0, out _) == 0f, "an empty planet blocks nothing");
+
+            DockWarships(b, 1, 3);   // player 1: offense 30
+            DockWarships(b, 0, 1);   // player 0: offense 10
+            ok &= Check(Near(blockade.DockedOffense(b, 1), 30f), "docked offense is the sum over that player's warships");
+            ok &= Check(Near(blockade.Value(b, 0, out var blocker), 20f) && blocker == 1,
+                "player 1 blockades player 0's order by 30 - 10 = 20");
+            ok &= Check(blockade.Value(b, 1, out _) == 0f, "the stronger player is not blockaded by the weaker");
+
+            DockWarships(b, 2, 3);   // player 2: 30 as well
+            ok &= Check(Near(blockade.Value(b, 0, out blocker), 20f) && blocker == 1,
+                "two blockaders do not add up: the largest single one counts (ties go to the lowest id)");
+
+            DockWarships(b, 0, 2);   // player 0 now 30
+            ok &= Check(blockade.Value(b, 0, out _) == 0f, "equal offense is not a positive blockade");
+
+            b.DockShipFromSave(Ship.ShipKind.ColonyShip, 1, new List<string>());
+            ok &= Check(Near(blockade.DockedOffense(b, 1), 30f), "colony ships add no offense");
+
+            // A ship docked while the constants have no warship template counts as 0 offense.
+            var c = map.GetPlanet("C");
+            var savedTemplate = constants.warShipData;
+            constants.warShipData = null;
+            DockWarships(c, 1, 2);
+            constants.warShipData = savedTemplate;
+            ok &= Check(blockade.DockedOffense(c, 1) == 0f, "a docked ship with a null template has 0 offense, no crash");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    public static bool RunBlockadeRouteCheck()
+    {
+        var ok = true;
+        var go = new GameObject("WarshipSelfCheckMap_BlockadeRoute");
+        var template = MakeTemplate();
+        var constants = MakeConstants(template);
+        var research = MakeResearch();
+        try
+        {
+            var map = BuildLine(go, constants);
+            var blockade = new BlockadeSystem(map, research);
+
+            var route = blockade.Route("A", "C");
+            ok &= Check(route.Count == 2 && route[0].Name == "B" && route[1].Name == "C",
+                "the route lists every node after the origin, ending at the target");
+            ok &= Check(Near(route[0].Fraction, 0.5f) && Near(route[1].Fraction, 1f),
+                "B is halfway along an even route, the target is at 1");
+
+            var single = blockade.Route("A", "A");
+            ok &= Check(single.Count == 1 && single[0].Name == "A", "origin == target checks just the target, no throw");
+            var unknown = blockade.Route("A", "Nowhere");
+            ok &= Check(unknown.Count == 1 && unknown[0].Name == "Nowhere", "an unknown planet checks just the target, no throw");
+
+            ok &= Check(Near(BlockadeSystem.Progress(4, 4), 0f) && Near(BlockadeSystem.Progress(2, 4), 0.5f)
+                        && Near(BlockadeSystem.Progress(0, 4), 1f) && Near(BlockadeSystem.Progress(-1, 4), 1f)
+                        && Near(BlockadeSystem.Progress(0, 0), 1f),
+                "progress runs 0 -> 1 as the delay runs out and is clamped");
+
+            var o = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 0, "A", "C", 3, 4, 30f);
+            ok &= Check(blockade.PassedNodes(o).Count == 0, "3 of 4 turns left: nothing passed yet (progress .25)");
+            o.TimingDelay = 2;
+            var passed = blockade.PassedNodes(o);
+            ok &= Check(passed.Count == 1 && passed[0].Name == "B", "2 of 4 left: B was passed this turn");
+            o.TimingDelay = 1;
+            ok &= Check(blockade.PassedNodes(o).Count == 0, "B is not passed twice; C is not reached yet");
+            o.TimingDelay = 0;
+            passed = blockade.PassedNodes(o);
+            ok &= Check(passed.Count == 1 && passed[0].Name == "C", "on arrival the target is passed");
+
+            var fast = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 0, "A", "C", 0, 1, 30f);
+            ok &= Check(blockade.PassedNodes(fast).Count == 2, "a 1-turn trip passes every node in that one turn");
+        }
+        finally
+        {
+            DestroyAll(research);
+            Object.DestroyImmediate(go);
             Object.DestroyImmediate(constants);
             Object.DestroyImmediate(template);
         }
