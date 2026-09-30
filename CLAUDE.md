@@ -625,6 +625,12 @@ underlying condition holds, not once, so a naive grep-count of those codes overc
 `Gameboard.InitGame` (which starts a match's log) can run more than once for a single match, and two
 inits within the same wall-clock second would silently collide on the same filename.
 
+The standard review of a log is the tracked `tuning-log` skill (`.claude/skills/tuning-log/SKILL.md`, run it with
+`/tuning-log`): it finds the newest log, identifies the board and players, and computes the usual metrics (pace,
+colonization, research, shipments, economy, fleet-cap discipline, blockade), comparing against an earlier run on the
+same board. Keep it in step with any new log line or invariant, as was done for `Blockade`, `BlockadedProduction` and
+`ColonizeCancelled`.
+
 ### Input
 
 New Input System. `Assets/Game/Input/MapInputActions.cs` is the generated C# wrapper for the map action
