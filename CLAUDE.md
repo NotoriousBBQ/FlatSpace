@@ -45,7 +45,7 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`;
 `FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`;
 `FlatSpace → AI → Run Warship Self-Check` in `Assets/Editor/WarshipSelfCheck.cs`;
-`FlatSpace → AI → Run Blockade Avoidance Self-Check` in `Assets/Editor/BlockadeAvoidanceSelfCheck.cs`;
+`FlatSpace → AI → Run Blockade Avoidance Self-Check` in `Assets/Editor/BlockadeAvoidanceSelfCheck.cs` (colonization and resource-shipping avoidance, and the shipment origin cut);
 `FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
 `FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
 the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
@@ -504,7 +504,9 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   orders execute, to `OrderTypePopulationTransport`, `OrderTypeFoodTransport` and `OrderTypeGrotsitsTransport`.
   The route comes from `GameAIMap.GetPath`; each node's fraction is its cumulative edge cost / total cost, and an
   order passes a node in the turn its progress (`1 - TimingDelay / TotalDelay`) first reaches that fraction (the
-  target on arrival). The origin is never checked. A blockaded colony order is removed together with its food rider
+  target on arrival). A colonist order's origin is never checked; a food/grotsits shipment's origin is checked
+  once, on the first turn the order is processed (`TotalDelay > 0` and `TimingDelay + 1 >= TotalDelay`, so a
+  zero-delay or mid-flight order is skipped). A blockaded colony order is removed together with its food rider
   (colonist and rider are lost) and the target's population-transfer flag cleared; a food/grotsits shipment loses the
   blockade value at each blockaded node and is removed (incoming flag cleared) once its amount is <= 0.
   Research: Warship has three parallel research lines, so the research roll divides each choice's weight by the
@@ -540,7 +542,24 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   Consolidate fleet-cap cutoff, and Update Warship gets the same boost (its 0 when nothing needs updating stays 0). The `BlockadedProduction` tuning-log
   line marks each such start, so a `WarshipBoost` multiplier of 0 with a Warship start is the intended exemption only
   when that line exists.
-  Resource shipping and assault are not blockade-aware yet.
+- **Blockade avoidance (resource shipping):** `RoutePlanner.PlanShipmentRoute` plans every (source, shortage) pair in
+  `PlayerAI.BuildResourceMatrix`. The range rule is colonization's (the target must be in range by its SHORTEST path,
+  `2 <= NumNodes <= maxPathNodesForResourceDistribution`, which also rejects `FindPath`'s no-route stub) and only the
+  route taken may exceed the limit. A clean route (the ordinary shortest path, else `PlanRoute`'s clean detour) is used
+  when one exists; otherwise the least-loss route, then the cheapest, from the shared `RoutePlanner.Search` core (a
+  Dijkstra minimising (total blockade value, cost), ties by node name; `ShortestPathAvoiding` is the same core with
+  hard-skipped nodes and no loss). `PlannedRoute.Loss` is the total blockade value on the route and includes the
+  ORIGIN's own value. A blockaded source or target is an ordinary node, not dropped outright: the pair is offered only
+  while `Loss < min(remainingSurplus, remainingShortage)` (loss >= amount is cancelled, since nothing would arrive).
+  `PlayerAI.CompareResourceChoices` sorts clean routes before lossy ones, then by cost minus surplus. The transport order
+  carries `Route` (saved as `OrderSave.route`, applied by `BlockadeSystem.RouteFor`) and its delay uses the route's cost.
+  The simulation agrees with the planner because `BlockadeSystem` now also cuts a shipment at its origin (see above), so
+  economy numbers on boards with lasting blockades are not comparable with runs before this change. Logging:
+  `RouteDetour` (shared with colonists), `ShipmentLossy|<origin>-><target>|<amount>|<loss>` when a shipment goes out
+  through unavoidable blockades, and `ShipmentCancelled|<target>|Blockade` when blockades removed every source for a
+  shortage (logged on state change only, through `PlayerAI.NoteShipmentHeldBack`, log-only state like
+  `_colonizeHeldBack`). A shipment sends and deducts its full amount; the loss happens en route, so the shortage
+  re-reports after a lossy shipment lands. Assault is not blockade-aware yet.
 
 ### Distribution Centers
 
@@ -608,7 +627,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a blockade detour (colonist or shipment) as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a shipment sent through unavoidable blockades as `ShipmentLossy|<origin>-><target>|<amount>|<loss>`, a shortage left unsupplied because blockades removed every source as `ShipmentCancelled|<target>|Blockade` (on state change only), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony

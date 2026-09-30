@@ -4,6 +4,7 @@ using UnityEngine;
 using FlatSpace.AI;
 using FlatSpace.Pathing;
 using Flatspace.Objects.Production;
+using Flatspace.Objects.Resource;
 
 public static class BlockadeAvoidanceSelfCheck
 {
@@ -15,8 +16,11 @@ public static class BlockadeAvoidanceSelfCheck
         var ok = RunBlockadeViewCheck();
         ok &= RunRoutePlannerCheck();
         ok &= RunShortestPathAvoidingCheck();
+        ok &= RunShipmentPlannerCheck();
         ok &= RunCarriedRouteCheck();
+        ok &= RunShipmentOriginCheck();
         ok &= RunColonizationRoutingCheck();
+        ok &= RunShipmentPlanningCheck();
         ok &= RunProductionResponseCheck();
         ok &= RunColonizeHeldBackStateCheck();
         ok &= RunBlockadeMemoryCheck();
@@ -207,6 +211,86 @@ public static class BlockadeAvoidanceSelfCheck
         return ok;
     }
 
+    // PlanShipmentRoute: a clean route when one exists (even beyond the node range), else the least-loss route; the
+    // origin's own blockade counts as loss; an out-of-range source is never reachable.
+    public static bool RunShipmentPlannerCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_ShipPlanner");
+        var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            var map = BuildDiamond(go, constants);   // A to D: about 224 via B, about 361 via C
+
+            var none = RoutePlanner.PlanShipmentRoute(map, "A", "D", null, 6);
+            ok &= Check(Join(none) == "A>B>D" && !none.IsDetour && Near(none.Loss, 0f),
+                "a null view: the ordinary shortest path with no loss");
+            var clean = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B"), 6);
+            ok &= Check(Join(clean) == "A>C>D" && clean.IsDetour && Near(clean.Loss, 0f),
+                "B blockaded: the clean detour A>C>D, no loss");
+
+            var tie = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B", "C"), 6);
+            ok &= Check(Join(tie) == "A>B>D" && !tie.IsDetour && Near(tie.Loss, 1f),
+                "both ways blockaded (1 each): equal loss, so the cheaper path A>B>D, loss 1, not a detour");
+            var lighter = RoutePlanner.PlanShipmentRoute(map, "A", "D",
+                BlockadeView.WithValues(("B", 2f), ("C", 1f)), 6);
+            ok &= Check(Join(lighter) == "A>C>D" && lighter.IsDetour && Near(lighter.Loss, 1f),
+                "B worth 2, C worth 1: the least-loss route is the longer A>C>D, loss 1");
+
+            var target = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("D"), 6);
+            ok &= Check(Join(target) == "A>B>D" && Near(target.Loss, 1f),
+                "a blockaded target is not refused: its value counts (loss 1)");
+            var origin = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("A"), 6);
+            ok &= Check(Join(origin) == "A>B>D" && !origin.IsDetour && Near(origin.Loss, 1f),
+                "a blockaded origin is not refused: its value counts (loss 1)");
+            var all = RoutePlanner.PlanShipmentRoute(map, "A", "D",
+                BlockadeView.WithValues(("A", 3f), ("B", 5f), ("C", 1f), ("D", 2f)), 6);
+            ok &= Check(Join(all) == "A>C>D" && Near(all.Loss, 6f),
+                "origin 3 + C 1 + target 2 = 6, cheaper than via B (3 + 5 + 2)");
+
+            ok &= Check(RoutePlanner.PlanShipmentRoute(map, "A", "D", null, 2) == null,
+                "a target beyond the node range (3 nodes, max 2) is unreachable");
+            ok &= Check(RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B", "C"), 2) == null,
+                "a blockade does not bring an out-of-range target into range");
+            ok &= Check(RoutePlanner.PlanShipmentRoute(map, "A", "Z", null, 6) == null
+                        && RoutePlanner.PlanShipmentRoute(map, "A", "A", null, 6) == null
+                        && RoutePlanner.PlanShipmentRoute(map, "A", "Nowhere", null, 6) == null,
+                "the no-route stub, origin == target and unknown planets have no route");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+        }
+
+        // A detour may exceed the node range: A - B - D is 3 nodes, the way round is 5.
+        var go2 = new GameObject("BASelfCheckMap_ShipPlannerLong");
+        var constants2 = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            var map = Build(go2, constants2,
+                Spawn("A", 0f, 0f, new[] { "B", "C1" }),
+                Spawn("B", 100f, 0f, new[] { "A", "D" }),
+                Spawn("D", 200f, 0f, new[] { "B", "C3" }),
+                Spawn("C1", 0f, 200f, new[] { "A", "C2" }),
+                Spawn("C2", 100f, 300f, new[] { "C1", "C3" }),
+                Spawn("C3", 200f, 200f, new[] { "C2", "D" }));
+            var longWay = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B"), 3);
+            ok &= Check(Join(longWay) == "A>C1>C2>C3>D" && longWay.NumNodes == 5 && Near(longWay.Loss, 0f),
+                "with B blockaded the clean detour takes 5 nodes, beyond the maximum of 3, with no loss");
+            var cheap = RoutePlanner.PlanShipmentRoute(map, "A", "D",
+                BlockadeView.WithValues(("B", 1f), ("C2", 5f)), 3);
+            ok &= Check(Join(cheap) == "A>B>D" && Near(cheap.Loss, 1f),
+                "no clean route (B and C2 both blockaded): the least-loss route is through B, loss 1");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go2);
+            Object.DestroyImmediate(constants2);
+        }
+        return ok;
+    }
+
     // Dijkstra on a hand-built graph: the origin is never skipped, blocked nodes are, ties break by node name.
     public static bool RunShortestPathAvoidingCheck()
     {
@@ -323,6 +407,71 @@ public static class BlockadeAvoidanceSelfCheck
         return ok;
     }
 
+    // The origin of a food/grotsits shipment is blockaded like any other node, once, on the first turn the order is
+    // processed (TimingDelay + 1 >= TotalDelay, TotalDelay > 0). Colonists are unchanged.
+    public static bool RunShipmentOriginCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_ShipOrigin");
+        var template = WarshipSelfCheck.MakeTemplate();
+        var constants = WarshipSelfCheck.MakeConstants(template);
+        var research = WarshipSelfCheck.MakeResearch();
+        try
+        {
+            var map = BuildDiamond(go, constants);
+            var blockade = new BlockadeSystem(map, research);
+            var route = new List<string> { "A", "B", "D" };
+            WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 1, 1);   // 10 against player 0 at the origin A
+
+            var order = ShipmentOrder("A", "D", 3, 4, route, 50f);
+            var orders = new List<GameAI.GameAIOrder> { order };
+            var cuts = blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(order.Data), 40f) && cuts.Count == 1 && cuts[0].Planet == "A"
+                        && Near(cuts[0].Value, 10f),
+                "a shipment loses the origin's blockade value on its first processed turn (50 to 40) and reports the cut");
+            order.TimingDelay = 2;
+            blockade.Apply(orders, 2);
+            ok &= Check(Near(System.Convert.ToSingle(order.Data), 40f), "the origin is cut once, not again on later turns");
+
+            var small = ShipmentOrder("A", "D", 3, 4, route, 8f);
+            map.GetPlanet("D").FoodShipmentIncoming = true;
+            orders = new List<GameAI.GameAIOrder> { small };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0 && !map.GetPlanet("D").FoodShipmentIncoming,
+                "a shipment smaller than the origin's blockade is removed and the target's incoming flag cleared");
+
+            orders = new List<GameAI.GameAIOrder> { ColonistOrder("A", "D", 3, 4, route) };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 1, "a colonist's origin is still never checked");
+
+            var zero = ShipmentOrder("A", "D", 0, 0, route, 50f);
+            orders = new List<GameAI.GameAIOrder> { zero };
+            blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(zero.Data), 50f),
+                "a zero-delay order (the known double-execution quirk) never has its origin cut");
+
+            var mid = ShipmentOrder("A", "D", 1, 4, route, 50f);
+            orders = new List<GameAI.GameAIOrder> { mid };
+            blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(mid.Data), 50f),
+                "an order already past its first turn (e.g. loaded mid-flight) is not cut at the origin");
+
+            var older = ShipmentOrder("A", "D", 3, 4, null, 50f);
+            orders = new List<GameAI.GameAIOrder> { older };
+            blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(older.Data), 40f),
+                "an older shipment with no carried route still has its origin cut on its first turn");
+        }
+        finally
+        {
+            WarshipSelfCheck.DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
     // The diamond with player 0 present at A: 5 inhabitants (a full planet, ready to colonize), B and C not valid
     // targets (a colonist is already inbound), D the only target. Player 0's research catalog holds MakeResearch().
     private sealed class Scenario : System.IDisposable
@@ -342,6 +491,7 @@ public static class BlockadeAvoidanceSelfCheck
             s.Constants.defaultTravelSpeed = 1f;
             s.Constants.expandPopulationTrigger = 0.8f;
             s.Constants.maxPathNodesForColonization = 6;
+            s.Constants.maxPathNodesForResourceDistribution = 6;
             s.Constants.maxPathNodesForKnowledge = 6;
             s.Research = WarshipSelfCheck.MakeResearch();
             s.MapGo = new GameObject("BASelfCheckMap_Scenario");
@@ -412,6 +562,55 @@ public static class BlockadeAvoidanceSelfCheck
 
         public void Unblockade(string planet)
             => Map.GetPlanet(planet).UndockShips(Ship.ShipKind.WarShip, 1, 999);
+
+        public static Scenario Long()
+        {
+            var s = new Scenario();
+            s.Template = WarshipSelfCheck.MakeTemplate();
+            s.Constants = WarshipSelfCheck.MakeConstants(s.Template);
+            s.Constants.defaultTravelSpeed = 1f;
+            s.Constants.maxPathNodesForResourceDistribution = 3;   // the direct route A>B>D is 3 nodes; the way round is 5
+            s.Constants.maxPathNodesForKnowledge = 6;
+            s.Research = WarshipSelfCheck.MakeResearch();
+            s.MapGo = new GameObject("BASelfCheckMap_ScenarioLong");
+            s.PlayerGo = new GameObject("BASelfCheckPlayer_ScenarioLong");
+            s.Map = Build(s.MapGo, s.Constants,
+                Spawn("A", 0f, 0f, new[] { "B", "C1" }),
+                Spawn("B", 100f, 0f, new[] { "A", "D" }),
+                Spawn("D", 200f, 0f, new[] { "B", "C3" }),
+                Spawn("C1", 0f, 200f, new[] { "A", "C2" }),
+                Spawn("C2", 100f, 300f, new[] { "C1", "C3" }),
+                Spawn("C3", 200f, 200f, new[] { "C2", "D" }));
+
+            var a = s.Map.GetPlanet("A");
+            a.Owner = 0;
+            for (var i = 0; i < 5; i++) a.Population.Add(new Planet.Inhabitant { Player = 0 });
+
+            var player = s.PlayerGo.AddComponent<Player>();
+            s.AI = s.PlayerGo.AddComponent<PlayerAI>();
+            s.AI.Player = player;
+            s.AI.AIMap = s.Map;
+            player.playerID = 0;
+            s.AI.ResearchCatalog = s.PlayerGo.AddComponent<Catalog>();
+            s.AI.ResearchCatalog.catalogItems = s.Research;
+            s.Map.Knowledge.Update(s.Map, 1, 6);
+            return s;
+        }
+
+        // A populated A (surplus `surplus` food) ships to D (shortage `shortage` food): the food shipment orders.
+        public List<GameAI.GameAIOrder> ShipFood(float shortage, float surplus = 100f)
+        {
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("D",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage, -shortage, 0),
+                new Planet.PlanetUpdateResult("A",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, surplus, 0),
+            };
+            var orders = new List<GameAI.GameAIOrder>();
+            AI.ProcessFoodShortage(results, orders);
+            return orders;
+        }
 
         public List<GameAI.GameAIOrder> Colonize()
         {
@@ -503,6 +702,138 @@ public static class BlockadeAvoidanceSelfCheck
             ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("D") && s.Colonize().Count == 0,
                 "a visibly blockaded target is never chosen: colonization is cancelled");
         }
+        return ok;
+    }
+
+    private static GameAI.GameAIOrder FoodShipment(List<GameAI.GameAIOrder> orders)
+        => orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport);
+
+    private static float FoodDeducted(List<GameAI.GameAIOrder> orders)
+    {
+        var change = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodChange);
+        return change == null ? 0f : System.Convert.ToSingle(change.Data);
+    }
+
+    public static bool RunShipmentPlanningCheck()
+    {
+        var ok = true;
+        const GameAI.GameAIOrder.OrderType food = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport;
+        using (var s = Scenario.Diamond())
+        {
+            // No view yet (null): nothing is blockaded, shipping is exactly as before.
+            s.Blockade("B");
+            var before = FoodShipment(s.ShipFood(50f));
+            ok &= Check(before != null && string.Join(">", before.Route) == "A>B>D",
+                "with no view yet, a blockade at B is unknown: the shipment takes the shortest route A>B>D");
+            s.Unblockade("B");
+
+            // Clean: the shortest route rides on the order; the delay comes from its cost.
+            s.AI.RefreshBlockadeView();
+            var cleanOrders = s.ShipFood(50f);
+            var clean = FoodShipment(cleanOrders);
+            var cleanRoute = RoutePlanner.PlanShipmentRoute(s.Map, "A", "D", s.AI.CurrentBlockadeView, 6);
+            ok &= Check(clean != null && string.Join(">", clean.Route) == "A>B>D"
+                        && clean.TotalDelay == System.Convert.ToInt32(cleanRoute.Cost) && Near(FoodDeducted(cleanOrders), -50f),
+                "unblockaded: the shipment carries A>B>D, its delay comes from the route cost, the origin is charged 50");
+
+            // B blockaded (visible): a clean detour through C, longer delay, nothing lost.
+            s.Blockade("B");
+            s.AI.RefreshBlockadeView();
+            var detoured = FoodShipment(s.ShipFood(50f));
+            ok &= Check(detoured != null && string.Join(">", detoured.Route) == "A>C>D" && detoured.TotalDelay > clean.TotalDelay,
+                "B blockaded: the shipment detours A>C>D and the longer trip has a longer delay");
+
+            // Both ways blockaded: least loss wins even though it is the longer way (B worth 20, C worth 10).
+            s.Blockade("B");                 // B now holds 2 warships
+            s.Blockade("C");
+            s.AI.RefreshBlockadeView();
+            var lossyOrders = s.ShipFood(50f);
+            var lossy = FoodShipment(lossyOrders);
+            ok &= Check(lossy != null && string.Join(">", lossy.Route) == "A>C>D" && Near(FoodDeducted(lossyOrders), -50f),
+                "no clean route: the least-loss route A>C>D (10 against B's 20) is taken and the full 50 is sent");
+
+            // loss >= amount cancels; the state is noted once; a shipment just above the loss ships.
+            s.Unblockade("B");
+            s.Blockade("B");                 // B and C now 10 each: every route loses 10
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.ShipFood(8f).Count == 0, "a shipment smaller than the unavoidable loss (8 against 10) is cancelled");
+            ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == "Blockade", "the cancelled shortage is remembered as held back");
+            ok &= Check(!s.AI.NoteShipmentHeldBack(food, "D", "Blockade") && s.AI.NoteShipmentHeldBack(food, "D", "Other"),
+                "the held-back note is news only when the reason changes (so the log line is not repeated every turn)");
+            ok &= Check(s.ShipFood(10f).Count == 0, "a shipment exactly equal to the loss (10 against 10) is cancelled: nothing would arrive");
+            ok &= Check(FoodShipment(s.ShipFood(11f)) != null, "a shipment just above the loss (11 against 10) still ships");
+            ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null, "a shipment that goes out clears the held-back state");
+
+            // The record is forgotten once the shortage is gone, so a later episode for the same planet logs again.
+            ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade",
+                "D is held back again by the blockade");
+            s.AI.ProcessFoodShortage(new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("A",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 100f, 0),
+            }, new List<GameAI.GameAIOrder>());
+            ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null,
+                "when D stops reporting a shortage its held-back record is forgotten");
+            s.AI.ProcessFoodShortage(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade"
+                        && s.AI.NoteShipmentHeldBack(food, "D", "Other"),
+                "a later episode is news again (the record was forgotten, then re-set to Blockade)");
+
+            // A way opens: it ships again.
+            s.Unblockade("C");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(string.Join(">", FoodShipment(s.ShipFood(8f)).Route) == "A>C>D",
+                "when a clean way opens, even a small shipment goes");
+            s.Unblockade("B");
+
+            // A blockaded SOURCE is not dropped: its value is loss. 8 is lost entirely, 50 ships.
+            s.Blockade("A");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.ShipFood(8f).Count == 0, "a blockaded source (10) cancels a shipment of 8");
+            var fromBlockaded = FoodShipment(s.ShipFood(50f));
+            ok &= Check(fromBlockaded != null && string.Join(">", fromBlockaded.Route) == "A>B>D",
+                "a blockaded source still ships a shipment larger than its blockade, by the ordinary route");
+            s.Unblockade("A");
+
+            // A blockaded TARGET is not dropped either: give player 0 presence at C so D is visible.
+            s.Map.GetPlanet("C").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            s.Blockade("D");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("D"), "D is visible and blockaded");
+            ok &= Check(s.ShipFood(8f).Count == 0, "a blockaded target (10) cancels a shipment of 8");
+            ok &= Check(FoodShipment(s.ShipFood(50f)) != null, "a blockaded target still receives a shipment larger than its blockade");
+            s.Unblockade("D");
+
+            // Range: D is 3 nodes from A; with a maximum of 2 nothing is reachable, detour or not.
+            s.Constants.maxPathNodesForResourceDistribution = 2;
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.ShipFood(50f).Count == 0, "a target beyond the node range is not shipped to");
+            s.Blockade("B");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.ShipFood(50f).Count == 0, "a blockade does not bring an out-of-range target into range");
+        }
+
+        // The detour may exceed the node range: direct A>B>D is 3 nodes (the maximum), the clean way round is 5.
+        using (var s = Scenario.Long())
+        {
+            s.Blockade("B");
+            s.AI.RefreshBlockadeView();
+            var around = FoodShipment(s.ShipFood(50f));
+            ok &= Check(around != null && string.Join(">", around.Route) == "A>C1>C2>C3>D",
+                "a clean detour of 5 nodes is taken although the maximum is 3");
+        }
+
+        // Clean routes sort before lossy ones; otherwise by cost minus surplus as before.
+        var surplusPlanet = new Planet.PlanetUpdateResult("X",
+            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 10f, 0);
+        var cleanFar = new ResourceChoiceElement { SurplusResult = surplusPlanet, Cost = 500f, Loss = 0f };
+        var lossyNear = new ResourceChoiceElement { SurplusResult = surplusPlanet, Cost = 100f, Loss = 5f };
+        var cleanNear = new ResourceChoiceElement { SurplusResult = surplusPlanet, Cost = 100f, Loss = 0f };
+        ok &= Check(PlayerAI.CompareResourceChoices(cleanFar, lossyNear) < 0
+                    && PlayerAI.CompareResourceChoices(lossyNear, cleanFar) > 0,
+            "a clean far source sorts before a lossy near one");
+        ok &= Check(PlayerAI.CompareResourceChoices(cleanNear, cleanFar) < 0,
+            "between clean routes the cheaper sorts first (the existing order)");
         return ok;
     }
 

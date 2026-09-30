@@ -204,6 +204,22 @@ public static class AITuningLogger
             string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A shipment was sent through unavoidable blockades: T&lt;turn&gt;|P&lt;id&gt;|ShipmentLossy|origin-&gt;target|amount|loss.</summary>
+    public static void LogShipmentLossy(int turnNumber, int playerId, string origin, string target, float amount, float loss)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ShipmentLossy", $"{origin}->{target}",
+            amount.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture),
+            loss.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A shortage could not be supplied because blockades removed every source: T&lt;turn&gt;|P&lt;id&gt;|ShipmentCancelled|target|Blockade. Logged on state change only.</summary>
+    public static void LogShipmentCancelled(int turnNumber, int playerId, string target, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ShipmentCancelled", target, reason) });
+    }
+
     /// <summary>A ready colonizer was held back: T&lt;turn&gt;|P&lt;id&gt;|ColonizeCancelled|origin|BlockadedOrigin or NoRoute. Repeats every turn the condition holds.</summary>
     public static void LogColonizeCancelled(int turnNumber, int playerId, string origin, string reason)
     {

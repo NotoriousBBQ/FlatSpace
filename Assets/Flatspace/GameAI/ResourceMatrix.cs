@@ -1,6 +1,7 @@
 // ResourceMatrix.cs
 
 using System;
+using System.Collections.Generic;
 
 namespace Flatspace.Objects.Resource
 {
@@ -19,7 +20,15 @@ namespace Flatspace.Objects.Resource
         // IScoreMatrixChoiceElement
         public string Target => ShortageResult.Name;
         public string Source => SurplusResult.Name;
-        public float Cost { get; set; }    
+        public float Cost { get; set; }
+
+        /// <summary>The planned route, source to target inclusive (null in tests that do not plan one).</summary>
+        public List<string> Route { get; set; }
+        /// <summary>Total blockade value along the route, origin included; 0 for a clean route.</summary>
+        public float Loss { get; set; }
+        /// <summary>True when the route is not the ordinary shortest path (for the RouteDetour log line).</summary>
+        public bool IsDetour { get; set; }
+
         public float Surplus => Convert.ToSingle(SurplusResult.Data);
         public float Shortage => Convert.ToSingle(ShortageResult.Data);
 
@@ -45,5 +54,8 @@ namespace Flatspace.Objects.Resource
         public string Origin => ChosenChoiceElement.Source;
         public string Target => ChosenChoiceElement.Target;
         public float Cost => ChosenChoiceElement.Cost;
+        public List<string> Route => ChosenChoiceElement.Route;
+        public float Loss => ChosenChoiceElement.Loss;
+        public bool IsDetour => ChosenChoiceElement.IsDetour;
     }
 }

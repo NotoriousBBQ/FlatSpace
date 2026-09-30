@@ -207,7 +207,16 @@ namespace FlatSpace.AI
         private void ApplyToShipment(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber,
             List<BlockadeCut> cuts)
         {
-            foreach (var node in PassedNodes(order))
+            // A shipment's own origin is blockaded like any other node, once: on the first turn the order is processed
+            // (its previous progress is 0). Colonists never check their origin (a blockaded colonizer is held back), and
+            // RouteFor/PassedNodes stay shared with them. A zero-delay order (the known double-execution quirk) is skipped
+            // so its stale copy cannot be cut at the origin every turn.
+            var nodes = new List<RouteNode>();
+            if (order.TotalDelay > 0 && order.TimingDelay + 1 >= order.TotalDelay)
+                nodes.Add(new RouteNode { Name = order.Origin, Fraction = 0f });
+            nodes.AddRange(PassedNodes(order));
+
+            foreach (var node in nodes)
             {
                 var value = Value(_map.GetPlanet(node.Name), order.PlayerId, out var blocker);
                 if (value <= 0f) continue;

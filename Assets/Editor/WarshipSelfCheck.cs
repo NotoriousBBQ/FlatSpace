@@ -625,7 +625,8 @@ public static class WarshipSelfCheck
             blockade.Apply(orders, 1);
             ok &= Check(orders.Count == 1, "equal docked offense of the order owner: no blockade");
 
-            // A blockade only at the ORIGIN never affects the order.
+            // A blockade only at the ORIGIN never affects a colonist, nor a shipment past its first turn (a shipment is cut
+            // at its origin only on its first processed turn: see BlockadeAvoidanceSelfCheck.RunShipmentOriginCheck).
             var go2 = new GameObject("WarshipSelfCheckMap_BlockadeOrigin");
             try
             {
