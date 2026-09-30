@@ -150,6 +150,31 @@ user asked about one specific thing.
   different player. Per run give the event count, the number of distinct planets, and the most contested planet (e.g.
   `Industrial 16` changing hands 9 times). Planets changing hands is a desired outcome, so call it out and do not flag
   it as a defect.
+- **Colonize-die churn:** per run, count `ColonizeArrive` (target = the name after `->`) and `PlanetDead` per planet, and
+  list the planets with repeated cycles (a `ColonizeArrive` followed by a `PlanetDead` or `PopulationLoss` run that empties
+  it, three or more times, or five or more deaths), with the turn range and the colonizing players. Report the share of all
+  `PlanetDead` events that the top two planets account for (for example `Verdant 0` and `Industrial 1` were 63 of 100 deaths
+  in one set of `test2.json` runs against 8 of 44 before) and compare the per-planet death counts with the baseline runs, since
+  a jump in total `PlanetDead` or `ColonizeArrive` is usually one or two planets, not a systemic change. For each flagged
+  planet separate the two causes:
+  1. *Designed failure:* a planet that cannot feed itself (Desolate; the colony food rider, `ColonyRider`, is a bridge, not a
+     guarantee), so a few deaths per run are expected. Check that it is supplied while alive (grotsits exported, food in).
+  2. *Unsupplied churn:* a non-Desolate planet recolonized again and again with almost no `FoodShip`/`GrotsitsShip` arriving
+     for it (sum the amounts with it as target, per player). Find out why nothing reaches it: its `ShipmentCancelled`
+     episodes (reason `Blockade` or `LowYield`), `Blockade` cuts at the planet and at its neighbours, `BlockadedProduction`,
+     `AssaultTarget` lines on it or its neighbours, and its place on the board (connection count from the board config: a leaf
+     behind a hub that is blockaded or contested cannot be fed; `Industrial 1` behind `Verdant 0` on `test2.json`).
+  For the flagged (churn) planets only, give the grotsits-to-food ratio per planet per run: grotsits shipped OUT (`GrotsitsShip`
+  with the planet as origin) over food RECEIVED (`FoodArrive` with it as target), with `ColonyRider` amounts shown separately
+  and also added in; a planet that exports nothing gets grotsits received over food received instead. On `test2.json` the
+  churning Desolate planet (`Desolate 0`) exports about 10 grotsits per food received (about 6 counting riders), while the
+  non-Desolate churn planets import about 3 to 4 grotsits per food; an importer with near-zero inflow of both is the
+  unsupplied case. Pool the ratios by planet type for the summary.
+  Give the churn cost (colonize starts spent on the planet, for example 15 starts and 14 arrivals over 230 turns) and say
+  which run-to-run variation it is (the same planet in every run, or only in the runs where a rival occupies its hub). The
+  Colonize-die churn, including on planets the AI cannot currently supply (a leaf behind a contested hub), is desired
+  behaviour: describe the mechanism neutrally and report it as information, never as a defect or gap, and do not propose a
+  supply-reachability gate or a colonization back-off unless the user's own question is about survivability tuning.
 - **Weak start:** flag a player whose morale or planet count lags early (morale under about 100 or several planets short
   at T100, noticeably fewer planets at T250 than the others) and say whether it recovers. Check its blockade and colonist
   cut counts to say whether it looks like a start-position or balance effect or blockade damage.
