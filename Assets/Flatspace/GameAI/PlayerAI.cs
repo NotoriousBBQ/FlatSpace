@@ -92,6 +92,26 @@ namespace FlatSpace
                 return true;
             }
 
+            // Why each shortage last went unsupplied ("<transportType>:<target>" -> reason), so ShipmentCancelled is logged on
+            // a change and not every turn the blockade holds. Log-only state: not saved.
+            private readonly Dictionary<string, string> _shipmentHeldBack = new Dictionary<string, string>();
+
+            private static string ShipmentKey(GameAI.GameAIOrder.OrderType transportType, string target)
+                => $"{transportType}:{target}";
+
+            /// <summary>The reason this shortage was last left unsupplied by blockades, or null. Public for the self-check.</summary>
+            public string ShipmentHeldBackReason(GameAI.GameAIOrder.OrderType transportType, string target)
+                => _shipmentHeldBack.TryGetValue(ShipmentKey(transportType, target), out var reason) ? reason : null;
+
+            /// <summary>True when this is news (first turn held back, or a different reason), i.e. the caller should log it. Public for the self-check.</summary>
+            public bool NoteShipmentHeldBack(GameAI.GameAIOrder.OrderType transportType, string target, string reason)
+            {
+                var key = ShipmentKey(transportType, target);
+                if (_shipmentHeldBack.TryGetValue(key, out var last) && last == reason) return false;
+                _shipmentHeldBack[key] = reason;
+                return true;
+            }
+
             // ── Entry point ──────────────────────────────────────────────────
 
             public void ProcessResults(
@@ -537,7 +557,8 @@ namespace FlatSpace
 
             // ── Food ─────────────────────────────────────────────────────────
 
-            private void ProcessFoodShortage(
+            // public for the self-check
+            public void ProcessFoodShortage(
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
@@ -556,7 +577,8 @@ namespace FlatSpace
 
             // ── Grotsits ─────────────────────────────────────────────────────
 
-            private void ProcessGrotsitsShortage(
+            // public for the self-check
+            public void ProcessGrotsitsShortage(
                 List<Planet.PlanetUpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
@@ -577,6 +599,16 @@ namespace FlatSpace
             // worse shortage sorts first), so an ordinary fixed negative constant is enough to always lose
             // to every real shortage regardless of magnitude.
             private const float DistributionCenterPrioritySentinel = float.MinValue / 2f;
+
+            /// <summary>
+            /// Choice order within a shortage row: clean routes before lossy ones (a nearer source that loses part of the
+            /// shipment never beats a clean one), then the ScoreMatrix default, cost minus surplus. Public for the self-check.
+            /// </summary>
+            public static int CompareResourceChoices(ResourceChoiceElement x, ResourceChoiceElement y)
+            {
+                var lossy = (x.Loss > 0f).CompareTo(y.Loss > 0f);
+                return lossy != 0 ? lossy : (x.Cost - x.Surplus).CompareTo(y.Cost - y.Surplus);
+            }
 
             /// <summary>
             /// Shared shipment logic for any surplus -> shortage resource. A shipment is capped at
@@ -637,14 +669,17 @@ namespace FlatSpace
                     s => Convert.ToSingle(s.Data) * AIMap.GetPlanet(s.Name).GetPopulationFraction(Player.playerID));
 
                 var maxRounds = shortages.Count + surplusResults.Count;
+                var blockedRows = new HashSet<string>();   // rows a blockade removed every source from (in any round)
+                var servedRows = new HashSet<string>();
                 for (var round = 0; round < maxRounds; round++)
                 {
-                    var matrix = BuildResourceMatrix(shortages, surplusResults, remainingShortage, remainingSurplus, syntheticShortageNames);
+                    var matrix = BuildResourceMatrix(shortages, surplusResults, remainingShortage, remainingSurplus,
+                        syntheticShortageNames, blockedRows);
                     if (matrix == null) break;
 
                     var actions = matrix.GenerateActionList(
                         actionFactory: (origin, element) => new ResourceAction { ChosenChoiceElement = element },
-                        ChoiceCompare: null);
+                        ChoiceCompare: CompareResourceChoices);
                     if (actions.Count == 0) break;
 
                     foreach (var action in actions)
@@ -655,6 +690,22 @@ namespace FlatSpace
                         EmitResourceOrders(action, amount, transportType, changeType, inProgressType, orders);
                         remainingSurplus[action.Origin]  -= amount;
                         remainingShortage[action.Target] -= amount;
+                        servedRows.Add(action.Target);
+                    }
+                }
+
+                // ShipmentCancelled is logged when a shortage's blocked state changes, not on every turn it holds.
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                foreach (var shortage in shortages)
+                {
+                    if (!servedRows.Contains(shortage.Name) && blockedRows.Contains(shortage.Name))
+                    {
+                        if (NoteShipmentHeldBack(transportType, shortage.Name, "Blockade"))
+                            AITuningLogger.LogShipmentCancelled(turn, Player.playerID, shortage.Name, "Blockade");
+                    }
+                    else
+                    {
+                        _shipmentHeldBack.Remove(ShipmentKey(transportType, shortage.Name));
                     }
                 }
             }
@@ -672,7 +723,8 @@ namespace FlatSpace
                 List<Planet.PlanetUpdateResult> surplusResults,
                 Dictionary<string, float>       remainingShortage,
                 Dictionary<string, float>       remainingSurplus,
-                List<string>                    syntheticShortageNames)
+                List<string>                    syntheticShortageNames,
+                HashSet<string>                 blockedRows)
             {
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
                     (new ScoreMatrixDecisionComparer());
@@ -681,28 +733,37 @@ namespace FlatSpace
                 {
                     if (remainingShortage[shortage.Name] <= 0f) continue;
 
-                    var pathMap = AIMap.GetPlanet(shortage.Name).DistanceMapToPathingList;
                     var maxNodes = AIMap.GameAIConstants.maxPathNodesForResourceDistribution;
-                    // s.Name != shortage.Name: DistanceMapToPathingList never contains a planet's own
-                    // name, so a planet that is BOTH this shortage row (e.g. a DC's synthetic demand) AND
-                    // a real surplus source the same turn (routine — see this task's own comment above)
-                    // would otherwise throw KeyNotFoundException on pathMap[s.Name] below. NumNodes >= 2:
-                    // the same pathing-stub floor as SelectDistributionCenter's IsUsablePath — this
-                    // filter previously lacked it (a pre-existing gap from before this plan, now folded
-                    // into the same fix since it's the identical line).
-                    var entries = surplusResults
-                        .Where(s => s.Name != shortage.Name
-                                    && remainingSurplus[s.Name] > 0f
-                                    && pathMap.ContainsKey(s.Name)
-                                    && pathMap[s.Name].NumNodes >= 2
-                                    && pathMap[s.Name].NumNodes <= maxNodes)
-                        .Select(s => new ResourceChoiceElement
+                    // Every (source, shortage) pair is planned through RoutePlanner.PlanShipmentRoute (range rule included:
+                    // the shortest path must be 2..maxNodes nodes, which also rejects FindPath's no-route stub; the route
+                    // actually taken may be longer). s.Name != shortage.Name stays: a DC can be BOTH this shortage row
+                    // (synthetic demand) AND a real surplus source the same turn, and must never ship to itself.
+                    // A blockaded source or target is not dropped: its value is part of the route's Loss, and the pair is
+                    // offered only while Loss < the amount it would carry (a shipment that would arrive with 0 is cancelled).
+                    var entries = new List<ResourceChoiceElement>();
+                    var droppedByBlockade = false;
+                    foreach (var s in surplusResults)
+                    {
+                        if (s.Name == shortage.Name || remainingSurplus[s.Name] <= 0f) continue;
+                        var route = RoutePlanner.PlanShipmentRoute(AIMap, s.Name, shortage.Name, _blockadeView, maxNodes);
+                        if (route == null) continue;
+                        var amount = Mathf.Min(remainingSurplus[s.Name], remainingShortage[shortage.Name]);
+                        if (route.Loss >= amount)
+                        {
+                            droppedByBlockade = true;
+                            continue;
+                        }
+                        entries.Add(new ResourceChoiceElement
                         {
                             SurplusResult = s,
                             ShortageResult = shortage,
-                            Cost = pathMap[s.Name].Cost
-                        })
-                        .ToList();
+                            Cost = route.Cost,
+                            Route = route.Nodes,
+                            Loss = route.Loss,
+                            IsDetour = route.IsDetour,
+                        });
+                    }
+                    if (entries.Count == 0 && droppedByBlockade) blockedRows.Add(shortage.Name);
 
                     if (entries.Count > 0)
                     {
@@ -748,9 +809,17 @@ namespace FlatSpace
             {
                 var delay = Convert.ToInt32(action.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
 
-                orders.Add(MakeOrder(transportType,
+                var transport = MakeOrder(transportType,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                    delay, delay, amount, action.Origin, action.Target));
+                    delay, delay, amount, action.Origin, action.Target);
+                if (action.Route != null) transport.Route = new List<string>(action.Route);
+                orders.Add(transport);
+
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                if (action.IsDetour)
+                    AITuningLogger.LogRouteDetour(turn, Player.playerID, action.Origin, action.Target, action.Route, action.Cost);
+                if (action.Loss > 0f)
+                    AITuningLogger.LogShipmentLossy(turn, Player.playerID, action.Origin, action.Target, amount, action.Loss);
 
                 orders.Add(MakeOrder(changeType,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
