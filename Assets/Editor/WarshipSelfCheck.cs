@@ -71,7 +71,7 @@ public static class WarshipSelfCheck
         return items;
     }
 
-    private static void DestroyAll(List<CatalogItem> items)
+    public static void DestroyAll(List<CatalogItem> items)
     {
         foreach (var i in items) Object.DestroyImmediate(i);
     }
@@ -222,7 +222,7 @@ public static class WarshipSelfCheck
         return spawn;
     }
 
-    private static GameAIConstants MakeConstants(ShipData warship)
+    public static GameAIConstants MakeConstants(ShipData warship)
     {
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
         constants.defaultTravelSpeed = 1f;
@@ -237,7 +237,7 @@ public static class WarshipSelfCheck
         return map;
     }
 
-    private static void DockWarships(Planet planet, int owner, int count, params string[] snapshot)
+    public static void DockWarships(Planet planet, int owner, int count, params string[] snapshot)
     {
         for (var i = 0; i < count; i++)
             planet.DockShipFromSave(Ship.ShipKind.WarShip, owner, new List<string>(snapshot));

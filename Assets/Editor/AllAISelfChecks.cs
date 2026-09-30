@@ -15,6 +15,7 @@ public static class AllAISelfChecks
             ("Ship Transport", ShipTransportSelfCheck.RunChecks),
             ("Distribution Center", DistributionCenterSelfCheck.RunChecks),
             ("Warship", WarshipSelfCheck.RunChecks),
+            ("Blockade Avoidance", BlockadeAvoidanceSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();
