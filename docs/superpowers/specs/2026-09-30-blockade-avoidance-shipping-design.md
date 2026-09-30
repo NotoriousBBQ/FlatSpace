@@ -93,7 +93,8 @@ reduced or removed by blockades (`OrderBlocked` lines), without a fall in shipme
 ## 4. `BlockadeSystem`: the origin of a shipment
 
 - `ApplyToShipment` also applies the origin's blockade value, once, on the first turn the order is processed (the turn its
-  previous progress is 0: `TimingDelay + 1 >= TotalDelay`). `RouteFor`/`PassedNodes` are not changed, because they are shared
+  previous progress is 0: `TotalDelay > 0` and `TimingDelay + 1 >= TotalDelay`, so a zero-delay order, the known
+  double-execution quirk, is never cut at its origin). `RouteFor`/`PassedNodes` are not changed, because they are shared
   with colonists, whose origin stays unchecked.
 - The origin cut uses the same code path as any other node: `LogBlockade`, a `BlockadeCut` (so the owner's
   `BlockadeMemory` learns the origin), `LogOrderBlocked`, reduce `Data`, remove and clear the incoming flag at `<= 0`.

@@ -109,6 +109,13 @@ user asked about one specific thing.
   `ColonizeCancelled` (`BlockadedOrigin`/`NoRoute`; logged when a planet's hold-back state changes, not every
   turn, so one line is one episode. Logs from before that change repeat every turn, so count distinct
   planets there).
+  Resource shipping is blockade-aware too: split `OrderBlocked` by order type (`OrderTypeFoodTransport` /
+  `OrderTypeGrotsitsTransport` should fall sharply against a pre-change run on the same board); count
+  `ShipmentLossy` (shipments sent through unavoidable blockades) and `ShipmentCancelled` (a shortage whose every
+  source was removed by blockades; state-change only, so one line is one episode). `RouteDetour` now comes from both
+  colonists and shipments: attribute each by the neighbouring `ColonizeStart` or `FoodShip`/`GrotsitsShip` line.
+  Shipments are also cut at a blockaded ORIGIN on their first turn, so a run on a board with lasting blockades is not
+  directly comparable with one from before this change; say so when comparing.
 - **Colony failures:** count `PopulationLoss` and `PlanetDead`. The colony food rider is a bridge, not
   a guarantee — a few failures are expected and fine; zero is fine too; a lot might mean the rider
   amount needs raising.
