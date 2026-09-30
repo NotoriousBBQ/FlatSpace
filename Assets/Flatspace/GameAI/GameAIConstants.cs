@@ -60,6 +60,12 @@ public class GameAIConstants : ScriptableObject
     // disables the memory. Raised from 10 to 20 after tuning logs showed a lasting blockade outliving a 10-turn memory
     // and re-cutting the same player's colonists each time it lapsed.
     public int blockadeMemoryTurns = 20;
+    // Resource shipping through unavoidable blockades: a (source, shortage) pair is refused when the shipment would deliver
+    // less than this share of what the origin pays (amount - blockade loss < fraction x amount), on top of the plain rule that
+    // the loss must stay below the amount. 0 = the plain rule; 1 = clean routes only. Tuning logs on test2.json and 4p.json
+    // showed lossy shipments delivering ~12% of what they cost (e.g. 11 sent into a blockade of 10), hence 0.5. Read through
+    // PlayerAI.MinDeliveredFractionFor, the seam for a per-target (high value planet) threshold.
+    public float shipmentMinDeliveredFraction = 0.5f;
 
     [Header("Warships")]
     // Each researched Warship improvement a ship carries adds this fraction of the base cost to building it

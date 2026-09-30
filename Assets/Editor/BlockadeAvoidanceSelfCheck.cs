@@ -21,6 +21,7 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunShipmentOriginCheck();
         ok &= RunColonizationRoutingCheck();
         ok &= RunShipmentPlanningCheck();
+        ok &= RunShipmentMinFractionCheck();
         ok &= RunProductionResponseCheck();
         ok &= RunColonizeHeldBackStateCheck();
         ok &= RunBlockadeMemoryCheck();
@@ -492,6 +493,7 @@ public static class BlockadeAvoidanceSelfCheck
             s.Constants.expandPopulationTrigger = 0.8f;
             s.Constants.maxPathNodesForColonization = 6;
             s.Constants.maxPathNodesForResourceDistribution = 6;
+            s.Constants.shipmentMinDeliveredFraction = 0f;   // the older shipment checks assume any loss < amount ships
             s.Constants.maxPathNodesForKnowledge = 6;
             s.Research = WarshipSelfCheck.MakeResearch();
             s.MapGo = new GameObject("BASelfCheckMap_Scenario");
@@ -834,6 +836,52 @@ public static class BlockadeAvoidanceSelfCheck
             "a clean far source sorts before a lossy near one");
         ok &= Check(PlayerAI.CompareResourceChoices(cleanNear, cleanFar) < 0,
             "between clean routes the cheaper sorts first (the existing order)");
+        return ok;
+    }
+
+    // shipmentMinDeliveredFraction: a lossy pair is also refused when it would deliver less than that share of the
+    // shipment (LowYield); clean routes are unaffected; 0 is the plain "loss < amount" rule. Amounts avoid the exact
+    // boundary (20 here): a float product can land either side of it (see CLAUDE.md, float thresholds).
+    public static bool RunShipmentMinFractionCheck()
+    {
+        var ok = true;
+        const GameAI.GameAIOrder.OrderType food = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport;
+        var defaults = ScriptableObject.CreateInstance<GameAIConstants>();
+        ok &= Check(Near(defaults.shipmentMinDeliveredFraction, 0.5f), "shipmentMinDeliveredFraction defaults to 0.5");
+        Object.DestroyImmediate(defaults);
+
+        using (var s = Scenario.Diamond())
+        {
+            // Both ways blockaded, 10 each: every route loses 10.
+            s.Blockade("B");
+            s.Blockade("C");
+            s.AI.RefreshBlockadeView();
+
+            s.Constants.shipmentMinDeliveredFraction = 0.5f;
+            ok &= Check(Near(s.AI.MinDeliveredFractionFor("D"), 0.5f), "the seam returns the tunable for an ordinary target");
+            ok &= Check(s.ShipFood(15f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "LowYield",
+                "15 against a loss of 10 delivers 33% (< 50%): cancelled as LowYield");
+            ok &= Check(FoodShipment(s.ShipFood(30f)) != null,
+                "30 against a loss of 10 delivers 67% (>= 50%): it still ships");
+            ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null, "a shipment that goes out clears the held-back state");
+            ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade",
+                "loss >= amount is still reported as Blockade, not LowYield");
+
+            s.Constants.shipmentMinDeliveredFraction = 0f;
+            ok &= Check(FoodShipment(s.ShipFood(15f)) != null, "with the fraction at 0 the plain rule returns: 15 against 10 ships");
+
+            s.Constants.shipmentMinDeliveredFraction = 1f;
+            ok &= Check(s.ShipFood(30f).Count == 0, "a fraction of 1 refuses every lossy shipment (30 against 10)");
+            s.Unblockade("B");
+            s.Unblockade("C");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(FoodShipment(s.ShipFood(5f)) != null, "a clean route is never refused, even at a fraction of 1");
+
+            s.Constants.shipmentMinDeliveredFraction = 2f;
+            ok &= Check(Near(s.AI.MinDeliveredFractionFor("D"), 1f), "a fraction above 1 is clamped to 1");
+            s.Constants.shipmentMinDeliveredFraction = -1f;
+            ok &= Check(Near(s.AI.MinDeliveredFractionFor("D"), 0f), "a negative fraction is clamped to 0");
+        }
         return ok;
     }
 

@@ -112,7 +112,11 @@ user asked about one specific thing.
   Resource shipping is blockade-aware too: split `OrderBlocked` by order type (`OrderTypeFoodTransport` /
   `OrderTypeGrotsitsTransport` should fall sharply against a pre-change run on the same board); count
   `ShipmentLossy` (shipments sent through unavoidable blockades) and `ShipmentCancelled` (a shortage whose every
-  source was removed by blockades; state-change only, so one line is one episode). `RouteDetour` now comes from both
+  source was removed by blockades; state-change only, so one line is one episode; the last field is `Blockade`, loss >=
+  amount, or `LowYield`, only `shipmentMinDeliveredFraction` refused it). To tune that fraction (default 0.5), compute each
+  `ShipmentLossy` line's delivered share `(amount - loss) / amount` (it should now sit at or above the fraction) and count
+  `LowYield` episodes per target: a target that keeps logging `LowYield` while `PopulationLoss`/`PlanetDead` lines appear
+  for it is being starved by the threshold (lower it, ideally per target through `MinDeliveredFractionFor`). `RouteDetour` now comes from both
   colonists and shipments: attribute each by the neighbouring `ColonizeStart` or `FoodShip`/`GrotsitsShip` line.
   Shipments are also cut at a blockaded ORIGIN on their first turn, so a run on a board with lasting blockades is not
   directly comparable with one from before this change; say so when comparing.
