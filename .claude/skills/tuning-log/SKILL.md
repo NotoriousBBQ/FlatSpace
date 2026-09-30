@@ -102,7 +102,9 @@ user asked about one specific thing.
   exempt from the fleet cap (`blockadedWarshipBoost`), so a multiplier of `0` with a `WarShipProduction`
   start is expected only when a `BlockadedProduction` line for that planet, player and turn exists;
   anything else is a real bug.
-- **Blockade:** count `Blockade` and `OrderBlocked` lines; compare `ColonizeStart` to `ColonizeArrive` per
+- **Blockade:** count `Blockade` and `OrderBlocked` lines; `BlockadeLearned|<planet>|<value>` is logged when a
+  player newly remembers a planet where its order was cut (not on refreshes), so repeated `Blockade` losses at
+  one planet should now be followed by `RouteDetour` lines; compare `ColonizeStart` to `ColonizeArrive` per
   player (all of the shortfall used to be blockade losses); read `RouteDetour` (detours taken) and
   `ColonizeCancelled` (`BlockadedOrigin`/`NoRoute`; logged when a planet's hold-back state changes, not every
   turn, so one line is one episode. Logs from before that change repeat every turn, so count distinct

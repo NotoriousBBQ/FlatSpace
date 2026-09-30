@@ -174,7 +174,16 @@ namespace FlatSpace
                 // Player.Start next frame. No orders are in flight then (ClearGameAI emptied them), so skipping is safe.
                 var research = BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players);
                 if (research == null) return;
-                new BlockadeSystem(GameAIMap, research).Apply(CurrentAIOrders, Gameboard.Instance.TurnNumber);
+                var turn = Gameboard.Instance.TurnNumber;
+                var cuts = new BlockadeSystem(GameAIMap, research).Apply(CurrentAIOrders, turn);
+
+                // The order owner learns where its orders were cut, so colonization can route around it later.
+                foreach (var cut in cuts)
+                {
+                    if (cut.PlayerId < 0 || cut.PlayerId >= Gameboard.Instance.players.Count) continue;
+                    var owner = Gameboard.Instance.players[cut.PlayerId];
+                    if (owner && owner.playerAI) owner.playerAI.LearnBlockade(cut.Planet, cut.Value, turn);
+                }
             }
 
             private void ExecuteOrder(GameAIOrder executableOrder)

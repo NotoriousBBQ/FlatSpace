@@ -247,6 +247,8 @@ namespace FlatSpace
                         "Food", playerSave.foodDistributionCenters ?? new List<string>());
                     players[playerSave.playerId].playerAI.SetDistributionCenters(
                         "Grotsits", playerSave.grotsitsDistributionCenters ?? new List<string>());
+                    players[playerSave.playerId].playerAI.RestoreRememberedBlockades(
+                        playerSave.rememberedBlockades?.ConvertAll(b => b.ToEntry()));
 
                 }
                 GameAI.SetSimulationStats(gameSave);

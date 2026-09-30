@@ -209,7 +209,8 @@ board discards the saved bits instead of misapplying them. It also carries each 
 `PlayerKnowledge` known-planet names as a plain `knownPlanets: List<string>` (no packing needed, unlike
 the grid bitset); a missing/older field deserializes to `null` and is treated as "nothing known yet" —
 each player re-learns its home planet on the very next `PlayerKnowledge.Update()` since a populated
-planet is always a source.
+planet is always a source. `GameSave.PlayerSave.rememberedBlockades` persists each player's remembered
+blockades (planet, value, turn; older saves load with none).
 
 ### Board designer
 
@@ -516,7 +517,15 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 - **Blockade avoidance (colonization):** `BlockadeView` (`Assets/Flatspace/GameAI/BlockadeView.cs`) is a per-player
   snapshot rebuilt each `ProcessResults` (`PlayerAI.RefreshBlockadeView`); a planet is visible to the player when it is
   a presence planet (population or docked ship) or a direct neighbour of one, and blockaded when its blockade value
-  against that player is > 0. A null view means nothing is blockaded. `RoutePlanner.PlanRoute`
+  against that player is > 0. A null view means nothing is blockaded. **Blockade memory:** a player also remembers
+  planets where one of its OWN orders was cut (`BlockadeMemory`, `Assets/Flatspace/GameAI/BlockadeMemory.cs`: planet,
+  value, turn). `BlockadeSystem.Apply` returns every cut it made (colony orders; each blockaded node a food/grotsits
+  shipment passes) and `GameAI.ApplyBlockades` hands each to the ORDER OWNER's `PlayerAI.LearnBlockade`. The memory is
+  active for `GameAIConstants.blockadeMemoryTurns` (default 10; 0 disables) after the LAST cut (another cut refreshes
+  it), so a hub two hops from anything the player holds stops eating colonists every few turns. `BlockadeView.Build`
+  adds remembered planets that are not currently visible; a fresh direct sighting overrides memory (a visible planet
+  that is not blockaded is forgotten). Only colonization routing uses it so far (through the view), and it is saved
+  per player (`GameSave.PlayerSave.rememberedBlockades`; older saves load with none). `RoutePlanner.PlanRoute`
   (`Assets/Flatspace/GameAI/RoutePlanner.cs`) returns the ordinary shortest path unchanged when it is clean; when an
   in-range target's shortest path visibly crosses a blockaded planet it runs a fresh Dijkstra around them (no node
   limit, so a detour may exceed `maxPathNodesForColonization`; ties expand the smaller node name first, and
@@ -599,7 +608,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony

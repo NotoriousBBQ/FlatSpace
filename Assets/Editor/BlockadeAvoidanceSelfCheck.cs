@@ -19,6 +19,10 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunColonizationRoutingCheck();
         ok &= RunProductionResponseCheck();
         ok &= RunColonizeHeldBackStateCheck();
+        ok &= RunBlockadeMemoryCheck();
+        ok &= RunBlockadeCutsCheck();
+        ok &= RunLearningRoutingCheck();
+        ok &= RunRememberedBlockadeSaveCheck();
         Debug.Log(ok
             ? "[BlockadeAvoidanceSelfCheck] ALL PASSED"
             : "[BlockadeAvoidanceSelfCheck] FAILURES (see errors above)");
@@ -362,6 +366,47 @@ public static class BlockadeAvoidanceSelfCheck
             return s;
         }
 
+        // A hub graph: A(0,0) X(100,0) H(200,0) D(300,0) Y(0,200) Z(200,250); edges A-X, X-H, H-D, A-Y, Y-Z, Z-D. The
+        // direct route A>X>H>D costs 300, the long way A>Y>Z>D about 675. Player 0 is present at A only, so H (two hops
+        // away) is NOT visible to it; D is the only valid target (X, H, Y, Z carry an inbound-colonist flag).
+        public static Scenario Hub()
+        {
+            var s = new Scenario();
+            s.Template = WarshipSelfCheck.MakeTemplate();
+            s.Constants = WarshipSelfCheck.MakeConstants(s.Template);
+            s.Constants.defaultTravelSpeed = 1f;
+            s.Constants.expandPopulationTrigger = 0.8f;
+            s.Constants.maxPathNodesForColonization = 6;
+            s.Constants.maxPathNodesForKnowledge = 6;
+            s.Research = WarshipSelfCheck.MakeResearch();
+            s.MapGo = new GameObject("BASelfCheckMap_Hub");
+            s.PlayerGo = new GameObject("BASelfCheckPlayer_Hub");
+            s.Map = Build(s.MapGo, s.Constants,
+                Spawn("A", 0f, 0f, new[] { "X", "Y" }),
+                Spawn("X", 100f, 0f, new[] { "A", "H" }),
+                Spawn("H", 200f, 0f, new[] { "X", "D" }),
+                Spawn("D", 300f, 0f, new[] { "H", "Z" }),
+                Spawn("Y", 0f, 200f, new[] { "A", "Z" }),
+                Spawn("Z", 200f, 250f, new[] { "Y", "D" }));
+
+            var a = s.Map.GetPlanet("A");
+            a.Owner = 0;
+            for (var i = 0; i < 5; i++) a.Population.Add(new Planet.Inhabitant { Player = 0 });
+            a.Food = 100f;
+            foreach (var name in new[] { "X", "H", "Y", "Z" })
+                s.Map.GetPlanet(name).SetPopulationTransferInProgress(0);
+
+            var player = s.PlayerGo.AddComponent<Player>();
+            s.AI = s.PlayerGo.AddComponent<PlayerAI>();
+            s.AI.Player = player;
+            s.AI.AIMap = s.Map;
+            player.playerID = 0;
+            s.AI.ResearchCatalog = s.PlayerGo.AddComponent<Catalog>();
+            s.AI.ResearchCatalog.catalogItems = s.Research;
+            s.Map.Knowledge.Update(s.Map, 1, 6);
+            return s;
+        }
+
         public void Blockade(string planet, int warships = 1)
             => WarshipSelfCheck.DockWarships(Map.GetPlanet(planet), 1, warships);
 
@@ -511,6 +556,218 @@ public static class BlockadeAvoidanceSelfCheck
             s.AI.ProcessColonizers(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
             ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "and forgotten again when nothing is ready");
         }
+        return ok;
+    }
+
+    private static bool RunBlockadeMemoryCheck()
+    {
+        var ok = true;
+
+        var m = new BlockadeMemory();
+        ok &= Check(m.Learn("P", 10f, 100, 10), "the first time a planet is learned is news");
+        ok &= Check(m.IsActive("P", 100, 10) && m.IsActive("P", 109, 10),
+            "learned at T100 with lifetime 10: active through T109");
+        ok &= Check(!m.IsActive("P", 110, 10), "learned at T100 with lifetime 10: expired at T110");
+        ok &= Check(!m.Learn("P", 12f, 105, 10), "a cut while still remembered is a refresh, not news");
+        ok &= Check(m.IsActive("P", 114, 10) && !m.IsActive("P", 115, 10),
+            "a refresh at T105 extends the memory to T114");
+        ok &= Check(m.Active(114, 10).Count == 1 && Near(m.Active(114, 10)[0].Value, 12f) && m.Active(114, 10)[0].Turn == 105,
+            "a refresh replaces the value and the turn");
+        ok &= Check(m.Learn("P", 10f, 120, 10), "learning a planet again after it expired is news");
+        m.Forget("P");
+        ok &= Check(!m.IsActive("P", 120, 10), "Forget removes the entry");
+        m.Forget("Nowhere");   // must not throw
+
+        var off = new BlockadeMemory();
+        ok &= Check(!off.Learn("P", 10f, 100, 0) && !off.IsActive("P", 100, 0) && off.Active(100, 10).Count == 0,
+            "lifetime 0 disables memory: nothing is stored and nothing is news");
+
+        var snap = new BlockadeMemory();
+        snap.Learn("Old", 5f, 90, 10);
+        snap.Learn("New", 7f, 100, 10);
+        var active = snap.Snapshot(104, 10);
+        ok &= Check(active.Count == 1 && active[0].Planet == "New" && Near(active[0].Value, 7f) && active[0].Turn == 100,
+            "Snapshot lists only active entries (Old, learned T90, expired at T100)");
+
+        snap.Restore(new List<BlockadeMemory.Entry>
+            { new BlockadeMemory.Entry { Planet = "Other", Value = 3f, Turn = 102 } });
+        ok &= Check(!snap.IsActive("New", 104, 10) && snap.IsActive("Other", 104, 10),
+            "Restore replaces the contents");
+        snap.Restore(null);
+        ok &= Check(snap.Active(104, 10).Count == 0, "Restore(null) empties the memory");
+
+        var pruned = new BlockadeMemory();
+        pruned.Learn("Old", 5f, 90, 10);
+        pruned.Learn("New", 7f, 100, 10);
+        pruned.Prune(105, 10);
+        ok &= Check(!pruned.IsActive("Old", 95, 10) && pruned.IsActive("New", 105, 10),
+            "Prune drops the expired entry (Old is gone even when asked about an earlier turn) and keeps the active one");
+        return ok;
+    }
+
+    private static GameAI.GameAIOrder ShipmentOrder(string origin, string target, int timingDelay, int totalDelay,
+        List<string> route, float amount)
+        => new GameAI.GameAIOrder
+        {
+            Type = GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+            TimingDelay = timingDelay, TotalDelay = totalDelay,
+            Data = amount, Origin = origin, Target = target, PlayerId = 0,
+            Route = route,
+        };
+
+    // BlockadeSystem.Apply reports every cut it made (order owner, planet, value) so the owner can learn from it.
+    public static bool RunBlockadeCutsCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_Cuts");
+        var template = WarshipSelfCheck.MakeTemplate();
+        var constants = WarshipSelfCheck.MakeConstants(template);
+        var research = WarshipSelfCheck.MakeResearch();
+        try
+        {
+            var map = BuildDiamond(go, constants);
+            var blockade = new BlockadeSystem(map, research);
+            var route = new List<string> { "A", "C", "D" };
+
+            // Nothing blockaded: no cut.
+            var orders = new List<GameAI.GameAIOrder> { ColonistOrder("A", "D", 2, 4, route) };
+            ok &= Check(blockade.Apply(orders, 1).Count == 0 && orders.Count == 1,
+                "an order that meets no blockade reports no cut");
+
+            // A colonist cut at C (10 offense): exactly one cut, for player 0, at C, value 10.
+            WarshipSelfCheck.DockWarships(map.GetPlanet("C"), 1, 1);
+            var cuts = blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0 && cuts.Count == 1 && cuts[0].PlayerId == 0 && cuts[0].Planet == "C"
+                        && Near(cuts[0].Value, 10f),
+                "a colonist order cut at C reports one cut: player 0, C, value 10");
+
+            // A shipment reduced (30 - 20 = 10) at one node: one cut with the value 20; the order survives.
+            map.GetPlanet("C").UndockShips(Ship.ShipKind.WarShip, 1, 99);
+            WarshipSelfCheck.DockWarships(map.GetPlanet("C"), 1, 2);
+            orders = new List<GameAI.GameAIOrder> { ShipmentOrder("A", "D", 2, 4, route, 30f) };
+            cuts = blockade.Apply(orders, 1);
+            ok &= Check(cuts.Count == 1 && cuts[0].PlayerId == 0 && cuts[0].Planet == "C" && Near(cuts[0].Value, 20f),
+                "a shipment reduced at one node reports one cut with the value taken (20)");
+            ok &= Check(orders.Count == 1 && Near(System.Convert.ToSingle(orders[0].Data), 10f),
+                "the reduced shipment survives with 10 left (behavior unchanged)");
+
+            // A shipment passing two blockaded nodes in one turn: two cuts, in route order.
+            map.GetPlanet("C").UndockShips(Ship.ShipKind.WarShip, 1, 99);
+            WarshipSelfCheck.DockWarships(map.GetPlanet("C"), 1, 1);
+            WarshipSelfCheck.DockWarships(map.GetPlanet("D"), 1, 1);
+            orders = new List<GameAI.GameAIOrder> { ShipmentOrder("A", "D", 0, 1, route, 30f) };
+            cuts = blockade.Apply(orders, 1);
+            ok &= Check(cuts.Count == 2 && cuts[0].Planet == "C" && Near(cuts[0].Value, 10f)
+                        && cuts[1].Planet == "D" && Near(cuts[1].Value, 10f),
+                "a shipment passing two blockaded nodes reports two cuts (C then D, 10 each)");
+            ok &= Check(orders.Count == 1 && Near(System.Convert.ToSingle(orders[0].Data), 10f),
+                "after both cuts the shipment carries 30 - 10 - 10 = 10");
+        }
+        finally
+        {
+            WarshipSelfCheck.DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    // A player learns from a cut order: the planet is remembered blockaded for the lifetime and colonization routes
+    // around it even though the player cannot see it; a direct sighting of the planet unblockaded forgets it.
+    public static bool RunLearningRoutingCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Hub())
+        {
+            ok &= Check(s.Constants.blockadeMemoryTurns == 10, "blockadeMemoryTurns defaults to 10");
+
+            // A warship of player 1 sits at H, two hops from A: unseen and unremembered, so the colonist goes through it.
+            s.Blockade("H");
+            var unaware = Colonist(s.Colonize());
+            ok &= Check(unaware != null && string.Join(">", unaware.Route) == "A>X>H>D",
+                "with no view and no memory the colonist takes the direct route A>X>H>D");
+
+            // One of its orders was cut at H at T5: remembered, so the next view lists H and the route detours.
+            ok &= Check(s.AI.LearnBlockade("H", 10f, 5), "the first cut at H is news");
+            s.AI.RefreshBlockadeView(5);
+            ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("H") && Near(s.AI.CurrentBlockadeView.Value("H"), 10f),
+                "H is in the view from memory, although it is not visible from A");
+            var aware = Colonist(s.Colonize());
+            ok &= Check(aware != null && string.Join(">", aware.Route) == "A>Y>Z>D",
+                "after learning, the colonist routes around H: A>Y>Z>D");
+
+            // Another cut at T6 only refreshes it.
+            ok &= Check(!s.AI.LearnBlockade("H", 10f, 6), "a second cut at H is a refresh, not news");
+
+            // Learned last at T6: at T16 (16 - 6 = 10) it has expired, the view forgets it and the route is direct again.
+            s.AI.RefreshBlockadeView(16);
+            ok &= Check(!s.AI.CurrentBlockadeView.IsBlockaded("H") && !s.AI.IsBlockadeRemembered("H", 16),
+                "10 turns after the last cut the memory has expired");
+            var expired = Colonist(s.Colonize());
+            ok &= Check(expired != null && string.Join(">", expired.Route) == "A>X>H>D",
+                "once the memory expires the colonist goes through H again");
+
+            // A fresh sighting overrides memory: learn at T20, then gain presence at X (H becomes a visible neighbour)
+            // with the blockade gone.
+            ok &= Check(s.AI.LearnBlockade("H", 10f, 20), "learning H again after it expired is news");
+            s.Map.GetPlanet("X").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            s.Unblockade("H");
+            s.AI.RefreshBlockadeView(20);
+            ok &= Check(!s.AI.IsBlockadeRemembered("H", 20) && !s.AI.CurrentBlockadeView.IsBlockaded("H"),
+                "seeing H directly with no blockade forgets the memory");
+            var cleared = Colonist(s.Colonize());
+            ok &= Check(cleared != null && string.Join(">", cleared.Route) == "A>X>H>D",
+                "after the sighting the colonist goes through H");
+        }
+        return ok;
+    }
+
+    public static bool RunRememberedBlockadeSaveCheck()
+    {
+        var ok = true;
+
+        var entry = new BlockadeMemory.Entry { Planet = "H", Value = 12.5f, Turn = 42 };
+        var back = SaveLoadSystem.GameSave.RememberedBlockadeSave.From(entry).ToEntry();
+        ok &= Check(back.Planet == "H" && Near(back.Value, 12.5f) && back.Turn == 42, "From and ToEntry are inverse");
+
+        var save = new SaveLoadSystem.GameSave.PlayerSave
+        {
+            playerId = 1,
+            rememberedBlockades = new List<SaveLoadSystem.GameSave.RememberedBlockadeSave>
+                { SaveLoadSystem.GameSave.RememberedBlockadeSave.From(entry) },
+        };
+        var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlayerSave>(JsonUtility.ToJson(save));
+        ok &= Check(loaded.rememberedBlockades != null && loaded.rememberedBlockades.Count == 1
+                    && loaded.rememberedBlockades[0].planet == "H" && Near(loaded.rememberedBlockades[0].value, 12.5f)
+                    && loaded.rememberedBlockades[0].turn == 42,
+            "a PlayerSave's remembered blockades survive a JsonUtility round trip");
+
+        var older = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlayerSave>("{\"playerId\":1}");
+        var none = new BlockadeMemory();
+        none.Learn("Stale", 1f, 100, 10);
+        none.Restore(older.rememberedBlockades?.ConvertAll(b => b.ToEntry()));
+        ok &= Check(older.rememberedBlockades == null || older.rememberedBlockades.Count == 0,
+            "an older PlayerSave has no remembered blockades (null or empty)");
+        ok &= Check(none.Active(100, 10).Count == 0, "restoring an older save's (missing) list leaves the memory empty");
+
+        // Memory -> save structs -> JSON -> fresh memory reproduces the active entries.
+        var source = new BlockadeMemory();
+        source.Learn("C", 10f, 100, 10);
+        source.Learn("D", 20f, 105, 10);
+        source.Learn("E", 30f, 90, 10);   // expired by T108, so not saved
+        var toSave = new SaveLoadSystem.GameSave.PlayerSave
+        {
+            rememberedBlockades = source.Snapshot(108, 10).ConvertAll(SaveLoadSystem.GameSave.RememberedBlockadeSave.From),
+        };
+        var reloaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlayerSave>(JsonUtility.ToJson(toSave));
+        var fresh = new BlockadeMemory();
+        fresh.Restore(reloaded.rememberedBlockades?.ConvertAll(b => b.ToEntry()));
+        var restored = fresh.Active(108, 10);
+        ok &= Check(restored.Count == 2 && restored[0].Planet == "C" && Near(restored[0].Value, 10f) && restored[0].Turn == 100
+                    && restored[1].Planet == "D" && Near(restored[1].Value, 20f) && restored[1].Turn == 105,
+            "a memory survives snapshot, save structs, JSON and restore: C and D, not the expired E");
         return ok;
     }
 

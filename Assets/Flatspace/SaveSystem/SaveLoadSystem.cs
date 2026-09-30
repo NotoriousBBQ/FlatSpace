@@ -98,6 +98,21 @@ public class SaveLoadSystem : MonoBehaviour
             public List<string> route;
         }
 
+        // A planet where one of the player's orders was cut by a blockade, remembered for routing (see BlockadeMemory).
+        [Serializable]
+        public struct RememberedBlockadeSave
+        {
+            public string planet;
+            public float value;
+            public int turn;
+
+            public static RememberedBlockadeSave From(BlockadeMemory.Entry e)
+                => new RememberedBlockadeSave { planet = e.Planet, value = e.Value, turn = e.Turn };
+
+            public BlockadeMemory.Entry ToEntry()
+                => new BlockadeMemory.Entry { Planet = planet, Value = value, Turn = turn };
+        }
+
         [Serializable]
         public struct PlayerSave
         {
@@ -113,6 +128,8 @@ public class SaveLoadSystem : MonoBehaviour
             public List<string> knownPlanets;
             public List<string> foodDistributionCenters;
             public List<string> grotsitsDistributionCenters;
+            // Null in older saves: no blockades remembered.
+            public List<RememberedBlockadeSave> rememberedBlockades;
         }
 
         [Serializable]
@@ -165,6 +182,9 @@ public class SaveLoadSystem : MonoBehaviour
                         knownPlanets = new List<string>(gameAI.GameAIMap.Knowledge.KnownPlanets(i)),
                         foodDistributionCenters = new List<string>(Gameboard.Instance.players[i].playerAI.FoodDistributionCenters),
                         grotsitsDistributionCenters = new List<string>(Gameboard.Instance.players[i].playerAI.GrotsitsDistributionCenters),
+                        rememberedBlockades = Gameboard.Instance.players[i].playerAI
+                            .RememberedBlockades(Gameboard.Instance.TurnNumber)
+                            .ConvertAll(RememberedBlockadeSave.From),
                     });
             }
             

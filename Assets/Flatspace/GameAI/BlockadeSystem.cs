@@ -18,6 +18,14 @@ namespace FlatSpace.AI
             public float Fraction;   // how far along the route this node is: cumulative cost / total cost, target = 1
         }
 
+        /// <summary>One order cut by a blockade at a planet, for the order owner to learn from.</summary>
+        public struct BlockadeCut
+        {
+            public int PlayerId;
+            public string Planet;
+            public float Value;
+        }
+
         private const float Epsilon = 0.0001f;
 
         private readonly GameAIMap _map;
@@ -157,25 +165,28 @@ namespace FlatSpace.AI
         /// origin already paid for them); food and grotsits shipments lose the blockade value at every blockaded
         /// node they pass and are removed when nothing is left.
         /// </summary>
-        public void Apply(List<GameAI.GameAIOrder> orders, int turnNumber)
+        public List<BlockadeCut> Apply(List<GameAI.GameAIOrder> orders, int turnNumber)
         {
+            var cuts = new List<BlockadeCut>();
             foreach (var order in orders.ToList())
             {
                 if (!orders.Contains(order)) continue;   // already removed with its twin
                 switch (order.Type)
                 {
                     case GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport:
-                        ApplyToColony(orders, order, turnNumber);
+                        ApplyToColony(orders, order, turnNumber, cuts);
                         break;
                     case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
                     case GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport:
-                        ApplyToShipment(orders, order, turnNumber);
+                        ApplyToShipment(orders, order, turnNumber, cuts);
                         break;
                 }
             }
+            return cuts;
         }
 
-        private void ApplyToColony(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber)
+        private void ApplyToColony(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber,
+            List<BlockadeCut> cuts)
         {
             foreach (var node in PassedNodes(order))
             {
@@ -183,6 +194,7 @@ namespace FlatSpace.AI
                 if (value <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
+                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value });
                 orders.RemoveAll(o => o.PlayerId == order.PlayerId && o.Origin == order.Origin && o.Target == order.Target
                     && (o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
                         || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider));
@@ -192,7 +204,8 @@ namespace FlatSpace.AI
             }
         }
 
-        private void ApplyToShipment(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber)
+        private void ApplyToShipment(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder order, int turnNumber,
+            List<BlockadeCut> cuts)
         {
             foreach (var node in PassedNodes(order))
             {
@@ -200,6 +213,7 @@ namespace FlatSpace.AI
                 if (value <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
+                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value });
                 var remaining = System.Convert.ToSingle(order.Data) - value;
                 AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name,
                     System.Math.Max(0f, remaining));
