@@ -16,6 +16,7 @@ public static class AllAISelfChecks
             ("Distribution Center", DistributionCenterSelfCheck.RunChecks),
             ("Warship", WarshipSelfCheck.RunChecks),
             ("Blockade Avoidance", BlockadeAvoidanceSelfCheck.RunChecks),
+            ("Grotsits Short", GrotsitsShortSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

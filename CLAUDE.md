@@ -46,7 +46,8 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`;
 `FlatSpace → AI → Run Warship Self-Check` in `Assets/Editor/WarshipSelfCheck.cs`;
 `FlatSpace → AI → Run Blockade Avoidance Self-Check` in `Assets/Editor/BlockadeAvoidanceSelfCheck.cs` (colonization and resource-shipping avoidance, and the shipment origin cut);
-`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
+`FlatSpace → AI → Run Grotsits Short Self-Check` in `Assets/Editor/GrotsitsShortSelfCheck.cs` (the `GrotsitsShortTracker` start/end transitions);
+`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance, Grotsits Short; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
 `FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
 the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
@@ -642,7 +643,7 @@ started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's n
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
 ship's food rider as `ColonyRider|<origin>-><target>|<amount>`, and colony failures as `PopulationLoss|<planet>`
-plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), and every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player) for
+plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), a populated planet becoming short of grotsits or recovering as `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>` (owner's player id; transitions only, through `GrotsitsShortTracker`, fed by `GameAI.LogGrotsitsShortChanges` right after the planets update; capacity is `Planet.GetGrotsitsCapacity()`, upkeep `GetImprovementMaintenanceCost()`, demand is about population + upkeep; a planet that empties while short logs an `End`; log-only state, so a load logs each planet still short once more), and every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own

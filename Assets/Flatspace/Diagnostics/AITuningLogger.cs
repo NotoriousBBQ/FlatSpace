@@ -228,6 +228,20 @@ public static class AITuningLogger
             loss.ToString("0.#", ci), amount.ToString("0.#", ci), blockedNodes) });
     }
 
+    /// <summary>
+    /// A populated planet became short of grotsits or stopped being short: T&lt;turn&gt;|P&lt;owner&gt;|GrotsitsShort|planet|Start or End|population|capacity|upkeep|morale.
+    /// capacity is the planet's grotsits capacity (base plus max population x worker rate) and upkeep its improvement upkeep,
+    /// so demand is about population + upkeep; morale is after the turn's update. Logged on state change only.
+    /// </summary>
+    public static void LogGrotsitsShort(int turnNumber, int playerId, string planet, bool started, int population,
+        float capacity, float upkeep, float morale)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "GrotsitsShort", planet, started ? "Start" : "End",
+            population.ToString(ci), capacity.ToString("0.#", ci), upkeep.ToString("0.#", ci), morale.ToString("0", ci)) });
+    }
+
     /// <summary>A ready colonizer was held back: T&lt;turn&gt;|P&lt;id&gt;|ColonizeCancelled|origin|BlockadedOrigin or NoRoute. Repeats every turn the condition holds.</summary>
     public static void LogColonizeCancelled(int turnNumber, int playerId, string origin, string reason)
     {

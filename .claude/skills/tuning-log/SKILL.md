@@ -178,6 +178,14 @@ user asked about one specific thing.
   Colonize-die churn, including on planets the AI cannot currently supply (a leaf behind a contested hub), is desired
   behaviour: describe the mechanism neutrally and report it as information, never as a defect or gap, and do not propose a
   supply-reachability gate or a colonization back-off unless the user's own question is about survivability tuning.
+- **Grotsits shortage (which planets, when):** from `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>`
+  (older logs lack it; the `Economy` line only counts short planets). For a player, list the first planets to go short with
+  their turn and type (the planet name carries the type), how many are short at once over time, and how long each episode
+  lasts (Start to End; one never ended means short to the end of the run). Read the numbers with it: demand is about
+  population + upkeep, so `capacity` below that explains the shortage (a food specialist with too little grotsits capacity,
+  upkeep from improvements) and capacity above it points at shipping (check `GrotsitsShip` into that planet and
+  `ShipmentCancelled` for it). Count Starts per planet to spot flapping (a planet that toggles every few turns). Use it
+  to say what tips a player into the shortage-morale-fewer-colony-ships loop before morale falls under about 100.
 - **Weak start:** flag a player whose morale or planet count lags early (morale under about 100 or several planets short
   at T100, noticeably fewer planets at T250 than the others) and say whether it recovers. Check its blockade and colonist
   cut counts to say whether it looks like a start-position or balance effect or blockade damage.
