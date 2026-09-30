@@ -58,6 +58,12 @@ ask, rather than silently analyzing a near-empty log.
   4. If this doesn't match what's in the asset (`Assets/GameAIConstantsProductionTypes.asset`,
      `improvementUpkeepScale`), say so explicitly — that's a live-edit-didn't-persist situation the
      user needs to know about, not a quiet detail.
+- **New log lines (after a logging change):** when the user says a logging change was made ("verify the logging
+  changes took effect"), check that before any other analysis: `grep -c` each new or changed code, print one sample
+  line per code and confirm its fields match the documented format (CLAUDE.md, "AI Tuning Log"), and confirm removed or
+  renamed codes are gone. Report "all lines showed up" or exactly which are missing. A code tied to a rare condition
+  (`ShipmentLossy`, `BlockadeLearned`, `ColonizeCancelled`) can be legitimately absent from one quiet run, so look across
+  every log the user just made before calling it missing.
 
 ## 3. Compute the standard metrics
 
@@ -120,6 +126,33 @@ user asked about one specific thing.
   colonists and shipments: attribute each by the neighbouring `ColonizeStart` or `FoodShip`/`GrotsitsShip` line.
   Shipments are also cut at a blockaded ORIGIN on their first turn, so a run on a board with lasting blockades is not
   directly comparable with one from before this change; say so when comparing.
+- **Lasting occupations:** per run, rank planets by `Blockade` events (`T<turn>|P<victim>|Blockade|<planet>|<blocker>|<value>`)
+  and report the top three with their share of all blockade events, the blocking player, the victim(s), the turn range,
+  and how the value grows (first and last value). A planet taking about half or more of a run's events is a lasting
+  occupation (on `4p.json` one hub took 60 to 90% in every run); give its share of shipment cuts too (`OrderBlocked` for
+  food/grotsits over `FoodShip` + `GrotsitsShip`). Say what kind of planet it is: type, connection count from
+  `Assets/Flatspace/BoardConfigs/<board>.json`, and betweenness rank from
+  `./tools/planet-centrality.ps1 -Board <config> -Highlight "<planet>"`: a chokepoint (high rank, e.g. `Industrial 4`) or
+  a specialised producer (low rank, e.g. `Verdant 4`). The user watches this because it feeds the "Weight planet value by
+  connectivity" idea (`FUTURE_FEATURES.md`): mention it when the occupied planets are strategic.
+- **Who blockades whom:** a victim x blocker matrix of `Blockade` events per run. Link each occupier to that player's
+  `AssaultTarget` lines: a blockade normally comes from the assault logic sending a fleet to its target (e.g. P1's
+  `Normal 6` blockade was its own assault target; not a bug), so report a lasting blockade that was not preceded by an
+  `AssaultTarget` on that planet as the surprising case.
+- **Colonist cuts against the blockade memory:** for `OrderBlocked|OrderTypePopulationTransport`, count cuts per player and
+  planet, list repeat clusters (3 or more cuts at one planet; name the worst), and classify each cut against that
+  player's `BlockadeLearned` for the planet: *in flight when learned* (launched before the learn turn and cut within a few
+  turns after it; only in-flight rerouting, sub-project 5, fixes these), *after the memory expired* (more than
+  `blockadeMemoryTurns` since the last learn or cut; a longer memory would fix it), or *no memory yet* (the first cut).
+  Give the colonist arrive/start ratio next to it.
+- **Contested planets (cross-player recolonization):** report as its own headline, not buried in `ColonizeArrive` totals: a
+  `ColonizeArrive` on a planet whose previous owner (an earlier `ColonizeArrive`, or the owner before a `PlanetDead`) is a
+  different player. Per run give the event count, the number of distinct planets, and the most contested planet (e.g.
+  `Industrial 16` changing hands 9 times). Planets changing hands is a desired outcome, so call it out and do not flag
+  it as a defect.
+- **Weak start:** flag a player whose morale or planet count lags early (morale under about 100 or several planets short
+  at T100, noticeably fewer planets at T250 than the others) and say whether it recovers. Check its blockade and colonist
+  cut counts to say whether it looks like a start-position or balance effect or blockade damage.
 - **Colony failures:** count `PopulationLoss` and `PlanetDead`. The colony food rider is a bridge, not
   a guarantee — a few failures are expected and fine; zero is fine too; a lot might mean the rider
   amount needs raising.
@@ -131,7 +164,10 @@ If the user is testing a specific change (a tunable, a wiring fix, a board), fin
 *previous* log on the **same board** (check `BoardConfig`) to diff against — same-board comparisons
 are far more meaningful than cross-board ones. State plainly which prior run you're comparing to and
 why (same board, same code state) or why not (different board — note it and don't force a comparison
-table that isn't apples-to-apples).
+table that isn't apples-to-apples). When the previous runs predate a mechanism or a tuned value (compare the log
+file timestamps with `git log --format='%h %ad %s' --date=format:'%m-%d %H:%M'`), say the comparison is only
+directional and name the code difference; a baseline made after the last tuned value and before the change under
+test is the clean one.
 
 ## 5. Report
 
