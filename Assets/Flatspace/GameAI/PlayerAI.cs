@@ -39,11 +39,35 @@ namespace FlatSpace
             public BlockadeView CurrentBlockadeView => _blockadeView;
 
             /// <summary>Rebuilds the view from current docked ships. Public for the self-check.</summary>
-            public void RefreshBlockadeView()
+            public void RefreshBlockadeView(int turn = -1)
             {
+                if (turn < 0) turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
                 var items = ResearchCatalog != null ? ResearchCatalog.catalogItems : null;
-                _blockadeView = BlockadeView.Build(AIMap, Player.playerID, new BlockadeSystem(AIMap, items));
+                _blockadeView = BlockadeView.Build(AIMap, Player.playerID, new BlockadeSystem(AIMap, items),
+                    _blockadeMemory, turn, AIMap.GameAIConstants.blockadeMemoryTurns);
             }
+
+            // Planets where one of this player's own orders was cut by a blockade, remembered for a while so colonization
+            // routes around them even when the player cannot currently see them (see BlockadeMemory).
+            private readonly BlockadeMemory _blockadeMemory = new BlockadeMemory();
+
+            /// <summary>Remembers a planet where one of this player's orders was cut. True (and logged) only when newly remembered.</summary>
+            public bool LearnBlockade(string planetName, float value, int turn)
+            {
+                var news = _blockadeMemory.Learn(planetName, value, turn, AIMap.GameAIConstants.blockadeMemoryTurns);
+                if (news) AITuningLogger.LogBlockadeLearned(turn, Player.playerID, planetName, value);
+                return news;
+            }
+
+            public bool IsBlockadeRemembered(string planetName, int turn)
+                => _blockadeMemory.IsActive(planetName, turn, AIMap.GameAIConstants.blockadeMemoryTurns);
+
+            /// <summary>The active remembered blockades, for saving.</summary>
+            public List<BlockadeMemory.Entry> RememberedBlockades(int turn)
+                => _blockadeMemory.Snapshot(turn, AIMap.GameAIConstants.blockadeMemoryTurns);
+
+            public void RestoreRememberedBlockades(IEnumerable<BlockadeMemory.Entry> entries)
+                => _blockadeMemory.Restore(entries);
 
             // A null view (self-checks, before the first turn) means nothing is known to be blockaded.
             private bool IsBlockaded(string planetName)

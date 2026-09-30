@@ -24,7 +24,8 @@ namespace FlatSpace.AI
         public int Blocker(string planetName)
             => planetName != null && _blockaded.TryGetValue(planetName, out var entry) ? entry.blocker : Planet.NoOwner;
 
-        public static BlockadeView Build(GameAIMap map, int playerId, BlockadeSystem blockade)
+        public static BlockadeView Build(GameAIMap map, int playerId, BlockadeSystem blockade,
+            BlockadeMemory memory = null, int turn = 0, int memoryLifetime = 0)
         {
             var view = new BlockadeView();
             var visible = new HashSet<string>();
@@ -41,6 +42,18 @@ namespace FlatSpace.AI
                 if (planet == null) continue;
                 var value = blockade.Value(planet, playerId, out var blocker);
                 if (value > 0f) view._blockaded[name] = (value, blocker);
+            }
+
+            // Memory of planets where this player's own orders were cut: a fresh sighting of a visible planet overrides
+            // it; a remembered planet that is not visible is treated as blockaded (value as remembered, blocker unknown).
+            if (memory != null && memoryLifetime > 0)
+            {
+                foreach (var name in visible)
+                    if (!view._blockaded.ContainsKey(name)) memory.Forget(name);
+                foreach (var entry in memory.Active(turn, memoryLifetime))
+                    if (!visible.Contains(entry.Planet) && !view._blockaded.ContainsKey(entry.Planet))
+                        view._blockaded[entry.Planet] = (entry.Value, Planet.NoOwner);
+                memory.Prune(turn, memoryLifetime);
             }
             return view;
         }
