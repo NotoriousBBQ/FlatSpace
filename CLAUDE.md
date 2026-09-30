@@ -45,7 +45,8 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `FlatSpace → AI → Run PlayerAI Resource Self-Check` in `Assets/Editor/PlayerAIResourceSelfCheck.cs`;
 `FlatSpace → AI → Run Ship Transport Self-Check` in `Assets/Editor/ShipTransportSelfCheck.cs`;
 `FlatSpace → AI → Run Warship Self-Check` in `Assets/Editor/WarshipSelfCheck.cs`;
-`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
+`FlatSpace → AI → Run Blockade Avoidance Self-Check` in `Assets/Editor/BlockadeAvoidanceSelfCheck.cs`;
+`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
 `FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
 the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
@@ -511,7 +512,26 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   Limitation: `ProcessNewOrders` both queues and executes a zero-delay `Delayed` order (a pre-existing double
   execution), so its first delivery is never blockaded, but the stale queued copy (`TotalDelay` 0, so
   `PassedNodes` treats the whole route as passed) can be reduced or removed by a blockade on the next turn. The AI
-  does not yet avoid blockaded routes or move warships to blockade (see `FUTURE_FEATURES.md`).
+  does not yet move warships to blockade (see `FUTURE_FEATURES.md`).
+- **Blockade avoidance (colonization):** `BlockadeView` (`Assets/Flatspace/GameAI/BlockadeView.cs`) is a per-player
+  snapshot rebuilt each `ProcessResults` (`PlayerAI.RefreshBlockadeView`); a planet is visible to the player when it is
+  a presence planet (population or docked ship) or a direct neighbour of one, and blockaded when its blockade value
+  against that player is > 0. A null view means nothing is blockaded. `RoutePlanner.PlanRoute`
+  (`Assets/Flatspace/GameAI/RoutePlanner.cs`) returns the ordinary shortest path unchanged when it is clean; when an
+  in-range target's shortest path visibly crosses a blockaded planet it runs a fresh Dijkstra around them (no node
+  limit, so a detour may exceed `maxPathNodesForColonization`; ties expand the smaller node name first, and
+  `FindPath`'s fragile A* is left alone). It returns null when the target is blockaded, out of range, unreachable
+  or every way round is blocked. Colonist orders carry their planned route (`GameAIOrder.Route`, saved as
+  `OrderSave.route`; an older save with none falls back to the shortest path) and `BlockadeSystem.RouteFor` applies
+  blockades along that route. `ProcessColonizers` launches nothing from a blockaded origin and drops targets with no
+  route: the colony ship stays docked and retries next turn. `PlanetHasColonizationTarget` also goes through the
+  planner; as a deliberate tightening the planner rejects `FindPath`'s 1-node no-route stub, which the old
+  `NumNodes <= max` filter accepted. The ColonyShip weight is 0 on a blockaded planet; a blockaded planet's Warship
+  weight is `max(multiplier, 1) x blockadedWarshipBoost` (`GameAIConstants`, default 3), i.e. exempt from the
+  Consolidate fleet-cap cutoff, and Update Warship gets the same boost (its 0 when nothing needs updating stays 0). The `BlockadedProduction` tuning-log
+  line marks each such start, so a `WarshipBoost` multiplier of 0 with a Warship start is the intended exemption only
+  when that line exists.
+  Resource shipping and assault are not blockade-aware yet.
 
 ### Distribution Centers
 
@@ -579,7 +599,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
@@ -600,8 +620,8 @@ unconditionally with no toggle check of their own. There is deliberately no clos
 already durable regardless of how the process exits — this project has no consolidated "quit game"
 path to hook a close into anyway. Files land in `AITuningLogs/` at the project root, a sibling of `Assets/`
 (editor — outside `Assets/` so Unity's asset database and IDE searches never index them) /
-`Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match, gitignored. Two known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the
-underlying condition holds, not once, so a naive grep-count of those two codes overcounts; and
+`Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match, gitignored. Known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the
+underlying condition holds, not once, so a naive grep-count of those codes overcounts; and
 `Gameboard.InitGame` (which starts a match's log) can run more than once for a single match, and two
 inits within the same wall-clock second would silently collide on the same filename.
 

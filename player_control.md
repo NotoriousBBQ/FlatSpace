@@ -1,4 +1,4 @@
-# Player Control
+# Playercl Control
 
 Summary of everything discussed so far about letting something other than `PlayerAI` control a
 player — a human, or an LLM agent. Speculative and exploratory; nothing here has been designed or

@@ -171,12 +171,36 @@ public static class AITuningLogger
             value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A Warship or Update Warship was started on a planet blockaded against its owner: T&lt;turn&gt;|P&lt;id&gt;|BlockadedProduction|planet|item|value. Marks the fleet-cap exemption.</summary>
+    public static void LogBlockadedProduction(int turnNumber, int playerId, string planetName, string itemName, float value)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadedProduction", planetName, itemName,
+            value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
     public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
     {
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "OrderBlocked", orderType, planetName,
             remaining.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A colonist took a detour around visible blockades: T&lt;turn&gt;|P&lt;id&gt;|RouteDetour|origin-&gt;target|nodes joined by '&gt;'|cost.</summary>
+    public static void LogRouteDetour(int turnNumber, int playerId, string origin, string target,
+        IEnumerable<string> nodes, float cost)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RouteDetour", $"{origin}->{target}",
+            string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A ready colonizer was held back: T&lt;turn&gt;|P&lt;id&gt;|ColonizeCancelled|origin|BlockadedOrigin or NoRoute. Repeats every turn the condition holds.</summary>
+    public static void LogColonizeCancelled(int turnNumber, int playerId, string origin, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonizeCancelled", origin, reason) });
     }
 
     /// <summary>Logged the turn a Distribution Center is designated for a resource.</summary>

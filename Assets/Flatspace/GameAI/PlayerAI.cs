@@ -31,6 +31,43 @@ namespace FlatSpace
             public Catalog ProductionCatalog { get; set; }
             public Catalog ResearchCatalog   { get; set; }
 
+            // ── Blockade awareness ───────────────────────────────────────────
+
+            private BlockadeView _blockadeView;
+
+            /// <summary>This player's view of visible blockades, rebuilt at the start of every ProcessResults; null before the first.</summary>
+            public BlockadeView CurrentBlockadeView => _blockadeView;
+
+            /// <summary>Rebuilds the view from current docked ships. Public for the self-check.</summary>
+            public void RefreshBlockadeView()
+            {
+                var items = ResearchCatalog != null ? ResearchCatalog.catalogItems : null;
+                _blockadeView = BlockadeView.Build(AIMap, Player.playerID, new BlockadeSystem(AIMap, items));
+            }
+
+            // A null view (self-checks, before the first turn) means nothing is known to be blockaded.
+            private bool IsBlockaded(string planetName)
+                => _blockadeView != null && _blockadeView.IsBlockaded(planetName);
+
+            // Why each ready colonizer was last held back (planet name -> reason), so ColonizeCancelled is logged when that
+            // changes and not on every turn the condition holds. Log-only state: not saved (a load re-logs it once).
+            private readonly Dictionary<string, string> _colonizeHeldBack = new Dictionary<string, string>();
+
+            /// <summary>The reason this planet's colonizer was last held back, or null when it is not. Public for the self-check.</summary>
+            public string ColonizeHeldBackReason(string planetName)
+                => _colonizeHeldBack.TryGetValue(planetName, out var reason) ? reason : null;
+
+            /// <summary>
+            /// Records that a ready colonizer was held back. True when this is news (its first turn held back, or a different
+            /// reason than last time), i.e. the caller should log it. Public for the self-check.
+            /// </summary>
+            public bool NoteColonizeHeldBack(string planetName, string reason)
+            {
+                if (_colonizeHeldBack.TryGetValue(planetName, out var last) && last == reason) return false;
+                _colonizeHeldBack[planetName] = reason;
+                return true;
+            }
+
             // ── Entry point ──────────────────────────────────────────────────
 
             public void ProcessResults(
@@ -39,6 +76,7 @@ namespace FlatSpace
             {
                 // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
                 TryEnterConsolidate(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
+                RefreshBlockadeView();
 
                 switch (Strategy)
                 {
@@ -105,10 +143,14 @@ namespace FlatSpace
             private bool PlanetHasColonizationTarget(string planetName)
             {
                 var origin = AIMap.GetPlanet(planetName);
+                var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
                 return origin.DistanceMapToPathingList.Any(t =>
-                    t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForColonization
+                    t.Value.NumNodes <= maxNodes
                     && IsValidColonizationTarget(AIMap.GetPlanet(t.Key))
-                    && CanSupportColony(origin, AIMap.GetPlanet(t.Key)));
+                    && CanSupportColony(origin, AIMap.GetPlanet(t.Key))
+                    // a route must exist that avoids the planets I can see are blockaded (the planner also rejects the
+                    // 1-node no-route stub)
+                    && RoutePlanner.PlanRoute(AIMap, planetName, t.Key, _blockadeView, maxNodes) != null);
             }
 
             /// <summary>
@@ -332,31 +374,77 @@ namespace FlatSpace
                 var colonizers = results.FindAll(
                     x => x.PlayerID == Player.playerID 
                          && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
-                if (colonizers.Count == 0) return;
+                if (colonizers.Count == 0)
+                {
+                    _colonizeHeldBack.Clear();   // nobody is ready, so nobody is being held back
+                    return;
+                }
 
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
-                if (targets.Count == 0) return;
+                if (targets.Count == 0)
+                {
+                    _colonizeHeldBack.Clear();   // nothing to colonize: not held back by a blockade
+                    return;
+                }
+
+                // A planet that is no longer a ready colonizer is no longer held back.
+                foreach (var heldBackPlanet in _colonizeHeldBack.Keys.ToList())
+                    if (!colonizers.Exists(c => c.Name == heldBackPlanet))
+                        _colonizeHeldBack.Remove(heldBackPlanet);
+
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
+                // The route planned for each (origin, target) choice; the chosen one rides on the colonist order below.
+                var plannedRoutes = new Dictionary<(string origin, string target), RoutePlanner.PlannedRoute>();
 
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
                     (new ScoreMatrixDecisionComparer());
                 int colonizerIndex = 0;
                 foreach (var colonizer in colonizers)
                 {
+                    // A blockaded planet keeps its colony ship until the blockade lifts.
+                    if (IsBlockaded(colonizer.Name))
+                    {
+                        if (NoteColonizeHeldBack(colonizer.Name, "BlockadedOrigin"))
+                            AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "BlockadedOrigin");
+                        continue;
+                    }
+
                     var colonizerPlanet = AIMap.GetPlanet(colonizer.Name);
                     var pathMap = colonizerPlanet.DistanceMapToPathingList;
-                    var entries = targets
-                        .Where(t => pathMap.ContainsKey(t.PlanetName)
-                                 && pathMap[t.PlanetName].NumNodes
-                                        <= AIMap.GameAIConstants.maxPathNodesForColonization
-                                 && CanSupportColony(colonizerPlanet, t))
-                        .Select(t => new ScoreMatrixChoiceElement
+                    var entries = new List<ScoreMatrixChoiceElement>();
+                    var hadCandidate = false;
+                    foreach (var t in targets)
+                    {
+                        if (!pathMap.ContainsKey(t.PlanetName)
+                            || pathMap[t.PlanetName].NumNodes > maxNodes
+                            || pathMap[t.PlanetName].NumNodes < 2   // FindPath's 1-node no-route stub is not a candidate
+                            || !CanSupportColony(colonizerPlanet, t))
+                            continue;
+                        hadCandidate = true;
+
+                        // Avoid planets I can see are blockaded; a target with no such route is dropped.
+                        var route = RoutePlanner.PlanRoute(AIMap, colonizer.Name, t.PlanetName, _blockadeView, maxNodes);
+                        if (route == null) continue;
+                        plannedRoutes[(colonizer.Name, t.PlanetName)] = route;
+                        entries.Add(new ScoreMatrixChoiceElement
                         {
                             Surplus  = 1.0f,
                             Target   = t.PlanetName,
-                            Cost     = pathMap[t.PlanetName].Cost,
+                            Cost     = route.Cost,
                             Shortage = 1.0f,
-                        })
-                        .ToList();
+                        });
+                    }
+
+                    if (entries.Count == 0 && hadCandidate)
+                    {
+                        if (NoteColonizeHeldBack(colonizer.Name, "NoRoute"))
+                            AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "NoRoute");
+                    }
+                    else
+                    {
+                        _colonizeHeldBack.Remove(colonizer.Name);   // it launches (or has nothing to colonize): no longer held back
+                    }
 
                     if (entries.Count > 0)
                     {
@@ -383,10 +471,16 @@ namespace FlatSpace
                         colonizers.Find(x => x.Name == action.Origin).Data);
                     var delay  = Convert.ToInt32(
                         action.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
+                    var route  = plannedRoutes[(action.Origin, action.Target)];
 
-                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
+                    var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                        delay, delay, amount, action.Origin, action.Target));
+                        delay, delay, amount, action.Origin, action.Target);
+                    colonist.Route = new List<string>(route.Nodes);
+                    orders.Add(colonist);
+                    if (route.IsDetour)
+                        AITuningLogger.LogRouteDetour(turn, Player.playerID, action.Origin, action.Target,
+                            route.Nodes, route.Cost);
 
                     orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationChange,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
@@ -961,6 +1055,8 @@ namespace FlatSpace
             {
                 if (item.subType == "ColonyShip")
                 {
+                    if (IsBlockaded(planetName))
+                        return 0f;                       // a blockaded planet builds no colony ships (it launches none either)
                     if (PlanetHasColonyShip(planetName))
                         return 0f;                       // already have one — exclude
                     if (!PlanetHasColonizationTarget(planetName))
@@ -972,20 +1068,31 @@ namespace FlatSpace
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
-                if (item.subType == "WarshipUpdate"
-                    && AIMap.GetPlanet(planetName).FindWarshipUpdateTarget(
-                        Player.playerID, WarshipStats.ResearchedNames(ResearchCatalog.catalogItems)) == null)
-                    return 0f;                           // nothing docked here is missing an improvement — do not offer it
-                if (item.subType == "Warship" && Strategy == AIStrategy.AIStrategyConsolidate)
+                var blockaded = IsBlockaded(planetName);
+                var blockadeBoost = blockaded ? AIMap.GameAIConstants.blockadedWarshipBoost : 1f;
+                if (item.subType == "WarshipUpdate")
                 {
-                    if (_warshipMultiplierThisTurn == null)
+                    if (AIMap.GetPlanet(planetName).FindWarshipUpdateTarget(
+                            Player.playerID, WarshipStats.ResearchedNames(ResearchCatalog.catalogItems)) == null)
+                        return 0f;                       // nothing docked here is missing an improvement — do not offer it
+                    return blockadeBoost;
+                }
+                if (item.subType == "Warship")
+                {
+                    var shortfall = 1f;                  // Expand has no fleet cap
+                    if (Strategy == AIStrategy.AIStrategyConsolidate)
                     {
-                        _warshipMultiplierThisTurn = ComputeWarshipMultiplier(Strategy, out var wanted, out var have);
-                        AITuningLogger.LogWarshipBoost(
-                            Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
-                            Player.playerID, wanted, have, _warshipMultiplierThisTurn.Value);
+                        if (_warshipMultiplierThisTurn == null)
+                        {
+                            _warshipMultiplierThisTurn = ComputeWarshipMultiplier(Strategy, out var wanted, out var have);
+                            AITuningLogger.LogWarshipBoost(
+                                Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
+                                Player.playerID, wanted, have, _warshipMultiplierThisTurn.Value);
+                        }
+                        shortfall = _warshipMultiplierThisTurn.Value;   // shortfall boost / surplus taper, 0 at the cap
                     }
-                    return _warshipMultiplierThisTurn.Value;   // shortfall boost / surplus taper, 0 at the cap
+                    // A blockaded planet is exempt from the fleet-cap cutoff: floor at 1, then boost.
+                    return (blockaded ? Math.Max(shortfall, 1f) : shortfall) * blockadeBoost;
                 }
                 return 1f;
             }
@@ -1027,6 +1134,13 @@ namespace FlatSpace
             {
                 var originPlanet = AIMap.GetPlanet(action.Origin);
                 var productionName = action.Target;
+
+                // Mark a warship started under the blockade fleet-cap exemption, so a log can tell it from a cap bug.
+                var producedItem = ProductionCatalog.catalogItems.Find(x => x.name == productionName);
+                if (producedItem != null && (producedItem.subType == "Warship" || producedItem.subType == "WarshipUpdate")
+                    && IsBlockaded(action.Origin))
+                    AITuningLogger.LogBlockadedProduction(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
+                        Player.playerID, action.Origin, productionName, _blockadeView.Value(action.Origin));
 
                 orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeIndustrySetProduction,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,

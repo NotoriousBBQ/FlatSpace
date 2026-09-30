@@ -109,6 +109,31 @@ namespace FlatSpace.AI
             return result;
         }
 
+        /// <summary>
+        /// The nodes an order will pass, after its origin. A carried route (2 or more nodes) is used as planned, with
+        /// fractions from edge costs; an order with no route (older saves, or one planned before routes were carried)
+        /// falls back to the shortest path.
+        /// </summary>
+        public List<RouteNode> RouteFor(GameAI.GameAIOrder order)
+        {
+            var route = order.Route;
+            if (route == null || route.Count < 2) return Route(order.Origin, order.Target);
+
+            var cumulative = new float[route.Count];
+            for (var i = 1; i < route.Count; i++)
+                cumulative[i] = cumulative[i - 1] + _map.EdgeCost(route[i - 1], route[i]);
+
+            var total = cumulative[route.Count - 1];
+            var result = new List<RouteNode>();
+            for (var i = 1; i < route.Count; i++)
+                result.Add(new RouteNode
+                {
+                    Name = route[i],
+                    Fraction = total > 0f ? cumulative[i] / total : (float)i / (route.Count - 1),
+                });
+            return result;
+        }
+
         /// <summary>0 when an order is just launched, 1 when it has arrived.</summary>
         public static float Progress(int timingDelay, int totalDelay)
             => totalDelay <= 0 ? 1f : Mathf.Clamp01(1f - (float)timingDelay / totalDelay);
@@ -121,7 +146,7 @@ namespace FlatSpace.AI
         {
             var now = Progress(order.TimingDelay, order.TotalDelay);
             var previous = order.TotalDelay <= 0 ? 0f : Progress(order.TimingDelay + 1, order.TotalDelay);
-            return Route(order.Origin, order.Target)
+            return RouteFor(order)
                 .Where(n => n.Fraction > previous + Epsilon && n.Fraction <= now + Epsilon)
                 .ToList();
         }

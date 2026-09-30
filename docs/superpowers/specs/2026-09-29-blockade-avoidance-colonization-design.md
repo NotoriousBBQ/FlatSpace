@@ -118,9 +118,11 @@ today. Sub-project 2 reuses the view, the planner and route-carrying orders buil
   `GameAIConstants.blockadedWarshipBoost`, in-code default 3. The Warship multiplier cache
   (`_warshipMultiplierThisTurn`) is unaffected: the planet-specific part is applied after it.
 - Logging (`AITuningLogger`, no toggle checks at call sites): `RouteDetour|<origin>-><target>|<nodes joined by '>'>|<cost>`
-  when a detour is taken, and `ColonizeCancelled|<origin>|<reason>` with reason `BlockadedOrigin` or `NoRoute`. Like
-  `ColonizerReady`, `ColonizeCancelled` repeats every turn the condition holds, so its count overcounts; note that in
-  `CLAUDE.md`.
+  when a detour is taken, and `ColonizeCancelled|<origin>|<reason>` with reason `BlockadedOrigin` or `NoRoute`.
+  `ColonizeCancelled` is logged when a planet's hold-back state changes (the first turn it is held back, or its reason
+  changes), not on every turn the condition holds: the first version repeated every turn and produced thousands of
+  lines per run. `PlayerAI` remembers the last reason per planet and forgets it when the colonizer launches or is no
+  longer ready; the state is log-only and not saved.
 
 ## 5. Saves and compatibility
 
