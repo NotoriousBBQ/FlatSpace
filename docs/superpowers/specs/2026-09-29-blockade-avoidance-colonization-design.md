@@ -35,6 +35,7 @@ verification, in this order. This spec is sub-project 1 only.
 | 9 | Otherwise resource shipment is cancelled | 2 |
 | 10 | Assault behavior is modified to break blockades on visibly blockaded planets | 3 |
 | 11 | Optional: prioritize planets that cut a colonization or shipment in the last N turns (tunable, 5) | 3 |
+| 12 | (added later) Breaking blockades also includes research priority changes for warships, so a blockaded player researches warship improvements sooner | 3 |
 
 Assumptions recorded for the later sub-projects: rule 8's "total blockade values" is the sum along the best route (a
 blockaded target counts), not across the whole map; "breaking" a blockade means docking enough offense that the value
