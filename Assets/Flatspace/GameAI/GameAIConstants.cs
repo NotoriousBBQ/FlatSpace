@@ -47,6 +47,13 @@ public class GameAIConstants : ScriptableObject
     // assaultRatio x the enemies' known fleets) chases the enemies, who chase mine, and grows without limit.
     public float warshipsPerColonizedPlanet = 8f;
 
+    [Header("Blockade response")]
+    // Multiplies the Warship and Update Warship production weights on a planet that is blockaded against its owner (new
+    // ships dock where they are built, so building there lifts the blockade). On such a planet the Consolidate fleet-cap
+    // cutoff no longer applies: the Warship multiplier is floored at 1 before this boost. Update Warship's existing 0
+    // (nothing to upgrade) stays 0.
+    public float blockadedWarshipBoost = 3f;
+
     [Header("Warships")]
     // Each researched Warship improvement a ship carries adds this fraction of the base cost to building it
     // (0.1 with 15 improvements = 2.5x). Update Warship costs base x this x the improvements the ship is missing.

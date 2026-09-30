@@ -17,6 +17,7 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunShortestPathAvoidingCheck();
         ok &= RunCarriedRouteCheck();
         ok &= RunColonizationRoutingCheck();
+        ok &= RunProductionResponseCheck();
         Debug.Log(ok
             ? "[BlockadeAvoidanceSelfCheck] ALL PASSED"
             : "[BlockadeAvoidanceSelfCheck] FAILURES (see errors above)");
@@ -453,6 +454,106 @@ public static class BlockadeAvoidanceSelfCheck
             s.AI.RefreshBlockadeView();
             ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("D") && s.Colonize().Count == 0,
                 "a visibly blockaded target is never chosen: colonization is cancelled");
+        }
+        return ok;
+    }
+
+    private static CatalogItem ProductionEntry(string name, string subType)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.itemName = name; item.name = name; item.type = "Ship"; item.subType = subType; item.cost = 100f;
+        return item;
+    }
+
+    public static bool RunProductionResponseCheck()
+    {
+        var ok = true;
+        ok &= Check(Near(ScriptableObject.CreateInstance<GameAIConstants>().blockadedWarshipBoost, 3f),
+            "blockadedWarshipBoost defaults to 3");
+
+        var colony = ProductionEntry("Colony Ship Production", "ColonyShip");
+        var warship = ProductionEntry("Warship", "Warship");
+        var update = ProductionEntry("Update Warship", "WarshipUpdate");
+        try
+        {
+            using (var s = Scenario.Diamond())
+            {
+                s.Constants.blockadedWarshipBoost = 3f;
+
+                // ColonyShip: wanted (2) when a target is reachable; 0 when every route is blockaded or the origin is.
+                s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+                s.AI.RefreshBlockadeView();
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(colony, "A"), 2f),
+                    "unblockaded, a ready planet with a reachable target wants colony ships (2)");
+                s.Blockade("B");
+                s.AI.RefreshBlockadeView();
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(colony, "A"), 2f),
+                    "one way blockaded: the detour keeps a target reachable, colony ships still wanted");
+                s.Blockade("C");
+                s.AI.RefreshBlockadeView();
+                ok &= Check(s.AI.GetIndustrySituationalWeightMultiplier(colony, "A") == 0f,
+                    "every route blockaded: no reachable target, so no colony ships are built");
+                s.Unblockade("B");
+                s.Unblockade("C");
+                s.Blockade("A");
+                s.AI.RefreshBlockadeView();
+                ok &= Check(s.AI.GetIndustrySituationalWeightMultiplier(colony, "A") == 0f,
+                    "a blockaded planet builds no colony ships");
+                s.Unblockade("A");
+
+                // Warship under Expand (no fleet cap): 1, boosted x3 on a blockaded planet.
+                s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+                s.AI.RefreshBlockadeView();
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(warship, "A"), 1f),
+                    "Expand, unblockaded: Warship multiplier 1");
+                s.Blockade("A");
+                s.AI.RefreshBlockadeView();
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(warship, "A"), 3f),
+                    "Expand, blockaded: the boost multiplies (1 x 3)");
+                s.Unblockade("A");
+
+                // Warship under Consolidate past the fleet cap: 0, but a blockaded planet is exempt (floor 1, x3).
+                s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+                WarshipSelfCheck.DockWarships(s.Map.GetPlanet("A"), 0, 30);   // my fleet: far beyond wanted x cap
+                s.AI.RefreshBlockadeView();
+                ok &= Check(s.AI.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate) == 0f,
+                    "precondition: 30 own warships are past the fleet cap, so the plain multiplier is 0");
+                ok &= Check(s.AI.GetIndustrySituationalWeightMultiplier(warship, "A") == 0f,
+                    "Consolidate past the cap, unblockaded: Warship is not offered (0)");
+                s.Blockade("A", 40);   // 400 offense against my 300: blockaded
+                s.AI.RefreshBlockadeView();
+                ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("A"), "precondition: A is blockaded (400 against 300)");
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(warship, "A"), 3f),
+                    "Consolidate past the cap but blockaded: exempt from the cutoff, floor 1 x boost 3");
+
+                // Update Warship: boosted on a blockaded planet with something to upgrade; 0 when nothing to upgrade.
+                s.AI.ResearchCatalog.catalogItems = WarshipSelfCheck.MakeResearch(1);   // 3 researched improvements
+                var oldResearch = s.Research;
+                s.Research = s.AI.ResearchCatalog.catalogItems;
+                WarshipSelfCheck.DestroyAll(oldResearch);
+                s.AI.RefreshBlockadeView();
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(update, "A"), 3f),
+                    "Update Warship on a blockaded planet with ships to upgrade is boosted x3");
+                s.Unblockade("A");
+                s.AI.RefreshBlockadeView();
+                ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(update, "A"), 1f),
+                    "Update Warship unblockaded, with ships to upgrade: plain 1");
+                var freshMap = s.Map.GetPlanet("A");
+                foreach (var ship in freshMap.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.WarShip)
+                        foreach (var name in WarshipStats.ResearchedNames(s.Research))
+                            if (!ship.ResearchSnapshot.Contains(name)) ship.ResearchSnapshot.Add(name);
+                s.Blockade("A", 60);
+                s.AI.RefreshBlockadeView();
+                ok &= Check(s.AI.GetIndustrySituationalWeightMultiplier(update, "A") == 0f,
+                    "Update Warship stays 0 when nothing is upgradable, even on a blockaded planet");
+            }
+        }
+        finally
+        {
+            Object.DestroyImmediate(colony);
+            Object.DestroyImmediate(warship);
+            Object.DestroyImmediate(update);
         }
         return ok;
     }

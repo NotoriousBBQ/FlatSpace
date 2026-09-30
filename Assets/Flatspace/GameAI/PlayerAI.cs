@@ -1014,6 +1014,8 @@ namespace FlatSpace
             {
                 if (item.subType == "ColonyShip")
                 {
+                    if (IsBlockaded(planetName))
+                        return 0f;                       // a blockaded planet builds no colony ships (it launches none either)
                     if (PlanetHasColonyShip(planetName))
                         return 0f;                       // already have one — exclude
                     if (!PlanetHasColonizationTarget(planetName))
@@ -1025,20 +1027,31 @@ namespace FlatSpace
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
-                if (item.subType == "WarshipUpdate"
-                    && AIMap.GetPlanet(planetName).FindWarshipUpdateTarget(
-                        Player.playerID, WarshipStats.ResearchedNames(ResearchCatalog.catalogItems)) == null)
-                    return 0f;                           // nothing docked here is missing an improvement — do not offer it
-                if (item.subType == "Warship" && Strategy == AIStrategy.AIStrategyConsolidate)
+                var blockaded = IsBlockaded(planetName);
+                var blockadeBoost = blockaded ? AIMap.GameAIConstants.blockadedWarshipBoost : 1f;
+                if (item.subType == "WarshipUpdate")
                 {
-                    if (_warshipMultiplierThisTurn == null)
+                    if (AIMap.GetPlanet(planetName).FindWarshipUpdateTarget(
+                            Player.playerID, WarshipStats.ResearchedNames(ResearchCatalog.catalogItems)) == null)
+                        return 0f;                       // nothing docked here is missing an improvement — do not offer it
+                    return blockadeBoost;
+                }
+                if (item.subType == "Warship")
+                {
+                    var shortfall = 1f;                  // Expand has no fleet cap
+                    if (Strategy == AIStrategy.AIStrategyConsolidate)
                     {
-                        _warshipMultiplierThisTurn = ComputeWarshipMultiplier(Strategy, out var wanted, out var have);
-                        AITuningLogger.LogWarshipBoost(
-                            Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
-                            Player.playerID, wanted, have, _warshipMultiplierThisTurn.Value);
+                        if (_warshipMultiplierThisTurn == null)
+                        {
+                            _warshipMultiplierThisTurn = ComputeWarshipMultiplier(Strategy, out var wanted, out var have);
+                            AITuningLogger.LogWarshipBoost(
+                                Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
+                                Player.playerID, wanted, have, _warshipMultiplierThisTurn.Value);
+                        }
+                        shortfall = _warshipMultiplierThisTurn.Value;   // shortfall boost / surplus taper, 0 at the cap
                     }
-                    return _warshipMultiplierThisTurn.Value;   // shortfall boost / surplus taper, 0 at the cap
+                    // A blockaded planet is exempt from the fleet-cap cutoff: floor at 1, then boost.
+                    return (blockaded ? Math.Max(shortfall, 1f) : shortfall) * blockadeBoost;
                 }
                 return 1f;
             }
