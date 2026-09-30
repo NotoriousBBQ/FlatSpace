@@ -639,7 +639,11 @@ namespace FlatSpace
                 List<GameAI.GameAIOrder>                         orders)
             {
                 var surplusResults = results.FindAll(x => x.PlayerID == Player.playerID && x.Result == surplusType);
-                if (surplusResults.Count == 0) return;
+                if (surplusResults.Count == 0)
+                {
+                    PruneShipmentHeldBack(transportType, null);   // nothing to ship: nothing is held back by a blockade
+                    return;
+                }
 
                 var shortages = results.FindAll(x =>
                     x.Result == shortageType && x.PlayerID == Player.playerID && !incomingCheck(x.Name));
@@ -661,7 +665,11 @@ namespace FlatSpace
                     syntheticShortageNames.Add(dcName);
                 }
 
-                if (shortages.Count == 0) return;
+                if (shortages.Count == 0)
+                {
+                    PruneShipmentHeldBack(transportType, null);   // no shortage left to be held back
+                    return;
+                }
 
                 // Real PlanetUpdatePlanet shortages carry a negative Data; the magnitude is what matters here.
                 var remainingShortage = shortages.ToDictionary(s => s.Name, s => Mathf.Abs(Convert.ToSingle(s.Data)));
@@ -708,6 +716,18 @@ namespace FlatSpace
                         _shipmentHeldBack.Remove(ShipmentKey(transportType, shortage.Name));
                     }
                 }
+                PruneShipmentHeldBack(transportType, shortages.Select(s => s.Name));
+            }
+
+            // Forgets this resource's held-back records for shortages that are no longer reported, so a later blockade
+            // episode for the same planet is logged again (activeTargets null = no shortage is active).
+            private void PruneShipmentHeldBack(GameAI.GameAIOrder.OrderType transportType, IEnumerable<string> activeTargets)
+            {
+                var prefix = transportType + ":";
+                var active = new HashSet<string>(activeTargets ?? Enumerable.Empty<string>());
+                foreach (var key in _shipmentHeldBack.Keys.ToList())
+                    if (key.StartsWith(prefix, StringComparison.Ordinal) && !active.Contains(key.Substring(prefix.Length)))
+                        _shipmentHeldBack.Remove(key);
             }
 
             /// <summary>

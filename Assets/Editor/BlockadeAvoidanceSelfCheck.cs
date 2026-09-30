@@ -764,6 +764,21 @@ public static class BlockadeAvoidanceSelfCheck
             ok &= Check(FoodShipment(s.ShipFood(11f)) != null, "a shipment just above the loss (11 against 10) still ships");
             ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null, "a shipment that goes out clears the held-back state");
 
+            // The record is forgotten once the shortage is gone, so a later episode for the same planet logs again.
+            ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade",
+                "D is held back again by the blockade");
+            s.AI.ProcessFoodShortage(new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("A",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 100f, 0),
+            }, new List<GameAI.GameAIOrder>());
+            ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null,
+                "when D stops reporting a shortage its held-back record is forgotten");
+            s.AI.ProcessFoodShortage(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade"
+                        && s.AI.NoteShipmentHeldBack(food, "D", "Other"),
+                "a later episode is news again (the record was forgotten, then re-set to Blockade)");
+
             // A way opens: it ships again.
             s.Unblockade("C");
             s.AI.RefreshBlockadeView();
