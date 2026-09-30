@@ -760,6 +760,10 @@ public static class BlockadeAvoidanceSelfCheck
             s.AI.RefreshBlockadeView();
             ok &= Check(s.ShipFood(8f).Count == 0, "a shipment smaller than the unavoidable loss (8 against 10) is cancelled");
             ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == "Blockade", "the cancelled shortage is remembered as held back");
+            var detail = s.AI.ShipmentHeldBackDetail(food, "D");
+            ok &= Check(detail != null && detail.Source == "A" && Near(detail.Loss, 10f) && Near(detail.Amount, 8f)
+                        && detail.BlockedNodes == "B=10",
+                "the held-back record names the dropped source (A), its loss (10), the amount (8) and the blockaded route node (B=10)");
             ok &= Check(!s.AI.NoteShipmentHeldBack(food, "D", "Blockade") && s.AI.NoteShipmentHeldBack(food, "D", "Other"),
                 "the held-back note is news only when the reason changes (so the log line is not repeated every turn)");
             ok &= Check(s.ShipFood(10f).Count == 0, "a shipment exactly equal to the loss (10 against 10) is cancelled: nothing would arrive");
@@ -792,6 +796,9 @@ public static class BlockadeAvoidanceSelfCheck
             s.Blockade("A");
             s.AI.RefreshBlockadeView();
             ok &= Check(s.ShipFood(8f).Count == 0, "a blockaded source (10) cancels a shipment of 8");
+            var sourceDetail = s.AI.ShipmentHeldBackDetail(food, "D");
+            ok &= Check(sourceDetail != null && sourceDetail.Source == "A" && sourceDetail.BlockedNodes == "A=10",
+                "a blockaded source is named as the blocked node (A=10)");
             var fromBlockaded = FoodShipment(s.ShipFood(50f));
             ok &= Check(fromBlockaded != null && string.Join(">", fromBlockaded.Route) == "A>B>D",
                 "a blockaded source still ships a shipment larger than its blockade, by the ordinary route");
@@ -861,6 +868,10 @@ public static class BlockadeAvoidanceSelfCheck
             ok &= Check(Near(s.AI.MinDeliveredFractionFor("D"), 0.5f), "the seam returns the tunable for an ordinary target");
             ok &= Check(s.ShipFood(15f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "LowYield",
                 "15 against a loss of 10 delivers 33% (< 50%): cancelled as LowYield");
+            var lowDetail = s.AI.ShipmentHeldBackDetail(food, "D");
+            ok &= Check(lowDetail != null && lowDetail.Reason == "LowYield" && lowDetail.Source == "A"
+                        && Near(lowDetail.Loss, 10f) && Near(lowDetail.Amount, 15f) && lowDetail.BlockedNodes == "B=10",
+                "a LowYield record carries the same detail (source A, loss 10, amount 15, blocked B=10)");
             ok &= Check(FoodShipment(s.ShipFood(30f)) != null,
                 "30 against a loss of 10 delivers 67% (>= 50%): it still ships");
             ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null, "a shipment that goes out clears the held-back state");

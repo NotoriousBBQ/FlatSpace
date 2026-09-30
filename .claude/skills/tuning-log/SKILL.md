@@ -118,8 +118,11 @@ user asked about one specific thing.
   Resource shipping is blockade-aware too: split `OrderBlocked` by order type (`OrderTypeFoodTransport` /
   `OrderTypeGrotsitsTransport` should fall sharply against a pre-change run on the same board); count
   `ShipmentLossy` (shipments sent through unavoidable blockades) and `ShipmentCancelled` (a shortage whose every
-  source was removed by blockades; state-change only, so one line is one episode; the last field is `Blockade`, loss >=
-  amount, or `LowYield`, only `shipmentMinDeliveredFraction` refused it). To tune that fraction (default 0.5), compute each
+  source was removed by blockades; state-change only, so one line is one episode; the line is
+  `ShipmentCancelled|<target>|<reason>|<source>|<loss>|<amount>|<blocked planets>`: reason is `Blockade` (loss >= amount) or
+  `LowYield` (only `shipmentMinDeliveredFraction` refused it), source/loss/amount describe the dropped pair closest to
+  shipping, and the blocked planets are the `name=value` blockades on that route, `-` when none; older logs stop after the
+  reason). To tune that fraction (default 0.5), compute each
   `ShipmentLossy` line's delivered share `(amount - loss) / amount` (it should now sit at or above the fraction) and count
   `LowYield` episodes per target: a target that keeps logging `LowYield` while `PopulationLoss`/`PlanetDead` lines appear
   for it is being starved by the threshold (lower it, ideally per target through `MinDeliveredFractionFor`). `RouteDetour` now comes from both
@@ -175,6 +178,14 @@ user asked about one specific thing.
   Colonize-die churn, including on planets the AI cannot currently supply (a leaf behind a contested hub), is desired
   behaviour: describe the mechanism neutrally and report it as information, never as a defect or gap, and do not propose a
   supply-reachability gate or a colonization back-off unless the user's own question is about survivability tuning.
+- **Grotsits shortage (which planets, when):** from `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>`
+  (older logs lack it; the `Economy` line only counts short planets). For a player, list the first planets to go short with
+  their turn and type (the planet name carries the type), how many are short at once over time, and how long each episode
+  lasts (Start to End; one never ended means short to the end of the run). Read the numbers with it: demand is about
+  population + upkeep, so `capacity` below that explains the shortage (a food specialist with too little grotsits capacity,
+  upkeep from improvements) and capacity above it points at shipping (check `GrotsitsShip` into that planet and
+  `ShipmentCancelled` for it). Count Starts per planet to spot flapping (a planet that toggles every few turns). Use it
+  to say what tips a player into the shortage-morale-fewer-colony-ships loop before morale falls under about 100.
 - **Weak start:** flag a player whose morale or planet count lags early (morale under about 100 or several planets short
   at T100, noticeably fewer planets at T250 than the others) and say whether it recovers. Check its blockade and colonist
   cut counts to say whether it looks like a start-position or balance effect or blockade damage.
@@ -193,8 +204,10 @@ user asked about one specific thing.
   shipments detoured), and the average node count and cost. A lane with dozens of detours over hundreds of turns is a
   lasting blockade being routed around (working as intended), but note the extra transit time it costs.
 - **Cancelled episodes per target:** `ShipmentCancelled` counts per player, target and reason. One line is one episode, yet
-  a flickering shortage repeats, so a target with dozens of episodes deserves a look: who blockades it, and is its
-  population falling (`PopulationLoss`/`PlanetDead` for that planet)?
+  a flickering shortage repeats, so a target with dozens of episodes deserves a look: which planets are named in its blocked
+  planets field (count them per player across the run: one blockaded planet, often the source itself, usually explains a
+  whole cluster, for example a small blockade on the only surplus planet cancelling every small shipment), who blockades
+  those planets, and is the target's population falling (`PopulationLoss`/`PlanetDead` for that planet)?
 - **Variance with few runs:** with three runs per side, print each metric's per-run values next to the average (and the
   planets owned at T375 per player per run, which swing between runs) and call a difference real only when the ranges do
   not overlap (for example `Blockade` 166 to 321 before against 6 to 43 after); an overlapping difference

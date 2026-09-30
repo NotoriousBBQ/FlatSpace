@@ -109,9 +109,13 @@ namespace FlatSpace
                 GameAIMap.GameAIMapInit(spawnDataList, gameAIConstants);
             }
 
+            // Which planets are short of grotsits right now, so GrotsitsShort is logged on change only (log-only state).
+            private readonly GrotsitsShortTracker _grotsitsShort = new GrotsitsShortTracker();
+
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
+                _grotsitsShort.Clear();
 
             }
 
@@ -123,6 +127,7 @@ namespace FlatSpace
                 planetUpdateResults.Clear();
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
+                LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
                 LogEconomySummary(Gameboard.Instance.TurnNumber, Gameboard.Instance.players.Count);
                 GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count,
                     GameAIMap.GameAIConstants.maxPathNodesForKnowledge);
@@ -130,6 +135,22 @@ namespace FlatSpace
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
+            }
+
+            // One GrotsitsShort line when a populated planet becomes short of grotsits (Start) or recovers or empties (End), with
+            // the numbers that explain it, so a log says which planets tip a player into the shortage and morale loop.
+            private void LogGrotsitsShortChanges(int turnNumber)
+            {
+                var populated = GameAIMap.PlanetList.Where(p => p.Population.Count > 0)
+                    .Select(p => (p.PlanetName, p.GrotsitsShort));
+                foreach (var change in _grotsitsShort.Update(populated))
+                {
+                    var planet = GameAIMap.GetPlanet(change.Planet);
+                    if (planet == null) continue;
+                    AITuningLogger.LogGrotsitsShort(turnNumber, planet.Owner, planet.PlanetName, change.Started,
+                        planet.Population.Count, planet.GetGrotsitsCapacity(), planet.GetImprovementMaintenanceCost(),
+                        planet.Morale);
+                }
             }
 
             // Every 25 turns, one line per player: how many planets it owns, how many were short of grotsits,
