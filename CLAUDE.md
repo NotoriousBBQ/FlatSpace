@@ -599,7 +599,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>`, and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
@@ -620,7 +620,7 @@ unconditionally with no toggle check of their own. There is deliberately no clos
 already durable regardless of how the process exits — this project has no consolidated "quit game"
 path to hook a close into anyway. Files land in `AITuningLogs/` at the project root, a sibling of `Assets/`
 (editor — outside `Assets/` so Unity's asset database and IDE searches never index them) /
-`Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match, gitignored. Known caveats: `ColonizerReady`, `ResearchComplete` and `ColonizeCancelled` are emitted every turn the
+`Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match, gitignored. Known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the
 underlying condition holds, not once, so a naive grep-count of those codes overcounts; and
 `Gameboard.InitGame` (which starts a match's log) can run more than once for a single match, and two
 inits within the same wall-clock second would silently collide on the same filename.

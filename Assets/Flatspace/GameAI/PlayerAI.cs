@@ -49,6 +49,25 @@ namespace FlatSpace
             private bool IsBlockaded(string planetName)
                 => _blockadeView != null && _blockadeView.IsBlockaded(planetName);
 
+            // Why each ready colonizer was last held back (planet name -> reason), so ColonizeCancelled is logged when that
+            // changes and not on every turn the condition holds. Log-only state: not saved (a load re-logs it once).
+            private readonly Dictionary<string, string> _colonizeHeldBack = new Dictionary<string, string>();
+
+            /// <summary>The reason this planet's colonizer was last held back, or null when it is not. Public for the self-check.</summary>
+            public string ColonizeHeldBackReason(string planetName)
+                => _colonizeHeldBack.TryGetValue(planetName, out var reason) ? reason : null;
+
+            /// <summary>
+            /// Records that a ready colonizer was held back. True when this is news (its first turn held back, or a different
+            /// reason than last time), i.e. the caller should log it. Public for the self-check.
+            /// </summary>
+            public bool NoteColonizeHeldBack(string planetName, string reason)
+            {
+                if (_colonizeHeldBack.TryGetValue(planetName, out var last) && last == reason) return false;
+                _colonizeHeldBack[planetName] = reason;
+                return true;
+            }
+
             // ── Entry point ──────────────────────────────────────────────────
 
             public void ProcessResults(
@@ -355,10 +374,23 @@ namespace FlatSpace
                 var colonizers = results.FindAll(
                     x => x.PlayerID == Player.playerID 
                          && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
-                if (colonizers.Count == 0) return;
+                if (colonizers.Count == 0)
+                {
+                    _colonizeHeldBack.Clear();   // nobody is ready, so nobody is being held back
+                    return;
+                }
 
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
-                if (targets.Count == 0) return;
+                if (targets.Count == 0)
+                {
+                    _colonizeHeldBack.Clear();   // nothing to colonize: not held back by a blockade
+                    return;
+                }
+
+                // A planet that is no longer a ready colonizer is no longer held back.
+                foreach (var heldBackPlanet in _colonizeHeldBack.Keys.ToList())
+                    if (!colonizers.Exists(c => c.Name == heldBackPlanet))
+                        _colonizeHeldBack.Remove(heldBackPlanet);
 
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
@@ -373,7 +405,8 @@ namespace FlatSpace
                     // A blockaded planet keeps its colony ship until the blockade lifts.
                     if (IsBlockaded(colonizer.Name))
                     {
-                        AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "BlockadedOrigin");
+                        if (NoteColonizeHeldBack(colonizer.Name, "BlockadedOrigin"))
+                            AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "BlockadedOrigin");
                         continue;
                     }
 
@@ -404,7 +437,14 @@ namespace FlatSpace
                     }
 
                     if (entries.Count == 0 && hadCandidate)
-                        AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "NoRoute");
+                    {
+                        if (NoteColonizeHeldBack(colonizer.Name, "NoRoute"))
+                            AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "NoRoute");
+                    }
+                    else
+                    {
+                        _colonizeHeldBack.Remove(colonizer.Name);   // it launches (or has nothing to colonize): no longer held back
+                    }
 
                     if (entries.Count > 0)
                     {

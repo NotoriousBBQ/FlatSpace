@@ -18,6 +18,7 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunCarriedRouteCheck();
         ok &= RunColonizationRoutingCheck();
         ok &= RunProductionResponseCheck();
+        ok &= RunColonizeHeldBackStateCheck();
         Debug.Log(ok
             ? "[BlockadeAvoidanceSelfCheck] ALL PASSED"
             : "[BlockadeAvoidanceSelfCheck] FAILURES (see errors above)");
@@ -465,6 +466,52 @@ public static class BlockadeAvoidanceSelfCheck
         var item = ScriptableObject.CreateInstance<CatalogItem>();
         item.itemName = name; item.name = name; item.type = "Ship"; item.subType = subType; item.cost = 100f;
         return item;
+    }
+
+    // ColonizeCancelled is logged when a colonizer's hold-back state changes, not on every turn it holds: the per-planet
+    // reason is remembered (NoteColonizeHeldBack returns true only for news) and forgotten when it launches or stops
+    // being a ready colonizer.
+    public static bool RunColonizeHeldBackStateCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Diamond())
+        {
+            ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "nothing is held back at first");
+            ok &= Check(s.AI.NoteColonizeHeldBack("A", "NoRoute"), "the first turn a colonizer is held back is news");
+            ok &= Check(!s.AI.NoteColonizeHeldBack("A", "NoRoute"), "the same reason again is not news");
+            ok &= Check(s.AI.NoteColonizeHeldBack("A", "BlockadedOrigin"), "a different reason is news");
+            ok &= Check(!s.AI.NoteColonizeHeldBack("A", "BlockadedOrigin"), "and then it is quiet again");
+
+            // Nobody ready: the state is forgotten.
+            s.AI.ProcessColonizers(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "with no ready colonizer the held-back state is forgotten");
+
+            // Every way blocked: held back as NoRoute. Later turns find it already recorded, so nothing new is logged.
+            s.Blockade("B");
+            s.Blockade("C");
+            s.AI.RefreshBlockadeView();
+            s.Colonize();
+            ok &= Check(s.AI.ColonizeHeldBackReason("A") == "NoRoute", "all routes blocked: A is held back as NoRoute");
+            s.Colonize();
+            ok &= Check(!s.AI.NoteColonizeHeldBack("A", "NoRoute"),
+                "the next turn's identical hold-back is already recorded, so it is not news (and not logged again)");
+
+            // A way opens: the colonizer launches and the state clears.
+            s.Unblockade("C");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(Colonist(s.Colonize()) != null, "with C open the colonizer launches");
+            ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "launching clears the held-back state");
+
+            // Blockaded origin: held back for a different reason; then cleared once nothing is ready.
+            s.Unblockade("B");
+            s.Blockade("A");
+            s.AI.RefreshBlockadeView();
+            s.Colonize();
+            ok &= Check(s.AI.ColonizeHeldBackReason("A") == "BlockadedOrigin", "a blockaded origin is held back as BlockadedOrigin");
+            s.AI.ProcessColonizers(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "and forgotten again when nothing is ready");
+        }
+        return ok;
     }
 
     public static bool RunProductionResponseCheck()
