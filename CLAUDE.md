@@ -528,7 +528,9 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   planner; as a deliberate tightening the planner rejects `FindPath`'s 1-node no-route stub, which the old
   `NumNodes <= max` filter accepted. The ColonyShip weight is 0 on a blockaded planet; a blockaded planet's Warship
   weight is `max(multiplier, 1) x blockadedWarshipBoost` (`GameAIConstants`, default 3), i.e. exempt from the
-  Consolidate fleet-cap cutoff, and Update Warship gets the same boost (its 0 when nothing needs updating stays 0).
+  Consolidate fleet-cap cutoff, and Update Warship gets the same boost (its 0 when nothing needs updating stays 0). The `BlockadedProduction` tuning-log
+  line marks each such start, so a `WarshipBoost` multiplier of 0 with a Warship start is the intended exemption only
+  when that line exists.
   Resource shipping and assault are not blockade-aware yet.
 
 ### Distribution Centers
@@ -597,7 +599,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>`, and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a colonist's blockade detour as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>`, and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony

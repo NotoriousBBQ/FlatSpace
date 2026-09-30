@@ -171,6 +171,14 @@ public static class AITuningLogger
             value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A Warship or Update Warship was started on a planet blockaded against its owner: T&lt;turn&gt;|P&lt;id&gt;|BlockadedProduction|planet|item|value. Marks the fleet-cap exemption.</summary>
+    public static void LogBlockadedProduction(int turnNumber, int playerId, string planetName, string itemName, float value)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadedProduction", planetName, itemName,
+            value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
     public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
     {

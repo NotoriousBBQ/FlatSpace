@@ -385,6 +385,7 @@ namespace FlatSpace
                     {
                         if (!pathMap.ContainsKey(t.PlanetName)
                             || pathMap[t.PlanetName].NumNodes > maxNodes
+                            || pathMap[t.PlanetName].NumNodes < 2   // FindPath's 1-node no-route stub is not a candidate
                             || !CanSupportColony(colonizerPlanet, t))
                             continue;
                         hadCandidate = true;
@@ -1093,6 +1094,13 @@ namespace FlatSpace
             {
                 var originPlanet = AIMap.GetPlanet(action.Origin);
                 var productionName = action.Target;
+
+                // Mark a warship started under the blockade fleet-cap exemption, so a log can tell it from a cap bug.
+                var producedItem = ProductionCatalog.catalogItems.Find(x => x.name == productionName);
+                if (producedItem != null && (producedItem.subType == "Warship" || producedItem.subType == "WarshipUpdate")
+                    && IsBlockaded(action.Origin))
+                    AITuningLogger.LogBlockadedProduction(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
+                        Player.playerID, action.Origin, productionName, _blockadeView.Value(action.Origin));
 
                 orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeIndustrySetProduction,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,

@@ -119,6 +119,8 @@ public static class BlockadeAvoidanceSelfCheck
         return ok;
     }
 
+    // Z is deliberately disconnected: it exercises FindPath's 1-node no-route stub. PathingSystem logs a harmless red
+    // "planet 'Z' has no connections" error when this self-check runs; that is not a failure (other suites accept it too).
     // Diamond A - B - D and A - C - D, plus a disconnected Z. A to D is about 224 via B and about 361 via C.
     private static GameAIMap BuildDiamond(GameObject go, GameAIConstants constants)
         => Build(go, constants,
@@ -468,8 +470,10 @@ public static class BlockadeAvoidanceSelfCheck
     public static bool RunProductionResponseCheck()
     {
         var ok = true;
-        ok &= Check(Near(ScriptableObject.CreateInstance<GameAIConstants>().blockadedWarshipBoost, 3f),
+        var defaultConstants = ScriptableObject.CreateInstance<GameAIConstants>();
+        ok &= Check(Near(defaultConstants.blockadedWarshipBoost, 3f),
             "blockadedWarshipBoost defaults to 3");
+        Object.DestroyImmediate(defaultConstants);
 
         var colony = ProductionEntry("Colony Ship Production", "ColonyShip");
         var warship = ProductionEntry("Warship", "Warship");
@@ -538,8 +542,8 @@ public static class BlockadeAvoidanceSelfCheck
                 s.AI.RefreshBlockadeView();
                 ok &= Check(Near(s.AI.GetIndustrySituationalWeightMultiplier(update, "A"), 1f),
                     "Update Warship unblockaded, with ships to upgrade: plain 1");
-                var freshMap = s.Map.GetPlanet("A");
-                foreach (var ship in freshMap.DockedShips)
+                var homePlanet = s.Map.GetPlanet("A");
+                foreach (var ship in homePlanet.DockedShips)
                     if (ship.Kind == Ship.ShipKind.WarShip)
                         foreach (var name in WarshipStats.ResearchedNames(s.Research))
                             if (!ship.ResearchSnapshot.Contains(name)) ship.ResearchSnapshot.Add(name);
