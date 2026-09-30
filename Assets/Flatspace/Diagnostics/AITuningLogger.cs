@@ -179,6 +179,22 @@ public static class AITuningLogger
             remaining.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A colonist took a detour around visible blockades: T&lt;turn&gt;|P&lt;id&gt;|RouteDetour|origin-&gt;target|nodes joined by '&gt;'|cost.</summary>
+    public static void LogRouteDetour(int turnNumber, int playerId, string origin, string target,
+        IEnumerable<string> nodes, float cost)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RouteDetour", $"{origin}->{target}",
+            string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A ready colonizer was held back: T&lt;turn&gt;|P&lt;id&gt;|ColonizeCancelled|origin|BlockadedOrigin or NoRoute. Repeats every turn the condition holds.</summary>
+    public static void LogColonizeCancelled(int turnNumber, int playerId, string origin, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonizeCancelled", origin, reason) });
+    }
+
     /// <summary>Logged the turn a Distribution Center is designated for a resource.</summary>
     public static void LogDCSelected(int turnNumber, int playerId, string planetName, string resource)
     {

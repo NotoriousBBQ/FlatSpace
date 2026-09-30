@@ -16,6 +16,7 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunRoutePlannerCheck();
         ok &= RunShortestPathAvoidingCheck();
         ok &= RunCarriedRouteCheck();
+        ok &= RunColonizationRoutingCheck();
         Debug.Log(ok
             ? "[BlockadeAvoidanceSelfCheck] ALL PASSED"
             : "[BlockadeAvoidanceSelfCheck] FAILURES (see errors above)");
@@ -311,6 +312,148 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= Check(GameAI.GameAIOrder.RouteFromSave(new List<string> { "A" }) == null
                     && GameAI.GameAIOrder.RouteFromSave(null) == null,
             "a saved route of fewer than 2 nodes, or none, restores as none");
+        return ok;
+    }
+
+    // The diamond with player 0 present at A: 5 inhabitants (a full planet, ready to colonize), B and C not valid
+    // targets (a colonist is already inbound), D the only target. Player 0's research catalog holds MakeResearch().
+    private sealed class Scenario : System.IDisposable
+    {
+        public GameObject MapGo, PlayerGo;
+        public GameAIMap Map;
+        public PlayerAI AI;
+        public GameAIConstants Constants;
+        public ShipData Template;
+        public List<CatalogItem> Research;
+
+        public static Scenario Diamond()
+        {
+            var s = new Scenario();
+            s.Template = WarshipSelfCheck.MakeTemplate();
+            s.Constants = WarshipSelfCheck.MakeConstants(s.Template);
+            s.Constants.defaultTravelSpeed = 1f;
+            s.Constants.expandPopulationTrigger = 0.8f;
+            s.Constants.maxPathNodesForColonization = 6;
+            s.Constants.maxPathNodesForKnowledge = 6;
+            s.Research = WarshipSelfCheck.MakeResearch();
+            s.MapGo = new GameObject("BASelfCheckMap_Scenario");
+            s.PlayerGo = new GameObject("BASelfCheckPlayer_Scenario");
+            s.Map = BuildDiamond(s.MapGo, s.Constants);
+
+            var a = s.Map.GetPlanet("A");
+            a.Owner = 0;
+            for (var i = 0; i < 5; i++) a.Population.Add(new Planet.Inhabitant { Player = 0 });
+            a.Food = 100f;
+            s.Map.GetPlanet("B").SetPopulationTransferInProgress(0);
+            s.Map.GetPlanet("C").SetPopulationTransferInProgress(0);
+
+            var player = s.PlayerGo.AddComponent<Player>();
+            s.AI = s.PlayerGo.AddComponent<PlayerAI>();
+            s.AI.Player = player;
+            s.AI.AIMap = s.Map;
+            player.playerID = 0;
+            s.AI.ResearchCatalog = s.PlayerGo.AddComponent<Catalog>();
+            s.AI.ResearchCatalog.catalogItems = s.Research;
+            s.Map.Knowledge.Update(s.Map, 1, 6);
+            return s;
+        }
+
+        public void Blockade(string planet, int warships = 1)
+            => WarshipSelfCheck.DockWarships(Map.GetPlanet(planet), 1, warships);
+
+        public void Unblockade(string planet)
+            => Map.GetPlanet(planet).UndockShips(Ship.ShipKind.WarShip, 1, 999);
+
+        public List<GameAI.GameAIOrder> Colonize()
+        {
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("A",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+            };
+            var orders = new List<GameAI.GameAIOrder>();
+            AI.ProcessColonizers(results, orders);
+            return orders;
+        }
+
+        public void Dispose()
+        {
+            WarshipSelfCheck.DestroyAll(Research);
+            Object.DestroyImmediate(PlayerGo);
+            Object.DestroyImmediate(MapGo);
+            Object.DestroyImmediate(Constants);
+            Object.DestroyImmediate(Template);
+        }
+    }
+
+    private static GameAI.GameAIOrder Colonist(List<GameAI.GameAIOrder> orders)
+        => orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+
+    public static bool RunColonizationRoutingCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Diamond())
+        {
+            // No view has been built yet (null): nothing is blockaded, colonization is exactly as before.
+            s.Blockade("B");
+            var before = Colonist(s.Colonize());
+            ok &= Check(before != null && string.Join(">", before.Route) == "A>B>D",
+                "with no view yet, a blockade at B is unknown: the colonist takes the shortest route A>B>D");
+            s.Unblockade("B");
+
+            // Clean: the shortest route, carried on the order, delay from the route's cost.
+            s.AI.RefreshBlockadeView();
+            var clean = Colonist(s.Colonize());
+            var cleanRoute = RoutePlanner.PlanRoute(s.Map, "A", "D", s.AI.CurrentBlockadeView, 6);
+            ok &= Check(clean != null && string.Join(">", clean.Route) == "A>B>D"
+                        && clean.TimingDelay == System.Convert.ToInt32(cleanRoute.Cost) && clean.TotalDelay == clean.TimingDelay,
+                "unblockaded: the colonist carries A>B>D and its delay comes from that route's cost");
+
+            // B blockaded (visible: a neighbour of A): the colonist detours through C, with the detour's delay.
+            s.Blockade("B");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("B"), "B is in player 0's view (a neighbour of its presence)");
+            var detoured = Colonist(s.Colonize());
+            var detourRoute = RoutePlanner.PlanRoute(s.Map, "A", "D", s.AI.CurrentBlockadeView, 6);
+            ok &= Check(detoured != null && string.Join(">", detoured.Route) == "A>C>D"
+                        && detoured.TotalDelay == System.Convert.ToInt32(detourRoute.Cost)
+                        && detoured.TotalDelay > clean.TotalDelay,
+                "B blockaded: the colonist detours A>C>D and the longer trip has a longer delay");
+
+            // Both ways blockaded: colonization is cancelled and the colony ship stays (no orders at all).
+            s.Blockade("C");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.Colonize().Count == 0, "every route blockaded: no colonist order and no other order is emitted");
+
+            // C freed again: the colonist goes that way again (the colonizer stayed ready, nothing was consumed).
+            s.Unblockade("C");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(Colonist(s.Colonize()) != null, "when a way opens again the colonizer launches");
+            s.Unblockade("B");
+
+            // Blockaded origin: no colonist launches.
+            s.Blockade("A");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("A") && s.Colonize().Count == 0,
+                "a blockaded origin launches nothing");
+            s.Unblockade("A");
+
+            // A blockade the player cannot see is not avoided: D is two hops from A's presence, so its blockade is unseen.
+            s.Blockade("D");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(!s.AI.CurrentBlockadeView.IsBlockaded("D"), "D is not visible from A's presence");
+            var unseen = Colonist(s.Colonize());
+            ok &= Check(unseen != null && string.Join(">", unseen.Route) == "A>B>D",
+                "an unseen blockade at the target is not avoided (the colonist is sent and may be lost)");
+            s.Unblockade("D");
+
+            // A visible blockaded target is never chosen: give player 0 presence at C so D is a visible neighbour.
+            s.Map.GetPlanet("C").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            s.Blockade("D");
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("D") && s.Colonize().Count == 0,
+                "a visibly blockaded target is never chosen: colonization is cancelled");
+        }
         return ok;
     }
 }

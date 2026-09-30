@@ -31,6 +31,24 @@ namespace FlatSpace
             public Catalog ProductionCatalog { get; set; }
             public Catalog ResearchCatalog   { get; set; }
 
+            // ── Blockade awareness ───────────────────────────────────────────
+
+            private BlockadeView _blockadeView;
+
+            /// <summary>This player's view of visible blockades, rebuilt at the start of every ProcessResults; null before the first.</summary>
+            public BlockadeView CurrentBlockadeView => _blockadeView;
+
+            /// <summary>Rebuilds the view from current docked ships. Public for the self-check.</summary>
+            public void RefreshBlockadeView()
+            {
+                var items = ResearchCatalog != null ? ResearchCatalog.catalogItems : null;
+                _blockadeView = BlockadeView.Build(AIMap, Player.playerID, new BlockadeSystem(AIMap, items));
+            }
+
+            // A null view (self-checks, before the first turn) means nothing is known to be blockaded.
+            private bool IsBlockaded(string planetName)
+                => _blockadeView != null && _blockadeView.IsBlockaded(planetName);
+
             // ── Entry point ──────────────────────────────────────────────────
 
             public void ProcessResults(
@@ -39,6 +57,7 @@ namespace FlatSpace
             {
                 // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
                 TryEnterConsolidate(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
+                RefreshBlockadeView();
 
                 switch (Strategy)
                 {
@@ -105,10 +124,14 @@ namespace FlatSpace
             private bool PlanetHasColonizationTarget(string planetName)
             {
                 var origin = AIMap.GetPlanet(planetName);
+                var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
                 return origin.DistanceMapToPathingList.Any(t =>
-                    t.Value.NumNodes <= AIMap.GameAIConstants.maxPathNodesForColonization
+                    t.Value.NumNodes <= maxNodes
                     && IsValidColonizationTarget(AIMap.GetPlanet(t.Key))
-                    && CanSupportColony(origin, AIMap.GetPlanet(t.Key)));
+                    && CanSupportColony(origin, AIMap.GetPlanet(t.Key))
+                    // a route must exist that avoids the planets I can see are blockaded (the planner also rejects the
+                    // 1-node no-route stub)
+                    && RoutePlanner.PlanRoute(AIMap, planetName, t.Key, _blockadeView, maxNodes) != null);
             }
 
             /// <summary>
@@ -337,26 +360,50 @@ namespace FlatSpace
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
                 if (targets.Count == 0) return;
 
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
+                // The route planned for each (origin, target) choice; the chosen one rides on the colonist order below.
+                var plannedRoutes = new Dictionary<(string origin, string target), RoutePlanner.PlannedRoute>();
+
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
                     (new ScoreMatrixDecisionComparer());
                 int colonizerIndex = 0;
                 foreach (var colonizer in colonizers)
                 {
+                    // A blockaded planet keeps its colony ship until the blockade lifts.
+                    if (IsBlockaded(colonizer.Name))
+                    {
+                        AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "BlockadedOrigin");
+                        continue;
+                    }
+
                     var colonizerPlanet = AIMap.GetPlanet(colonizer.Name);
                     var pathMap = colonizerPlanet.DistanceMapToPathingList;
-                    var entries = targets
-                        .Where(t => pathMap.ContainsKey(t.PlanetName)
-                                 && pathMap[t.PlanetName].NumNodes
-                                        <= AIMap.GameAIConstants.maxPathNodesForColonization
-                                 && CanSupportColony(colonizerPlanet, t))
-                        .Select(t => new ScoreMatrixChoiceElement
+                    var entries = new List<ScoreMatrixChoiceElement>();
+                    var hadCandidate = false;
+                    foreach (var t in targets)
+                    {
+                        if (!pathMap.ContainsKey(t.PlanetName)
+                            || pathMap[t.PlanetName].NumNodes > maxNodes
+                            || !CanSupportColony(colonizerPlanet, t))
+                            continue;
+                        hadCandidate = true;
+
+                        // Avoid planets I can see are blockaded; a target with no such route is dropped.
+                        var route = RoutePlanner.PlanRoute(AIMap, colonizer.Name, t.PlanetName, _blockadeView, maxNodes);
+                        if (route == null) continue;
+                        plannedRoutes[(colonizer.Name, t.PlanetName)] = route;
+                        entries.Add(new ScoreMatrixChoiceElement
                         {
                             Surplus  = 1.0f,
                             Target   = t.PlanetName,
-                            Cost     = pathMap[t.PlanetName].Cost,
+                            Cost     = route.Cost,
                             Shortage = 1.0f,
-                        })
-                        .ToList();
+                        });
+                    }
+
+                    if (entries.Count == 0 && hadCandidate)
+                        AITuningLogger.LogColonizeCancelled(turn, Player.playerID, colonizer.Name, "NoRoute");
 
                     if (entries.Count > 0)
                     {
@@ -383,10 +430,16 @@ namespace FlatSpace
                         colonizers.Find(x => x.Name == action.Origin).Data);
                     var delay  = Convert.ToInt32(
                         action.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
+                    var route  = plannedRoutes[(action.Origin, action.Target)];
 
-                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
+                    var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                        delay, delay, amount, action.Origin, action.Target));
+                        delay, delay, amount, action.Origin, action.Target);
+                    colonist.Route = new List<string>(route.Nodes);
+                    orders.Add(colonist);
+                    if (route.IsDetour)
+                        AITuningLogger.LogRouteDetour(turn, Player.playerID, action.Origin, action.Target,
+                            route.Nodes, route.Cost);
 
                     orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationChange,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
