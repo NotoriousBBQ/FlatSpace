@@ -65,5 +65,13 @@ namespace FlatSpace.AI
             foreach (var name in blockadedPlanets) view._blockaded[name] = (1f, Planet.NoOwner);
             return view;
         }
+
+        /// <summary>A view with these blockade values (no blocker). For planning tests.</summary>
+        public static BlockadeView WithValues(params (string name, float value)[] entries)
+        {
+            var view = new BlockadeView();
+            foreach (var (name, value) in entries) view._blockaded[name] = (value, Planet.NoOwner);
+            return view;
+        }
     }
 }

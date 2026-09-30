@@ -15,6 +15,7 @@ public static class BlockadeAvoidanceSelfCheck
         var ok = RunBlockadeViewCheck();
         ok &= RunRoutePlannerCheck();
         ok &= RunShortestPathAvoidingCheck();
+        ok &= RunShipmentPlannerCheck();
         ok &= RunCarriedRouteCheck();
         ok &= RunColonizationRoutingCheck();
         ok &= RunProductionResponseCheck();
@@ -198,6 +199,86 @@ public static class BlockadeAvoidanceSelfCheck
             var longWay = RoutePlanner.PlanRoute(map, "A", "D", BlockadeView.Of("B"), 3);
             ok &= Check(Join(longWay) == "A>C1>C2>C3>D" && longWay.IsDetour && longWay.NumNodes == 5,
                 "with B blockaded the detour takes 5 nodes, beyond the normal maximum of 3");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go2);
+            Object.DestroyImmediate(constants2);
+        }
+        return ok;
+    }
+
+    // PlanShipmentRoute: a clean route when one exists (even beyond the node range), else the least-loss route; the
+    // origin's own blockade counts as loss; an out-of-range source is never reachable.
+    public static bool RunShipmentPlannerCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_ShipPlanner");
+        var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            var map = BuildDiamond(go, constants);   // A to D: about 224 via B, about 361 via C
+
+            var none = RoutePlanner.PlanShipmentRoute(map, "A", "D", null, 6);
+            ok &= Check(Join(none) == "A>B>D" && !none.IsDetour && Near(none.Loss, 0f),
+                "a null view: the ordinary shortest path with no loss");
+            var clean = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B"), 6);
+            ok &= Check(Join(clean) == "A>C>D" && clean.IsDetour && Near(clean.Loss, 0f),
+                "B blockaded: the clean detour A>C>D, no loss");
+
+            var tie = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B", "C"), 6);
+            ok &= Check(Join(tie) == "A>B>D" && !tie.IsDetour && Near(tie.Loss, 1f),
+                "both ways blockaded (1 each): equal loss, so the cheaper path A>B>D, loss 1, not a detour");
+            var lighter = RoutePlanner.PlanShipmentRoute(map, "A", "D",
+                BlockadeView.WithValues(("B", 2f), ("C", 1f)), 6);
+            ok &= Check(Join(lighter) == "A>C>D" && lighter.IsDetour && Near(lighter.Loss, 1f),
+                "B worth 2, C worth 1: the least-loss route is the longer A>C>D, loss 1");
+
+            var target = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("D"), 6);
+            ok &= Check(Join(target) == "A>B>D" && Near(target.Loss, 1f),
+                "a blockaded target is not refused: its value counts (loss 1)");
+            var origin = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("A"), 6);
+            ok &= Check(Join(origin) == "A>B>D" && !origin.IsDetour && Near(origin.Loss, 1f),
+                "a blockaded origin is not refused: its value counts (loss 1)");
+            var all = RoutePlanner.PlanShipmentRoute(map, "A", "D",
+                BlockadeView.WithValues(("A", 3f), ("B", 5f), ("C", 1f), ("D", 2f)), 6);
+            ok &= Check(Join(all) == "A>C>D" && Near(all.Loss, 6f),
+                "origin 3 + C 1 + target 2 = 6, cheaper than via B (3 + 5 + 2)");
+
+            ok &= Check(RoutePlanner.PlanShipmentRoute(map, "A", "D", null, 2) == null,
+                "a target beyond the node range (3 nodes, max 2) is unreachable");
+            ok &= Check(RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B", "C"), 2) == null,
+                "a blockade does not bring an out-of-range target into range");
+            ok &= Check(RoutePlanner.PlanShipmentRoute(map, "A", "Z", null, 6) == null
+                        && RoutePlanner.PlanShipmentRoute(map, "A", "A", null, 6) == null
+                        && RoutePlanner.PlanShipmentRoute(map, "A", "Nowhere", null, 6) == null,
+                "the no-route stub, origin == target and unknown planets have no route");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+        }
+
+        // A detour may exceed the node range: A - B - D is 3 nodes, the way round is 5.
+        var go2 = new GameObject("BASelfCheckMap_ShipPlannerLong");
+        var constants2 = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            var map = Build(go2, constants2,
+                Spawn("A", 0f, 0f, new[] { "B", "C1" }),
+                Spawn("B", 100f, 0f, new[] { "A", "D" }),
+                Spawn("D", 200f, 0f, new[] { "B", "C3" }),
+                Spawn("C1", 0f, 200f, new[] { "A", "C2" }),
+                Spawn("C2", 100f, 300f, new[] { "C1", "C3" }),
+                Spawn("C3", 200f, 200f, new[] { "C2", "D" }));
+            var longWay = RoutePlanner.PlanShipmentRoute(map, "A", "D", BlockadeView.Of("B"), 3);
+            ok &= Check(Join(longWay) == "A>C1>C2>C3>D" && longWay.NumNodes == 5 && Near(longWay.Loss, 0f),
+                "with B blockaded the clean detour takes 5 nodes, beyond the maximum of 3, with no loss");
+            var cheap = RoutePlanner.PlanShipmentRoute(map, "A", "D",
+                BlockadeView.WithValues(("B", 1f), ("C2", 5f)), 3);
+            ok &= Check(Join(cheap) == "A>B>D" && Near(cheap.Loss, 1f),
+                "no clean route (B and C2 both blockaded): the least-loss route is through B, loss 1");
         }
         finally
         {
