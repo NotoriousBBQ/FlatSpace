@@ -118,8 +118,11 @@ user asked about one specific thing.
   Resource shipping is blockade-aware too: split `OrderBlocked` by order type (`OrderTypeFoodTransport` /
   `OrderTypeGrotsitsTransport` should fall sharply against a pre-change run on the same board); count
   `ShipmentLossy` (shipments sent through unavoidable blockades) and `ShipmentCancelled` (a shortage whose every
-  source was removed by blockades; state-change only, so one line is one episode; the last field is `Blockade`, loss >=
-  amount, or `LowYield`, only `shipmentMinDeliveredFraction` refused it). To tune that fraction (default 0.5), compute each
+  source was removed by blockades; state-change only, so one line is one episode; the line is
+  `ShipmentCancelled|<target>|<reason>|<source>|<loss>|<amount>|<blocked planets>`: reason is `Blockade` (loss >= amount) or
+  `LowYield` (only `shipmentMinDeliveredFraction` refused it), source/loss/amount describe the dropped pair closest to
+  shipping, and the blocked planets are the `name=value` blockades on that route, `-` when none; older logs stop after the
+  reason). To tune that fraction (default 0.5), compute each
   `ShipmentLossy` line's delivered share `(amount - loss) / amount` (it should now sit at or above the fraction) and count
   `LowYield` episodes per target: a target that keeps logging `LowYield` while `PopulationLoss`/`PlanetDead` lines appear
   for it is being starved by the threshold (lower it, ideally per target through `MinDeliveredFractionFor`). `RouteDetour` now comes from both
@@ -193,8 +196,10 @@ user asked about one specific thing.
   shipments detoured), and the average node count and cost. A lane with dozens of detours over hundreds of turns is a
   lasting blockade being routed around (working as intended), but note the extra transit time it costs.
 - **Cancelled episodes per target:** `ShipmentCancelled` counts per player, target and reason. One line is one episode, yet
-  a flickering shortage repeats, so a target with dozens of episodes deserves a look: who blockades it, and is its
-  population falling (`PopulationLoss`/`PlanetDead` for that planet)?
+  a flickering shortage repeats, so a target with dozens of episodes deserves a look: which planets are named in its blocked
+  planets field (count them per player across the run: one blockaded planet, often the source itself, usually explains a
+  whole cluster, for example a small blockade on the only surplus planet cancelling every small shipment), who blockades
+  those planets, and is the target's population falling (`PopulationLoss`/`PlanetDead` for that planet)?
 - **Variance with few runs:** with three runs per side, print each metric's per-run values next to the average (and the
   planets owned at T375 per player per run, which swing between runs) and call a difference real only when the ranges do
   not overlap (for example `Blockade` 166 to 321 before against 6 to 43 after); an overlapping difference

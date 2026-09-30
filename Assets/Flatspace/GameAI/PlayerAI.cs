@@ -96,6 +96,42 @@ namespace FlatSpace
             // a change and not every turn the blockade holds. Log-only state: not saved.
             private readonly Dictionary<string, string> _shipmentHeldBack = new Dictionary<string, string>();
 
+            /// <summary>
+            /// Why a shortage went unsupplied: the dropped (source, shortage) pair closest to shipping, for the
+            /// ShipmentCancelled log line (log-only, not saved). BlockedNodes lists the route's blockaded planets with their
+            /// values ("Normal 23=22,Farm 4=10", "-" when none).
+            /// </summary>
+            public class ShipmentHold
+            {
+                public string Reason;       // "Blockade" (loss >= amount) or "LowYield" (below the minimum delivered fraction)
+                public string Source;
+                public float Loss;
+                public float Amount;
+                public string BlockedNodes;
+            }
+
+            private readonly Dictionary<string, ShipmentHold> _shipmentHeldBackDetail = new Dictionary<string, ShipmentHold>();
+
+            /// <summary>The record behind the last ShipmentCancelled for this shortage, or null. Public for the self-check.</summary>
+            public ShipmentHold ShipmentHeldBackDetail(GameAI.GameAIOrder.OrderType transportType, string target)
+                => _shipmentHeldBackDetail.TryGetValue(ShipmentKey(transportType, target), out var detail) ? detail : null;
+
+            /// <summary>The route's planets the player sees as blockaded, with their values, for the ShipmentCancelled line.</summary>
+            public string BlockedNodeSummary(IEnumerable<string> routeNodes)
+            {
+                if (_blockadeView == null || routeNodes == null) return "-";
+                var parts = routeNodes.Where(n => _blockadeView.Value(n) > 0f)
+                    .Select(n => n + "=" + _blockadeView.Value(n).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))
+                    .ToList();
+                return parts.Count == 0 ? "-" : string.Join(",", parts);
+            }
+
+            private void ForgetShipmentHold(string key)
+            {
+                _shipmentHeldBack.Remove(key);
+                _shipmentHeldBackDetail.Remove(key);
+            }
+
             private static string ShipmentKey(GameAI.GameAIOrder.OrderType transportType, string target)
                 => $"{transportType}:{target}";
 
@@ -688,7 +724,7 @@ namespace FlatSpace
                 var maxRounds = shortages.Count + surplusResults.Count;
                 // Rows where blockades removed every source (in any round): "Blockade" (loss >= amount) or "LowYield"
                 // (only the minimum delivered fraction refused them).
-                var blockedRows = new Dictionary<string, string>();
+                var blockedRows = new Dictionary<string, ShipmentHold>();
                 var servedRows = new HashSet<string>();
                 for (var round = 0; round < maxRounds; round++)
                 {
@@ -717,14 +753,16 @@ namespace FlatSpace
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
                 foreach (var shortage in shortages)
                 {
-                    if (!servedRows.Contains(shortage.Name) && blockedRows.TryGetValue(shortage.Name, out var heldReason))
+                    if (!servedRows.Contains(shortage.Name) && blockedRows.TryGetValue(shortage.Name, out var hold))
                     {
-                        if (NoteShipmentHeldBack(transportType, shortage.Name, heldReason))
-                            AITuningLogger.LogShipmentCancelled(turn, Player.playerID, shortage.Name, heldReason);
+                        _shipmentHeldBackDetail[ShipmentKey(transportType, shortage.Name)] = hold;
+                        if (NoteShipmentHeldBack(transportType, shortage.Name, hold.Reason))
+                            AITuningLogger.LogShipmentCancelled(turn, Player.playerID, shortage.Name, hold.Reason,
+                                hold.Source, hold.Loss, hold.Amount, hold.BlockedNodes);
                     }
                     else
                     {
-                        _shipmentHeldBack.Remove(ShipmentKey(transportType, shortage.Name));
+                        ForgetShipmentHold(ShipmentKey(transportType, shortage.Name));
                     }
                 }
                 PruneShipmentHeldBack(transportType, shortages.Select(s => s.Name));
@@ -738,7 +776,7 @@ namespace FlatSpace
                 var active = new HashSet<string>(activeTargets ?? Enumerable.Empty<string>());
                 foreach (var key in _shipmentHeldBack.Keys.ToList())
                     if (key.StartsWith(prefix, StringComparison.Ordinal) && !active.Contains(key.Substring(prefix.Length)))
-                        _shipmentHeldBack.Remove(key);
+                        ForgetShipmentHold(key);
             }
 
             /// <summary>
@@ -755,7 +793,7 @@ namespace FlatSpace
                 Dictionary<string, float>       remainingShortage,
                 Dictionary<string, float>       remainingSurplus,
                 List<string>                    syntheticShortageNames,
-                Dictionary<string, string>      blockedRows)
+                Dictionary<string, ShipmentHold> blockedRows)
             {
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
                     (new ScoreMatrixDecisionComparer());
@@ -773,8 +811,7 @@ namespace FlatSpace
                     // offered only while Loss < the amount it would carry (a shipment that would arrive with 0 is cancelled)
                     // and it delivers at least MinDeliveredFractionFor(shortage) of that amount (LowYield otherwise).
                     var entries = new List<ResourceChoiceElement>();
-                    var droppedByBlockade = false;
-                    var droppedLowYield = false;
+                    ShipmentHold dropped = null;   // the dropped pair closest to shipping (Blockade outranks LowYield)
                     var minFraction = MinDeliveredFractionFor(shortage.Name);
                     foreach (var s in surplusResults)
                     {
@@ -782,14 +819,17 @@ namespace FlatSpace
                         var route = RoutePlanner.PlanShipmentRoute(AIMap, s.Name, shortage.Name, _blockadeView, maxNodes);
                         if (route == null) continue;
                         var amount = Mathf.Min(remainingSurplus[s.Name], remainingShortage[shortage.Name]);
-                        if (route.Loss >= amount)
+                        var dropReason = route.Loss >= amount ? "Blockade"
+                            : amount - route.Loss < minFraction * amount ? "LowYield" : null;
+                        if (dropReason != null)
                         {
-                            droppedByBlockade = true;
-                            continue;
-                        }
-                        if (amount - route.Loss < minFraction * amount)
-                        {
-                            droppedLowYield = true;
+                            if (dropped == null || (dropReason == "Blockade" && dropped.Reason == "LowYield")
+                                || (dropReason == dropped.Reason && route.Loss < dropped.Loss))
+                                dropped = new ShipmentHold
+                                {
+                                    Reason = dropReason, Source = s.Name, Loss = route.Loss, Amount = amount,
+                                    BlockedNodes = BlockedNodeSummary(route.Nodes),
+                                };
                             continue;
                         }
                         entries.Add(new ResourceChoiceElement
@@ -802,9 +842,11 @@ namespace FlatSpace
                             IsDetour = route.IsDetour,
                         });
                     }
-                    if (entries.Count == 0 && (droppedByBlockade || droppedLowYield)
-                        && !(blockedRows.TryGetValue(shortage.Name, out var already) && already == "Blockade"))
-                        blockedRows[shortage.Name] = droppedByBlockade ? "Blockade" : "LowYield";
+                    if (entries.Count == 0 && dropped != null
+                        && (!blockedRows.TryGetValue(shortage.Name, out var already)
+                            || (dropped.Reason == "Blockade" && already.Reason == "LowYield")
+                            || (dropped.Reason == already.Reason && dropped.Loss < already.Loss)))
+                        blockedRows[shortage.Name] = dropped;
 
                     if (entries.Count > 0)
                     {

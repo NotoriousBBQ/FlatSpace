@@ -213,11 +213,19 @@ public static class AITuningLogger
             loss.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
-    /// <summary>A shortage could not be supplied because blockades removed every source: T&lt;turn&gt;|P&lt;id&gt;|ShipmentCancelled|target|Blockade. Logged on state change only.</summary>
-    public static void LogShipmentCancelled(int turnNumber, int playerId, string target, string reason)
+    /// <summary>
+    /// A shortage could not be supplied because blockades removed every source: T&lt;turn&gt;|P&lt;id&gt;|ShipmentCancelled|target|reason|source|loss|amount|blockedNodes.
+    /// reason is Blockade (loss &gt;= amount) or LowYield (below the minimum delivered fraction); source, loss and amount describe the
+    /// dropped pair closest to shipping; blockedNodes lists that route's blockaded planets as name=value joined by ',' ('-' when none).
+    /// Logged on state change only.
+    /// </summary>
+    public static void LogShipmentCancelled(int turnNumber, int playerId, string target, string reason, string source,
+        float loss, float amount, string blockedNodes)
     {
         if (_currentLogPath == null) return;
-        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ShipmentCancelled", target, reason) });
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ShipmentCancelled", target, reason, source,
+            loss.ToString("0.#", ci), amount.ToString("0.#", ci), blockedNodes) });
     }
 
     /// <summary>A ready colonizer was held back: T&lt;turn&gt;|P&lt;id&gt;|ColonizeCancelled|origin|BlockadedOrigin or NoRoute. Repeats every turn the condition holds.</summary>
