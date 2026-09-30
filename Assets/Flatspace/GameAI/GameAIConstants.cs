@@ -57,8 +57,9 @@ public class GameAIConstants : ScriptableObject
     [Header("Blockade memory")]
     // How many turns a planet where one of a player's own orders was cut stays remembered as blockaded, counted from
     // the last cut (another cut refreshes it; a fresh sighting of the planet without a blockade forgets it early). 0
-    // disables the memory.
-    public int blockadeMemoryTurns = 10;
+    // disables the memory. Raised from 10 to 20 after tuning logs showed a lasting blockade outliving a 10-turn memory
+    // and re-cutting the same player's colonists each time it lapsed.
+    public int blockadeMemoryTurns = 20;
 
     [Header("Warships")]
     // Each researched Warship improvement a ship carries adds this fraction of the base cost to building it

@@ -681,7 +681,8 @@ public static class BlockadeAvoidanceSelfCheck
         var ok = true;
         using (var s = Scenario.Hub())
         {
-            ok &= Check(s.Constants.blockadeMemoryTurns == 10, "blockadeMemoryTurns defaults to 10");
+            ok &= Check(s.Constants.blockadeMemoryTurns == 20, "blockadeMemoryTurns defaults to 20");
+            s.Constants.blockadeMemoryTurns = 10;   // the turn numbers below (5, 6, 16, 20) assume a lifetime of 10
 
             // A warship of player 1 sits at H, two hops from A: unseen and unremembered, so the colonist goes through it.
             s.Blockade("H");

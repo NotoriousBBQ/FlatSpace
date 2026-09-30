@@ -521,7 +521,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   planets where one of its OWN orders was cut (`BlockadeMemory`, `Assets/Flatspace/GameAI/BlockadeMemory.cs`: planet,
   value, turn). `BlockadeSystem.Apply` returns every cut it made (colony orders; each blockaded node a food/grotsits
   shipment passes) and `GameAI.ApplyBlockades` hands each to the ORDER OWNER's `PlayerAI.LearnBlockade`. The memory is
-  active for `GameAIConstants.blockadeMemoryTurns` (default 10; 0 disables) after the LAST cut (another cut refreshes
+  active for `GameAIConstants.blockadeMemoryTurns` (default 20, raised from 10 after tuning logs showed a lasting blockade outliving the shorter memory; 0 disables) after the LAST cut (another cut refreshes
   it), so a hub two hops from anything the player holds stops eating colonists every few turns. `BlockadeView.Build`
   adds remembered planets that are not currently visible; a fresh direct sighting overrides memory (a visible planet
   that is not blockaded is forgotten). Only colonization routing uses it so far (through the view), and it is saved
