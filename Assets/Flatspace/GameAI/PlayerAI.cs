@@ -601,6 +601,15 @@ namespace FlatSpace
             private const float DistributionCenterPrioritySentinel = float.MinValue / 2f;
 
             /// <summary>
+            /// The least share of a shipment that must still arrive, through unavoidable blockades, for this target to be
+            /// supplied (GameAIConstants.shipmentMinDeliveredFraction, clamped to 0..1). One method so a later change can
+            /// ask for less on a high value target (a Distribution Center, a specialist producer, a chokepoint) and more on
+            /// an ordinary one; today every target shares the constant. Public for the self-check.
+            /// </summary>
+            public float MinDeliveredFractionFor(string targetPlanetName)
+                => Mathf.Clamp01(AIMap.GameAIConstants.shipmentMinDeliveredFraction);
+
+            /// <summary>
             /// Choice order within a shortage row: clean routes before lossy ones (a nearer source that loses part of the
             /// shipment never beats a clean one), then the ScoreMatrix default, cost minus surplus. Public for the self-check.
             /// </summary>
@@ -677,7 +686,9 @@ namespace FlatSpace
                     s => Convert.ToSingle(s.Data) * AIMap.GetPlanet(s.Name).GetPopulationFraction(Player.playerID));
 
                 var maxRounds = shortages.Count + surplusResults.Count;
-                var blockedRows = new HashSet<string>();   // rows a blockade removed every source from (in any round)
+                // Rows where blockades removed every source (in any round): "Blockade" (loss >= amount) or "LowYield"
+                // (only the minimum delivered fraction refused them).
+                var blockedRows = new Dictionary<string, string>();
                 var servedRows = new HashSet<string>();
                 for (var round = 0; round < maxRounds; round++)
                 {
@@ -706,10 +717,10 @@ namespace FlatSpace
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
                 foreach (var shortage in shortages)
                 {
-                    if (!servedRows.Contains(shortage.Name) && blockedRows.Contains(shortage.Name))
+                    if (!servedRows.Contains(shortage.Name) && blockedRows.TryGetValue(shortage.Name, out var heldReason))
                     {
-                        if (NoteShipmentHeldBack(transportType, shortage.Name, "Blockade"))
-                            AITuningLogger.LogShipmentCancelled(turn, Player.playerID, shortage.Name, "Blockade");
+                        if (NoteShipmentHeldBack(transportType, shortage.Name, heldReason))
+                            AITuningLogger.LogShipmentCancelled(turn, Player.playerID, shortage.Name, heldReason);
                     }
                     else
                     {
@@ -744,7 +755,7 @@ namespace FlatSpace
                 Dictionary<string, float>       remainingShortage,
                 Dictionary<string, float>       remainingSurplus,
                 List<string>                    syntheticShortageNames,
-                HashSet<string>                 blockedRows)
+                Dictionary<string, string>      blockedRows)
             {
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction  >
                     (new ScoreMatrixDecisionComparer());
@@ -759,9 +770,12 @@ namespace FlatSpace
                     // actually taken may be longer). s.Name != shortage.Name stays: a DC can be BOTH this shortage row
                     // (synthetic demand) AND a real surplus source the same turn, and must never ship to itself.
                     // A blockaded source or target is not dropped: its value is part of the route's Loss, and the pair is
-                    // offered only while Loss < the amount it would carry (a shipment that would arrive with 0 is cancelled).
+                    // offered only while Loss < the amount it would carry (a shipment that would arrive with 0 is cancelled)
+                    // and it delivers at least MinDeliveredFractionFor(shortage) of that amount (LowYield otherwise).
                     var entries = new List<ResourceChoiceElement>();
                     var droppedByBlockade = false;
+                    var droppedLowYield = false;
+                    var minFraction = MinDeliveredFractionFor(shortage.Name);
                     foreach (var s in surplusResults)
                     {
                         if (s.Name == shortage.Name || remainingSurplus[s.Name] <= 0f) continue;
@@ -771,6 +785,11 @@ namespace FlatSpace
                         if (route.Loss >= amount)
                         {
                             droppedByBlockade = true;
+                            continue;
+                        }
+                        if (amount - route.Loss < minFraction * amount)
+                        {
+                            droppedLowYield = true;
                             continue;
                         }
                         entries.Add(new ResourceChoiceElement
@@ -783,7 +802,9 @@ namespace FlatSpace
                             IsDetour = route.IsDetour,
                         });
                     }
-                    if (entries.Count == 0 && droppedByBlockade) blockedRows.Add(shortage.Name);
+                    if (entries.Count == 0 && (droppedByBlockade || droppedLowYield)
+                        && !(blockedRows.TryGetValue(shortage.Name, out var already) && already == "Blockade"))
+                        blockedRows[shortage.Name] = droppedByBlockade ? "Blockade" : "LowYield";
 
                     if (entries.Count > 0)
                     {

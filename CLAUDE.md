@@ -556,10 +556,17 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   The simulation agrees with the planner because `BlockadeSystem` now also cuts a shipment at its origin (see above), so
   economy numbers on boards with lasting blockades are not comparable with runs before this change. Logging:
   `RouteDetour` (shared with colonists), `ShipmentLossy|<origin>-><target>|<amount>|<loss>` when a shipment goes out
-  through unavoidable blockades, and `ShipmentCancelled|<target>|Blockade` when blockades removed every source for a
-  shortage (logged on state change only, through `PlayerAI.NoteShipmentHeldBack`, log-only state like
+  through unavoidable blockades, and `ShipmentCancelled|<target>|<Blockade or LowYield>` when blockades removed every source
+  for a shortage (`Blockade`: loss >= amount; `LowYield`: only the minimum delivered fraction refused it; logged on state change only, through `PlayerAI.NoteShipmentHeldBack`, log-only state like
   `_colonizeHeldBack`). A shipment sends and deducts its full amount; the loss happens en route, so the shortage
-  re-reports after a lossy shipment lands. Assault is not blockade-aware yet.
+  re-reports after a lossy shipment lands. **Minimum delivered fraction:** a lossy pair is also refused when it would deliver
+  less than `GameAIConstants.shipmentMinDeliveredFraction` (in-code default 0.5, clamped to 0..1; 0 = the plain
+  `loss < amount` rule, 1 = clean routes only) of what the origin pays, i.e. it needs `amount - loss >= fraction x amount`.
+  Clean routes (loss 0) are never refused. Tuning logs on `test2.json` and `4p.json` showed lossy shipments delivering
+  ~12% of their cost (e.g. 11 sent into a blockade of 10), which is why 0.5. The threshold is read through
+  `PlayerAI.MinDeliveredFractionFor(targetPlanetName)`, today just the constant: the seam for a per-target threshold
+  (see "Value-aware shipment delivery threshold" in `FUTURE_FEATURES.md`). Float caveat as elsewhere: never put a
+  self-check exactly on the `fraction x amount` boundary. Assault is not blockade-aware yet.
 
 ### Distribution Centers
 
@@ -627,7 +634,7 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a blockade detour (colonist or shipment) as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a shipment sent through unavoidable blockades as `ShipmentLossy|<origin>-><target>|<amount>|<loss>`, a shortage left unsupplied because blockades removed every source as `ShipmentCancelled|<target>|Blockade` (on state change only), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a blockade detour (colonist or shipment) as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a shipment sent through unavoidable blockades as `ShipmentLossy|<origin>-><target>|<amount>|<loss>`, a shortage left unsupplied because blockades removed every source as `ShipmentCancelled|<target>|<Blockade or LowYield>` (on state change only), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
