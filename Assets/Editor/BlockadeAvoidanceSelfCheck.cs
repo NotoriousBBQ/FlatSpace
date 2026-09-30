@@ -17,6 +17,7 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunShortestPathAvoidingCheck();
         ok &= RunShipmentPlannerCheck();
         ok &= RunCarriedRouteCheck();
+        ok &= RunShipmentOriginCheck();
         ok &= RunColonizationRoutingCheck();
         ok &= RunProductionResponseCheck();
         ok &= RunColonizeHeldBackStateCheck();
@@ -401,6 +402,71 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= Check(GameAI.GameAIOrder.RouteFromSave(new List<string> { "A" }) == null
                     && GameAI.GameAIOrder.RouteFromSave(null) == null,
             "a saved route of fewer than 2 nodes, or none, restores as none");
+        return ok;
+    }
+
+    // The origin of a food/grotsits shipment is blockaded like any other node, once, on the first turn the order is
+    // processed (TimingDelay + 1 >= TotalDelay, TotalDelay > 0). Colonists are unchanged.
+    public static bool RunShipmentOriginCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_ShipOrigin");
+        var template = WarshipSelfCheck.MakeTemplate();
+        var constants = WarshipSelfCheck.MakeConstants(template);
+        var research = WarshipSelfCheck.MakeResearch();
+        try
+        {
+            var map = BuildDiamond(go, constants);
+            var blockade = new BlockadeSystem(map, research);
+            var route = new List<string> { "A", "B", "D" };
+            WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 1, 1);   // 10 against player 0 at the origin A
+
+            var order = ShipmentOrder("A", "D", 3, 4, route, 50f);
+            var orders = new List<GameAI.GameAIOrder> { order };
+            var cuts = blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(order.Data), 40f) && cuts.Count == 1 && cuts[0].Planet == "A"
+                        && Near(cuts[0].Value, 10f),
+                "a shipment loses the origin's blockade value on its first processed turn (50 to 40) and reports the cut");
+            order.TimingDelay = 2;
+            blockade.Apply(orders, 2);
+            ok &= Check(Near(System.Convert.ToSingle(order.Data), 40f), "the origin is cut once, not again on later turns");
+
+            var small = ShipmentOrder("A", "D", 3, 4, route, 8f);
+            map.GetPlanet("D").FoodShipmentIncoming = true;
+            orders = new List<GameAI.GameAIOrder> { small };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0 && !map.GetPlanet("D").FoodShipmentIncoming,
+                "a shipment smaller than the origin's blockade is removed and the target's incoming flag cleared");
+
+            orders = new List<GameAI.GameAIOrder> { ColonistOrder("A", "D", 3, 4, route) };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 1, "a colonist's origin is still never checked");
+
+            var zero = ShipmentOrder("A", "D", 0, 0, route, 50f);
+            orders = new List<GameAI.GameAIOrder> { zero };
+            blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(zero.Data), 50f),
+                "a zero-delay order (the known double-execution quirk) never has its origin cut");
+
+            var mid = ShipmentOrder("A", "D", 1, 4, route, 50f);
+            orders = new List<GameAI.GameAIOrder> { mid };
+            blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(mid.Data), 50f),
+                "an order already past its first turn (e.g. loaded mid-flight) is not cut at the origin");
+
+            var older = ShipmentOrder("A", "D", 3, 4, null, 50f);
+            orders = new List<GameAI.GameAIOrder> { older };
+            blockade.Apply(orders, 1);
+            ok &= Check(Near(System.Convert.ToSingle(older.Data), 40f),
+                "an older shipment with no carried route still has its origin cut on its first turn");
+        }
+        finally
+        {
+            WarshipSelfCheck.DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
         return ok;
     }
 
