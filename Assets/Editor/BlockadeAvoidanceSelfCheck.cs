@@ -15,6 +15,7 @@ public static class BlockadeAvoidanceSelfCheck
         var ok = RunBlockadeViewCheck();
         ok &= RunRoutePlannerCheck();
         ok &= RunShortestPathAvoidingCheck();
+        ok &= RunCarriedRouteCheck();
         Debug.Log(ok
             ? "[BlockadeAvoidanceSelfCheck] ALL PASSED"
             : "[BlockadeAvoidanceSelfCheck] FAILURES (see errors above)");
@@ -229,6 +230,87 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= Check(RoutePlanner.ShortestPathAvoiding(graph, "S", "Nowhere", null) == null
                     && RoutePlanner.ShortestPathAvoiding(graph, "Nowhere", "T", null) == null,
             "an unknown origin or target gives null");
+        return ok;
+    }
+
+    private static GameAI.GameAIOrder ColonistOrder(string origin, string target, int timingDelay, int totalDelay,
+        List<string> route)
+        => new GameAI.GameAIOrder
+        {
+            Type = GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+            TimingDelay = timingDelay, TotalDelay = totalDelay,
+            Data = 1, Origin = origin, Target = target, PlayerId = 0,
+            Route = route,
+        };
+
+    public static bool RunCarriedRouteCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_CarriedRoute");
+        var template = WarshipSelfCheck.MakeTemplate();
+        var constants = WarshipSelfCheck.MakeConstants(template);
+        var research = WarshipSelfCheck.MakeResearch();
+        try
+        {
+            var map = BuildDiamond(go, constants);
+            var blockade = new BlockadeSystem(map, research);
+
+            ok &= Check(Near(map.EdgeCost("A", "B"), 111.8f) && map.EdgeCost("A", "D") == 0f && map.EdgeCost("Q", "B") == 0f,
+                "EdgeCost is the connection cost between adjacent nodes, 0 when there is no such edge");
+
+            var detourRoute = new List<string> { "A", "C", "D" };
+            var flown = blockade.RouteFor(ColonistOrder("A", "D", 4, 4, detourRoute));
+            ok &= Check(flown.Count == 2 && flown[0].Name == "C" && Near(flown[0].Fraction, 0.5f)
+                        && flown[1].Name == "D" && Near(flown[1].Fraction, 1f),
+                "a carried route yields its own nodes after the origin, C halfway (A-C and C-D cost the same)");
+            var fallback = blockade.RouteFor(ColonistOrder("A", "D", 4, 4, null));
+            ok &= Check(fallback.Count == 2 && fallback[0].Name == "B",
+                "an order with no route falls back to the shortest path A>B>D");
+            var tooShort = blockade.RouteFor(ColonistOrder("A", "D", 4, 4, new List<string> { "A" }));
+            ok &= Check(tooShort.Count == 2 && tooShort[0].Name == "B",
+                "a carried route of fewer than 2 nodes is ignored");
+
+            // A blockader at B (on the shortest path only). The detour order does not pass B.
+            WarshipSelfCheck.DockWarships(map.GetPlanet("B"), 1, 1);
+            var orders = new List<GameAI.GameAIOrder> { ColonistOrder("A", "D", 2, 4, detourRoute) };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 1, "a blockade only on the shortest path does not touch an order flying the detour");
+
+            // The same order WITHOUT a carried route is checked on the shortest path and is removed at B.
+            orders = new List<GameAI.GameAIOrder> { ColonistOrder("A", "D", 2, 4, null) };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0, "an older order with no route is still blockaded along the shortest path");
+
+            // A blockader at C blocks the detour order at the halfway node.
+            map.GetPlanet("B").UndockShips(Ship.ShipKind.WarShip, 1, 99);
+            WarshipSelfCheck.DockWarships(map.GetPlanet("C"), 1, 1);
+            orders = new List<GameAI.GameAIOrder> { ColonistOrder("A", "D", 2, 4, detourRoute) };
+            blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0, "a blockade on the carried route removes the colonist order");
+        }
+        finally
+        {
+            WarshipSelfCheck.DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+
+        // Saves: the route survives a JsonUtility round trip; an older order with no route loads as none.
+        var save = new SaveLoadSystem.GameSave.OrderSave
+        {
+            origin = "A", target = "D", playerId = 0,
+            route = new List<string> { "A", "C", "D" },
+        };
+        var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>(JsonUtility.ToJson(save));
+        var restored = GameAI.GameAIOrder.RouteFromSave(loaded.route);
+        ok &= Check(restored != null && string.Join(">", restored) == "A>C>D", "an order route survives a save round trip");
+        var older = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>("{\"origin\":\"A\",\"target\":\"D\"}");
+        ok &= Check(GameAI.GameAIOrder.RouteFromSave(older.route) == null, "an older order with no route restores as none");
+        ok &= Check(GameAI.GameAIOrder.RouteFromSave(new List<string> { "A" }) == null
+                    && GameAI.GameAIOrder.RouteFromSave(null) == null,
+            "a saved route of fewer than 2 nodes, or none, restores as none");
         return ok;
     }
 }

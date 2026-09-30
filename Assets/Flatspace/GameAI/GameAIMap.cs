@@ -62,6 +62,16 @@ namespace FlatSpace
                 return reversed;
             }
 
+            /// <summary>The connection cost between two adjacent planets; 0 when they are not adjacent or unknown.</summary>
+            public float EdgeCost(string a, string b)
+            {
+                if (!PathingSystem.Instance.PathNodes.TryGetValue(a, out var node)) return 0f;
+                foreach (var connection in node.Connections)
+                    if (connection.NodeName == b)
+                        return connection.Cost;
+                return 0f;
+            }
+
             public void ClearGameAIMap()
             {
                 _planets.Clear();

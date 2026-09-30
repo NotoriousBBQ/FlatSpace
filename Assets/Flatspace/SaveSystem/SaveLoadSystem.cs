@@ -94,6 +94,8 @@ public class SaveLoadSystem : MonoBehaviour
             public int playerId;
             // Ships in flight for a ship-transport order (null/empty for every other order and for older saves).
             public List<GameSave.ShipSave> fleetShips;
+            // A colonist order's planned route (null/empty for every other order and for older saves).
+            public List<string> route;
         }
 
         [Serializable]
@@ -229,7 +231,8 @@ public class SaveLoadSystem : MonoBehaviour
                         data = Convert.ToSingle(order.Data),
                         dataType = order.Data is float ? "float" : "int",
                         playerId = order.PlayerId,
-                        fleetShips = order.Fleet?.ToSave(order.PlayerId)
+                        fleetShips = order.Fleet?.ToSave(order.PlayerId),
+                        route = order.Route != null ? new List<string>(order.Route) : null
                     });
             }
 

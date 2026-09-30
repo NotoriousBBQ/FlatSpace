@@ -60,6 +60,15 @@ namespace FlatSpace
                 // Ships carried by a ship order. Not serialized by Unity; saves go through GameSave.ShipSave.
                 [NonSerialized] public ShipFleetPayload Fleet;
 
+                // The planned route of a colonist order (origin to target inclusive), so blockade is applied along the route
+                // actually flown, not the shortest path. Not serialized by Unity; saves go through OrderSave.route. Null
+                // (no route recorded) means "use the shortest path".
+                [NonSerialized] public List<string> Route;
+
+                /// <summary>A saved route of fewer than 2 nodes (older saves, non-route orders) restores as none.</summary>
+                public static List<string> RouteFromSave(List<string> saved)
+                    => saved != null && saved.Count >= 2 ? new List<string>(saved) : null;
+
                 /// <summary>What a fleet in flight is: the ship kind and one research snapshot per ship.</summary>
                 public class ShipFleetPayload
                 {
@@ -335,7 +344,8 @@ namespace FlatSpace
                         Origin = orderStatus.origin,
                         Target = orderStatus.target,
                         PlayerId = orderStatus.playerId,
-                        Fleet = GameAIOrder.ShipFleetPayload.FromSave(orderStatus.fleetShips)
+                        Fleet = GameAIOrder.ShipFleetPayload.FromSave(orderStatus.fleetShips),
+                        Route = GameAIOrder.RouteFromSave(orderStatus.route),
                     });
                 }
 
