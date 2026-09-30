@@ -153,6 +153,27 @@ user asked about one specific thing.
 - **Weak start:** flag a player whose morale or planet count lags early (morale under about 100 or several planets short
   at T100, noticeably fewer planets at T250 than the others) and say whether it recovers. Check its blockade and colonist
   cut counts to say whether it looks like a start-position or balance effect or blockade damage.
+- **Shipment delivery:** per run, total the amount fields of `FoodShip`/`GrotsitsShip` (`T|P|FoodShip|<origin>-><target>|<amount>`)
+  against `FoodArrive`/`GrotsitsArrive`, and report delivered / sent for each resource. Counts alone hide blockade losses
+  (arrivals are reduced, not removed); with blockade-aware shipping this should sit near 0.99 (it was about 0.82 to 0.94
+  before shipment avoidance).
+- **Lossy shipments:** for each `ShipmentLossy|<origin>-><target>|<amount>|<loss>` compute the delivered share
+  `(amount - loss) / amount` and total amount sent against planned loss per run (the shipment minimum delivered fraction,
+  `shipmentMinDeliveredFraction`, should keep every line at or above it). Then join each food/grotsits `OrderBlocked`
+  to a lossy plan by player and the plan's origin or target within about 14 turns after it, and report cuts at the
+  origin, at the target, mid-route and unexplained. Planned and actual cuts should agree; a handful of unexplained cuts
+  are blockades the player could not see, many mean the view or memory is missing something.
+- **Detour lanes:** a `RouteDetour` with no `ColonizeStart` for the same player, turn and route is a shipment detour.
+  Report colonist and shipment detour counts per run, the top lanes (origin->target pairs, how many of that pair's
+  shipments detoured), and the average node count and cost. A lane with dozens of detours over hundreds of turns is a
+  lasting blockade being routed around (working as intended), but note the extra transit time it costs.
+- **Cancelled episodes per target:** `ShipmentCancelled` counts per player, target and reason. One line is one episode, yet
+  a flickering shortage repeats, so a target with dozens of episodes deserves a look: who blockades it, and is its
+  population falling (`PopulationLoss`/`PlanetDead` for that planet)?
+- **Variance with few runs:** with three runs per side, print each metric's per-run values next to the average (and the
+  planets owned at T375 per player per run, which swing between runs) and call a difference real only when the ranges do
+  not overlap (for example `Blockade` 166 to 321 before against 6 to 43 after); an overlapping difference
+  (`PopulationLoss` 94 to 215 against 138 to 286) is a watch item, not a finding.
 - **Colony failures:** count `PopulationLoss` and `PlanetDead`. The colony food rider is a bridge, not
   a guarantee — a few failures are expected and fine; zero is fine too; a lot might mean the rider
   amount needs raising.
