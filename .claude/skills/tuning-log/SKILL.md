@@ -164,6 +164,12 @@ user asked about one specific thing.
      episodes (reason `Blockade` or `LowYield`), `Blockade` cuts at the planet and at its neighbours, `BlockadedProduction`,
      `AssaultTarget` lines on it or its neighbours, and its place on the board (connection count from the board config: a leaf
      behind a hub that is blockaded or contested cannot be fed; `Industrial 1` behind `Verdant 0` on `test2.json`).
+  For the flagged (churn) planets only, give the grotsits-to-food ratio per planet per run: grotsits shipped OUT (`GrotsitsShip`
+  with the planet as origin) over food RECEIVED (`FoodArrive` with it as target), with `ColonyRider` amounts shown separately
+  and also added in; a planet that exports nothing gets grotsits received over food received instead. On `test2.json` the
+  churning Desolate planet (`Desolate 0`) exports about 10 grotsits per food received (about 6 counting riders), while the
+  non-Desolate churn planets import about 3 to 4 grotsits per food; an importer with near-zero inflow of both is the
+  unsupplied case. Pool the ratios by planet type for the summary.
   Give the churn cost (colonize starts spent on the planet, for example 15 starts and 14 arrivals over 230 turns) and say
   which run-to-run variation it is (the same planet in every run, or only in the runs where a rival occupies its hub). The
   Colonize-die churn, including on planets the AI cannot currently supply (a leaf behind a contested hub), is desired
