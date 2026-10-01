@@ -13,6 +13,8 @@ public static class BlockadeBreakSelfCheck
     public static bool RunChecks()
     {
         var ok = RunIncomingOffenseCheck();
+        ok &= RunBlockadeTargetCheck();
+        ok &= RunBlockadeRankingCheck();
         Debug.Log(ok
             ? "[BlockadeBreakSelfCheck] ALL PASSED"
             : "[BlockadeBreakSelfCheck] FAILURES (see errors above)");
@@ -215,6 +217,131 @@ public static class BlockadeBreakSelfCheck
 
             c.AddIncomingOffense(Ship.ShipKind.WarShip, 0, -5f);
             ok &= Check(Near(c.GetIncomingOffense(Ship.ShipKind.WarShip, 0), 0f), "the counter never goes below 0");
+        }
+        return ok;
+    }
+
+    public static bool RunBlockadeTargetCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            s.Ships("C", 1, 2);                       // player 1 blockades C against me: value 2 x 10 = 20
+            var view = s.View(10);
+            var planner = s.Planner(view, 10);
+
+            var target = planner.ChooseBlockadeTarget(out var reason);
+            ok &= Check(target == s.P("C") && reason == AssaultPlanner.ReasonCheapest,
+                "a visibly blockaded, reachable planet is the target (the only candidate decides on 'Cheapest')");
+            ok &= Check(planner.IsBlockadeTarget(s.P("C")) && !planner.IsBlockadeTarget(s.P("D")),
+                "IsBlockadeTarget is true for the blockaded planet only");
+            ok &= Check(Near(planner.NeededOffense(s.P("C")), 22f),
+                "needed = value 20 x (1 + margin 0.1) = 22");
+            s.P("C").AddIncomingOffense(Ship.ShipKind.WarShip, 0, 8f);
+            ok &= Check(Near(planner.NeededOffense(s.P("C")), 14f), "offense already in flight is subtracted: 22 - 8 = 14");
+            ok &= Check(planner.ChooseTarget() == s.P("C"), "ChooseTarget picks the blockade target first");
+
+            // An enemy-occupied planet D exists, but the blockade outranks it.
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("D"), "the enemy-occupied fallback still finds D");
+        }
+
+        // No blockade anywhere: the existing enemy-occupied rule runs unchanged.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == null && reason == null,
+                "nothing blockaded: no blockade target");
+            ok &= Check(planner.ChooseTarget() == s.P("D"), "nothing blockaded: the enemy-occupied planet D is the target");
+        }
+
+        // Review focus 5: no view at all (the old constructor, every existing caller) behaves exactly as before.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            s.Ships("C", 1, 2);
+            var legacy = new AssaultPlanner(s.Map, 0);
+            ok &= Check(legacy.ChooseBlockadeTarget(out _) == null, "no view: no blockade candidates");
+            ok &= Check(!legacy.IsBlockadeTarget(s.P("C")), "no view: nothing is a blockade target");
+            ok &= Check(legacy.ChooseTarget() == s.P("D"),
+                "no view: ChooseTarget is the enemy-occupied rule (C holds enemy ships but no population, D is the target)");
+            ok &= Check(Near(legacy.NeededOffense(s.P("C")), 0f), "no view: nothing is needed anywhere");
+        }
+
+        // Review focus 1: a planet known only from memory (no blocker, value only) is a valid target and nothing throws.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            var remembered = new AssaultPlanner(s.Map, 0, BlockadeView.WithValues(("C", 20f)),
+                new WarshipStats(s.Research), s.Memory, 10);
+            ok &= Check(remembered.ChooseBlockadeTarget(out _) == s.P("C"),
+                "a blockade with no known blocker (remembered, unseen) is still a target");
+            ok &= Check(Near(remembered.NeededOffense(s.P("C")), 22f), "its remembered value sizes the need: 20 x 1.1");
+        }
+
+        // Review focus 2: a blockaded planet nobody of mine can reach is not a candidate, so the fallback runs.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            var unreachable = new AssaultPlanner(s.Map, 0, BlockadeView.WithValues(("Z", 20f)),
+                new WarshipStats(s.Research), s.Memory, 10);
+            ok &= Check(unreachable.ChooseBlockadeTarget(out _) == null, "an unreachable blockaded planet is not a candidate");
+            ok &= Check(unreachable.ChooseTarget() == s.P("D"), "so the enemy-occupied fallback (D) runs");
+        }
+        return ok;
+    }
+
+    // Ranking: committed offense, then a recent cut, then the smallest offense still needed, then path cost, then name.
+    public static bool RunBlockadeRankingCheck()
+    {
+        var ok = true;
+
+        // C1: 3 enemy ships (value 30, cheaper path); C2: 2 enemy ships (value 20, dearer path).
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCheapest,
+                "nothing committed, no cut: the smaller need (C2: 22 against C1: 33) wins");
+        }
+
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            s.Memory.Learn("C1", 30f, 8, 20);               // turn 10: cut 2 turns ago, inside the 5-turn window
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C1") && reason == AssaultPlanner.ReasonRecentCut,
+                "a planet that cut my order 2 turns ago outranks a smaller need");
+        }
+
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            s.Memory.Learn("C1", 30f, 3, 20);               // turn 10: cut 7 turns ago, outside the window
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out _) == s.P("C2"),
+                "a cut older than blockadeTargetRecentTurns no longer outranks the smaller need");
+        }
+
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            s.Ships("C1", 0, 1);                            // I already hold one ship (offense 10) at C1
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.CommittedOffense(s.P("C1")) > 9.99f, "docked offense counts as committed");
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C1") && reason == AssaultPlanner.ReasonCommitted,
+                "committed offense wins first, even though C1's remaining value (20) ties C2's");
+        }
+
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            s.P("C2").AddIncomingShips(Ship.ShipKind.WarShip, 0, 1);
+            s.P("C2").AddIncomingOffense(Ship.ShipKind.WarShip, 0, 10f);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCommitted,
+                "offense in flight toward a planet counts as committed");
         }
         return ok;
     }

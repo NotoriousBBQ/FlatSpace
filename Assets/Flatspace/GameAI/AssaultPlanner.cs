@@ -14,15 +14,32 @@ namespace FlatSpace
         /// </summary>
         public class AssaultPlanner
         {
+            public const string ReasonCommitted = "Committed";
+            public const string ReasonRecentCut = "RecentCut";
+            public const string ReasonCheapest  = "Cheapest";
+
             private readonly GameAIMap _map;
             private readonly int _playerId;
             private readonly GameAIConstants _constants;
+            private readonly BlockadeView _view;
+            private readonly WarshipStats _stats;
+            private readonly BlockadeMemory _memory;
+            private readonly int _turn;
 
-            public AssaultPlanner(GameAIMap map, int playerId)
+            /// <summary>
+            /// `view`, `stats` and `memory` are optional: without a view nothing is a blockade target and the planner behaves
+            /// exactly as it did before blockade breaking existed. `turn` is only used to test BlockadeMemory for recent cuts.
+            /// </summary>
+            public AssaultPlanner(GameAIMap map, int playerId, BlockadeView view = null, WarshipStats stats = null,
+                BlockadeMemory memory = null, int turn = 0)
             {
                 _map = map;
                 _playerId = playerId;
                 _constants = map.GameAIConstants;
+                _view = view;
+                _stats = stats;
+                _memory = memory;
+                _turn = turn;
             }
 
             private int CountWarships(Planet planet)
@@ -100,12 +117,108 @@ namespace FlatSpace
                 return best;
             }
 
+            // ── Blockade breaking ────────────────────────────────────────────
+
+            /// <summary>The planet is blockaded against me in my view.</summary>
+            public bool IsBlockadeTarget(Planet planet)
+                => _view != null && planet != null && _view.IsBlockaded(planet.PlanetName);
+
+            /// <summary>My real warship offense docked at the planet (0 without WarshipStats).</summary>
+            private float DockedOffense(Planet planet)
+            {
+                if (_stats == null) return 0f;
+                var sum = 0f;
+                foreach (var ship in planet.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.WarShip && ship.Owner == _playerId)
+                        sum += _stats.Offense(ship.Template, ship.ResearchSnapshot);
+                return sum;
+            }
+
+            /// <summary>My offense committed at the planet: docked plus in flight.</summary>
+            public float CommittedOffense(Planet planet)
+                => DockedOffense(planet) + planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);
+
+            /// <summary>
+            /// Offense still to send to break the blockade: value x (1 + margin) minus offense already in flight. The view's
+            /// value already subtracts my docked offense. 0 when the planet is not blockaded; at or below 0 when covered.
+            /// </summary>
+            public float NeededOffense(Planet planet)
+            {
+                if (!IsBlockadeTarget(planet)) return 0f;
+                return _view.Value(planet.PlanetName) * (1f + _constants.blockadeBreakMargin)
+                       - planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);
+            }
+
+            private struct BlockadeCandidate
+            {
+                public Planet Planet;
+                public float  Committed;
+                public bool   Recent;
+                public float  Needed;
+                public float  Cost;
+            }
+
+            /// <summary>
+            /// The blockaded, reachable planet to break. Ranked: most of my offense committed there, then a recent cut of one
+            /// of my orders, then the smallest offense still needed, then the cheapest path from a holder of my warships,
+            /// then name. `reason` says which step decided it (null with no target). A planet is reachable when I have ships
+            /// committed there or a usable path from a planet holding my warships; remembered, unseen planets count.
+            /// </summary>
+            public Planet ChooseBlockadeTarget(out string reason)
+            {
+                reason = null;
+                if (_view == null) return null;
+
+                var holders = _map.PlanetList.Where(p => CountWarships(p) > 0).ToList();
+                var candidates = new List<BlockadeCandidate>();
+                foreach (var name in _view.BlockadedNames.OrderBy(n => n, StringComparer.Ordinal))
+                {
+                    var planet = _map.GetPlanet(name);
+                    if (planet == null) continue;
+
+                    var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId);
+                    var cost = own > 0 ? 0f : CheapestPathCost(holders, planet);
+                    if (cost == null) continue;
+
+                    candidates.Add(new BlockadeCandidate
+                    {
+                        Planet    = planet,
+                        Committed = CommittedOffense(planet),
+                        Recent    = _memory != null
+                                    && _memory.IsActive(name, _turn, _constants.blockadeTargetRecentTurns),
+                        Needed    = NeededOffense(planet),
+                        Cost      = cost.Value,
+                    });
+                }
+                if (candidates.Count == 0) return null;
+
+                var ranked = candidates
+                    .OrderByDescending(c => c.Committed)
+                    .ThenByDescending(c => c.Recent)
+                    .ThenBy(c => c.Needed)
+                    .ThenBy(c => c.Cost)
+                    .ThenBy(c => c.Planet.PlanetName, StringComparer.Ordinal)
+                    .ToList();
+                var best = ranked[0];
+                if (ranked.Count == 1)
+                    reason = best.Committed > 0f ? ReasonCommitted : best.Recent ? ReasonRecentCut : ReasonCheapest;
+                else if (best.Committed != ranked[1].Committed) reason = ReasonCommitted;
+                else if (best.Recent != ranked[1].Recent) reason = ReasonRecentCut;
+                else reason = ReasonCheapest;
+                return best.Planet;
+            }
+
+            // ── Targets ──────────────────────────────────────────────────────
+
+            /// <summary>A blockaded planet first (see ChooseBlockadeTarget), else the enemy-occupied rule.</summary>
+            public Planet ChooseTarget() => ChooseBlockadeTarget(out _) ?? ChooseEnemyTarget();
+
             /// <summary>
             /// The known, reachable, enemy-occupied planet where I already have the most warships
             /// docked + incoming (sticky); otherwise the cheapest path from a planet holding warships;
             /// ties by name. Null when there is no such planet.
             /// </summary>
-            public Planet ChooseTarget()
+            public Planet ChooseEnemyTarget()
             {
                 var holders = _map.PlanetList.Where(p => CountWarships(p) > 0).ToList();
                 if (holders.Count == 0) return null;
