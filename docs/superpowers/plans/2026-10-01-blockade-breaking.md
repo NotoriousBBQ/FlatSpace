@@ -25,6 +25,22 @@
 - Namespace and style: match the file being edited (`FlatSpace.AI` for `Assets/Flatspace/GameAI/*`; `Planet.cs` is in the global namespace and writes `System.Math`).
 - Verification: Unity cannot be run from Claude Code here. RED is "Rider `get_file_problems` reports errors for the missing members" (a brand-new file reports "not included in any project" until Unity regenerates it, so for new files ask the user to focus the Editor). GREEN is the user focusing the Editor (recompile, check the Console) and running `FlatSpace -> AI -> Run Blockade Breaking Self-Check`, then `Run All AI Self-Checks`.
 
+## Proposed tuning log output
+
+Required by `docs/session_configuration.md` section 4. All lines use `T<turn>|P<playerId>|<EventCode>|<fields...>`, are
+written by `AITuningLogger` (no-ops when no match is logging), and are added in Task 4 (Task 5 for the last one).
+
+| Line | Logged when | Question it answers | Repeat control, test |
+|---|---|---|---|
+| `BlockadeTarget\|<planet>\|<blocker>\|<value>\|<neededOffense>\|<Committed, RecentCut or Cheapest>` | the blockade target changes | which planet did the assault pick, against whom, how much offense does it need, and which ranking step decided it (is the recent-cut step ever the deciding one?) | `BlockadeTargetTracker` start transition; `RunTrackerCheck` |
+| `BlockadeForce\|<planet>\|<ships>\|<offense>\|<stillNeeded>` | each turn ships are sent at a blockade target | how much of the need does each wave cover; is `blockadeBreakMargin` too small (waves end with `stillNeeded > 0` and the blockade stays) or too large | once per turn a force is sent, so it is naturally sparse; `RunPlanShipActionsCheck` covers the send, the field values are covered by `RunBlockadePlanCheck` through `LastBlockadeForce` |
+| `BlockadeTargetEnd\|<planet>\|<Cleared, Switched or Unreachable>\|<turnsHeld>` | a blockade target stops being the target | how long does clearing take; are targets abandoned (`Switched`, `Unreachable`) before they clear | `BlockadeTargetTracker` end transition; `RunTrackerCheck` |
+| `OffenseResearchBoost\|<item>\|<multiplier>` | a research start picks a Warship Offense item while a blockade is visible | does the boost actually change which research is picked, and does it show only while blockaded | once per research start (not per turn); not self-checkable (needs `Gameboard`), verified in Play mode |
+
+Existing lines these read alongside: `Blockade`, `OrderBlocked`, `BlockadeLearned`, `AssaultTarget` (now logged only for a
+non-blockade target), `WarshipBoost`, `ShipMove`, `ShipArrive`. The `tuning-log` skill and the "AI Tuning Log" section of
+`CLAUDE.md` are updated in Task 6 (new codes plus the analyses listed there).
+
 ## Deviation from the spec (read before Task 1)
 
 The spec says incoming offense is "maintained at the same three places" as the incoming ship counter. This plan instead recomputes it once per turn from the in-flight `OrderTypeShipTransport` orders (`GameAIMap.RecomputeIncomingOffense`, called in `GameAI.GameAIUpdate` just before `ProcessResults`). The planner sees exactly the same set of ships the counter shows at that moment (the counter changes only when a ship-transfer-in-progress order executes, at the end of the previous turn, and the order is then in `CurrentAIOrders`), it cannot drift, and it needs no arrival or load bookkeeping and no stats inside the static `ApplyShip*` methods. Task 1 updates the spec text to match.
