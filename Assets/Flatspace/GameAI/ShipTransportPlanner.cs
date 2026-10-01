@@ -27,6 +27,16 @@ namespace FlatSpace
             /// </summary>
             public string HeldPlanet { get; set; }
 
+            /// <summary>
+            /// More planets whose docked ships must stay put (Consolidate: standoffs the player is holding, see
+            /// AssaultPlanner.ContestedHolds). Held like HeldPlanet: never stranded sources, and a held colony keeps
+            /// every ship (it still receives ships when below its garrison).
+            /// </summary>
+            public ICollection<string> HeldPlanets { get; set; } = new List<string>();
+
+            private bool IsHeld(string planetName)
+                => planetName == HeldPlanet || (HeldPlanets != null && HeldPlanets.Contains(planetName));
+
             public ShipTransportPlanner(GameAIMap map, int playerId,
                 PlayerAI.AIStrategy strategy = PlayerAI.AIStrategy.AIStrategyExpand)
             {
@@ -134,7 +144,8 @@ namespace FlatSpace
                 public int Docked;
                 public int Incoming;
                 public int RoundGarrison;   // Garrison x current round
-                public int Spare   => Math.Max(0, Docked - RoundGarrison);
+                public bool Held;           // its ships must stay (assault force or a held standoff): never spare
+                public int Spare   => Held ? 0 : Math.Max(0, Docked - RoundGarrison);
                 public int Deficit => Math.Max(0, RoundGarrison - (Docked + Incoming));
             }
 
@@ -158,7 +169,7 @@ namespace FlatSpace
                 // while a fleet is in flight): they are source-only so those ships are not stranded.
                 // The held (assault target) planet is excluded: those ships are the assault force.
                 var stranded = _map.PlanetList
-                    .Where(p => !IsColonized(p) && p.PlanetName != HeldPlanet && CountWarships(p) > 0)
+                    .Where(p => !IsColonized(p) && !IsHeld(p.PlanetName) && CountWarships(p) > 0)
                     .ToList();
                 // Ships in flight still belong to the player, so they count toward the unlock total.
                 var totalWarships = colonized.Concat(stranded)
@@ -210,7 +221,11 @@ namespace FlatSpace
                 }
 
                 LastRound = _strategy == PlayerAI.AIStrategy.AIStrategyConsolidate ? 1 : ComputeRound(states);
-                foreach (var state in states) state.RoundGarrison = state.Garrison * LastRound;
+                foreach (var state in states)
+                {
+                    state.RoundGarrison = state.Garrison * LastRound;
+                    state.Held = IsHeld(state.Planet.PlanetName);
+                }
                 LastStates = states;
                 return states;
             }

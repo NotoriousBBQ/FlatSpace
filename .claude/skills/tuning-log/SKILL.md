@@ -215,7 +215,26 @@ user asked about one specific thing.
 - **Colony failures:** count `PopulationLoss` and `PlanetDead`. The colony food rider is a bridge, not
   a guarantee — a few failures are expected and fine; zero is fine too; a lot might mean the rider
   amount needs raising.
-- **Combat activity:** `AssaultTarget` count/targets, if present (multi-player boards only).
+- **Combat activity:** `AssaultTarget` count/targets, if present (multi-player boards only). `AssaultTarget` is now logged
+  only for an ordinary enemy-occupied target; a blockade target is logged as `BlockadeTarget` instead.
+- **Blockade breaking:** under Consolidate the assault goes to a planet blockaded against the player first.
+  `BlockadeTarget|<planet>|<blocker>|<value>|<neededOffense>|<Committed, RecentCut or Cheapest>` logs a target change (the
+  last field is the ranking step that decided it; blocker `-1` is a remembered, unseen planet),
+  `BlockadeForce|<planet>|<ships>|<offense>|<stillNeeded>` each turn ships are sent at it, and
+  `BlockadeTargetEnd|<planet>|<Cleared, Switched or Unreachable>|<turnsHeld>` when it stops being the target. Report per run:
+  - **Time to clear:** `turnsHeld` of every `Cleared` end, and how many targets ended `Switched` or `Unreachable` instead
+    (abandoned before clearing). A planet that is a target again and again is a lasting occupation the force cannot beat.
+  - **Wave coverage:** the `BlockadeForce` lines per target. `stillNeeded` should fall to 0 within a few waves; waves that
+    end with `stillNeeded > 0` while the blockade stands mean the margin (`blockadeBreakMargin`) is too small or the fleet
+    is. Compare `neededOffense` on the `BlockadeTarget` line with the total `offense` sent.
+  - **Effect:** after a `Cleared`, `Blockade` and `OrderBlocked` lines at that planet against the same player should stop;
+    count them in the 20 turns before and after.
+  - **Ranking:** how often `RecentCut` decides a target (it needs `BlockadeLearned` for that planet within
+    `blockadeTargetRecentTurns`), against `Committed` and `Cheapest`.
+  - **Discipline:** the fleet cap still holds while a force is committed (`WarshipBoost` multiplier `0` with zero
+    `WarShipProduction` starts, except where a `BlockadedProduction` line exists).
+  - **Research boost:** `OffenseResearchBoost|<item>|<multiplier>` should appear only while a `Blockade` line for that
+    player is recent; compare the turn the first Warship Offense item completed against a run without blockades.
 
 ## 4. Compare against a previous run when one exists
 

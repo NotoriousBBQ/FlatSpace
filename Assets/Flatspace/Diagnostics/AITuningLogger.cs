@@ -155,6 +155,42 @@ public static class AITuningLogger
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "AssaultTarget", target, requiredForce.ToString()) });
     }
+    /// <summary>The blockade-breaking target changed: T&lt;turn&gt;|P&lt;id&gt;|BlockadeTarget|planet|blocker|value|neededOffense|Committed, RecentCut or Cheapest. Blocker -1 = remembered, unseen.</summary>
+    public static void LogBlockadeTarget(int turnNumber, int playerId, string planet, int blocker, float value,
+        float neededOffense, string reason)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadeTarget", planet, blocker.ToString(ci),
+            value.ToString("0.#", ci), neededOffense.ToString("0.#", ci), reason) });
+    }
+
+    /// <summary>Ships were sent at the blockade target this turn: T&lt;turn&gt;|P&lt;id&gt;|BlockadeForce|planet|ships|offense|stillNeeded.</summary>
+    public static void LogBlockadeForce(int turnNumber, int playerId, string planet, int ships, float offense,
+        float stillNeeded)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadeForce", planet, ships.ToString(ci),
+            offense.ToString("0.#", ci), stillNeeded.ToString("0.#", ci)) });
+    }
+
+    /// <summary>A blockade target stopped being the target: T&lt;turn&gt;|P&lt;id&gt;|BlockadeTargetEnd|planet|Cleared, Switched or Unreachable|turnsHeld.</summary>
+    public static void LogBlockadeTargetEnd(int turnNumber, int playerId, string planet, string reason, int turnsHeld)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadeTargetEnd", planet, reason,
+            turnsHeld.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A research start picked a Warship Offense item while the blockade boost was active: T&lt;turn&gt;|P&lt;id&gt;|OffenseResearchBoost|item|multiplier.</summary>
+    public static void LogOffenseResearchBoost(int turnNumber, int playerId, string itemName, float multiplier)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "OffenseResearchBoost", itemName,
+            multiplier.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
     public static void LogWarshipBoost(int turnNumber, int playerId, int wanted, int have, float multiplier)
     {
         if (_currentLogPath == null) return;

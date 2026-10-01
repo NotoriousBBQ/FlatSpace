@@ -131,6 +131,9 @@ namespace FlatSpace
                 LogEconomySummary(Gameboard.Instance.TurnNumber, Gameboard.Instance.players.Count);
                 GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count,
                     GameAIMap.GameAIConstants.maxPathNodesForKnowledge);
+                // The AI sizes blockade-breaking fleets against offense already in flight (see AssaultPlanner).
+                GameAIMap.RecomputeIncomingOffense(CurrentAIOrders,
+                    new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players)));
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);

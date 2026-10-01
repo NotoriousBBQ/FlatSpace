@@ -265,6 +265,27 @@ namespace FlatSpace
                 }
             }
 
+            /// <summary>
+            /// Rebuilds every planet's in-flight warship offense from the in-flight ShipTransport orders: the real offense
+            /// of each ship from the snapshot it left with. Derived state, recomputed once per turn before the AI decides
+            /// (GameAI.GameAIUpdate), so it matches the incoming ship counter and never drifts. Orders without a warship
+            /// fleet are ignored.
+            /// </summary>
+            public void RecomputeIncomingOffense(List<GameAI.GameAIOrder> orders, WarshipStats stats)
+            {
+                foreach (var planet in PlanetList) planet.ClearIncomingOffense();
+                var template = GameAIConstants.warShipData;
+                foreach (var order in orders)
+                {
+                    if (order.Type != GameAI.GameAIOrder.OrderType.OrderTypeShipTransport) continue;
+                    if (order.Fleet == null || order.Fleet.Kind != Ship.ShipKind.WarShip) continue;
+                    var target = GetPlanet(order.Target);
+                    if (target == null) continue;
+                    var offense = order.Fleet.Snapshots.Sum(snapshot => stats.Offense(template, snapshot));
+                    target.AddIncomingOffense(Ship.ShipKind.WarShip, order.PlayerId, offense);
+                }
+            }
+
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
                 var catalog = Gameboard.Instance.GetComponent<Catalog>();

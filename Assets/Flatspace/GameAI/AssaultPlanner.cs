@@ -14,15 +14,32 @@ namespace FlatSpace
         /// </summary>
         public class AssaultPlanner
         {
+            public const string ReasonCommitted = "Committed";
+            public const string ReasonRecentCut = "RecentCut";
+            public const string ReasonCheapest  = "Cheapest";
+
             private readonly GameAIMap _map;
             private readonly int _playerId;
             private readonly GameAIConstants _constants;
+            private readonly BlockadeView _view;
+            private readonly WarshipStats _stats;
+            private readonly BlockadeMemory _memory;
+            private readonly int _turn;
 
-            public AssaultPlanner(GameAIMap map, int playerId)
+            /// <summary>
+            /// `view`, `stats` and `memory` are optional: without a view nothing is a blockade target and the planner behaves
+            /// exactly as it did before blockade breaking existed. `turn` is only used to test BlockadeMemory for recent cuts.
+            /// </summary>
+            public AssaultPlanner(GameAIMap map, int playerId, BlockadeView view = null, WarshipStats stats = null,
+                BlockadeMemory memory = null, int turn = 0)
             {
                 _map = map;
                 _playerId = playerId;
                 _constants = map.GameAIConstants;
+                _view = view;
+                _stats = stats;
+                _memory = memory;
+                _turn = turn;
             }
 
             private int CountWarships(Planet planet)
@@ -100,12 +117,129 @@ namespace FlatSpace
                 return best;
             }
 
+            // ── Blockade breaking ────────────────────────────────────────────
+
+            /// <summary>The planet is blockaded against me in my view.</summary>
+            public bool IsBlockadeTarget(Planet planet)
+                => _view != null && planet != null && _view.IsBlockaded(planet.PlanetName);
+
+            /// <summary>My real warship offense docked at the planet (0 without WarshipStats).</summary>
+            private float DockedOffense(Planet planet)
+            {
+                if (_stats == null) return 0f;
+                var sum = 0f;
+                foreach (var ship in planet.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.WarShip && ship.Owner == _playerId)
+                        sum += _stats.Offense(ship.Template, ship.ResearchSnapshot);
+                return sum;
+            }
+
+            /// <summary>
+            /// Planets where my warships and another player's are both docked: a standoff I am holding. A blockade I have
+            /// just broken is one: its value is 0 or less, so it has left my BlockadeView, yet if my ships left the blockade
+            /// would re-form at once. The home plan keeps these ships where they are for as long as the rival stays. Empty
+            /// without warship stats.
+            /// </summary>
+            public List<string> ContestedHolds()
+            {
+                var holds = new List<string>();
+                if (_stats == null) return holds;
+                foreach (var planet in _map.PlanetList)
+                {
+                    if (DockedOffense(planet) <= 0f) continue;
+                    var rivalHere = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip
+                        && s.Owner != _playerId && s.Owner != Planet.NoOwner
+                        && _stats.Offense(s.Template, s.ResearchSnapshot) > 0f);
+                    if (rivalHere) holds.Add(planet.PlanetName);
+                }
+                return holds;
+            }
+
+            /// <summary>My offense committed at the planet: docked plus in flight.</summary>
+            public float CommittedOffense(Planet planet)
+                => DockedOffense(planet) + planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);
+
+            /// <summary>
+            /// Offense still to send to break the blockade: value x (1 + margin) minus offense already in flight. The view's
+            /// value already subtracts my docked offense. 0 when the planet is not blockaded; at or below 0 when covered.
+            /// </summary>
+            public float NeededOffense(Planet planet)
+            {
+                if (!IsBlockadeTarget(planet)) return 0f;
+                return _view.Value(planet.PlanetName) * (1f + _constants.blockadeBreakMargin)
+                       - planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);
+            }
+
+            private struct BlockadeCandidate
+            {
+                public Planet Planet;
+                public float  Committed;
+                public bool   Recent;
+                public float  Needed;
+                public float  Cost;
+            }
+
+            /// <summary>
+            /// The blockaded, reachable planet to break. Ranked: most of my offense committed there, then a recent cut of one
+            /// of my orders, then the smallest offense still needed, then the cheapest path from a holder of my warships,
+            /// then name. `reason` says which step decided it (null with no target). A planet is reachable when I have ships
+            /// committed there or a usable path from a planet holding my warships; remembered, unseen planets count.
+            /// </summary>
+            public Planet ChooseBlockadeTarget(out string reason)
+            {
+                reason = null;
+                if (_view == null) return null;
+
+                var holders = _map.PlanetList.Where(p => CountWarships(p) > 0).ToList();
+                var candidates = new List<BlockadeCandidate>();
+                foreach (var name in _view.BlockadedNames.OrderBy(n => n, StringComparer.Ordinal))
+                {
+                    var planet = _map.GetPlanet(name);
+                    if (planet == null) continue;
+
+                    var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId);
+                    var cost = own > 0 ? 0f : CheapestPathCost(holders, planet);
+                    if (cost == null) continue;
+
+                    candidates.Add(new BlockadeCandidate
+                    {
+                        Planet    = planet,
+                        Committed = CommittedOffense(planet),
+                        Recent    = _memory != null
+                                    && _memory.IsActive(name, _turn, _constants.blockadeTargetRecentTurns),
+                        Needed    = NeededOffense(planet),
+                        Cost      = cost.Value,
+                    });
+                }
+                if (candidates.Count == 0) return null;
+
+                var ranked = candidates
+                    .OrderByDescending(c => c.Committed)
+                    .ThenByDescending(c => c.Recent)
+                    .ThenBy(c => c.Needed)
+                    .ThenBy(c => c.Cost)
+                    .ThenBy(c => c.Planet.PlanetName, StringComparer.Ordinal)
+                    .ToList();
+                var best = ranked[0];
+                if (ranked.Count == 1)
+                    reason = best.Committed > 0f ? ReasonCommitted : best.Recent ? ReasonRecentCut : ReasonCheapest;
+                else if (best.Committed != ranked[1].Committed) reason = ReasonCommitted;
+                else if (best.Recent != ranked[1].Recent) reason = ReasonRecentCut;
+                else reason = ReasonCheapest;
+                return best.Planet;
+            }
+
+            // ── Targets ──────────────────────────────────────────────────────
+
+            /// <summary>A blockaded planet first (see ChooseBlockadeTarget), else the enemy-occupied rule.</summary>
+            public Planet ChooseTarget() => ChooseBlockadeTarget(out _) ?? ChooseEnemyTarget();
+
             /// <summary>
             /// The known, reachable, enemy-occupied planet where I already have the most warships
             /// docked + incoming (sticky); otherwise the cheapest path from a planet holding warships;
             /// ties by name. Null when there is no such planet.
             /// </summary>
-            public Planet ChooseTarget()
+            public Planet ChooseEnemyTarget()
             {
                 var holders = _map.PlanetList.Where(p => CountWarships(p) > 0).ToList();
                 if (holders.Count == 0) return null;
@@ -133,6 +267,16 @@ namespace FlatSpace
                 return best;
             }
 
+            /// <summary>What the last Plan call sent at a blockade target; all zero for any other target.</summary>
+            public struct BlockadeForce
+            {
+                public int   Ships;
+                public float Offense;
+                public float StillNeeded;
+            }
+
+            public BlockadeForce LastBlockadeForce { get; private set; }
+
             private struct Source
             {
                 public string Name;
@@ -140,22 +284,10 @@ namespace FlatSpace
                 public float  Cost;
             }
 
-            /// <summary>
-            /// Sends spare ships to the target, cheapest path first, until the deficit is met. A source's
-            /// spare is its state's Spare minus what the home actions already send from it.
-            /// </summary>
-            public List<ShipAction> Plan(Planet target, List<ShipTransportPlanner.PlanetState> states,
-                List<ShipAction> homeActions)
+            /// <summary>The ships a planet can spare for `target`, cheapest path first, ties by name.</summary>
+            private List<Source> SpareSources(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                Dictionary<string, int> sentByOrigin)
             {
-                var actions = new List<ShipAction>();
-                if (target == null) return actions;
-                var deficit = Deficit(target);
-                if (deficit <= 0) return actions;
-
-                var sentByOrigin = homeActions
-                    .GroupBy(a => a.Origin)
-                    .ToDictionary(g => g.Key, g => g.Sum(a => a.Count));
-
                 var sources = new List<Source>();
                 foreach (var state in states)
                 {
@@ -167,10 +299,32 @@ namespace FlatSpace
                         || !IsUsablePath(entry)) continue;
                     sources.Add(new Source { Name = state.Planet.PlanetName, Remaining = remaining, Cost = entry.Cost });
                 }
+                return sources.OrderBy(s => s.Cost).ThenBy(s => s.Name, StringComparer.Ordinal).ToList();
+            }
 
-                foreach (var source in sources
-                             .OrderBy(s => s.Cost)
-                             .ThenBy(s => s.Name, StringComparer.Ordinal))
+            /// <summary>
+            /// Sends spare ships to the target, cheapest path first. An ordinary target is sized by ship count until the
+            /// deficit is met; a blockaded target is sized by real offense until NeededOffense is covered (or every spare
+            /// ship is sent). A source's spare is its state's Spare minus what the home actions already send from it.
+            /// </summary>
+            public List<ShipAction> Plan(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                List<ShipAction> homeActions)
+            {
+                LastBlockadeForce = default;
+                var actions = new List<ShipAction>();
+                if (target == null) return actions;
+
+                var sentByOrigin = homeActions
+                    .GroupBy(a => a.Origin)
+                    .ToDictionary(g => g.Key, g => g.Sum(a => a.Count));
+
+                if (IsBlockadeTarget(target))
+                    return PlanBlockadeForce(target, states, sentByOrigin);
+
+                var deficit = Deficit(target);
+                if (deficit <= 0) return actions;
+
+                foreach (var source in SpareSources(target, states, sentByOrigin))
                 {
                     var count = Math.Min(source.Remaining, deficit);
                     actions.Add(new ShipAction
@@ -184,6 +338,51 @@ namespace FlatSpace
                     deficit -= count;
                     if (deficit <= 0) break;
                 }
+                return actions;
+            }
+
+            // Walks the sources and, for each, the exact ships that would leave (the first docked ones after those home
+            // defence claimed), subtracting each ship's real offense from what is still needed. Without stats a ship
+            // counts 0, so every spare ship is sent.
+            private List<ShipAction> PlanBlockadeForce(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                Dictionary<string, int> sentByOrigin)
+            {
+                var actions = new List<ShipAction>();
+                var needed = NeededOffense(target);
+                if (needed <= 0f) return actions;
+
+                var template = _constants.warShipData;
+                var ships = 0;
+                var offense = 0f;
+                foreach (var source in SpareSources(target, states, sentByOrigin))
+                {
+                    if (needed <= 0f) break;
+                    sentByOrigin.TryGetValue(source.Name, out var skip);
+                    var snapshots = _map.GetPlanet(source.Name)
+                        .PeekShipSnapshots(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
+
+                    var taken = 0;
+                    foreach (var snapshot in snapshots)
+                    {
+                        if (needed <= 0f) break;
+                        var shipOffense = _stats != null ? _stats.Offense(template, snapshot) : 0f;
+                        needed -= shipOffense;
+                        offense += shipOffense;
+                        taken++;
+                    }
+                    if (taken == 0) continue;
+
+                    actions.Add(new ShipAction
+                    {
+                        Origin = source.Name,
+                        Target = target.PlanetName,
+                        Cost   = source.Cost,
+                        Count  = taken,
+                        Kind   = Ship.ShipKind.WarShip,
+                    });
+                    ships += taken;
+                }
+                LastBlockadeForce = new BlockadeForce { Ships = ships, Offense = offense, StillNeeded = Math.Max(0f, needed) };
                 return actions;
             }
         }

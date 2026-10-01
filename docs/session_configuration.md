@@ -54,3 +54,16 @@ situational weight, using the structure of `PlayerAI.GetIndustryWeight`.
 
 Only after both, look at other levers (shipping, constants, catalogs). Read the "Planet strategy" section of `CLAUDE.md`
 first: a planet's `PlanetStrategy` is not the player's `AIStrategy`, and the AI does not change a planet's strategy today.
+
+## 4. Tuning log output in implementation plans
+
+Every implementation plan must include a section of proposed additions to the tuning log output (`AITuningLogger`; see
+"AI Tuning Log" in `CLAUDE.md`), so a Play-mode run can show whether the feature works and how to tune it.
+
+- For each proposed line give the code and fields in the existing `T<turn>|P<playerId>|<EventCode>|<fields...>` format,
+  when it is logged (on a state change only, or every turn, and why), and which tuning question it answers.
+- Say how each line is kept from repeating every turn (a tracker class such as `GrotsitsShortTracker`, or log-only state
+  in `PlayerAI`), and which task adds it and which test, if any, covers it.
+- Include the matching update to the `tuning-log` skill (`.claude/skills/tuning-log/SKILL.md`) and to the "AI Tuning Log"
+  section of `CLAUDE.md`.
+- If the feature needs no new log output, the section says so and gives the reason; it is never left out.
