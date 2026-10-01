@@ -134,6 +134,27 @@ namespace FlatSpace
                 return sum;
             }
 
+            /// <summary>
+            /// Planets where my warships and another player's are both docked: a standoff I am holding. A blockade I have
+            /// just broken is one: its value is 0 or less, so it has left my BlockadeView, yet if my ships left the blockade
+            /// would re-form at once. The home plan keeps these ships where they are for as long as the rival stays. Empty
+            /// without warship stats.
+            /// </summary>
+            public List<string> ContestedHolds()
+            {
+                var holds = new List<string>();
+                if (_stats == null) return holds;
+                foreach (var planet in _map.PlanetList)
+                {
+                    if (DockedOffense(planet) <= 0f) continue;
+                    var rivalHere = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip
+                        && s.Owner != _playerId && s.Owner != Planet.NoOwner
+                        && _stats.Offense(s.Template, s.ResearchSnapshot) > 0f);
+                    if (rivalHere) holds.Add(planet.PlanetName);
+                }
+                return holds;
+            }
+
             /// <summary>My offense committed at the planet: docked plus in flight.</summary>
             public float CommittedOffense(Planet planet)
                 => DockedOffense(planet) + planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);

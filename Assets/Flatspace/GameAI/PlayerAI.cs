@@ -1493,7 +1493,8 @@ namespace FlatSpace
 
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
-                    HeldPlanet = targetName,
+                    HeldPlanet  = targetName,
+                    HeldPlanets = assault.ContestedHolds(),
                 };
                 var actions = transport.Plan();
                 actions.AddRange(assault.Plan(target, transport.LastStates, actions));

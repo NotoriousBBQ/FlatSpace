@@ -19,6 +19,8 @@ public static class BlockadeBreakSelfCheck
         ok &= RunTrackerCheck();
         ok &= RunPlanShipActionsCheck();
         ok &= RunResearchBoostCheck();
+        ok &= RunTargetKindsCheck();
+        ok &= RunHeldPlanetsCheck();
         Debug.Log(ok
             ? "[BlockadeBreakSelfCheck] ALL PASSED"
             : "[BlockadeBreakSelfCheck] FAILURES (see errors above)");
@@ -512,6 +514,90 @@ public static class BlockadeBreakSelfCheck
             var actions = s.AI.PlanShipActions(5);
             ok &= Check(actions.Count == 1 && actions[0].Target == "D" && actions[0].Count == 2,
                 "with nothing blockaded the assault still goes to the enemy-occupied D");
+        }
+        return ok;
+    }
+
+    // A blockaded planet may be enemy-occupied, my own colony or empty; all are targets and all are sized by offense.
+    public static bool RunTargetKindsCheck()
+    {
+        var ok = true;
+
+        // Enemy-occupied: ship-count sizing would send ceil(3 x 1.5) = 5; offense sizing needs 30 x 1.1 = 33, so 4 ships.
+        using (var s = Scenario.Line())
+        {
+            s.Colonize("C", 1);
+            s.Ships("A", 0, 5); s.Ships("C", 1, 3);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out _) == s.P("C"), "a blockaded enemy-occupied planet is a blockade target");
+            var actions = planner.Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Sum(a => a.Count) == 4 && planner.LastBlockadeForce.Ships == 4,
+                "it is sized by offense (4 ships), not by the enemy ship count (5)");
+        }
+
+        // My own colony with the rival's ships parked on it.
+        using (var s = Scenario.Line())
+        {
+            s.Colonize("C", 0);
+            s.Ships("A", 0, 5); s.Ships("C", 1, 3);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out _) == s.P("C"), "a blockaded colony of mine is a blockade target");
+            var actions = planner.Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Sum(a => a.Count) == 4, "and is sized by offense too (4 ships)");
+        }
+        return ok;
+    }
+
+    // A force that broke a blockade must stay: the planet leaves the view the moment the value reaches 0, so without a hold
+    // its ships would become spare the same turn and the blockade would re-form. Held colonies are sink-only for the
+    // home plan as well.
+    public static bool RunHeldPlanetsCheck()
+    {
+        var ok = true;
+
+        using (var s = Scenario.Line())
+        {
+            s.Ships("B", 0, 8);                       // outer garrison 6, so 2 are spare
+            s.Ships("C", 0, 4);                       // my force: offense 40
+            s.Ships("C", 1, 3);                       // the blocker: offense 30, so the value 30 - 40 is no blockade
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            s.AI.RefreshBlockadeView(5);
+            ok &= Check(!s.AI.CurrentBlockadeView.IsBlockaded("C"), "the standoff at C is no longer a blockade against me");
+
+            var planner = s.Planner(s.AI.CurrentBlockadeView, 5);
+            ok &= Check(planner.ContestedHolds().SequenceEqual(new[] { "C" }),
+                "C is a contested hold: my warships and an enemy's are both docked there");
+            var actions = s.AI.PlanShipActions(5);
+            ok &= Check(!actions.Any(a => a.Origin == "C"), "the ships holding C are not sent away");
+            ok &= Check(actions.Any(a => a.Origin == "B" && a.Target == "D" && a.Count == 2),
+                "B's two spare ships still go on to the enemy-occupied D");
+
+            s.P("C").UndockShips(Ship.ShipKind.WarShip, 1, 3);    // the enemy leaves
+            s.AI.RefreshBlockadeView(6);
+            ok &= Check(s.Planner(s.AI.CurrentBlockadeView, 6).ContestedHolds().Count == 0,
+                "no enemy docked at C any more: nothing to hold");
+            ok &= Check(s.AI.PlanShipActions(6).Any(a => a.Origin == "C"), "so the ships at C are spare again");
+
+            var noStats = new AssaultPlanner(s.Map, 0, null, null, s.Memory, 5);
+            ok &= Check(noStats.ContestedHolds().Count == 0, "without warship stats nothing counts as contested");
+        }
+
+        // A held colony is sink-only: it keeps every ship even above its garrison.
+        using (var s = Scenario.Line())
+        {
+            s.Colonize("C", 0);
+            s.Ships("C", 0, 8);                       // an outer colony (D is the rival's): garrison 6, 2 would be spare
+            var open = new ShipTransportPlanner(s.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            ok &= Check(open.BuildStates().First(x => x.Planet == s.P("C")).Spare == 2,
+                "an ordinary outer colony with 8 ships (garrison 6) has 2 spare");
+
+            var byName = new ShipTransportPlanner(s.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate) { HeldPlanet = "C" };
+            var heldState = byName.BuildStates().First(x => x.Planet == s.P("C"));
+            ok &= Check(heldState.Spare == 0 && heldState.Docked == 8, "HeldPlanet: the colony keeps all 8 ships");
+
+            var bySet = new ShipTransportPlanner(s.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate)
+                { HeldPlanets = new List<string> { "C" } };
+            ok &= Check(bySet.BuildStates().First(x => x.Planet == s.P("C")).Spare == 0, "HeldPlanets: the same");
         }
         return ok;
     }

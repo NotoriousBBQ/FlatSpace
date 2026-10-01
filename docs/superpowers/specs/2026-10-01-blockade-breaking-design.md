@@ -67,6 +67,13 @@ amount; accepted.
 **Exit.** A target stops being a candidate when its value drops to 0 or less (it leaves the view). The next `ChooseTarget`
 then picks the next candidate or the fallback.
 
+**Holding the planet (added after the whole-branch review).** A broken blockade has to stay broken: if the force left the
+turn the value reached 0, the blockade would re-form before any order benefited. `AssaultPlanner.ContestedHolds` lists every
+planet where my warships and another player's are both docked (stateless, empty without stats), and `PlayerAI` passes it to
+`ShipTransportPlanner.HeldPlanets`, so those ships are never stranded sources. A held colony of mine is sink-only
+(`PlanetState.Held`: `Spare` is 0), which also fixes `HeldPlanet` not protecting a blockaded own colony. The hold ends when
+the rival's ships leave.
+
 ### 2. Force sizing by offense
 
 For a blockade target:

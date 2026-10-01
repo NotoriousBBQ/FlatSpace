@@ -589,7 +589,13 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   (default 2) while any blockade against the player is visible, after `NormalizeResearchWeightsBySubtype`. Consolidate-only
   costs nothing: a visible blockade means a known planet holds another player's ship, which is the first-contact test.
   Ships the home plan sends to the target in the same turn are not yet in the incoming counters, so the force can overshoot
-  by that amount (accepted).
+  by that amount (accepted). **Holding a broken blockade:** the moment my docked offense brings a blockade's value to 0 the
+  planet leaves the `BlockadeView`, so without a hold its ships would be spare that turn and the blockade would re-form.
+  `AssaultPlanner.ContestedHolds` (planets where my warships and another player's are both docked; empty without stats)
+  goes to `ShipTransportPlanner.HeldPlanets` each turn, stateless: those ships are never stranded sources, and a held
+  colony is sink-only (`PlanetState.Held` makes `Spare` 0, it still receives ships up to its garrison). The same applies to
+  `HeldPlanet` when it is a colony of mine. The hold ends when the rival's ships leave. A blockade the rival keeps
+  reinforcing can pin the force there (the sticky first rank); the tuning log shows it.
 
 ### Distribution Centers
 
