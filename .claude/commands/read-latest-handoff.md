@@ -1,14 +1,15 @@
 ---
-description: Read the most recent HANDOFF file in docs/ and resume from it (also meant to be injected by a SessionStart hook)
+description: Read the most recent HANDOFF file in docs/handoffs/ and resume from it (also meant to be injected by a SessionStart hook)
 ---
 
 Before doing anything else in this session, find and read the most recent handoff file, then tell the user where things stand.
 
-1. **Find it.** Handoff files are `docs/HANDOFF-*.md`. The most recent is the one with the latest last-commit date
-   (modification times change on every checkout, so do not rely on them). In Git Bash:
+1. **Find it.** Handoff files are `docs/handoffs/HANDOFF-*.md`. The most recent is the one with the latest commit that added or
+   edited its content (modification times change on every checkout, and a plain last-commit date changes when files are
+   moved between folders, so `--follow --diff-filter=AM` follows renames and ignores them). In Git Bash:
 
    ```bash
-   for f in docs/HANDOFF-*.md; do printf '%s %s\n' "$(git log -1 --format=%ct -- "$f")" "$f"; done | sort -rn | head -1
+   for f in docs/handoffs/HANDOFF-*.md; do printf '%s %s\n' "$(git log --follow --diff-filter=AM -1 --format=%ct -- "$f")" "$f"; done | sort -rn | head -1
    ```
 
    A file that is not committed yet prints an empty date and sorts last; if any handoff file is untracked

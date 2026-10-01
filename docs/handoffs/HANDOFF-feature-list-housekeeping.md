@@ -21,7 +21,7 @@ session's content. The session set up a way to track finished features and added
 | Command | What it does |
 |---|---|
 | `/update_feature_list` | Does the move described above, leaving the dated placeholder lines. For a fully done feature it leaves a "moved" line and removes the lines for that feature's sub features. |
-| `/handoff` | Writes `docs/HANDOFF-<subject name>.md` (this kind of file), named after the session or, if unnamed, from its content. |
+| `/handoff` | Writes `docs/handoffs/HANDOFF-<subject name>.md` (this kind of file), named after the session or, if unnamed, from its content. |
 
 ## Commits and pushes
 
@@ -45,7 +45,7 @@ session's content. The session set up a way to track finished features and added
 - Commands added during a session are not always picked up by that session. `/update_feature_list` ran from an older
   copy that lacked the last rule, and `/handoff` came back as "Unknown skill". Start a new session before testing a
   new or edited command.
-- The user asked for `HANDOFF-` with a hyphen, matching `docs/HANDOFF-consolidation-tuning.md` (an earlier request
+- The user asked for `HANDOFF-` with a hyphen, matching `docs/handoffs/HANDOFF-consolidation-tuning.md` (an earlier request
   said underscore; the final decision is the hyphen).
 - Do not commit unless asked. The user has been committing and pushing in separate steps.
 
