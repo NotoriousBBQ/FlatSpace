@@ -2,7 +2,7 @@
 description: Write a HANDOFF-<subject name>.md summary of the current session into docs/
 ---
 
-Create a handoff file summarizing the current session, in `docs/` (the same folder as `HANDOFF-consolidation-tuning.md`), named `HANDOFF-<subject name>.md`.
+Create a handoff file summarizing the current session, in `docs/` (the same folder as `HANDOFF-consolidation-tuning.md`), named `HANDOFF-<subject name>-<date>.md`.
 
 **Subject name:** use the name of the current session. If the session is unnamed, create a short name from the content of the session. Write it in kebab-case (lowercase words joined by `-`, no spaces or punctuation), e.g. `HANDOFF-feature-list-cleanup.md`. If a file with that name already exists, ask before overwriting it.
 
