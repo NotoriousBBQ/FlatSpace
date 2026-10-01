@@ -1,10 +1,17 @@
 # Future Features
 
 - **Human player mode** — today every player is AI-driven and the game only runs the simulation forward. Add a mode where a human controls a player and issues orders (shipments, colonization, production, research) instead of `PlayerAI`. See [`player_control.md`](player_control.md) for a broader exploratory discussion of externally-controlled players (human or LLM-driven), including what the underlying interface would take to build.
-- **AIStrategyConsolidate** — a strategy phase the AI enters after first contact with another player, focused on fleet build, strategic colonization, and planet defense. *Remaining: strategic colonization, planet defense. (Completed cycles moved to `completed_features.md`.)*
+- **AIStrategyConsolidate** — a strategy phase the AI enters after first contact with another player, focused on fleet build, strategic colonization, and planet defense. *Remaining: strategic colonization, planet defense.*
+  - First cycle moved to completed_features on 2026-10-01
+  - Second cycle moved to completed_features on 2026-10-01
+  - Third cycle moved to completed_features on 2026-10-01
 - **Distribution centers** — today resource shipping moves the maximum amount of resources. In consolidate mode, change the model so the AI picks strategically located planets to serve as warehouses for resources.
 - **Ship to ship combat** — warships engaging each other.
-- **AI avoids blockaded routes and uses blockades** — *(1) Colonization and (2) Resource shipping are done and moved to `completed_features.md`.* Remaining:
+- Blockade planet with docked ships moved to completed_features on 2026-10-01
+- **AI avoids blockaded routes and uses blockades** —
+  - (1) Colonization moved to completed_features on 2026-10-01
+  - (2) Resource shipping moved to completed_features on 2026-10-01
+  - Remaining:
   - (3) **Assault breaks blockades:** target visibly blockaded planets with offense-based force sizing (dock enough offense that the value is 0 or less), include research priority changes for warships, and optionally prioritize blockaded planets that cut a colonization or shipment in the last N turns (tunable, default 5); the per-player blockade memory (`BlockadeMemory`, `PlayerAI.RememberedBlockades`) already records which planets recently cut a player's orders (planet, value, turn). Also the AI never moves warships in order to blockade (see Blockade Targets below).
   - (4) **Revisit garrison and colonization targeting with connectivity** — two places where a planet's connectivity is ignored today; evidence and the ranking script are in "Weight planet value by connectivity" below.
     - *Garrison:* `ShipTransportPlanner` decides where garrisons go by category, and its category 4 ("high traffic") counts a planet's neighbours (`GetNeighbours(name).Count >= highTrafficConnectionCount`). A plain neighbour count misses chokepoints: on `4p.json` `Industrial 4` (5 connections) is the 4th most central planet of 100, while `Verdant 1` has 8 connections and `Industrial 16` has only 4 but ranks 2nd. Revisit the categories and garrison sizes using shortest-path betweenness (`tools/planet-centrality.ps1`) so chokepoints are garrisoned and can be defended against the lasting blockade occupations seen in the tuning runs. Under Consolidate only outer planets garrison today, so decide how connectivity interacts with that too.
