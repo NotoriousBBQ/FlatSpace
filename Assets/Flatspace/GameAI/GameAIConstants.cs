@@ -54,6 +54,18 @@ public class GameAIConstants : ScriptableObject
     // (nothing to upgrade) stays 0.
     public float blockadedWarshipBoost = 3f;
 
+    [Header("Blockade breaking (Consolidate)")]
+    // A planet that cut one of my orders within this many turns ranks first among blockade-breaking targets (after the
+    // planet where I already have the most offense committed). Read from the player's BlockadeMemory.
+    public int blockadeTargetRecentTurns = 5;
+    // The force sent to a blockaded planet is value x (1 + this) offense, so any small overshoot clears the blockade (a
+    // blockade only counts while its value is strictly positive) and float edges or a blocker that adds a ship do not
+    // leave it standing.
+    public float blockadeBreakMargin = 0.1f;
+    // Multiplies the research weight of Warship Offense items while a blockade against the player is visible (1 disables).
+    // Blockade value is offense against offense; Health and Defense do nothing until ship combat exists.
+    public float blockadedOffenseResearchBoost = 2f;
+
     [Header("Blockade memory")]
     // How many turns a planet where one of a player's own orders was cut stays remembered as blockaded, counted from
     // the last cut (another cut refreshes it; a fresh sighting of the planet without a blockade forgets it early). 0

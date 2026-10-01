@@ -17,6 +17,7 @@ public static class AllAISelfChecks
             ("Warship", WarshipSelfCheck.RunChecks),
             ("Blockade Avoidance", BlockadeAvoidanceSelfCheck.RunChecks),
             ("Grotsits Short", GrotsitsShortSelfCheck.RunChecks),
+            ("Blockade Breaking", BlockadeBreakSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

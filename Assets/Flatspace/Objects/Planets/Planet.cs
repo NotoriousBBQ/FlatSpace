@@ -1045,6 +1045,16 @@ public class Planet : MonoBehaviour
         => _incomingShips[(kind, owner)] = System.Math.Max(0, GetIncomingShips(kind, owner) + delta);
     public void ClearIncomingShips() => _incomingShips.Clear();
 
+    // Offense of the warships in flight toward this planet, per owning player. Derived like the ship counter, but
+    // recomputed once per turn from the in-flight ship orders (GameAIMap.RecomputeIncomingOffense), never saved.
+    private readonly Dictionary<(Ship.ShipKind kind, int owner), float> _incomingOffense
+        = new Dictionary<(Ship.ShipKind kind, int owner), float>();
+    public float GetIncomingOffense(Ship.ShipKind kind, int owner)
+        => _incomingOffense.TryGetValue((kind, owner), out var offense) ? offense : 0f;
+    public void AddIncomingOffense(Ship.ShipKind kind, int owner, float delta)
+        => _incomingOffense[(kind, owner)] = System.Math.Max(0f, GetIncomingOffense(kind, owner) + delta);
+    public void ClearIncomingOffense() => _incomingOffense.Clear();
+
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
     {
         if (owner < 0 || owner >= Gameboard.Instance.players.Count) return new List<string>();

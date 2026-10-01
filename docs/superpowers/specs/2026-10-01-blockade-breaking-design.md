@@ -81,10 +81,10 @@ small overshoot clears it; the margin guards float edges and a blocker that adds
 `needed <= 0`.
 
 **Incoming offense.** `Planet.GetIncomingOffense(kind, owner)` is new, a float parallel to the incoming ship counter
-(`GetIncomingShips`, maintained in `GameAI.cs` at ship transfer in progress and at arrival, and rebuilt by
-`GameAIMap.RecomputeIncomingShips` on load). It is maintained at the same three places. The delta is the sum of
-`WarshipStats.Offense(template, snapshot)` over the order's `Fleet` snapshots. The arrival order carries the same
-snapshots as the departure, so add and remove match. It is derived state (never saved) and clamped at 0 like the counter.
+(`GetIncomingShips`). Unlike the counter it is not maintained incrementally: `GameAIMap.RecomputeIncomingOffense(orders, stats)`
+rebuilds it once per turn from the in-flight `OrderTypeShipTransport` orders, just before `ProcessResults`, summing
+`WarshipStats.Offense` over each order's `Fleet` snapshots. The planner sees the same set of ships the counter shows at that
+moment, and there is no arrival or load bookkeeping. It is derived state (never saved) and clamped at 0 like the counter.
 `WarshipStats` is built from the research items (`BlockadeSystem.ResearchItemsFrom`), as `BlockadeSystem` is.
 
 **Planning.** `AssaultPlanner.Plan` already walks sources cheapest path first. For a blockade target, each source peeks the
