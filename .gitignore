@@ -82,3 +82,6 @@ crashlytics-build.properties
 # Ad-hoc save files from manual Play-mode testing (existing tracked fixtures, e.g.
 # CameraSaveTest.json, are unaffected -- .gitignore only applies to untracked files)
 /Assets/Flatspace/GameSaves/
+
+# SessionEnd handoff hook log
+.claude/hooks/*.log
