@@ -18,6 +18,7 @@ public static class BlockadeBreakSelfCheck
         ok &= RunBlockadePlanCheck();
         ok &= RunTrackerCheck();
         ok &= RunPlanShipActionsCheck();
+        ok &= RunResearchBoostCheck();
         Debug.Log(ok
             ? "[BlockadeBreakSelfCheck] ALL PASSED"
             : "[BlockadeBreakSelfCheck] FAILURES (see errors above)");
@@ -511,6 +512,49 @@ public static class BlockadeBreakSelfCheck
             var actions = s.AI.PlanShipActions(5);
             ok &= Check(actions.Count == 1 && actions[0].Target == "D" && actions[0].Count == 2,
                 "with nothing blockaded the assault still goes to the enemy-occupied D");
+        }
+        return ok;
+    }
+
+    private static ResearchChoiceElement Choice(CatalogItem item, float weight)
+        => new ResearchChoiceElement { Item = item, Weight = weight };
+
+    // Warship Offense items get the boost only while a blockade against me is visible; Health, Defense and everything else
+    // never do; the input list is not mutated.
+    public static bool RunResearchBoostCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Line())
+        {
+            var off = s.Research.First(i => i.itemName == "Off 1");
+            var hp = s.Research.First(i => i.itemName == "Hp 1");
+            var food = ScriptableObject.CreateInstance<CatalogItem>();
+            food.itemName = "Food 1"; food.type = "Planet Improvement"; food.subType = "Food";
+            try
+            {
+                var input = new List<ResearchChoiceElement> { Choice(off, 0.5f), Choice(hp, 0.5f), Choice(food, 1f) };
+
+                s.AI.RefreshBlockadeView(5);   // nothing blockaded yet
+                ok &= Check(Near(s.AI.GetResearchSituationalMultiplier(off), 1f), "no blockade: the multiplier is 1");
+                var calm = s.AI.ApplyResearchSituationalWeights(input);
+                ok &= Check(Near(calm[0].Weight, 0.5f) && Near(calm[1].Weight, 0.5f) && Near(calm[2].Weight, 1f),
+                    "no blockade: weights unchanged");
+
+                s.Ships("B", 0, 1); s.Ships("C", 1, 2);
+                s.AI.RefreshBlockadeView(5);   // C is blockaded against me
+                ok &= Check(Near(s.AI.GetResearchSituationalMultiplier(off), 2f), "blockaded: Warship Offense is x2");
+                ok &= Check(Near(s.AI.GetResearchSituationalMultiplier(hp), 1f), "Health is not boosted");
+                ok &= Check(Near(s.AI.GetResearchSituationalMultiplier(food), 1f), "other subtypes are not boosted");
+                ok &= Check(Near(s.AI.GetResearchSituationalMultiplier(null), 1f), "a null item is neutral");
+                var boosted = s.AI.ApplyResearchSituationalWeights(input);
+                ok &= Check(Near(boosted[0].Weight, 1f) && Near(boosted[1].Weight, 0.5f) && Near(boosted[2].Weight, 1f),
+                    "blockaded: only Off 1 doubles (0.5 to 1.0, applied on the already-normalized weight)");
+                ok &= Check(Near(input[0].Weight, 0.5f), "the input list is not mutated");
+
+                s.Constants.blockadedOffenseResearchBoost = 1f;
+                ok &= Check(Near(s.AI.GetResearchSituationalMultiplier(off), 1f), "a boost of 1 disables it");
+            }
+            finally { Object.DestroyImmediate(food); }
         }
         return ok;
     }

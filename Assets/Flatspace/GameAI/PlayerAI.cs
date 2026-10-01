@@ -1020,6 +1020,10 @@ namespace FlatSpace
                 if (actions.Count == 0) return;
 
                 currentResearch = actions[0].ChosenItem;
+                var offenseBoost = GetResearchSituationalMultiplier(currentResearch);
+                if (offenseBoost > 1f)
+                    AITuningLogger.LogOffenseResearchBoost(Gameboard.Instance.TurnNumber, Player.playerID,
+                        currentResearch.itemName, offenseBoost);
                 if (Player.playerID == 0)
                 {
                     Debug.Log("Turn: " + Gameboard.Instance.TurnNumber + " New Research: " + currentResearch.name);
@@ -1045,11 +1049,12 @@ namespace FlatSpace
 
                 var matrix  = new ScoreMatrix<ScoreMatrixDecisionElement, ResearchChoiceElement, ResearchAction>
                     (new ScoreMatrixDecisionComparer());
-                var entries = NormalizeResearchWeightsBySubtype(choices.Select(item => new ResearchChoiceElement
-                {
-                    Item   = item,
-                    Weight = GetResearchWeight(item, strategy),
-                }).ToList());
+                var entries = ApplyResearchSituationalWeights(NormalizeResearchWeightsBySubtype(
+                    choices.Select(item => new ResearchChoiceElement
+                    {
+                        Item   = item,
+                        Weight = GetResearchWeight(item, strategy),
+                    }).ToList()));
 
                 matrix.MatrixElements.Add(new ScoreMatrixDecisionElement
                 {
@@ -1092,6 +1097,31 @@ namespace FlatSpace
 
                 return DefaultChoiceWeight;
             }
+
+            /// <summary>
+            /// The situational factor on a research item's weight: blockadedOffenseResearchBoost for a Warship Offense item
+            /// while any blockade against me is visible (blockade value is offense against offense), otherwise 1. Kept out
+            /// of the static strategy table, as production's situational weights are.
+            /// </summary>
+            public float GetResearchSituationalMultiplier(CatalogItem item)
+            {
+                if (item == null || !WarshipStats.IsWarshipImprovement(item) || item.effect != WarshipStats.OffenseKey)
+                    return 1f;
+                if (_blockadeView == null || !_blockadeView.BlockadedNames.Any()) return 1f;
+                return AIMap.GameAIConstants.blockadedOffenseResearchBoost;
+            }
+
+            /// <summary>
+            /// Applies the situational multiplier to already-normalized research weights (so Armor and Shields do not dilute
+            /// the boost). Returns a new list; the input is not mutated.
+            /// </summary>
+            public List<ResearchChoiceElement> ApplyResearchSituationalWeights(List<ResearchChoiceElement> choices)
+                => choices.Select(c =>
+                {
+                    var adjusted = c;
+                    adjusted.Weight = c.Weight * GetResearchSituationalMultiplier(c.Item);
+                    return adjusted;
+                }).ToList();
 
             // ── Industry ─────────────────────────────────────────────────────
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
