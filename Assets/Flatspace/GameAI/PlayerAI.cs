@@ -1437,23 +1437,29 @@ namespace FlatSpace
 
             private string _lastLoggedAssaultTarget;
 
+            // Log-only: which blockade-breaking target the assault has, so start and end are logged on change only.
+            private readonly BlockadeTargetTracker _blockadeTargets = new BlockadeTargetTracker();
+
             /// <summary>
-            /// Expand: the home garrison plan, unchanged. Consolidate: choose the assault target, plan
-            /// home defence with those ships held out, then send whatever is still spare to the target.
-            /// Public (and free of Gameboard.Instance) so the self-check can drive it directly.
+            /// Expand: the home garrison plan, unchanged. Consolidate: choose the assault target (a planet blockaded against
+            /// me first, else the enemy-occupied rule), plan home defence with those ships held out, then send whatever is
+            /// still spare to the target. Public (and free of Gameboard.Instance) so the self-check can drive it directly.
             /// </summary>
             public List<ShipAction> PlanShipActions(int turnNumber)
             {
                 if (Strategy != AIStrategy.AIStrategyConsolidate)
                     return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
 
-                var assault = new AssaultPlanner(AIMap, Player.playerID);
-                var target = assault.ChooseTarget();
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber);
+                var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
+                var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
                 var targetName = target?.PlanetName;
-                if (targetName != null && targetName != _lastLoggedAssaultTarget)
+                LogBlockadeTargetChanges(turnNumber, assault, blockadeTarget, blockadeReason);
+                if (blockadeTarget == null && targetName != null && targetName != _lastLoggedAssaultTarget)
                     AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
-                _lastLoggedAssaultTarget = targetName;
+                _lastLoggedAssaultTarget = blockadeTarget == null ? targetName : null;
 
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
@@ -1461,7 +1467,39 @@ namespace FlatSpace
                 };
                 var actions = transport.Plan();
                 actions.AddRange(assault.Plan(target, transport.LastStates, actions));
+
+                var force = assault.LastBlockadeForce;
+                if (blockadeTarget != null && force.Ships > 0)
+                    AITuningLogger.LogBlockadeForce(turnNumber, Player.playerID, blockadeTarget.PlanetName,
+                        force.Ships, force.Offense, force.StillNeeded);
                 return actions;
+            }
+
+            private void LogBlockadeTargetChanges(int turnNumber, AssaultPlanner assault, Planet blockadeTarget, string reason)
+            {
+                BlockadeTargetTracker.Target? current = null;
+                if (blockadeTarget != null)
+                {
+                    var name = blockadeTarget.PlanetName;
+                    current = new BlockadeTargetTracker.Target
+                    {
+                        Planet  = name,
+                        Blocker = _blockadeView.Blocker(name),
+                        Value   = _blockadeView.Value(name),
+                        Needed  = assault.NeededOffense(blockadeTarget),
+                        Reason  = reason,
+                    };
+                }
+                foreach (var change in _blockadeTargets.Update(turnNumber, current,
+                             name => _blockadeView != null && _blockadeView.IsBlockaded(name)))
+                {
+                    if (change.Started)
+                        AITuningLogger.LogBlockadeTarget(turnNumber, Player.playerID, change.Planet, change.Target.Blocker,
+                            change.Target.Value, change.Target.Needed, change.Target.Reason);
+                    else
+                        AITuningLogger.LogBlockadeTargetEnd(turnNumber, Player.playerID, change.Planet, change.EndReason,
+                            change.TurnsHeld);
+                }
             }
 
             /// <summary>

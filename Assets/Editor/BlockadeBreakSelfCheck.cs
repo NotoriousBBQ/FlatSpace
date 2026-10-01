@@ -16,6 +16,8 @@ public static class BlockadeBreakSelfCheck
         ok &= RunBlockadeTargetCheck();
         ok &= RunBlockadeRankingCheck();
         ok &= RunBlockadePlanCheck();
+        ok &= RunTrackerCheck();
+        ok &= RunPlanShipActionsCheck();
         Debug.Log(ok
             ? "[BlockadeBreakSelfCheck] ALL PASSED"
             : "[BlockadeBreakSelfCheck] FAILURES (see errors above)");
@@ -452,6 +454,63 @@ public static class BlockadeBreakSelfCheck
             var actions = planner.Plan(s.P("D"), States(s), new List<ShipAction>());
             ok &= Check(actions.Sum(a => a.Count) == 5 && planner.LastBlockadeForce.Ships == 0,
                 "an ordinary enemy-occupied target is still sized by ship count (5), and no blockade force is reported");
+        }
+        return ok;
+    }
+
+    private static BlockadeTargetTracker.Target Tg(string planet, string reason = "Cheapest")
+        => new BlockadeTargetTracker.Target { Planet = planet, Blocker = 1, Value = 20f, Needed = 22f, Reason = reason };
+
+    private static string Describe(List<BlockadeTargetTracker.Change> changes)
+        => string.Join(",", changes.Select(c => c.Started ? "+" + c.Planet : "-" + c.Planet + ":" + c.EndReason + ":" + c.TurnsHeld));
+
+    // Start and end transitions only (never a line per turn), End before Start in one call, and the end reason:
+    // Cleared when the planet is no longer blockaded, Switched when another target replaced it, else Unreachable.
+    public static bool RunTrackerCheck()
+    {
+        var ok = true;
+        var t = new BlockadeTargetTracker();
+        ok &= Check(Describe(t.Update(1, Tg("C"), n => true)) == "+C", "the first target starts");
+        ok &= Check(t.Current == "C", "Current is the tracked planet");
+        ok &= Check(t.Update(2, Tg("C"), n => true).Count == 0, "the same target on a later turn reports nothing");
+        ok &= Check(Describe(t.Update(5, Tg("D"), n => true)) == "-C:Switched:4,+D",
+            "a new target ends the old one as Switched (held 4 turns) and starts D, End first");
+        ok &= Check(Describe(t.Update(8, null, n => n != "D")) == "-D:Cleared:3",
+            "no target and D no longer blockaded: Cleared after 3 turns");
+        ok &= Check(t.Current == null, "Current is empty after an end");
+        ok &= Check(t.Update(9, null, n => false).Count == 0, "nothing tracked, nothing reported");
+        t.Update(9, Tg("E"), n => true);
+        ok &= Check(Describe(t.Update(10, null, n => true)) == "-E:Unreachable:1",
+            "no target while E is still blockaded: Unreachable");
+        t.Update(12, Tg("F"), n => true);
+        t.Clear();
+        ok &= Check(t.Update(13, null, n => true).Count == 0 && t.Current == null, "Clear forgets the tracked target silently");
+        return ok;
+    }
+
+    // End to end through PlayerAI: under Consolidate a blockaded C beats the enemy-occupied D, the home garrison at the
+    // outer planet B is kept, and only B's two spare ships go.
+    public static bool RunPlanShipActionsCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Line())
+        {
+            s.Ships("B", 0, 8);                       // outer garrison 6, so 2 are spare
+            s.Ships("C", 1, 3);                       // blockade value 30 against me
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            s.AI.RefreshBlockadeView(5);
+            var actions = s.AI.PlanShipActions(5);
+            ok &= Check(actions.Count == 1 && actions[0].Origin == "B" && actions[0].Target == "C" && actions[0].Count == 2,
+                "Consolidate sends B's two spare ships at the blockaded C, not at D");
+        }
+        using (var s = Scenario.Line())
+        {
+            s.Ships("B", 0, 8);
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            s.AI.RefreshBlockadeView(5);
+            var actions = s.AI.PlanShipActions(5);
+            ok &= Check(actions.Count == 1 && actions[0].Target == "D" && actions[0].Count == 2,
+                "with nothing blockaded the assault still goes to the enemy-occupied D");
         }
         return ok;
     }
