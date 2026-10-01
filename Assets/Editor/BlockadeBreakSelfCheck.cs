@@ -15,6 +15,7 @@ public static class BlockadeBreakSelfCheck
         var ok = RunIncomingOffenseCheck();
         ok &= RunBlockadeTargetCheck();
         ok &= RunBlockadeRankingCheck();
+        ok &= RunBlockadePlanCheck();
         Debug.Log(ok
             ? "[BlockadeBreakSelfCheck] ALL PASSED"
             : "[BlockadeBreakSelfCheck] FAILURES (see errors above)");
@@ -342,6 +343,115 @@ public static class BlockadeBreakSelfCheck
             var planner = s.Planner(s.View(10), 10);
             ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCommitted,
                 "offense in flight toward a planet counts as committed");
+        }
+        return ok;
+    }
+
+    private static List<ShipTransportPlanner.PlanetState> States(Scenario s)
+        => new List<ShipTransportPlanner.PlanetState>
+        {
+            // RoundGarrison 0: every docked ship is spare, so the checks aim at the assault arithmetic alone.
+            new ShipTransportPlanner.PlanetState { Planet = s.P("A"), Docked = s.P("A").DockedShips.Count, RoundGarrison = 0 },
+            new ShipTransportPlanner.PlanetState { Planet = s.P("B"), Docked = s.P("B").DockedShips.Count, RoundGarrison = 0 },
+        };
+
+    private static ShipAction Find(List<ShipAction> actions, string origin, string target)
+        => actions.FirstOrDefault(a => a.Origin == origin && a.Target == target);
+
+    // Sources are walked cheapest path first; each sends only the ships its real offense needs, using the exact ships that
+    // would leave (after the ones home defence already claimed); a short fleet sends everything it has spare.
+    public static bool RunBlockadePlanCheck()
+    {
+        var ok = true;
+
+        // Value 30 against my ships at A (10, 14, 18) and B (10, 10); margin 0 for exact arithmetic.
+        using (var s = Scenario.Line())
+        {
+            s.Constants.blockadeBreakMargin = 0f;
+            s.Dock("A", 0, None, Off1, Off12); s.Ships("B", 0, 2); s.Ships("C", 1, 3);
+            var planner = s.Planner(s.View(10), 10);
+            var actions = planner.Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Count == 2 && Find(actions, "B", "C").Count == 2 && Find(actions, "A", "C").Count == 1,
+                "B (cheaper path) sends both ships (20), A sends one (10): exactly the 30 needed, nothing more");
+            ok &= Check(Find(actions, "B", "C").Cost == 100f && Find(actions, "A", "C").Cost == 200f,
+                "each action carries its path cost");
+            var force = planner.LastBlockadeForce;
+            ok &= Check(force.Ships == 3 && Near(force.Offense, 30f) && Near(force.StillNeeded, 0f),
+                "LastBlockadeForce reports 3 ships, offense 30, nothing still needed");
+        }
+
+        // Partial: 10 enemy ships (value 100) against 62 of mine; everything spare is sent.
+        using (var s = Scenario.Line())
+        {
+            s.Constants.blockadeBreakMargin = 0f;
+            s.Dock("A", 0, None, Off1, Off12); s.Ships("B", 0, 2); s.Ships("C", 1, 10);
+            var planner = s.Planner(s.View(10), 10);
+            var actions = planner.Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(Find(actions, "B", "C").Count == 2 && Find(actions, "A", "C").Count == 3,
+                "a force that cannot cover the need sends every spare ship");
+            ok &= Check(Near(planner.LastBlockadeForce.Offense, 62f) && Near(planner.LastBlockadeForce.StillNeeded, 38f),
+                "62 sent, 38 still needed");
+        }
+
+        // Ships home defence already claimed are skipped by identity: the 18-offense ship is the one left at A.
+        using (var s = Scenario.Line())
+        {
+            s.Constants.blockadeBreakMargin = 0f;
+            s.Dock("A", 0, None, Off1, Off12); s.Ships("B", 0, 2); s.Ships("C", 1, 4);   // value 40
+            var home = new List<ShipAction>
+            {
+                new ShipAction { Origin = "A", Target = "B", Count = 2, Kind = Ship.ShipKind.WarShip },
+            };
+            var planner = s.Planner(s.View(10), 10);
+            var actions = planner.Plan(s.P("C"), States(s), home);
+            ok &= Check(Find(actions, "A", "C").Count == 1, "A has 3 ships, home defence takes 2: one is left for the assault");
+            ok &= Check(Near(planner.LastBlockadeForce.Offense, 38f) && Near(planner.LastBlockadeForce.StillNeeded, 2f),
+                "B's 20 plus A's remaining ship (offense 18, not the first-docked 10): 38 sent, 2 still needed");
+        }
+
+        // Offense already in flight is subtracted from the need.
+        using (var s = Scenario.Line())
+        {
+            s.Constants.blockadeBreakMargin = 0f;
+            s.Ships("A", 0, 3); s.Ships("B", 0, 2); s.Ships("C", 1, 3);                   // value 30
+            s.P("C").AddIncomingOffense(Ship.ShipKind.WarShip, 0, 25f);
+            var planner = s.Planner(s.View(10), 10);
+            var actions = planner.Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Count == 1 && actions[0].Origin == "B" && actions[0].Count == 1,
+                "30 needed, 25 in flight: one ship (10) from the cheapest source");
+
+            s.P("C").AddIncomingOffense(Ship.ShipKind.WarShip, 0, 10f);                   // now 35 in flight
+            ok &= Check(planner.Plan(s.P("C"), States(s), new List<ShipAction>()).Count == 0
+                        && planner.LastBlockadeForce.Ships == 0,
+                "offense in flight already covers the blockade: nothing is sent");
+        }
+
+        // The margin sizes the force above the value: 30 x 1.1 = 33 needs four 10-offense ships.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3); s.Ships("B", 0, 2); s.Ships("C", 1, 3);
+            var actions = s.Planner(s.View(10), 10).Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Sum(a => a.Count) == 4, "value 30 with margin 0.1 needs 33 offense: four ships of 10");
+        }
+
+        // Review focus 4: no warship stats means every ship counts 0 offense; the plan sends all spare ships and ends.
+        using (var s = Scenario.Line())
+        {
+            s.Constants.blockadeBreakMargin = 0f;
+            s.Ships("A", 0, 3); s.Ships("B", 0, 2); s.Ships("C", 1, 3);
+            var noStats = new AssaultPlanner(s.Map, 0, s.View(10), null, s.Memory, 10);
+            var actions = noStats.Plan(s.P("C"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Sum(a => a.Count) == 5, "without stats every spare ship is sent, and the plan terminates");
+        }
+
+        // A target that is not blockaded keeps the ship-count rule: 3 enemy ships known at C x 1.5 = ceil(4.5) = 5.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3); s.Ships("B", 0, 2); s.Ships("C", 1, 3);
+            var planner = s.Planner(BlockadeView.WithValues(), 10);   // nothing blockaded
+            var actions = planner.Plan(s.P("D"), States(s), new List<ShipAction>());
+            ok &= Check(actions.Sum(a => a.Count) == 5 && planner.LastBlockadeForce.Ships == 0,
+                "an ordinary enemy-occupied target is still sized by ship count (5), and no blockade force is reported");
         }
         return ok;
     }

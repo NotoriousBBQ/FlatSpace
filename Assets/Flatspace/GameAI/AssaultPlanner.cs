@@ -246,6 +246,16 @@ namespace FlatSpace
                 return best;
             }
 
+            /// <summary>What the last Plan call sent at a blockade target; all zero for any other target.</summary>
+            public struct BlockadeForce
+            {
+                public int   Ships;
+                public float Offense;
+                public float StillNeeded;
+            }
+
+            public BlockadeForce LastBlockadeForce { get; private set; }
+
             private struct Source
             {
                 public string Name;
@@ -253,22 +263,10 @@ namespace FlatSpace
                 public float  Cost;
             }
 
-            /// <summary>
-            /// Sends spare ships to the target, cheapest path first, until the deficit is met. A source's
-            /// spare is its state's Spare minus what the home actions already send from it.
-            /// </summary>
-            public List<ShipAction> Plan(Planet target, List<ShipTransportPlanner.PlanetState> states,
-                List<ShipAction> homeActions)
+            /// <summary>The ships a planet can spare for `target`, cheapest path first, ties by name.</summary>
+            private List<Source> SpareSources(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                Dictionary<string, int> sentByOrigin)
             {
-                var actions = new List<ShipAction>();
-                if (target == null) return actions;
-                var deficit = Deficit(target);
-                if (deficit <= 0) return actions;
-
-                var sentByOrigin = homeActions
-                    .GroupBy(a => a.Origin)
-                    .ToDictionary(g => g.Key, g => g.Sum(a => a.Count));
-
                 var sources = new List<Source>();
                 foreach (var state in states)
                 {
@@ -280,10 +278,32 @@ namespace FlatSpace
                         || !IsUsablePath(entry)) continue;
                     sources.Add(new Source { Name = state.Planet.PlanetName, Remaining = remaining, Cost = entry.Cost });
                 }
+                return sources.OrderBy(s => s.Cost).ThenBy(s => s.Name, StringComparer.Ordinal).ToList();
+            }
 
-                foreach (var source in sources
-                             .OrderBy(s => s.Cost)
-                             .ThenBy(s => s.Name, StringComparer.Ordinal))
+            /// <summary>
+            /// Sends spare ships to the target, cheapest path first. An ordinary target is sized by ship count until the
+            /// deficit is met; a blockaded target is sized by real offense until NeededOffense is covered (or every spare
+            /// ship is sent). A source's spare is its state's Spare minus what the home actions already send from it.
+            /// </summary>
+            public List<ShipAction> Plan(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                List<ShipAction> homeActions)
+            {
+                LastBlockadeForce = default;
+                var actions = new List<ShipAction>();
+                if (target == null) return actions;
+
+                var sentByOrigin = homeActions
+                    .GroupBy(a => a.Origin)
+                    .ToDictionary(g => g.Key, g => g.Sum(a => a.Count));
+
+                if (IsBlockadeTarget(target))
+                    return PlanBlockadeForce(target, states, sentByOrigin);
+
+                var deficit = Deficit(target);
+                if (deficit <= 0) return actions;
+
+                foreach (var source in SpareSources(target, states, sentByOrigin))
                 {
                     var count = Math.Min(source.Remaining, deficit);
                     actions.Add(new ShipAction
@@ -297,6 +317,51 @@ namespace FlatSpace
                     deficit -= count;
                     if (deficit <= 0) break;
                 }
+                return actions;
+            }
+
+            // Walks the sources and, for each, the exact ships that would leave (the first docked ones after those home
+            // defence claimed), subtracting each ship's real offense from what is still needed. Without stats a ship
+            // counts 0, so every spare ship is sent.
+            private List<ShipAction> PlanBlockadeForce(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                Dictionary<string, int> sentByOrigin)
+            {
+                var actions = new List<ShipAction>();
+                var needed = NeededOffense(target);
+                if (needed <= 0f) return actions;
+
+                var template = _constants.warShipData;
+                var ships = 0;
+                var offense = 0f;
+                foreach (var source in SpareSources(target, states, sentByOrigin))
+                {
+                    if (needed <= 0f) break;
+                    sentByOrigin.TryGetValue(source.Name, out var skip);
+                    var snapshots = _map.GetPlanet(source.Name)
+                        .PeekShipSnapshots(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
+
+                    var taken = 0;
+                    foreach (var snapshot in snapshots)
+                    {
+                        if (needed <= 0f) break;
+                        var shipOffense = _stats != null ? _stats.Offense(template, snapshot) : 0f;
+                        needed -= shipOffense;
+                        offense += shipOffense;
+                        taken++;
+                    }
+                    if (taken == 0) continue;
+
+                    actions.Add(new ShipAction
+                    {
+                        Origin = source.Name,
+                        Target = target.PlanetName,
+                        Cost   = source.Cost,
+                        Count  = taken,
+                        Kind   = Ship.ShipKind.WarShip,
+                    });
+                    ships += taken;
+                }
+                LastBlockadeForce = new BlockadeForce { Ships = ships, Offense = offense, StillNeeded = Math.Max(0f, needed) };
                 return actions;
             }
         }
