@@ -426,6 +426,8 @@ public static class PlayerKnowledgeSelfCheck
     {
         var map = mapGo.AddComponent<GameAIMap>();
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants.chokepointPercentile = 2f;            // chokepoints off: older checks keep their meaning
+        constants.colonizationChokepointWeight = 0f;
         var spawns = new List<PlanetSpawnData>
         {
             MakeSpawn("A", initialPopulation: 1, connections: new[] { "B" }),
@@ -706,6 +708,8 @@ public static class PlayerKnowledgeSelfCheck
         playerGo = new GameObject("PKSelfCheckPlayer_ColonyShip");
         map = mapGo.AddComponent<GameAIMap>();
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants.chokepointPercentile = 2f;            // chokepoints off: older checks keep their meaning
+        constants.colonizationChokepointWeight = 0f;
         constants.defaultTravelSpeed = 1f;
         constants.expandPopulationTrigger = 0.8f;
         constants.maxPathNodesForResourceDistribution = 10;

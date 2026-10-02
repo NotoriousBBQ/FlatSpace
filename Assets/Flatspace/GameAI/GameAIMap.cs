@@ -29,6 +29,7 @@ namespace FlatSpace
             }
 
             private List<GameAIPlanetPathing> _planetPathings;
+            private PlanetCentrality _centrality;
 
             private Dictionary<string, Planet> _planets;
             public GameAIConstants GameAIConstants { get; private set; }
@@ -118,6 +119,11 @@ namespace FlatSpace
                         _planetPathings.Add(planetPathing);
                     }
                 }
+
+                // Betweenness from the paths just stored (once per board: the graph never changes during a match).
+                _centrality = PlanetCentrality.Compute(
+                    PlanetList.Select(p => p.PlanetName),
+                    _planetPathings.Select(p => (IReadOnlyList<string>)p.Path1To2.PathNodes.Select(n => n.Name).ToList()));
 
                 SetInitialOwnership();
             }
@@ -221,6 +227,24 @@ namespace FlatSpace
                     ? list
                     : EmptyNeighbours;
             }
+
+            /// <summary>Paths through the planet over every stored shortest path (endpoints excluded); 0 when unknown.</summary>
+            public int Betweenness(string planetName) => _centrality?.Betweenness(planetName) ?? 0;
+
+            /// <summary>The planet's betweenness percentile, 0..1 (see PlanetCentrality); 0 when unknown.</summary>
+            public float Chokepoint(string planetName) => _centrality?.Percentile(planetName) ?? 0f;
+
+            /// <summary>
+            /// A chokepoint: on at least one stored path and at or above GameAIConstants.chokepointPercentile.
+            /// </summary>
+            public bool IsChokepoint(string planetName)
+                => Betweenness(planetName) > 0 && Chokepoint(planetName) >= GameAIConstants.chokepointPercentile;
+
+            /// <summary>The count planets with the highest betweenness, for the Chokepoints log line.</summary>
+            public IEnumerable<(string name, int betweenness, float percentile)> TopChokepoints(int count)
+                => _centrality != null
+                    ? _centrality.Top(count)
+                    : Enumerable.Empty<(string name, int betweenness, float percentile)>();
 
             private void BuildNeighbours()
             {

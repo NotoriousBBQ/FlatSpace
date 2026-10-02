@@ -29,6 +29,14 @@ public class GameAIConstants : ScriptableObject
     // Category-5-only planets take ships only once total warships >= this * colonized planet count.
     public float category5UnlockShipsPerColonizedPlanet = 3f;
 
+    [Header("Connectivity (chokepoints)")]
+    // A planet whose shortest-path betweenness percentile (0..1, see PlanetCentrality) is at least this is a chokepoint:
+    // garrison category 4, and under Consolidate it keeps a garrison. A value above 1 means no planet qualifies.
+    public float chokepointPercentile = 0.9f;
+    // Consolidate colonization: a target's choice cost is its route cost / (1 + this x its chokepoint percentile), so a
+    // hub may be farther and still win. 0 (or below) switches the tilt off; Expand never uses it.
+    public float colonizationChokepointWeight = 0.5f;
+
     [Header("Assault (Consolidate)")]
     // Force committed to a known enemy-occupied planet: ceil(enemy known docked warships x this)...
     public float assaultRatio = 1.5f;

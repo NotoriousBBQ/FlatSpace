@@ -18,6 +18,7 @@ public static class AllAISelfChecks
             ("Blockade Avoidance", BlockadeAvoidanceSelfCheck.RunChecks),
             ("Grotsits Short", GrotsitsShortSelfCheck.RunChecks),
             ("Blockade Breaking", BlockadeBreakSelfCheck.RunChecks),
+            ("Chokepoint", ChokepointSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();
