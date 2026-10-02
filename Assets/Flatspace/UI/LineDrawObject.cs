@@ -103,6 +103,13 @@ public class LineDrawObject : MonoBehaviour
         }
     }
    
+    // Colors only the triangle marker, leaving the line's color alone.
+    public void SetSpriteColor(Color32 color)
+    {
+        if (spriteRenderer)
+            spriteRenderer.color = color;
+    }
+
     private void Awake()
     {
         lineRenderer = GetComponent<LineRenderer>();

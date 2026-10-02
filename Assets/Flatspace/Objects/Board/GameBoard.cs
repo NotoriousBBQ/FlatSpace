@@ -458,6 +458,19 @@ namespace FlatSpace
 
             }
 
+            // The player colors are dark and about half transparent, which makes small markers fade into the
+            // board; keep the hue, scale the strongest channel to 255 and drop the transparency.
+            private static Color32 BrightOpaque(Color32 color)
+            {
+                int max = Math.Max(color.r, Math.Max(color.g, color.b));
+                if (max == 0)
+                    return new Color32(255, 255, 255, 255);
+                var scale = 255.0f / max;
+                return new Color32((byte)Math.Min(255, Mathf.RoundToInt(color.r * scale)),
+                    (byte)Math.Min(255, Mathf.RoundToInt(color.g * scale)),
+                    (byte)Math.Min(255, Mathf.RoundToInt(color.b * scale)), 255);
+            }
+
             private static Color32 ColorForOrderType(GameAI.GameAIOrder order)
             {
                 Color color;
@@ -524,6 +537,7 @@ namespace FlatSpace
                                 Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
                         lineDrawObject.SetPath(pathPoints, progressAmount);
                         lineDrawObject.SetColor(ColorForOrderType(order));
+                        lineDrawObject.SetSpriteColor(BrightOpaque(FleetSummary.ColorFor(order.PlayerId)));
                         if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
                         {
                             var originPlanet = GetPlanet(order.Origin);
