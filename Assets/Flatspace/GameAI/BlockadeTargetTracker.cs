@@ -16,7 +16,7 @@ namespace FlatSpace.AI
             public int    Blocker;   // -1 (Planet.NoOwner) for a remembered, unseen planet
             public float  Value;
             public float  Needed;
-            public string Reason;    // Committed, RecentCut or Cheapest
+            public string Reason;    // Committed, RecentCut, Chokepoint or Cheapest
         }
 
         public struct Change

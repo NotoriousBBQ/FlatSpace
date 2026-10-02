@@ -64,13 +64,18 @@ namespace FlatSpace
                 return false;
             }
 
+            /// <summary>Is the planet a chokepoint (a high shortest-path betweenness percentile, see PlanetCentrality)?</summary>
+            public bool IsChokepoint(Planet planet) => _map.IsChokepoint(planet.PlanetName);
+
             /// <summary>
             /// The seam for garrison policy: does this colonized planet hold a garrison? Every planet
-            /// does under Expand; under Consolidate only outer planets do, so every ship elsewhere is
-            /// spare. To garrison non-outer planets under Consolidate later, change this one method.
+            /// does under Expand; under Consolidate only outer planets and colonized chokepoints do (at round 1), so
+            /// every ship elsewhere is spare. To garrison more planets under Consolidate later, change this one method.
             /// </summary>
             public bool MaintainsGarrison(Planet planet)
-                => _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate || IsOuter(planet);
+                => _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate
+                   || IsOuter(planet)
+                   || (IsColonized(planet) && IsChokepoint(planet));
 
             /// <summary>Every category (1..5) that applies to the planet.</summary>
             public List<int> ApplicableCategories(Planet planet)
@@ -87,7 +92,7 @@ namespace FlatSpace
                 }
                 if (IsOuter(planet)) result.Add(2);
                 if (planet.Type == Planet.PlanetType.PlanetTypePrime) result.Add(3);
-                if (_map.GetNeighbours(planet.PlanetName).Count >= _constants.highTrafficConnectionCount)
+                if (IsChokepoint(planet))
                     result.Add(4);
                 if (planet.Type == Planet.PlanetType.PlanetTypeVerdant
                     || planet.Type == Planet.PlanetType.PlanetTypeDesolate)

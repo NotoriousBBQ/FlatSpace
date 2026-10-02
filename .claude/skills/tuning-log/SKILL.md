@@ -134,7 +134,8 @@ user asked about one specific thing.
   and how the value grows (first and last value). A planet taking about half or more of a run's events is a lasting
   occupation (on `4p.json` one hub took 60 to 90% in every run); give its share of shipment cuts too (`OrderBlocked` for
   food/grotsits over `FoodShip` + `GrotsitsShip`). Say what kind of planet it is: type, connection count from
-  `Assets/Flatspace/BoardConfigs/<board>.json`, and betweenness rank from
+  `Assets/Flatspace/BoardConfigs/<board>.json`, and betweenness rank from the `T0|P-1|Chokepoints|` line (top 10, as
+  `planet=betweenness%percentile`) or, for a planet outside it,
   `./tools/planet-centrality.ps1 -Board <config> -Highlight "<planet>"`: a chokepoint (high rank, e.g. `Industrial 4`) or
   a specialised producer (low rank, e.g. `Verdant 4`). The user watches this because it feeds the "Weight planet value by
   connectivity" idea (`FUTURE_FEATURES.md`): mention it when the occupied planets are strategic.
@@ -218,7 +219,7 @@ user asked about one specific thing.
 - **Combat activity:** `AssaultTarget` count/targets, if present (multi-player boards only). `AssaultTarget` is now logged
   only for an ordinary enemy-occupied target; a blockade target is logged as `BlockadeTarget` instead.
 - **Blockade breaking:** under Consolidate the assault goes to a planet blockaded against the player first.
-  `BlockadeTarget|<planet>|<blocker>|<value>|<neededOffense>|<Committed, RecentCut or Cheapest>` logs a target change (the
+  `BlockadeTarget|<planet>|<blocker>|<value>|<neededOffense>|<Committed, RecentCut, Chokepoint or Cheapest>` logs a target change (the
   last field is the ranking step that decided it; blocker `-1` is a remembered, unseen planet),
   `BlockadeForce|<planet>|<ships>|<offense>|<stillNeeded>` each turn ships are sent at it, and
   `BlockadeTargetEnd|<planet>|<Cleared, Switched or Unreachable>|<turnsHeld>` when it stops being the target. Report per run:
@@ -230,7 +231,17 @@ user asked about one specific thing.
   - **Effect:** after a `Cleared`, `Blockade` and `OrderBlocked` lines at that planet against the same player should stop;
     count them in the 20 turns before and after.
   - **Ranking:** how often `RecentCut` decides a target (it needs `BlockadeLearned` for that planet within
-    `blockadeTargetRecentTurns`), against `Committed` and `Cheapest`.
+    `blockadeTargetRecentTurns`) and how often `Chokepoint` decides one (the more central planet wins a tie on committed
+    offense and recent cut), against `Committed` and `Cheapest`. If `Chokepoint` almost never decides, say so: the step is
+    weak by design. Moving it ahead of the recent-cut step is a recorded tuning option (it touches the blockade ranking, so
+    tell the user).
+  - **Chokepoints:** `T0|P-1|Chokepoints|...` names the board's top chokepoints. `ChokepointColonize|<origin>-><target>|<routeCost>|<percentile>|<nearestTarget>|<nearestCost>`
+    is logged only when the Consolidate tilt moved a colonization away from the nearest candidate: report how often per
+    player, how much farther (`routeCost` against `nearestCost`) it reached, and whether those colonies survived (a
+    `PopulationLoss` or `PlanetDead` at the target afterwards). `ChokepointGarrison|<colonized>|<boardTotal>|<shipsOnThem>|<allShips>`
+    (every 25 turns per player): report the share `shipsOnThem / allShips` and whether the assault's spare ships
+    (`BlockadeForce` and `AssaultTarget` waves) fell after chokepoint garrisons began. Producer value (Verdant 1.0, Desolate
+    1.0, Farm 0.5, others 0) is agreed but not built; mention it when tuning connectivity weights.
   - **Discipline:** the fleet cap still holds while a force is committed (`WarshipBoost` multiplier `0` with zero
     `WarShipProduction` starts, except where a `BlockadedProduction` line exists).
   - **Starved blockades (skipped, never answered):** `BlockadeSkipped|<planet>|<NoPath or Outranked>|<value>|<winner>|<winnerCommitted>`

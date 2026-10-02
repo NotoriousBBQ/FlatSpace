@@ -155,7 +155,7 @@ public static class AITuningLogger
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "AssaultTarget", target, requiredForce.ToString()) });
     }
-    /// <summary>The blockade-breaking target changed: T&lt;turn&gt;|P&lt;id&gt;|BlockadeTarget|planet|blocker|value|neededOffense|Committed, RecentCut or Cheapest. Blocker -1 = remembered, unseen.</summary>
+    /// <summary>The blockade-breaking target changed: T&lt;turn&gt;|P&lt;id&gt;|BlockadeTarget|planet|blocker|value|neededOffense|Committed, RecentCut, Chokepoint or Cheapest. Blocker -1 = remembered, unseen.</summary>
     public static void LogBlockadeTarget(int turnNumber, int playerId, string planet, int blocker, float value,
         float neededOffense, string reason)
     {
@@ -295,6 +295,17 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonizeCancelled", origin, reason) });
     }
 
+    /// <summary>A Consolidate colonist went to a different planet than the nearest candidate because of the chokepoint tilt: T&lt;turn&gt;|P&lt;id&gt;|ChokepointColonize|origin-&gt;target|routeCost|percentile|nearestTarget|nearestCost.</summary>
+    public static void LogChokepointColonize(int turnNumber, int playerId, string origin, string target, float routeCost,
+        float percentile, string nearestTarget, float nearestCost)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ChokepointColonize", $"{origin}->{target}",
+            routeCost.ToString("0.#", ci), percentile.ToString("0.00", ci), nearestTarget,
+            nearestCost.ToString("0.#", ci)) });
+    }
+
     /// <summary>Logged the turn a Distribution Center is designated for a resource.</summary>
     public static void LogDCSelected(int turnNumber, int playerId, string planetName, string resource)
     {
@@ -344,6 +355,32 @@ public static class AITuningLogger
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Economy", planets.ToString(),
             planetsShort.ToString(), meanMorale.ToString("0.#", inv), totalUpkeep.ToString("0.#", inv)) });
+    }
+
+    /// <summary>The Chokepoints field: name=betweenness%percentile joined by commas, or - when empty.</summary>
+    public static string FormatChokepointList(IEnumerable<(string name, int betweenness, float percentile)> chokepoints)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var parts = new List<string>();
+        foreach (var c in chokepoints)
+            parts.Add($"{c.name}={c.betweenness}%{c.percentile.ToString("0.00", inv)}");
+        return parts.Count == 0 ? "-" : string.Join(",", parts);
+    }
+
+    /// <summary>The board's top chokepoints, once per InitGame (the last is the real board): T0|P-1|Chokepoints|name=betweenness%percentile,...</summary>
+    public static void LogChokepoints(IEnumerable<(string name, int betweenness, float percentile)> chokepoints)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(0, -1, "Chokepoints", FormatChokepointList(chokepoints)) });
+    }
+
+    /// <summary>Every 25 turns per player: T&lt;turn&gt;|P&lt;id&gt;|ChokepointGarrison|colonized|boardTotal|shipsOnThem|allShips.</summary>
+    public static void LogChokepointGarrison(int turnNumber, int playerId, int colonized, int boardTotal,
+        int shipsOnThem, int allShips)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ChokepointGarrison", colonized.ToString(),
+            boardTotal.ToString(), shipsOnThem.ToString(), allShips.ToString()) });
     }
 
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>

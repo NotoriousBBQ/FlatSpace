@@ -15,6 +15,8 @@ public static class BlockadeBreakSelfCheck
         var ok = RunIncomingOffenseCheck();
         ok &= RunBlockadeTargetCheck();
         ok &= RunBlockadeRankingCheck();
+        ok &= RunChokepointRankingCheck();
+        ok &= RunChokepointColonizationCheck();
         ok &= RunBlockadePlanCheck();
         ok &= RunTrackerCheck();
         ok &= RunPlanShipActionsCheck();
@@ -130,6 +132,18 @@ public static class BlockadeBreakSelfCheck
                 Spawn("C2", 100f, 150f, new[] { "B" }),
             }, s.Constants);
             s.Finish("A", "B");
+            return s;
+        }
+
+        // The ChokepointSelfCheck hub: A(0,0) - H(100,0) with H - X1, X2, X3, and A - Y(0,80). H is the chokepoint
+        // (percentile 1), A 0.8, the rest leaves. Player 0 holds A.
+        public static Scenario Hub()
+        {
+            var s = Create("Hub");
+            s.Constants.maxPathNodesForColonization = 6;
+            s.Map = s.MapGo.AddComponent<GameAIMap>();
+            s.Map.GameAIMapInit(ChokepointSelfCheck.HubSpawns(), s.Constants);
+            s.Finish("A");
             return s;
         }
 
@@ -350,6 +364,108 @@ public static class BlockadeBreakSelfCheck
             var planner = s.Planner(s.View(10), 10);
             ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCommitted,
                 "offense in flight toward a planet counts as committed");
+        }
+        return ok;
+    }
+
+    // The chokepoint step: after committed offense and a recent cut, before the smaller need and the cheaper path.
+    // Hub layout: H is a chokepoint (percentile 1), Y a leaf (0); H needs more offense and is no cheaper than Y.
+    public static bool RunChokepointRankingCheck()
+    {
+        var ok = true;
+
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.chokepointPercentile = 0.9f;                      // the Hub inherits "off" from the shared fixture constants
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);   // H value 30 (need 33), Y value 10 (need 11)
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(Near(s.Map.Chokepoint("H"), 1f) && Near(s.Map.Chokepoint("Y"), 0f), "hub layout: H is the top chokepoint, Y a leaf");
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("H") && reason == AssaultPlanner.ReasonChokepoint,
+                "nothing committed, no cut: the chokepoint H outranks the smaller need at Y");
+        }
+
+        // The step follows chokepointPercentile: only real chokepoints jump the queue, and above 1 it is off.
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.chokepointPercentile = 2f;
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonCheapest,
+                "chokepointPercentile above 1 switches the ranking step off: the smaller need at Y wins again");
+        }
+
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.chokepointPercentile = 0.9f;
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);
+            s.Memory.Learn("Y", 10f, 8, 20);                // Y cut my order 2 turns ago
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonRecentCut,
+                "a recent cut still outranks the chokepoint step");
+        }
+
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.chokepointPercentile = 0.9f;
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 2); s.Ships("Y", 0, 1);   // I hold one ship at Y (value 20 - 10)
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonCommitted,
+                "committed offense still outranks the chokepoint step");
+        }
+
+        // Equal chokepoint percentile falls through to the old order (the Fork leaves C1 and C2 are both 0).
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(Near(s.Map.Chokepoint("C1"), s.Map.Chokepoint("C2"))
+                        && planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCheapest,
+                "tied chokepoint percentile: the smaller need decides, as before");
+        }
+        return ok;
+    }
+
+    private static GameAI.GameAIOrder LaunchColonist(Scenario s)
+    {
+        var results = new List<Planet.PlanetUpdateResult>
+        {
+            new Planet.PlanetUpdateResult("A",
+                Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+        };
+        var orders = new List<GameAI.GameAIOrder>();
+        s.AI.ProcessColonizers(results, orders);
+        return orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+    }
+
+    // Consolidate only: the choice cost is route cost / (1 + weight x chokepoint percentile). Hub layout, A is the ready
+    // colonizer: Y is a leaf at cost 80, H a chokepoint (percentile 1) at cost 100, X1-X3 leaves at 200 or more.
+    public static bool RunChokepointColonizationCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.colonizationChokepointWeight = 0.5f;
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            var tilted = LaunchColonist(s);
+            ok &= Check(tilted != null && tilted.Target == "H",
+                "Consolidate, weight 0.5: the hub H (100 / 1.5 = 66.7) beats the nearer leaf Y (80)");
+            ok &= Check(tilted != null && tilted.TotalDelay == 100 && tilted.TimingDelay == 100,
+                "the order delay comes from the real route cost (100 at speed 1), not the tilted cost");
+
+            s.Constants.colonizationChokepointWeight = 0.1f;
+            ok &= Check(LaunchColonist(s)?.Target == "Y", "weight 0.1: H is 100 / 1.1 = 90.9, so the nearer leaf Y wins");
+
+            s.Constants.colonizationChokepointWeight = 0f;
+            ok &= Check(LaunchColonist(s)?.Target == "Y", "weight 0 switches the tilt off: nearest first");
+
+            s.Constants.colonizationChokepointWeight = -1f;
+            ok &= Check(LaunchColonist(s)?.Target == "Y", "a negative weight is off, not an inverted tilt (review focus 4)");
+
+            s.Constants.colonizationChokepointWeight = 0.5f;
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+            var expand = LaunchColonist(s);
+            ok &= Check(expand != null && expand.Target == "Y" && expand.TotalDelay == 80,
+                "Expand ignores the tilt: nearest first, delay 80");
         }
         return ok;
     }

@@ -227,6 +227,8 @@ public static class WarshipSelfCheck
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
         constants.defaultTravelSpeed = 1f;
         constants.warShipData = warship;
+        constants.chokepointPercentile = 2f;            // chokepoints off: older checks keep their meaning
+        constants.colonizationChokepointWeight = 0f;
         return constants;
     }
 

@@ -320,6 +320,8 @@ namespace FlatSpace
 
                 ClearPlayerData();
                 GameAI.InitGameAI(planetSpawnData, gameAIConstants);
+                // The chokepoints of this board (the last InitGame in a match is the real one, like BoardConfig).
+                AITuningLogger.LogChokepoints(GameAI.GameAIMap.TopChokepoints(10));
                 InitPlanetGraphics(planetSpawnData);
                 InitPathGraphics();
                 InitFogOfWar();
