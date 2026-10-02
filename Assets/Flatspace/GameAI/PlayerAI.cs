@@ -1469,6 +1469,8 @@ namespace FlatSpace
 
             // Log-only: which blockade-breaking target the assault has, so start and end are logged on change only.
             private readonly BlockadeTargetTracker _blockadeTargets = new BlockadeTargetTracker();
+            // Log-only: which blockaded planets the assault passed over (reported on change only).
+            private readonly BlockadeSkipTracker _blockadeSkips = new BlockadeSkipTracker();
 
             /// <summary>
             /// Expand: the home garrison plan, unchanged. Consolidate: choose the assault target (a planet blockaded against
@@ -1487,6 +1489,9 @@ namespace FlatSpace
 
                 var targetName = target?.PlanetName;
                 LogBlockadeTargetChanges(turnNumber, assault, blockadeTarget, blockadeReason);
+                foreach (var skip in _blockadeSkips.Update(assault.LastSkipped))
+                    AITuningLogger.LogBlockadeSkipped(turnNumber, Player.playerID, skip.Planet, skip.Reason, skip.Value,
+                        skip.Winner, skip.WinnerCommitted);
                 if (blockadeTarget == null && targetName != null && targetName != _lastLoggedAssaultTarget)
                     AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
                 _lastLoggedAssaultTarget = blockadeTarget == null ? targetName : null;
