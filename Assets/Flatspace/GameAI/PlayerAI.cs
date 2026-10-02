@@ -1210,8 +1210,8 @@ namespace FlatSpace
             }
 
             /// <summary>
-            /// The fleet Consolidate wants: round-1 garrisons for every outer planet (from the Consolidate
-            /// transport planner), plus the assault's required force whenever a known enemy planet exists
+            /// The fleet Consolidate wants: round-1 garrisons for every outer planet and every colonized
+            /// chokepoint (from the Consolidate transport planner), plus the assault's required force whenever a known enemy planet exists
             /// (not ChooseTarget, which is null while I hold no warships, exactly when I most need to build).
             /// </summary>
             public int WantedWarships()

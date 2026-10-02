@@ -70,7 +70,8 @@ namespace FlatSpace
             /// <summary>
             /// The seam for garrison policy: does this colonized planet hold a garrison? Every planet
             /// does under Expand; under Consolidate only outer planets and colonized chokepoints do (at round 1), so
-            /// every ship elsewhere is spare. To garrison more planets under Consolidate later, change this one method.
+            /// every ship elsewhere is spare. A garrisoning planet holds the largest garrison among its categories
+            /// (a Prime or Desert chokepoint holds that category's garrison, not garrisonHighTraffic). To garrison more planets under Consolidate later, change this one method.
             /// </summary>
             public bool MaintainsGarrison(Planet planet)
                 => _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate

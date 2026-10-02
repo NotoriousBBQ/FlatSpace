@@ -435,7 +435,9 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 - **Consolidate:** `ShipTransportPlanner` takes an optional strategy (default Expand = the rules above,
   unchanged). Under Consolidate `MaintainsGarrison(planet)` is true only for outer planets and colonized
   chokepoints, so only they garrison, at round 1 only; every other ship is spare, including on category-5-only
-  planets that would be locked under Expand. Because `PlayerAI.WantedWarships` sums this planner's round
+  planets that would be locked under Expand. A non-outer chokepoint garrisons the *largest* garrison among its
+  applicable categories like any planet (a Prime or Desert chokepoint holds 4, only a plain one holds
+  `garrisonHighTraffic`, 2). Because `PlayerAI.WantedWarships` sums this planner's round
   garrisons, chokepoint garrisons also raise the wanted fleet (still bounded by `warshipsPerColonizedPlanet`).
   Change `MaintainsGarrison` to garrison more planets later. `TargetRank` sorts
   outer planets first (0 + category, others 100 + category; Expand: rank = category). `HeldPlanet` (the
@@ -452,7 +454,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   `GetIndustryStrategyWeight x GetIndustrySituationalWeightMultiplier`. It reads every planet and is logged, so
   it is computed at most once per production turn (cached in `_warshipMultiplierThisTurn`, reset by
   `BuildIndustryMatrix`) through `PlayerAI.ComputeWarshipMultiplier`.
-  Wanted = round-1 garrisons of outer planets + the assault's required force whenever a known enemy planet
+  Wanted = round-1 garrisons of outer planets and colonized chokepoints + the assault's required force whenever a known enemy planet
   exists (`AssaultPlanner.HasKnownEnemyPlanet`, not `ChooseTarget`, which is null while I hold no warships);
   have = my docked warships + my own in-flight ships. Wanted is bounded by `warshipsPerColonizedPlanet` (default
   8) x my colonized planets: without that ceiling the assault force (`assaultRatio` x the enemies' known
