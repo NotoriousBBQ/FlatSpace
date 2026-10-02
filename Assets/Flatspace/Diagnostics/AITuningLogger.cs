@@ -295,6 +295,17 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonizeCancelled", origin, reason) });
     }
 
+    /// <summary>A Consolidate colonist went to a different planet than the nearest candidate because of the chokepoint tilt: T&lt;turn&gt;|P&lt;id&gt;|ChokepointColonize|origin-&gt;target|routeCost|percentile|nearestTarget|nearestCost.</summary>
+    public static void LogChokepointColonize(int turnNumber, int playerId, string origin, string target, float routeCost,
+        float percentile, string nearestTarget, float nearestCost)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ChokepointColonize", $"{origin}->{target}",
+            routeCost.ToString("0.#", ci), percentile.ToString("0.00", ci), nearestTarget,
+            nearestCost.ToString("0.#", ci)) });
+    }
+
     /// <summary>Logged the turn a Distribution Center is designated for a resource.</summary>
     public static void LogDCSelected(int turnNumber, int playerId, string planetName, string resource)
     {

@@ -446,6 +446,16 @@ namespace FlatSpace
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
                 return planet.PlayerWithMostPopulation() != Player.playerID;
             }
+            // Consolidate tilts colonization toward chokepoints: a target's choice cost is its route cost divided by
+            // 1 + colonizationChokepointWeight x its chokepoint percentile, so a hub may be farther and still win. Expand,
+            // a weight of 0 (or below) and unknown planets leave it at 1 (nearest first). The order delay never uses it.
+            private float ColonizationCostDivisor(string targetName)
+            {
+                if (Strategy != AIStrategy.AIStrategyConsolidate) return 1f;
+                var weight = AIMap.GameAIConstants.colonizationChokepointWeight;
+                return weight <= 0f ? 1f : 1f + weight * AIMap.Chokepoint(targetName);
+            }
+
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void ProcessColonizers(
                 List<Planet.PlanetUpdateResult> results,
@@ -476,6 +486,8 @@ namespace FlatSpace
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
                 // The route planned for each (origin, target) choice; the chosen one rides on the colonist order below.
                 var plannedRoutes = new Dictionary<(string origin, string target), RoutePlanner.PlannedRoute>();
+                // Per origin, the candidate with the lowest route cost, so the log shows when the chokepoint tilt moved the pick.
+                var nearest = new Dictionary<string, (string target, float cost)>();
 
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
                     (new ScoreMatrixDecisionComparer());
@@ -507,11 +519,14 @@ namespace FlatSpace
                         var route = RoutePlanner.PlanRoute(AIMap, colonizer.Name, t.PlanetName, _blockadeView, maxNodes);
                         if (route == null) continue;
                         plannedRoutes[(colonizer.Name, t.PlanetName)] = route;
+                        if (!nearest.TryGetValue(colonizer.Name, out var best) || route.Cost < best.cost
+                            || (route.Cost == best.cost && string.CompareOrdinal(t.PlanetName, best.target) < 0))
+                            nearest[colonizer.Name] = (t.PlanetName, route.Cost);
                         entries.Add(new ScoreMatrixChoiceElement
                         {
                             Surplus  = 1.0f,
                             Target   = t.PlanetName,
-                            Cost     = route.Cost,
+                            Cost     = route.Cost / ColonizationCostDivisor(t.PlanetName),
                             Shortage = 1.0f,
                         });
                     }
@@ -549,9 +564,14 @@ namespace FlatSpace
                 {
                     var amount = Convert.ToInt32(
                         colonizers.Find(x => x.Name == action.Origin).Data);
-                    var delay  = Convert.ToInt32(
-                        action.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
                     var route  = plannedRoutes[(action.Origin, action.Target)];
+                    // The real route cost: action.Cost may carry the chokepoint tilt, which must not shorten the flight.
+                    var delay  = Convert.ToInt32(
+                        route.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
+                    if (nearest.TryGetValue(action.Origin, out var near) && near.target != action.Target
+                        && ColonizationCostDivisor(action.Target) > 1f)
+                        AITuningLogger.LogChokepointColonize(turn, Player.playerID, action.Origin, action.Target,
+                            route.Cost, AIMap.Chokepoint(action.Target), near.target, near.cost);
 
                     var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,

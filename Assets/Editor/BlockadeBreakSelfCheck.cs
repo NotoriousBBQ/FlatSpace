@@ -16,6 +16,7 @@ public static class BlockadeBreakSelfCheck
         ok &= RunBlockadeTargetCheck();
         ok &= RunBlockadeRankingCheck();
         ok &= RunChokepointRankingCheck();
+        ok &= RunChokepointColonizationCheck();
         ok &= RunBlockadePlanCheck();
         ok &= RunTrackerCheck();
         ok &= RunPlanShipActionsCheck();
@@ -407,6 +408,51 @@ public static class BlockadeBreakSelfCheck
             ok &= Check(Near(s.Map.Chokepoint("C1"), s.Map.Chokepoint("C2"))
                         && planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCheapest,
                 "tied chokepoint percentile: the smaller need decides, as before");
+        }
+        return ok;
+    }
+
+    private static GameAI.GameAIOrder LaunchColonist(Scenario s)
+    {
+        var results = new List<Planet.PlanetUpdateResult>
+        {
+            new Planet.PlanetUpdateResult("A",
+                Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+        };
+        var orders = new List<GameAI.GameAIOrder>();
+        s.AI.ProcessColonizers(results, orders);
+        return orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+    }
+
+    // Consolidate only: the choice cost is route cost / (1 + weight x chokepoint percentile). Hub layout, A is the ready
+    // colonizer: Y is a leaf at cost 80, H a chokepoint (percentile 1) at cost 100, X1-X3 leaves at 200 or more.
+    public static bool RunChokepointColonizationCheck()
+    {
+        var ok = true;
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.colonizationChokepointWeight = 0.5f;
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            var tilted = LaunchColonist(s);
+            ok &= Check(tilted != null && tilted.Target == "H",
+                "Consolidate, weight 0.5: the hub H (100 / 1.5 = 66.7) beats the nearer leaf Y (80)");
+            ok &= Check(tilted != null && tilted.TotalDelay == 100 && tilted.TimingDelay == 100,
+                "the order delay comes from the real route cost (100 at speed 1), not the tilted cost");
+
+            s.Constants.colonizationChokepointWeight = 0.1f;
+            ok &= Check(LaunchColonist(s)?.Target == "Y", "weight 0.1: H is 100 / 1.1 = 90.9, so the nearer leaf Y wins");
+
+            s.Constants.colonizationChokepointWeight = 0f;
+            ok &= Check(LaunchColonist(s)?.Target == "Y", "weight 0 switches the tilt off: nearest first");
+
+            s.Constants.colonizationChokepointWeight = -1f;
+            ok &= Check(LaunchColonist(s)?.Target == "Y", "a negative weight is off, not an inverted tilt (review focus 4)");
+
+            s.Constants.colonizationChokepointWeight = 0.5f;
+            s.AI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+            var expand = LaunchColonist(s);
+            ok &= Check(expand != null && expand.Target == "Y" && expand.TotalDelay == 80,
+                "Expand ignores the tilt: nearest first, delay 80");
         }
         return ok;
     }
