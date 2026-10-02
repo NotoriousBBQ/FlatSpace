@@ -17,6 +17,8 @@ namespace FlatSpace
             public const string ReasonCommitted = "Committed";
             public const string ReasonRecentCut = "RecentCut";
             public const string ReasonCheapest  = "Cheapest";
+            public const string SkipNoPath      = "NoPath";
+            public const string SkipOutranked   = "Outranked";
 
             private readonly GameAIMap _map;
             private readonly int _playerId;
@@ -170,6 +172,13 @@ namespace FlatSpace
                        - planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);
             }
 
+            /// <summary>
+            /// The blockaded planets the last ChooseBlockadeTarget call passed over and why (no usable path, or outranked by
+            /// the winner, with the winner's committed offense). Reporting only: it never changes the choice. Replaced on
+            /// every call; empty before the first and without a view.
+            /// </summary>
+            public List<BlockadeSkipTracker.Skip> LastSkipped { get; private set; } = new List<BlockadeSkipTracker.Skip>();
+
             private struct BlockadeCandidate
             {
                 public Planet Planet;
@@ -188,6 +197,8 @@ namespace FlatSpace
             public Planet ChooseBlockadeTarget(out string reason)
             {
                 reason = null;
+                var skipped = new List<BlockadeSkipTracker.Skip>();
+                LastSkipped = skipped;
                 if (_view == null) return null;
 
                 var holders = _map.PlanetList.Where(p => CountWarships(p) > 0).ToList();
@@ -199,7 +210,14 @@ namespace FlatSpace
 
                     var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId);
                     var cost = own > 0 ? 0f : CheapestPathCost(holders, planet);
-                    if (cost == null) continue;
+                    if (cost == null)
+                    {
+                        skipped.Add(new BlockadeSkipTracker.Skip
+                        {
+                            Planet = name, Reason = SkipNoPath, Winner = "-", Value = _view.Value(name), WinnerCommitted = 0f,
+                        });
+                        continue;
+                    }
 
                     candidates.Add(new BlockadeCandidate
                     {
@@ -221,6 +239,15 @@ namespace FlatSpace
                     .ThenBy(c => c.Planet.PlanetName, StringComparer.Ordinal)
                     .ToList();
                 var best = ranked[0];
+                foreach (var other in ranked.Skip(1))
+                    skipped.Add(new BlockadeSkipTracker.Skip
+                    {
+                        Planet          = other.Planet.PlanetName,
+                        Reason          = SkipOutranked,
+                        Winner          = best.Planet.PlanetName,
+                        Value           = _view.Value(other.Planet.PlanetName),
+                        WinnerCommitted = best.Committed,
+                    });
                 if (ranked.Count == 1)
                     reason = best.Committed > 0f ? ReasonCommitted : best.Recent ? ReasonRecentCut : ReasonCheapest;
                 else if (best.Committed != ranked[1].Committed) reason = ReasonCommitted;

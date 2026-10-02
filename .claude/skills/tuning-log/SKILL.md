@@ -233,6 +233,14 @@ user asked about one specific thing.
     `blockadeTargetRecentTurns`), against `Committed` and `Cheapest`.
   - **Discipline:** the fleet cap still holds while a force is committed (`WarshipBoost` multiplier `0` with zero
     `WarShipProduction` starts, except where a `BlockadedProduction` line exists).
+  - **Starved blockades (skipped, never answered):** `BlockadeSkipped|<planet>|<NoPath or Outranked>|<value>|<winner>|<winnerCommitted>`
+    is logged on change only when a blockaded planet is passed over (winner `-` for `NoPath`). For every victim/planet pair
+    with 15 or more `Blockade` cuts, list its cuts, the victim's `BlockadeTarget` lines for it, `BlockadeForce` waves sent
+    there, and its `BlockadeSkipped` reasons (a pair with many cuts and few or no targets is starved). Then name the cause:
+    `NoPath` (no route from any warship holder), `Outranked` with a large `winnerCommitted` (garrison ships already docked at
+    the winner decided it, the committed-offense step), or neither (no skip line, no target: not in the player's view) and
+    a target with no `BlockadeForce` after it (no spare ships). `Desert 6`, `Desert 10` and `Industrial 14` on `4p.json`
+    were cut 91, 74 and 98 times with 3, 0 and 5 targets before this line existed.
   - **Research boost:** `OffenseResearchBoost|<item>|<multiplier>` should appear only while a `Blockade` line for that
     player is recent; compare the turn the first Warship Offense item completed against a run without blockades.
 

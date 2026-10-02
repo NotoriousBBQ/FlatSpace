@@ -21,6 +21,8 @@ public static class BlockadeBreakSelfCheck
         ok &= RunResearchBoostCheck();
         ok &= RunTargetKindsCheck();
         ok &= RunHeldPlanetsCheck();
+        ok &= RunSkippedCandidatesCheck();
+        ok &= RunSkipTrackerCheck();
         Debug.Log(ok
             ? "[BlockadeBreakSelfCheck] ALL PASSED"
             : "[BlockadeBreakSelfCheck] FAILURES (see errors above)");
@@ -599,6 +601,96 @@ public static class BlockadeBreakSelfCheck
                 { HeldPlanets = new List<string> { "C" } };
             ok &= Check(bySet.BuildStates().First(x => x.Planet == s.P("C")).Spare == 0, "HeldPlanets: the same");
         }
+        return ok;
+    }
+
+    // Every blockaded planet that is not chosen is reported with why: no usable path, or outranked by the winner (whose
+    // committed offense shows whether garrison ships already docked there decided it). Reporting changes no choice.
+    public static bool RunSkippedCandidatesCheck()
+    {
+        var ok = true;
+
+        // C1 (value 30) and C2 (value 20): the smaller need wins, C1 is outranked with nothing committed anywhere.
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out _) == s.P("C2"), "the choice itself is unchanged: C2 wins");
+            var skipped = planner.LastSkipped;
+            ok &= Check(skipped.Count == 1 && skipped[0].Planet == "C1" && skipped[0].Reason == AssaultPlanner.SkipOutranked
+                        && skipped[0].Winner == "C2" && Near(skipped[0].Value, 30f) && Near(skipped[0].WinnerCommitted, 0f),
+                "C1 is Outranked by C2: value 30, the winner has nothing committed");
+        }
+
+        // The winner's committed offense is reported: a ship of mine already docked at C1 outranks the smaller need at C2.
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2); s.Ships("C1", 0, 1);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out _) == s.P("C1"), "the docked ship makes C1 the winner");
+            var skipped = planner.LastSkipped;
+            ok &= Check(skipped.Count == 1 && skipped[0].Planet == "C2" && skipped[0].Winner == "C1"
+                        && Near(skipped[0].WinnerCommitted, 10f),
+                "C2 is Outranked by C1 and the report carries C1's committed offense (10)");
+        }
+
+        // A planet nobody can reach is reported as NoPath, without a winner.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            var planner = new AssaultPlanner(s.Map, 0, BlockadeView.WithValues(("C", 20f), ("Z", 25f)),
+                new WarshipStats(s.Research), s.Memory, 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out _) == s.P("C"), "C is the target");
+            var skipped = planner.LastSkipped;
+            ok &= Check(skipped.Count == 1 && skipped[0].Planet == "Z" && skipped[0].Reason == AssaultPlanner.SkipNoPath
+                        && skipped[0].Winner == "-" && Near(skipped[0].Value, 25f) && Near(skipped[0].WinnerCommitted, 0f),
+                "unreachable Z is reported as NoPath with its value and no winner");
+        }
+
+        // No view, or nothing blockaded: nothing is reported, and a new call replaces the previous report.
+        using (var s = Scenario.Line())
+        {
+            s.Ships("A", 0, 3);
+            var legacy = new AssaultPlanner(s.Map, 0);
+            legacy.ChooseBlockadeTarget(out _);
+            ok &= Check(legacy.LastSkipped.Count == 0, "no view: nothing skipped");
+
+            var planner = new AssaultPlanner(s.Map, 0, BlockadeView.WithValues(("C", 20f), ("Z", 25f)),
+                new WarshipStats(s.Research), s.Memory, 10);
+            planner.ChooseBlockadeTarget(out _);
+            ok &= Check(planner.LastSkipped.Count == 1, "one skipped planet after the first call");
+            ok &= Check(new AssaultPlanner(s.Map, 0, BlockadeView.WithValues(("C", 20f)),
+                new WarshipStats(s.Research), s.Memory, 10).LastSkipped.Count == 0,
+                "a planner that has not chosen yet reports nothing");
+        }
+        return ok;
+    }
+
+    private static BlockadeSkipTracker.Skip Sk(string planet, string reason, string winner = "-")
+        => new BlockadeSkipTracker.Skip { Planet = planet, Reason = reason, Winner = winner, Value = 20f, WinnerCommitted = 0f };
+
+    private static string DescribeSkips(List<BlockadeSkipTracker.Skip> skips)
+        => string.Join(",", skips.Select(k => k.Planet + ":" + k.Reason + ":" + k.Winner));
+
+    // One report when a skipped planet first appears or its reason or winner changes; nothing while it stays the same; the
+    // state clears when the planet is no longer skipped (chosen or not blockaded), so it is reported again later.
+    public static bool RunSkipTrackerCheck()
+    {
+        var ok = true;
+        var t = new BlockadeSkipTracker();
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("C1", "Outranked", "C2") })) == "C1:Outranked:C2", "a new skip is reported");
+        ok &= Check(t.Update(new[] { Sk("C1", "Outranked", "C2") }).Count == 0, "the same skip on a later turn is not repeated");
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("C1", "Outranked", "C3") })) == "C1:Outranked:C3", "a new winner is reported");
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("C1", "NoPath") })) == "C1:NoPath:-", "a new reason is reported");
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("B", "NoPath"), Sk("C1", "NoPath") })) == "B:NoPath:-",
+            "only the planet that changed is reported (C1 is unchanged), in name order");
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("Z", "NoPath"), Sk("A", "Outranked", "B"), Sk("B", "NoPath"), Sk("C1", "NoPath") }))
+                    == "A:Outranked:B,Z:NoPath:-", "several new skips are all reported, sorted by name");
+        ok &= Check(t.Update(new BlockadeSkipTracker.Skip[0]).Count == 0, "nothing skipped: nothing reported");
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("C1", "NoPath") })) == "C1:NoPath:-",
+            "after the state cleared, the same skip is reported again");
+        t.Clear();
+        ok &= Check(DescribeSkips(t.Update(new[] { Sk("C1", "NoPath") })) == "C1:NoPath:-", "Clear forgets everything");
         return ok;
     }
 

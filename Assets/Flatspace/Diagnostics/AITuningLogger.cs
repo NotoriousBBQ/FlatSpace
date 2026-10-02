@@ -183,6 +183,16 @@ public static class AITuningLogger
             turnsHeld.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A blockaded planet the assault passed over, on change only: T&lt;turn&gt;|P&lt;id&gt;|BlockadeSkipped|planet|NoPath or Outranked|value|winner|winnerCommitted. Winner is - and winnerCommitted 0 for NoPath.</summary>
+    public static void LogBlockadeSkipped(int turnNumber, int playerId, string planet, string reason, float value,
+        string winner, float winnerCommitted)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadeSkipped", planet, reason,
+            value.ToString("0.#", ci), winner, winnerCommitted.ToString("0.#", ci)) });
+    }
+
     /// <summary>A research start picked a Warship Offense item while the blockade boost was active: T&lt;turn&gt;|P&lt;id&gt;|OffenseResearchBoost|item|multiplier.</summary>
     public static void LogOffenseResearchBoost(int turnNumber, int playerId, string itemName, float multiplier)
     {
