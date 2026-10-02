@@ -68,7 +68,8 @@ public static class ShipTransportSelfCheck
         c.garrisonPrime = 4;
         c.garrisonHighTraffic = 2;
         c.garrisonHighlySpecialized = 1;
-        c.highTrafficConnectionCount = 4;
+        c.chokepointPercentile = 2f;           // chokepoints off: older checks keep their meaning (ChokepointSelfCheck covers them)
+        c.colonizationChokepointWeight = 0f;
         c.category5UnlockShipsPerColonizedPlanet = 2f;
         c.assaultRatio = 1.5f;
         c.assaultMinimumShips = 3;
@@ -173,7 +174,9 @@ public static class ShipTransportSelfCheck
         try
         {
             // A(Farm)-B(Normal)-C(Desert)-D(Normal, uncolonized). H is a hub with 4 neighbours.
-            var map = BuildMap(go, NewConstants(),
+            var constants = NewConstants();
+            constants.chokepointPercentile = 0.9f;   // H is the top chokepoint on this board; B and C (percentile 9/11) are not
+            var map = BuildMap(go, constants,
                 MakeSpawn("A", Planet.PlanetType.PlanetTypeFarm, new[] { "B" }),
                 MakeSpawn("B", Planet.PlanetType.PlanetTypeNormal, new[] { "C" }),
                 MakeSpawn("C", Planet.PlanetType.PlanetTypeDesert, new[] { "D" }),
@@ -202,7 +205,7 @@ public static class ShipTransportSelfCheck
                 "overlap: Desert+outer takes the LARGEST garrison (outer 6 > specialized 4)");
             ok &= Check(!planner.IsColonized(map.GetPlanet("D")), "D is not colonized");
             ok &= Check(planner.Category(map.GetPlanet("H")) == 4 && planner.Garrison(map.GetPlanet("H")) == 2,
-                "H with 4 neighbours is high traffic (category 4, garrison 2)");
+                "H (the hub, top betweenness) is a chokepoint: category 4, garrison 2");
             ok &= Check(planner.Category(map.GetPlanet("X1")) == ShipTransportPlanner.NoCategory,
                 "a leaf planet with one neighbour has no category");
             ok &= Check(planner.Category(map.GetPlanet("P")) == 2 && planner.Garrison(map.GetPlanet("P")) == 6,

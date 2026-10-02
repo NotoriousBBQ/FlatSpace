@@ -14,6 +14,7 @@ public static class ChokepointSelfCheck
     {
         var ok = RunCentralityCheck();
         ok &= RunMapCentralityCheck();
+        ok &= RunGarrisonCheck();
         Debug.Log(ok
             ? "[ChokepointSelfCheck] ALL PASSED"
             : "[ChokepointSelfCheck] FAILURES (see errors above)");
@@ -128,6 +129,102 @@ public static class ChokepointSelfCheck
         ok &= Check(!none.Top(5).Any(), "no planets: nothing to rank");
         var one = PlanetCentrality.Compute(new[] { "A" }, new List<IReadOnlyList<string>>());
         ok &= Check(Near(one.Percentile("A"), 0f), "one planet: percentile 0 (no division by zero)");
+        return ok;
+    }
+
+    private static Planet Colonize(GameAIMap map, string name, int player = 0)
+    {
+        var planet = map.GetPlanet(name);
+        planet.Owner = player;
+        planet.Population.Add(new Planet.Inhabitant { Player = player });
+        return planet;
+    }
+
+    // Category 4 is "is a chokepoint" (not a neighbour count); under Consolidate a colonized chokepoint keeps a garrison.
+    // Hub layout, all six planets colonized by player 0 (so none is outer): H is the chokepoint (percentile 1), A is 0.8.
+    public static bool RunGarrisonCheck()
+    {
+        var ok = true;
+
+        foreach (var percentile in new[] { 0.9f, 0.5f, 2f })
+        {
+            var go = new GameObject("ChokepointSelfCheckMap_Garrison");
+            var constants = Constants(percentile);
+            try
+            {
+                var map = go.AddComponent<GameAIMap>();
+                map.GameAIMapInit(HubSpawns(), constants);
+                foreach (var n in new[] { "A", "H", "X1", "X2", "X3", "Y" }) Colonize(map, n);
+                var expand = new ShipTransportPlanner(map, 0);
+                var consolidate = new ShipTransportPlanner(map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate);
+                Planet P(string n) => map.GetPlanet(n);
+
+                if (percentile == 0.9f)
+                {
+                    ok &= Check(expand.Category(P("H")) == 4 && expand.Garrison(P("H")) == 2,
+                        "0.9: H (4 neighbours and the top chokepoint) is category 4 with garrison 2");
+                    ok &= Check(expand.Category(P("A")) == ShipTransportPlanner.NoCategory && expand.Garrison(P("A")) == 0,
+                        "0.9: A (percentile 0.8) is not a chokepoint: no category");
+                    ok &= Check(expand.Category(P("X1")) == ShipTransportPlanner.NoCategory, "0.9: a leaf has no category");
+
+                    ok &= Check(consolidate.MaintainsGarrison(P("H")),
+                        "0.9 Consolidate: a colonized, non-outer chokepoint maintains a garrison");
+                    ok &= Check(!consolidate.MaintainsGarrison(P("A")) && !consolidate.MaintainsGarrison(P("X1")),
+                        "0.9 Consolidate: a non-outer non-chokepoint does not");
+                    var states = consolidate.BuildStates();
+                    var h = states.Find(s => s.Planet == P("H"));
+                    var a = states.Find(s => s.Planet == P("A"));
+                    ok &= Check(consolidate.LastRound == 1 && h.Garrison == 2 && h.RoundGarrison == 2 && h.Category == 4,
+                        "0.9 Consolidate: H garrisons at round 1 with garrisonHighTraffic");
+                    ok &= Check(a.Garrison == 0 && a.Category == ShipTransportPlanner.NoCategory,
+                        "0.9 Consolidate: A is spare-only (no garrison, no category)");
+
+                    // Expand with every planet colonized: the garrison round logic is unchanged for a chokepoint.
+                    ok &= Check(expand.BuildStates().Find(s => s.Planet == P("H")).Garrison == 2,
+                        "0.9 Expand: H garrisons through the ordinary category garrison");
+                }
+                else if (percentile == 0.5f)
+                {
+                    // A has only 2 neighbours (below the old threshold of 4) yet is category 4: it is the percentile, not the count.
+                    ok &= Check(map.GetNeighbours("A").Count == 2 && expand.Category(P("A")) == 4,
+                        "0.5: A has 2 neighbours but is category 4 (the test is centrality, not connection count)");
+                    ok &= Check(consolidate.MaintainsGarrison(P("A")), "0.5 Consolidate: A now garrisons too");
+                    ok &= Check(expand.Category(P("X1")) == ShipTransportPlanner.NoCategory,
+                        "0.5: a leaf (betweenness 0) never qualifies");
+                }
+                else
+                {
+                    ok &= Check(expand.Category(P("H")) == ShipTransportPlanner.NoCategory
+                                && !consolidate.MaintainsGarrison(P("H")),
+                        "2: a percentile above 1 switches it off: no category and no Consolidate garrison (review focus 4)");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+                Object.DestroyImmediate(constants);
+            }
+        }
+
+        // An outer chokepoint is unchanged: still outer, category 2 wins as the lower number, garrison is the larger.
+        var go2 = new GameObject("ChokepointSelfCheckMap_GarrisonOuter");
+        var constants2 = Constants();
+        constants2.garrisonOuter = 6;
+        try
+        {
+            var map = go2.AddComponent<GameAIMap>();
+            map.GameAIMapInit(HubSpawns(), constants2);
+            foreach (var n in new[] { "A", "H", "X1", "X2", "Y" }) Colonize(map, n);   // X3 stays empty: H is outer
+            var planner = new ShipTransportPlanner(map, 0);
+            ok &= Check(planner.IsOuter(map.GetPlanet("H")) && planner.Category(map.GetPlanet("H")) == 2
+                        && planner.Garrison(map.GetPlanet("H")) == 6,
+                "an outer chokepoint keeps category 2 and the larger (outer) garrison");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go2);
+            Object.DestroyImmediate(constants2);
+        }
         return ok;
     }
 

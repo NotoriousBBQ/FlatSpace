@@ -22,10 +22,8 @@ public class GameAIConstants : ScriptableObject
     public int garrisonSpecialized = 4;         // category 1: Desert, Industrial, Farm, Ocean
     public int garrisonOuter = 6;               // category 2: colonized with an uncolonized neighbour
     public int garrisonPrime = 4;               // category 3: Prime
-    public int garrisonHighTraffic = 2;         // category 4: many connections
+    public int garrisonHighTraffic = 2;         // category 4: chokepoint (see chokepointPercentile)
     public int garrisonHighlySpecialized = 1;   // category 5: Verdant, Desolate
-    // A planet with at least this many neighbours is "high traffic".
-    public int highTrafficConnectionCount = 4;
     // Category-5-only planets take ships only once total warships >= this * colonized planet count.
     public float category5UnlockShipsPerColonizedPlanet = 3f;
 

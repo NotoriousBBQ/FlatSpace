@@ -44,7 +44,6 @@ MonoBehaviour:
   garrisonPrime: 4
   garrisonHighTraffic: 2
   garrisonHighlySpecialized: 1
-  highTrafficConnectionCount: 4
   category5UnlockShipsPerColonizedPlanet: 3
   assaultRatio: 1.5
   assaultMinimumShips: 3
