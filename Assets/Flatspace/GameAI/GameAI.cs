@@ -158,6 +158,7 @@ namespace FlatSpace
 
             // Every 25 turns, one line per player: how many planets it owns, how many were short of grotsits,
             // their mean morale, and the total improvement upkeep, so upkeep and grotsits shipping can be tuned from logs.
+            // Beside it, how many chokepoints it colonizes and how many of its warships sit on them (ChokepointGarrison).
             private void LogEconomySummary(int turnNumber, int playerCount)
             {
                 if (turnNumber % 25 != 0) return;
@@ -168,6 +169,9 @@ namespace FlatSpace
                     AITuningLogger.LogEconomy(turnNumber, player, owned.Count,
                         owned.Count(p => p.GrotsitsShort), owned.Average(p => p.Morale),
                         owned.Sum(p => p.GetImprovementMaintenanceCost()));
+                    var chokepoints = GameAIMap.ChokepointSummary(player);
+                    AITuningLogger.LogChokepointGarrison(turnNumber, player, chokepoints.colonized, chokepoints.boardTotal,
+                        chokepoints.shipsOnThem, chokepoints.allShips);
                 }
             }
 

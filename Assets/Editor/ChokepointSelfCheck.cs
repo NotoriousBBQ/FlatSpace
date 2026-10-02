@@ -15,6 +15,7 @@ public static class ChokepointSelfCheck
         var ok = RunCentralityCheck();
         ok &= RunMapCentralityCheck();
         ok &= RunGarrisonCheck();
+        ok &= RunSummaryAndFormatCheck();
         Debug.Log(ok
             ? "[ChokepointSelfCheck] ALL PASSED"
             : "[ChokepointSelfCheck] FAILURES (see errors above)");
@@ -225,6 +226,43 @@ public static class ChokepointSelfCheck
             Object.DestroyImmediate(go2);
             Object.DestroyImmediate(constants2);
         }
+        return ok;
+    }
+
+    // The numbers behind the ChokepointGarrison line, and the Chokepoints line's field format.
+    public static bool RunSummaryAndFormatCheck()
+    {
+        var ok = true;
+        var go = new GameObject("ChokepointSelfCheckMap_Summary");
+        var constants = Constants();
+        try
+        {
+            var map = go.AddComponent<GameAIMap>();
+            map.GameAIMapInit(HubSpawns(), constants);
+            Colonize(map, "H"); Colonize(map, "A");
+            for (var i = 0; i < 2; i++) map.GetPlanet("H").DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>());
+            for (var i = 0; i < 3; i++) map.GetPlanet("A").DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>());
+            map.GetPlanet("H").DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());   // another player's ship
+            map.GetPlanet("H").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>()); // not a warship
+
+            var summary = map.ChokepointSummary(0);
+            ok &= Check(summary.colonized == 1 && summary.boardTotal == 1 && summary.shipsOnThem == 2 && summary.allShips == 5,
+                "player 0: 1 of the board's 1 chokepoints colonized, 2 warships on it, 5 warships in all");
+            var rival = map.ChokepointSummary(1);
+            ok &= Check(rival.colonized == 0 && rival.boardTotal == 1 && rival.shipsOnThem == 0 && rival.allShips == 1,
+                "player 1 colonizes no chokepoint; its one warship counts only in the total");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+        }
+
+        ok &= Check(AITuningLogger.FormatChokepointList(new[] { ("Industrial 4", 312, 1f), ("Normal 9", 207, 0.9f) })
+                    == "Industrial 4=312%1.00,Normal 9=207%0.90",
+            "the Chokepoints field is name=betweenness%percentile joined by commas");
+        ok &= Check(AITuningLogger.FormatChokepointList(new (string, int, float)[0]) == "-",
+            "an empty list is logged as -");
         return ok;
     }
 

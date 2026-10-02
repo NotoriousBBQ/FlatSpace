@@ -246,6 +246,28 @@ namespace FlatSpace
                     ? _centrality.Top(count)
                     : Enumerable.Empty<(string name, int betweenness, float percentile)>();
 
+            /// <summary>
+            /// For one player: the chokepoints it colonizes, the chokepoints on the board, its docked warships on those it
+            /// colonizes, and its docked warships everywhere. Feeds the ChokepointGarrison log line.
+            /// </summary>
+            public (int colonized, int boardTotal, int shipsOnThem, int allShips) ChokepointSummary(int playerId)
+            {
+                var colonized = 0; var boardTotal = 0; var shipsOnThem = 0; var allShips = 0;
+                foreach (var planet in PlanetList)
+                {
+                    var chokepoint = IsChokepoint(planet.PlanetName);
+                    if (chokepoint) boardTotal++;
+                    var ships = planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == playerId);
+                    allShips += ships;
+                    if (chokepoint && planet.Owner == playerId && planet.Population.Count > 0)
+                    {
+                        colonized++;
+                        shipsOnThem += ships;
+                    }
+                }
+                return (colonized, boardTotal, shipsOnThem, allShips);
+            }
+
             private void BuildNeighbours()
             {
                 _neighbours = new Dictionary<string, List<string>>();

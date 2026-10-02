@@ -357,6 +357,32 @@ public static class AITuningLogger
             planetsShort.ToString(), meanMorale.ToString("0.#", inv), totalUpkeep.ToString("0.#", inv)) });
     }
 
+    /// <summary>The Chokepoints field: name=betweenness%percentile joined by commas, or - when empty.</summary>
+    public static string FormatChokepointList(IEnumerable<(string name, int betweenness, float percentile)> chokepoints)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var parts = new List<string>();
+        foreach (var c in chokepoints)
+            parts.Add($"{c.name}={c.betweenness}%{c.percentile.ToString("0.00", inv)}");
+        return parts.Count == 0 ? "-" : string.Join(",", parts);
+    }
+
+    /// <summary>The board's top chokepoints, once per InitGame (the last is the real board): T0|P-1|Chokepoints|name=betweenness%percentile,...</summary>
+    public static void LogChokepoints(IEnumerable<(string name, int betweenness, float percentile)> chokepoints)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(0, -1, "Chokepoints", FormatChokepointList(chokepoints)) });
+    }
+
+    /// <summary>Every 25 turns per player: T&lt;turn&gt;|P&lt;id&gt;|ChokepointGarrison|colonized|boardTotal|shipsOnThem|allShips.</summary>
+    public static void LogChokepointGarrison(int turnNumber, int playerId, int colonized, int boardTotal,
+        int shipsOnThem, int allShips)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ChokepointGarrison", colonized.ToString(),
+            boardTotal.ToString(), shipsOnThem.ToString(), allShips.ToString()) });
+    }
+
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>
     public static void LogBoardConfig(string boardName)
     {

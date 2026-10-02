@@ -48,7 +48,8 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `FlatSpace → AI → Run Blockade Avoidance Self-Check` in `Assets/Editor/BlockadeAvoidanceSelfCheck.cs` (colonization and resource-shipping avoidance, and the shipment origin cut);
 `FlatSpace → AI → Run Grotsits Short Self-Check` in `Assets/Editor/GrotsitsShortSelfCheck.cs` (the `GrotsitsShortTracker` start/end transitions);
 `FlatSpace → AI → Run Blockade Breaking Self-Check` in `Assets/Editor/BlockadeBreakSelfCheck.cs` (blockade target candidates and ranking, offense-sized force, in-flight offense, the `BlockadeTargetTracker` transitions, the offense research boost);
-`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance, Grotsits Short, Blockade Breaking; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
+`FlatSpace → AI → Run Chokepoint Self-Check` in `Assets/Editor/ChokepointSelfCheck.cs` (betweenness percentile, the map's chokepoints, garrison category 4 and the Consolidate garrison, the `ChokepointGarrison` numbers; the chokepoint blockade ranking and colonization tilt are in `BlockadeBreakSelfCheck`);
+`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance, Grotsits Short, Blockade Breaking, Chokepoint; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
 `FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
 the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
@@ -403,7 +404,7 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 `Gameboard.Instance` so the self-check can drive it directly.
 
 - **Categories** (per colonized planet, lower = better): 1 Desert/Industrial/Farm/Ocean, 2 outer (has a
-  neighbour not colonized by this player: empty, enemy-held or contested), 3 Prime, 4 high traffic (`GetNeighbours(name).Count >= highTrafficConnectionCount`),
+  neighbour not colonized by this player: empty, enemy-held or contested), 3 Prime, 4 chokepoint (`GameAIMap.IsChokepoint`: shortest-path betweenness percentile >= `chokepointPercentile`, see Connectivity),
   5 Verdant/Desolate. A planet's priority is its best applicable category; its garrison is the *largest*
   garrison among its applicable categories.
 - **Garrison rounds:** `round = 1 + min(floor((docked + incoming) / garrison))` over garrisoned, reachable
@@ -429,12 +430,14 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
 - **Saves:** the fleet rides on `OrderSave.fleetShips` (reusing `GameSave.ShipSave`); a missing/empty list
   (older saves) loads as no fleet.
 - **Tunables** on `GameAIConstants` (`maxPathNodesForShipTransport`, `garrisonSpecialized/Outer/Prime/HighTraffic/HighlySpecialized`,
-  `highTrafficConnectionCount`, `category5UnlockShipsPerColonizedPlanet`) all have in-code defaults, so the
+  `chokepointPercentile`, `category5UnlockShipsPerColonizedPlanet`) all have in-code defaults, so the
   asset needs no edit until you tune.
 - **Consolidate:** `ShipTransportPlanner` takes an optional strategy (default Expand = the rules above,
-  unchanged). Under Consolidate `MaintainsGarrison(planet)` is true only for outer planets, so only they
-  garrison, at round 1 only; every other ship is spare, including on category-5-only planets that would be
-  locked under Expand. Change `MaintainsGarrison` to garrison non-outer planets later. `TargetRank` sorts
+  unchanged). Under Consolidate `MaintainsGarrison(planet)` is true only for outer planets and colonized
+  chokepoints, so only they garrison, at round 1 only; every other ship is spare, including on category-5-only
+  planets that would be locked under Expand. Because `PlayerAI.WantedWarships` sums this planner's round
+  garrisons, chokepoint garrisons also raise the wanted fleet (still bounded by `warshipsPerColonizedPlanet`).
+  Change `MaintainsGarrison` to garrison more planets later. `TargetRank` sorts
   outer planets first (0 + category, others 100 + category; Expand: rank = category). `HeldPlanet` (the
   assault target) removes that planet's ships from the stranded set so the assault force is not sent home.
   `AssaultPlanner` (`Assets/Flatspace/GameAI/AssaultPlanner.cs`) then picks one known enemy-occupied planet
@@ -576,9 +579,10 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   player in its `BlockadeView` first (enemy-occupied, own or empty; remembered, unseen planets count), else the old
   enemy-occupied rule (`AssaultPlanner.ChooseBlockadeTarget` / `ChooseEnemyTarget` / `ChooseTarget`; an `AssaultPlanner`
   built without a view behaves as before). Ranking, first difference wins: most of my offense committed there (docked +
-  in flight), a cut of one of my orders within `blockadeTargetRecentTurns` (default 5, `BlockadeMemory`), the smallest
-  offense still needed, the cheapest path from a holder, name. **Connectivity is deliberately not in the ranking yet:
-  add the shortest-path betweenness step after the recent-cut step when sub-project 4 builds it.** A blockade target is
+  in flight), a cut of one of my orders within `blockadeTargetRecentTurns` (default 5, `BlockadeMemory`), the more
+  central planet (higher chokepoint percentile, reason `Chokepoint`; see Connectivity), the smallest offense still
+  needed, the cheapest path from a holder, name. The chokepoint step rarely decides because committed offense decides
+  most targets; moving it ahead of the recent-cut step is a recorded tuning option. A blockade target is
   sized by real offense, not ship count: `needed = value x (1 + blockadeBreakMargin) - incoming offense` (margin default
   0.1); `Plan` walks sources cheapest path first, takes the exact ships that would leave (after home defence's claims, via
   `PeekShipSnapshots`) and stops when covered, or sends every spare ship when the fleet falls short (docked offense still
@@ -596,6 +600,25 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   colony is sink-only (`PlanetState.Held` makes `Spare` 0, it still receives ships up to its garrison). The same applies to
   `HeldPlanet` when it is a colony of mine. The hold ends when the rival's ships leave. A blockade the rival keeps
   reinforcing can pin the force there (the sticky first rank); the tuning log shows it.
+
+### Connectivity (chokepoints)
+
+`PlanetCentrality` (`Assets/Flatspace/GameAI/PlanetCentrality.cs`, namespace `FlatSpace.AI`, pure) counts, for every
+planet, the stored shortest paths that pass THROUGH it (endpoints excluded, so a stub or 2-node path adds nothing) and
+turns that into a percentile: the fraction of the other planets with strictly lower betweenness (ties share a score,
+leaves score 0, a board of 0 or 1 planets scores 0). `GameAIMapInit` builds it once from the all-pairs paths it just
+stored (the routes ships really fly; recomputed on every init and load, never saved). `GameAIMap` exposes
+`Betweenness(name)`, `Chokepoint(name)` (the percentile, 0 for an unknown name), `IsChokepoint(name)` (betweenness > 0
+and percentile >= `GameAIConstants.chokepointPercentile`, default 0.9; above 1 means none), `TopChokepoints(n)` and
+`ChokepointSummary(playerId)`. Three consumers: garrison category 4 and the Consolidate garrison seam
+(`ShipTransportPlanner`), the blockade target ranking (`AssaultPlanner.ChooseBlockadeTarget`), and a Consolidate-only
+colonization tilt in `PlayerAI.ProcessColonizers`: a target's choice cost is `route.Cost / (1 + colonizationChokepointWeight
+x percentile)` (default weight 0.5; 0 or below is off; Expand is unchanged). The colonist order's delay always uses the
+real `route.Cost`, never the tilted cost. **Producer value (by planet type: Verdant 1.0, Desolate 1.0, Farm 0.5, others 0,
+authored as data on `PlanetResourceData`) is agreed but deliberately not built.** The spare-ship calculation is
+unchanged. Older self-check fixtures set `chokepointPercentile = 2f` and `colonizationChokepointWeight = 0` so a
+3-planet chain's middle planet does not start garrisoning in their Consolidate checks. Self-check: `Assets/Editor/ChokepointSelfCheck.cs`
+(centrality, map, garrison, summary and formatter; the ranking and colonization checks live in `BlockadeBreakSelfCheck`).
 
 ### Distribution Centers
 
@@ -663,12 +686,12 @@ this feature's own self-check; the two regressions above are additionally covere
 class — no `MonoBehaviour`) writes a durable, plain-text, pipe-delimited log of outcome-level AI
 events (`T<turn>|P<playerId>|<EventCode>|<fields...>` — shipments sent/arrived, colonization
 started/arrived, ship fleets sent/arrived as `ShipMove`/`ShipArrive`, production set/completed,
-colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>` (logged for a non-blockade target only), a blockade-breaking target as `BlockadeTarget|<planet>|<blocker>|<value>|<neededOffense>|<Committed, RecentCut or Cheapest>` (blocker -1 for a remembered, unseen planet; logged when the target changes, through `BlockadeTargetTracker`, log-only state, so a load logs the current target once more), the force sent at it as `BlockadeForce|<planet>|<ships>|<offense>|<stillNeeded>` (each turn ships are sent), a target stopping as `BlockadeTargetEnd|<planet>|<Cleared, Switched or Unreachable>|<turnsHeld>`, a blockaded planet the assault passed over as `BlockadeSkipped|<planet>|<NoPath or Outranked>|<value>|<winner>|<winnerCommitted>` (winner `-` and 0 for NoPath; on change only, through `BlockadeSkipTracker`, log-only state, so a load logs each current skip once more; it reports `AssaultPlanner.LastSkipped` and never changes the choice), a boosted offense research start as `OffenseResearchBoost|<item>|<multiplier>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a blockade detour (colonist or shipment) as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a shipment sent through unavoidable blockades as `ShipmentLossy|<origin>-><target>|<amount>|<loss>`, a shortage left unsupplied because blockades removed every source as `ShipmentCancelled|<target>|<Blockade or LowYield>|<source>|<loss>|<amount>|<blocked planets>` (on state change only), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
+colonizer-ready, research started/completed, strategy switched as `StrategyChange|<from>|<to>`, assault target chosen as `AssaultTarget|<planet>|<required>` (logged for a non-blockade target only), a blockade-breaking target as `BlockadeTarget|<planet>|<blocker>|<value>|<neededOffense>|<Committed, RecentCut, Chokepoint or Cheapest>` (blocker -1 for a remembered, unseen planet; logged when the target changes, through `BlockadeTargetTracker`, log-only state, so a load logs the current target once more), the force sent at it as `BlockadeForce|<planet>|<ships>|<offense>|<stillNeeded>` (each turn ships are sent), a target stopping as `BlockadeTargetEnd|<planet>|<Cleared, Switched or Unreachable>|<turnsHeld>`, a blockaded planet the assault passed over as `BlockadeSkipped|<planet>|<NoPath or Outranked>|<value>|<winner>|<winnerCommitted>` (winner `-` and 0 for NoPath; on change only, through `BlockadeSkipTracker`, log-only state, so a load logs each current skip once more; it reports `AssaultPlanner.LastSkipped` and never changes the choice), a boosted offense research start as `OffenseResearchBoost|<item>|<multiplier>`, Consolidate warship production multiplier as `WarshipBoost|<wanted>|<have>|<multiplier>`, a blockade hit as `Blockade|<planet>|<blockerPlayerId>|<value>`, an order lost or reduced by it as `OrderBlocked|<orderType>|<planet>|<remaining>` (remaining 0 for a removed order), a Warship/Update Warship started on a planet blockaded against its owner as `BlockadedProduction|<planet>|<item>|<value>`, a planet newly remembered as blockaded after one of the player's orders was cut there as `BlockadeLearned|<planet>|<value>` (not logged on refreshes), a blockade detour (colonist or shipment) as `RouteDetour|<origin>-><target>|<nodes>|<cost>` (nodes joined by `>`), a shipment sent through unavoidable blockades as `ShipmentLossy|<origin>-><target>|<amount>|<loss>`, a shortage left unsupplied because blockades removed every source as `ShipmentCancelled|<target>|<Blockade or LowYield>|<source>|<loss>|<amount>|<blocked planets>` (on state change only), a colonizer held back as `ColonizeCancelled|<origin>|<BlockadedOrigin|NoRoute>` (logged when a planet's hold-back state changes, i.e. the first turn it is held back or its reason changes, not every turn; `PlayerAI` remembers the reason per planet and forgets it when the colonizer launches or is no longer ready), and the board the match
 started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's name or the designer JSON's file name,
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
 ship's food rider as `ColonyRider|<origin>-><target>|<amount>`, and colony failures as `PopulationLoss|<planet>`
-plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), a populated planet becoming short of grotsits or recovering as `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>` (owner's player id; transitions only, through `GrotsitsShortTracker`, fed by `GameAI.LogGrotsitsShortChanges` right after the planets update; capacity is `Planet.GetGrotsitsCapacity()`, upkeep `GetImprovementMaintenanceCost()`, demand is about population + upkeep; a planet that empties while short logs an `End`; log-only state, so a load logs each planet still short once more), and every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player) for
+plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), a populated planet becoming short of grotsits or recovering as `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>` (owner's player id; transitions only, through `GrotsitsShortTracker`, fed by `GameAI.LogGrotsitsShortChanges` right after the planets update; capacity is `Planet.GetGrotsitsCapacity()`, upkeep `GetImprovementMaintenanceCost()`, demand is about population + upkeep; a planet that empties while short logs an `End`; log-only state, so a load logs each planet still short once more), every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player, beside it `ChokepointGarrison|<colonized>|<boardTotal>|<shipsOnThem>|<allShips>` per player (chokepoints it colonizes, chokepoints on the board, its docked warships on those, and all its docked warships), the board's top chokepoints once per match as `T0|P-1|Chokepoints|<planet>=<betweenness>%<percentile>,...` (top 10; like `BoardConfig`, the last `InitGame` is the real board), and a Consolidate colonist sent somewhere other than the nearest candidate because of the chokepoint tilt as `ChokepointColonize|<origin>-><target>|<routeCost>|<percentile>|<nearestTarget>|<nearestCost>` (per launch, no tracker)) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own
