@@ -376,6 +376,7 @@ public static class BlockadeBreakSelfCheck
 
         using (var s = Scenario.Hub())
         {
+            s.Constants.chokepointPercentile = 0.9f;                      // the Hub inherits "off" from the shared fixture constants
             s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);   // H value 30 (need 33), Y value 10 (need 11)
             var planner = s.Planner(s.View(10), 10);
             ok &= Check(Near(s.Map.Chokepoint("H"), 1f) && Near(s.Map.Chokepoint("Y"), 0f), "hub layout: H is the top chokepoint, Y a leaf");
@@ -383,8 +384,19 @@ public static class BlockadeBreakSelfCheck
                 "nothing committed, no cut: the chokepoint H outranks the smaller need at Y");
         }
 
+        // The step follows chokepointPercentile: only real chokepoints jump the queue, and above 1 it is off.
         using (var s = Scenario.Hub())
         {
+            s.Constants.chokepointPercentile = 2f;
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonCheapest,
+                "chokepointPercentile above 1 switches the ranking step off: the smaller need at Y wins again");
+        }
+
+        using (var s = Scenario.Hub())
+        {
+            s.Constants.chokepointPercentile = 0.9f;
             s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);
             s.Memory.Learn("Y", 10f, 8, 20);                // Y cut my order 2 turns ago
             var planner = s.Planner(s.View(10), 10);
@@ -394,6 +406,7 @@ public static class BlockadeBreakSelfCheck
 
         using (var s = Scenario.Hub())
         {
+            s.Constants.chokepointPercentile = 0.9f;
             s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 2); s.Ships("Y", 0, 1);   // I hold one ship at Y (value 20 - 10)
             var planner = s.Planner(s.View(10), 10);
             ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonCommitted,

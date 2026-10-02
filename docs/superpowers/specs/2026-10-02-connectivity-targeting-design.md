@@ -57,7 +57,7 @@ off by a tunable, and the tuning log shows whether each one matters.
 
 ### 3. Blockade target ranking (`AssaultPlanner.ChooseBlockadeTarget`)
 
-- A new step, **higher chokepoint percentile first**, goes after the recent-cut step and before the smallest-offense-needed step.
+- A new step, **higher chokepoint percentile first, counting only chokepoints (planets below `chokepointPercentile` all tie at 0, so a value above 1 switches the step off; added after the final review, which found the raw percentile had no off switch and decided nearly every uncommitted tie)**, goes after the recent-cut step and before the smallest-offense-needed step.
   Order: committed offense, recent cut, **chokepoint**, smallest offense still needed, cheapest path, name.
 - A new reason label `Chokepoint` (beside `Committed`, `RecentCut`, `Cheapest`) is set when that step is the first difference, and
   shows in the `BlockadeTarget` log line.

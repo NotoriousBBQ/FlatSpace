@@ -580,9 +580,10 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   enemy-occupied rule (`AssaultPlanner.ChooseBlockadeTarget` / `ChooseEnemyTarget` / `ChooseTarget`; an `AssaultPlanner`
   built without a view behaves as before). Ranking, first difference wins: most of my offense committed there (docked +
   in flight), a cut of one of my orders within `blockadeTargetRecentTurns` (default 5, `BlockadeMemory`), the more
-  central planet (higher chokepoint percentile, reason `Chokepoint`; see Connectivity), the smallest offense still
-  needed, the cheapest path from a holder, name. The chokepoint step rarely decides because committed offense decides
-  most targets; moving it ahead of the recent-cut step is a recorded tuning option. A blockade target is
+  central planet (a chokepoint, higher percentile first; every planet below `chokepointPercentile` ties at 0, so a value
+  above 1 switches the step off; reason `Chokepoint`; see Connectivity), the smallest offense still needed, the cheapest
+  path from a holder, name. The chokepoint step only matters when committed offense and a recent cut tie; moving it ahead
+  of the recent-cut step is a recorded tuning option. A blockade target is
   sized by real offense, not ship count: `needed = value x (1 + blockadeBreakMargin) - incoming offense` (margin default
   0.1); `Plan` walks sources cheapest path first, takes the exact ships that would leave (after home defence's claims, via
   `PeekShipSnapshots`) and stops when covered, or sends every spare ship when the fleet falls short (docked offense still

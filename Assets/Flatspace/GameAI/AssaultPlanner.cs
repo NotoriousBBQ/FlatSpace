@@ -192,8 +192,8 @@ namespace FlatSpace
 
             /// <summary>
             /// The blockaded, reachable planet to break. Ranked: most of my offense committed there, then a recent cut of one
-            /// of my orders, then the more central planet (higher chokepoint percentile), then the smallest offense still
-            /// needed, then the cheapest path from a holder of my warships, then name. `reason` says which step decided it (null with no target). A planet is reachable when I have ships
+            /// of my orders, then the more central planet (a chokepoint, higher percentile first), then the smallest offense
+            /// still needed, then the cheapest path from a holder of my warships, then name. `reason` says which step decided it (null with no target). A planet is reachable when I have ships
             /// committed there or a usable path from a planet holding my warships; remembered, unseen planets count.
             /// </summary>
             public Planet ChooseBlockadeTarget(out string reason)
@@ -227,7 +227,9 @@ namespace FlatSpace
                         Committed = CommittedOffense(planet),
                         Recent    = _memory != null
                                     && _memory.IsActive(name, _turn, _constants.blockadeTargetRecentTurns),
-                        Chokepoint = _map.Chokepoint(name),
+                        // Only real chokepoints (at or above chokepointPercentile) outrank others; everything else ties at 0,
+                        // so a percentile above 1 switches the step off and the smaller need decides again.
+                        Chokepoint = _map.IsChokepoint(name) ? _map.Chokepoint(name) : 0f,
                         Needed    = NeededOffense(planet),
                         Cost      = cost.Value,
                     });
