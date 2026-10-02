@@ -15,6 +15,7 @@ public static class BlockadeBreakSelfCheck
         var ok = RunIncomingOffenseCheck();
         ok &= RunBlockadeTargetCheck();
         ok &= RunBlockadeRankingCheck();
+        ok &= RunChokepointRankingCheck();
         ok &= RunBlockadePlanCheck();
         ok &= RunTrackerCheck();
         ok &= RunPlanShipActionsCheck();
@@ -130,6 +131,18 @@ public static class BlockadeBreakSelfCheck
                 Spawn("C2", 100f, 150f, new[] { "B" }),
             }, s.Constants);
             s.Finish("A", "B");
+            return s;
+        }
+
+        // The ChokepointSelfCheck hub: A(0,0) - H(100,0) with H - X1, X2, X3, and A - Y(0,80). H is the chokepoint
+        // (percentile 1), A 0.8, the rest leaves. Player 0 holds A.
+        public static Scenario Hub()
+        {
+            var s = Create("Hub");
+            s.Constants.maxPathNodesForColonization = 6;
+            s.Map = s.MapGo.AddComponent<GameAIMap>();
+            s.Map.GameAIMapInit(ChokepointSelfCheck.HubSpawns(), s.Constants);
+            s.Finish("A");
             return s;
         }
 
@@ -350,6 +363,50 @@ public static class BlockadeBreakSelfCheck
             var planner = s.Planner(s.View(10), 10);
             ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCommitted,
                 "offense in flight toward a planet counts as committed");
+        }
+        return ok;
+    }
+
+    // The chokepoint step: after committed offense and a recent cut, before the smaller need and the cheaper path.
+    // Hub layout: H is a chokepoint (percentile 1), Y a leaf (0); H needs more offense and is no cheaper than Y.
+    public static bool RunChokepointRankingCheck()
+    {
+        var ok = true;
+
+        using (var s = Scenario.Hub())
+        {
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);   // H value 30 (need 33), Y value 10 (need 11)
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(Near(s.Map.Chokepoint("H"), 1f) && Near(s.Map.Chokepoint("Y"), 0f), "hub layout: H is the top chokepoint, Y a leaf");
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("H") && reason == AssaultPlanner.ReasonChokepoint,
+                "nothing committed, no cut: the chokepoint H outranks the smaller need at Y");
+        }
+
+        using (var s = Scenario.Hub())
+        {
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 1);
+            s.Memory.Learn("Y", 10f, 8, 20);                // Y cut my order 2 turns ago
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonRecentCut,
+                "a recent cut still outranks the chokepoint step");
+        }
+
+        using (var s = Scenario.Hub())
+        {
+            s.Ships("A", 0, 2); s.Ships("H", 1, 3); s.Ships("Y", 1, 2); s.Ships("Y", 0, 1);   // I hold one ship at Y (value 20 - 10)
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(planner.ChooseBlockadeTarget(out var reason) == s.P("Y") && reason == AssaultPlanner.ReasonCommitted,
+                "committed offense still outranks the chokepoint step");
+        }
+
+        // Equal chokepoint percentile falls through to the old order (the Fork leaves C1 and C2 are both 0).
+        using (var s = Scenario.Fork())
+        {
+            s.Ships("A", 0, 2); s.Ships("C1", 1, 3); s.Ships("C2", 1, 2);
+            var planner = s.Planner(s.View(10), 10);
+            ok &= Check(Near(s.Map.Chokepoint("C1"), s.Map.Chokepoint("C2"))
+                        && planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCheapest,
+                "tied chokepoint percentile: the smaller need decides, as before");
         }
         return ok;
     }

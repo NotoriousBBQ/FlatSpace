@@ -155,7 +155,7 @@ public static class AITuningLogger
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "AssaultTarget", target, requiredForce.ToString()) });
     }
-    /// <summary>The blockade-breaking target changed: T&lt;turn&gt;|P&lt;id&gt;|BlockadeTarget|planet|blocker|value|neededOffense|Committed, RecentCut or Cheapest. Blocker -1 = remembered, unseen.</summary>
+    /// <summary>The blockade-breaking target changed: T&lt;turn&gt;|P&lt;id&gt;|BlockadeTarget|planet|blocker|value|neededOffense|Committed, RecentCut, Chokepoint or Cheapest. Blocker -1 = remembered, unseen.</summary>
     public static void LogBlockadeTarget(int turnNumber, int playerId, string planet, int blocker, float value,
         float neededOffense, string reason)
     {

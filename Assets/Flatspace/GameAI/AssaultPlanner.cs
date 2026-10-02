@@ -16,6 +16,7 @@ namespace FlatSpace
         {
             public const string ReasonCommitted = "Committed";
             public const string ReasonRecentCut = "RecentCut";
+            public const string ReasonChokepoint = "Chokepoint";
             public const string ReasonCheapest  = "Cheapest";
             public const string SkipNoPath      = "NoPath";
             public const string SkipOutranked   = "Outranked";
@@ -184,14 +185,15 @@ namespace FlatSpace
                 public Planet Planet;
                 public float  Committed;
                 public bool   Recent;
+                public float  Chokepoint;
                 public float  Needed;
                 public float  Cost;
             }
 
             /// <summary>
             /// The blockaded, reachable planet to break. Ranked: most of my offense committed there, then a recent cut of one
-            /// of my orders, then the smallest offense still needed, then the cheapest path from a holder of my warships,
-            /// then name. `reason` says which step decided it (null with no target). A planet is reachable when I have ships
+            /// of my orders, then the more central planet (higher chokepoint percentile), then the smallest offense still
+            /// needed, then the cheapest path from a holder of my warships, then name. `reason` says which step decided it (null with no target). A planet is reachable when I have ships
             /// committed there or a usable path from a planet holding my warships; remembered, unseen planets count.
             /// </summary>
             public Planet ChooseBlockadeTarget(out string reason)
@@ -225,6 +227,7 @@ namespace FlatSpace
                         Committed = CommittedOffense(planet),
                         Recent    = _memory != null
                                     && _memory.IsActive(name, _turn, _constants.blockadeTargetRecentTurns),
+                        Chokepoint = _map.Chokepoint(name),
                         Needed    = NeededOffense(planet),
                         Cost      = cost.Value,
                     });
@@ -234,6 +237,7 @@ namespace FlatSpace
                 var ranked = candidates
                     .OrderByDescending(c => c.Committed)
                     .ThenByDescending(c => c.Recent)
+                    .ThenByDescending(c => c.Chokepoint)
                     .ThenBy(c => c.Needed)
                     .ThenBy(c => c.Cost)
                     .ThenBy(c => c.Planet.PlanetName, StringComparer.Ordinal)
@@ -252,6 +256,7 @@ namespace FlatSpace
                     reason = best.Committed > 0f ? ReasonCommitted : best.Recent ? ReasonRecentCut : ReasonCheapest;
                 else if (best.Committed != ranked[1].Committed) reason = ReasonCommitted;
                 else if (best.Recent != ranked[1].Recent) reason = ReasonRecentCut;
+                else if (best.Chokepoint != ranked[1].Chokepoint) reason = ReasonChokepoint;
                 else reason = ReasonCheapest;
                 return best.Planet;
             }
