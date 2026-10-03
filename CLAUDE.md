@@ -625,7 +625,13 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   so a foreign ship docked there would be launched by that planet's owner or sit unused; a planet held by another player below
   max also still takes the colonist. A blockade cut on a colonist (`BlockadeSystem.ApplyToColony`) removes only that order and ITS
   rider (matched on player, origin, target and the colonist's delay), and clears the target's flag only when no other colonist of
-  the player still heads there, because a divert can leave two colonists with the same origin and target. Accepted limits: edge progress is lost
+  the player still heads there, because a divert can leave two colonists with the same origin and target.
+  **Display and routes:** a diverted colonist may be sent back to its own origin (it is below max once the colonist left), so an
+  order's `Origin` can equal its `Target`, and a planet's own name is never in its path table, so `GameAIMap.GetPath(order.Origin,
+  order.Target)` throws `KeyNotFoundException` for it (this crashed `FogOfWarSystem.Recompute` on a 4p run). Anything that draws
+  or samples the path an order flies (order lines in `GameBoard`, fog corridors) must use `GameAIMap.OrderPathPoints(order)`: the
+  carried route (a redirected colonist's route starts at the node it redirected from), else the shortest Origin-to-Target path,
+  else nothing. Never call `GetPath` for an order's own Origin and Target. Accepted limits: edge progress is lost
   on a redirect, a stale view can redirect needlessly, and a diverted colonist may land on a planet that filled in transit (it
   docks). No new tunable and no save change (route, target and delays already ride on `OrderSave`).
 

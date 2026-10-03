@@ -15,6 +15,7 @@ public static class ColonistRedirectSelfCheck
         ok &= RunCandidateCheck();
         ok &= RunArrivalCheck();
         ok &= RunSharedTargetCutCheck();
+        ok &= RunOrderPathPointsCheck();
         Debug.Log(ok
             ? "[ColonistRedirectSelfCheck] ALL PASSED"
             : "[ColonistRedirectSelfCheck] FAILURES (see errors above)");
@@ -319,6 +320,47 @@ public static class ColonistRedirectSelfCheck
             new BlockadeSystem(s.Map, s.Research).Apply(lone, 2);
             ok &= Check(lone.Count == 0 && !s.Map.GetPlanet("D").IsPopulationTransferInProgress(0),
                 "a lone cut colonist: both orders removed and the flag cleared as before");
+        }
+        return ok;
+    }
+
+    // Display code (order lines, fog corridors) draws the path an order flies. A redirected colonist's route differs from
+    // the shortest Origin-to-Target path, and a colonist diverted back to its own origin has Origin == Target, a pair
+    // GameAIMap.GetPath cannot look up (a planet's own name is never in its path table): that crashed FogOfWarSystem.
+    public static bool RunOrderPathPointsCheck()
+    {
+        var ok = true;
+        using (var s = BlockadeAvoidanceSelfCheck.Scenario.Diamond())
+        {
+            // A carried route is drawn as is, not replaced by the shortest path A>B>D.
+            var viaC = Colonist(0, "D", new List<string> { "A", "C", "D" });
+            var points = s.Map.OrderPathPoints(viaC);
+            ok &= Check(points.Count == 3 && points[1] == s.Map.GetPlanet("C").Position,
+                "a carried route is drawn through its own nodes (A>C>D), not the shortest path");
+
+            // No carried route: the shortest path from the origin.
+            var plain = Colonist(0);
+            plain.Route = null;
+            ok &= Check(s.Map.OrderPathPoints(plain).Count == 3, "no carried route: the shortest path A>B>D");
+
+            // Origin == Target with no route, and an unknown planet: empty, never an exception.
+            var self = Colonist(0, "A");
+            self.Route = null;
+            ok &= Check(s.Map.OrderPathPoints(self).Count == 0, "origin equal to target with no route: no points, no exception");
+            var unknown = Colonist(0, "Nowhere");
+            unknown.Route = null;
+            ok &= Check(s.Map.OrderPathPoints(unknown).Count == 0, "an unknown target: no points, no exception");
+
+            // A colonist diverted back to its own origin (the origin is below max once it left, so it is a candidate).
+            var home = Colonist(6);   // on B, heading for D
+            var plan = Plan(s, home, BlockadeView.Of("D"), p => p.PlanetName == "A");
+            ok &= Check(plan.Kind == ColonistRedirect.RedirectKind.Divert && plan.Target == "A",
+                "fixture: with D blockaded and only the origin a candidate, the colonist diverts home");
+            ColonistRedirect.Apply(s.Map, new List<GameAI.GameAIOrder> { home }, home, plan);
+            var homePoints = s.Map.OrderPathPoints(home);
+            ok &= Check(home.Origin == home.Target && homePoints.Count == 2
+                        && homePoints[1] == s.Map.GetPlanet("A").Position,
+                "a colonist diverted to its own origin is drawn along its route home (B>A) without throwing");
         }
         return ok;
     }
