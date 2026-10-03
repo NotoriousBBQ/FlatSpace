@@ -258,6 +258,24 @@ public static class AITuningLogger
             amount.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A colonist in flight was redirected: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirect|origin-&gt;oldTarget|Detour or Divert|newTarget|nodes joined by '&gt;'|cost|blocked planets (name=value joined by ',', '-' when none).</summary>
+    public static void LogColonistRedirect(int turnNumber, int playerId, string origin, string oldTarget, string kind,
+        string newTarget, IEnumerable<string> nodes, float cost, string blockedSummary)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistRedirect", $"{origin}->{oldTarget}", kind,
+            newTarget, string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture),
+            blockedSummary) });
+    }
+
+    /// <summary>A colonist in flight could not be saved from a blockade ahead: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirectFailed|origin-&gt;target|blocked planets. Once per order.</summary>
+    public static void LogColonistRedirectFailed(int turnNumber, int playerId, string origin, string target, string blockedSummary)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistRedirectFailed", $"{origin}->{target}",
+            blockedSummary) });
+    }
+
     /// <summary>A shipment was sent through unavoidable blockades: T&lt;turn&gt;|P&lt;id&gt;|ShipmentLossy|origin-&gt;target|amount|loss.</summary>
     public static void LogShipmentLossy(int turnNumber, int playerId, string origin, string target, float amount, float loss)
     {

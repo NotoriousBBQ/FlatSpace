@@ -19,6 +19,7 @@ public static class AllAISelfChecks
             ("Grotsits Short", GrotsitsShortSelfCheck.RunChecks),
             ("Blockade Breaking", BlockadeBreakSelfCheck.RunChecks),
             ("Chokepoint", ChokepointSelfCheck.RunChecks),
+            ("Colonist Redirect", ColonistRedirectSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

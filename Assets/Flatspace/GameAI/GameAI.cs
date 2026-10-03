@@ -112,10 +112,15 @@ namespace FlatSpace
             // Which planets are short of grotsits right now, so GrotsitsShort is logged on change only (log-only state).
             private readonly GrotsitsShortTracker _grotsitsShort = new GrotsitsShortTracker();
 
+            // Orders already logged as ColonistRedirectFailed, so it is logged once per order and not every turn the blockade
+            // stays ahead of it (log-only state, pruned as orders leave; a load logs each still-failing order once more).
+            private readonly HashSet<GameAIOrder> _redirectFailedLogged = new HashSet<GameAIOrder>();
+
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
                 _grotsitsShort.Clear();
+                _redirectFailedLogged.Clear();
 
             }
 
@@ -183,6 +188,7 @@ namespace FlatSpace
                 }
 
                 ApplyBlockades();
+                RedirectColonists();
 
                 var executableOrders = CurrentAIOrders.FindAll(x => x.TimingDelay <= 0);
                 Gameboard.Instance.CreateNotificationsForExecutingOrders(executableOrders);
@@ -211,6 +217,44 @@ namespace FlatSpace
                     if (cut.PlayerId < 0 || cut.PlayerId >= Gameboard.Instance.players.Count) continue;
                     var owner = Gameboard.Instance.players[cut.PlayerId];
                     if (owner && owner.playerAI) owner.playerAI.LearnBlockade(cut.Planet, cut.Value, turn);
+                }
+            }
+
+            // Once per turn, after blockades were applied and before orders execute: a colonist whose remaining route now
+            // crosses a blockade its owner can see is detoured or diverted (ColonistRedirect); one that cannot be saved is
+            // left to be cut as before and logged once. Uses only the owner's BlockadeView.
+            private void RedirectColonists()
+            {
+                var research = BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players);
+                if (research == null) return;
+                var turn = Gameboard.Instance.TurnNumber;
+                var blockade = new BlockadeSystem(GameAIMap, research);
+                var maxNodes = GameAIMap.GameAIConstants.maxPathNodesForColonization;
+
+                _redirectFailedLogged.RemoveWhere(o => !CurrentAIOrders.Contains(o));
+                var colonists = CurrentAIOrders.FindAll(o =>
+                    o.Type == GameAIOrder.OrderType.OrderTypePopulationTransport && o.TimingDelay > 0);
+                foreach (var colonist in colonists)
+                {
+                    if (colonist.PlayerId < 0 || colonist.PlayerId >= Gameboard.Instance.players.Count) continue;
+                    var ai = Gameboard.Instance.players[colonist.PlayerId]?.playerAI;
+                    if (ai == null || ai.CurrentBlockadeView == null) continue;
+
+                    var result = ColonistRedirect.Plan(GameAIMap, blockade, colonist, ai.CurrentBlockadeView, maxNodes,
+                        ai.IsDiversionTarget, ai.ColonizationCostDivisor);
+                    if (result.Kind == ColonistRedirect.RedirectKind.None)
+                    {
+                        if (result.BlockedAhead.Count > 0 && _redirectFailedLogged.Add(colonist))
+                            AITuningLogger.LogColonistRedirectFailed(turn, colonist.PlayerId, colonist.Origin, colonist.Target,
+                                ai.BlockedNodeSummary(result.BlockedAhead));
+                        continue;
+                    }
+
+                    var oldTarget = colonist.Target;
+                    var blocked = ai.BlockedNodeSummary(result.BlockedAhead);
+                    ColonistRedirect.Apply(GameAIMap, CurrentAIOrders, colonist, result);
+                    AITuningLogger.LogColonistRedirect(turn, colonist.PlayerId, colonist.Origin, oldTarget,
+                        result.Kind.ToString(), result.Target, result.Nodes, result.Cost, blocked);
                 }
             }
 
