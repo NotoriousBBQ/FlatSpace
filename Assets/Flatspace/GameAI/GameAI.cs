@@ -112,10 +112,15 @@ namespace FlatSpace
             // Which planets are short of grotsits right now, so GrotsitsShort is logged on change only (log-only state).
             private readonly GrotsitsShortTracker _grotsitsShort = new GrotsitsShortTracker();
 
+            // Orders already logged as ColonistRedirectFailed, so it is logged once per order and not every turn the blockade
+            // stays ahead of it (log-only state, pruned as orders leave; a load logs each still-failing order once more).
+            private readonly HashSet<GameAIOrder> _redirectFailedLogged = new HashSet<GameAIOrder>();
+
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
                 _grotsitsShort.Clear();
+                _redirectFailedLogged.Clear();
 
             }
 
@@ -183,6 +188,7 @@ namespace FlatSpace
                 }
 
                 ApplyBlockades();
+                RedirectColonists();
 
                 var executableOrders = CurrentAIOrders.FindAll(x => x.TimingDelay <= 0);
                 Gameboard.Instance.CreateNotificationsForExecutingOrders(executableOrders);
@@ -214,18 +220,54 @@ namespace FlatSpace
                 }
             }
 
+            // Once per turn, after blockades were applied and before orders execute: a colonist whose remaining route now
+            // crosses a blockade its owner can see is detoured or diverted (ColonistRedirect); one that cannot be saved is
+            // left to be cut as before and logged once. Uses only the owner's BlockadeView.
+            private void RedirectColonists()
+            {
+                var research = BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players);
+                if (research == null) return;
+                var turn = Gameboard.Instance.TurnNumber;
+                var blockade = new BlockadeSystem(GameAIMap, research);
+                var maxNodes = GameAIMap.GameAIConstants.maxPathNodesForColonization;
+
+                _redirectFailedLogged.RemoveWhere(o => !CurrentAIOrders.Contains(o));
+                var colonists = CurrentAIOrders.FindAll(o =>
+                    o.Type == GameAIOrder.OrderType.OrderTypePopulationTransport && o.TimingDelay > 0);
+                foreach (var colonist in colonists)
+                {
+                    if (colonist.PlayerId < 0 || colonist.PlayerId >= Gameboard.Instance.players.Count) continue;
+                    var ai = Gameboard.Instance.players[colonist.PlayerId]?.playerAI;
+                    if (ai == null || ai.CurrentBlockadeView == null) continue;
+
+                    var result = ColonistRedirect.Plan(GameAIMap, blockade, colonist, ai.CurrentBlockadeView, maxNodes,
+                        ai.IsDiversionTarget, ai.ColonizationCostDivisor,
+                        GameAIMap.GameAIConstants.colonistDetourDivertRatio);
+                    if (result.Kind == ColonistRedirect.RedirectKind.None)
+                    {
+                        if (result.BlockedAhead.Count > 0 && _redirectFailedLogged.Add(colonist))
+                            AITuningLogger.LogColonistRedirectFailed(turn, colonist.PlayerId, colonist.Origin, colonist.Target,
+                                ai.BlockedNodeSummary(result.BlockedAhead));
+                        continue;
+                    }
+
+                    var oldTarget = colonist.Target;
+                    var blocked = ai.BlockedNodeSummary(result.BlockedAhead);
+                    ColonistRedirect.Apply(GameAIMap, CurrentAIOrders, colonist, result);
+                    AITuningLogger.LogColonistRedirect(turn, colonist.PlayerId, colonist.Origin, oldTarget,
+                        result.Kind.ToString(), result.Target, result.Nodes, result.Cost, blocked, result.DeclinedDetourCost);
+                }
+            }
+
             private void ExecuteOrder(GameAIOrder executableOrder)
             {
                 var targetPlanet = GameAIMap.GetPlanet(executableOrder.Target);
                 switch (executableOrder.Type)
                 {
                     case GameAIOrder.OrderType.OrderTypePopulationTransport:
-                        targetPlanet.ChangePopulation(Convert.ToInt32(executableOrder.Data), executableOrder.PlayerId);
-
-                        if (targetPlanet.IsPopulationTransferInProgress(executableOrder.PlayerId))
-                        {
-                            targetPlanet.SetPopulationTransferInProgress(executableOrder.PlayerId, false);
-                        }
+                        if (ApplyColonistArrival(targetPlanet, executableOrder))
+                            AITuningLogger.LogColonistDocked(Gameboard.Instance.TurnNumber, executableOrder.PlayerId,
+                                targetPlanet.PlanetName, Convert.ToInt32(executableOrder.Data));
 
                         var arrivingPlayerAI = Gameboard.Instance.players[executableOrder.PlayerId].playerAI;
                         if (arrivingPlayerAI.IsCoverageGap(targetPlanet,
@@ -315,6 +357,28 @@ namespace FlatSpace
             {
                 target.Food += Convert.ToSingle(order.Data);
             }
+
+            // A colonist lands: below max population it joins the planet as before; at or above max on a planet the order's
+            // player owns it docks as a colony ship instead (eligible for the next colonization pass). A full planet owned by
+            // someone else (or tied) still takes the colonist, as before: colony-ship queries (CheckColonizationReady,
+            // UndockShip, PlanetHasColonyShip) do not check a ship's owner, so a foreign ship docked there would be launched
+            // by that planet's owner or sit unused. The ship's research snapshot is rebuilt from the owner's current research
+            // (a colonist order carries none) via the default dock, which needs Gameboard.Instance; the self-check passes its
+            // own. Returns true when a ship docked.
+            public static bool ApplyColonistArrival(Planet target, GameAIOrder order, Action<Planet, int> dockColonyShip = null)
+            {
+                target.SetPopulationTransferInProgress(order.PlayerId, false);
+                if (target.Population.Count >= target.MaxPopulation && target.Owner == order.PlayerId)
+                {
+                    (dockColonyShip ?? DefaultDockColonyShip)(target, order.PlayerId);
+                    return true;
+                }
+                target.ChangePopulation(Convert.ToInt32(order.Data), order.PlayerId);
+                return false;
+            }
+
+            private static void DefaultDockColonyShip(Planet target, int owner)
+                => target.DockShipRebuiltSnapshot(Ship.ShipKind.ColonyShip, owner);
 
             // Immediate: takes the fleet's ships off the origin planet (same first-N ships the payload was read from).
             public static void ApplyShipDeparture(Planet origin, GameAIOrder order)

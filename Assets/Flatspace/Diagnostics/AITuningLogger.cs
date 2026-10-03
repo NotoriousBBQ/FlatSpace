@@ -250,6 +250,33 @@ public static class AITuningLogger
             string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A colonist arrived at a full planet and docked as a colony ship: T&lt;turn&gt;|P&lt;id&gt;|ColonistDocked|planet|amount.</summary>
+    public static void LogColonistDocked(int turnNumber, int playerId, string planetName, int amount)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistDocked", planetName,
+            amount.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A colonist in flight was redirected: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirect|origin-&gt;oldTarget|Detour or Divert|newTarget|nodes joined by '&gt;'|cost|blocked planets (name=value joined by ',', '-' when none)|declined detour cost ('-' unless a diversion was chosen over an available detour).</summary>
+    public static void LogColonistRedirect(int turnNumber, int playerId, string origin, string oldTarget, string kind,
+        string newTarget, IEnumerable<string> nodes, float cost, string blockedSummary, float declinedDetourCost = -1f)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistRedirect", $"{origin}->{oldTarget}", kind,
+            newTarget, string.Join(">", nodes), cost.ToString("0.#", ci), blockedSummary,
+            declinedDetourCost < 0f ? "-" : declinedDetourCost.ToString("0.#", ci)) });
+    }
+
+    /// <summary>A colonist in flight could not be saved from a blockade ahead: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirectFailed|origin-&gt;target|blocked planets. Once per order.</summary>
+    public static void LogColonistRedirectFailed(int turnNumber, int playerId, string origin, string target, string blockedSummary)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistRedirectFailed", $"{origin}->{target}",
+            blockedSummary) });
+    }
+
     /// <summary>A shipment was sent through unavoidable blockades: T&lt;turn&gt;|P&lt;id&gt;|ShipmentLossy|origin-&gt;target|amount|loss.</summary>
     public static void LogShipmentLossy(int turnNumber, int playerId, string origin, string target, float amount, float loss)
     {

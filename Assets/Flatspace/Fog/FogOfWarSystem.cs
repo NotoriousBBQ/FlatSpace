@@ -165,11 +165,11 @@ namespace FlatSpace.Fog
                 if (order.PlayerId < 0 || order.PlayerId >= _players.Length) continue;
                 if (string.IsNullOrEmpty(order.Origin) || string.IsNullOrEmpty(order.Target)) continue;
 
-                var path = gameAI.GameAIMap.GetPath(order.Origin, order.Target);
-                if (path == null || path.PathNodes.Count == 0) continue;
+                var orderPoints = gameAI.GameAIMap.OrderPathPoints(order);
+                if (orderPoints.Count == 0) continue;
 
                 corridorPts.Clear();
-                foreach (var n in path.PathNodes) corridorPts.Add(n.Position);
+                corridorPts.AddRange(orderPoints);
 
                 var totalLen = 0f;
                 for (var i = 1; i < corridorPts.Count; i++)

@@ -526,10 +526,14 @@ namespace FlatSpace
                         else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport)
                             offset = 30.0f;
 
-                        var path = GameAI.GameAIMap.GetPath(order.Origin, order.Target);
                         var pathPoints = new List<Vector3>();
-                        foreach (var node in path.PathNodes)
-                            pathPoints.Add(new Vector3(node.Position.x + offset, node.Position.y + offset, 0.0f));
+                        foreach (var point in GameAI.GameAIMap.OrderPathPoints(order))
+                            pathPoints.Add(new Vector3(point.x + offset, point.y + offset, 0.0f));
+                        if (pathPoints.Count < 2)
+                        {
+                            Destroy(lineDrawObject.gameObject);   // nothing to draw (no route and no pathed Origin to Target)
+                            continue;
+                        }
 
                         var progressAmount =
                             Math.Clamp(

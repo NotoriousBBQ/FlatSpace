@@ -63,6 +63,30 @@ namespace FlatSpace
                 return reversed;
             }
 
+            /// <summary>
+            /// The positions along the path an order flies, for display (order lines, fog corridors): the order's carried
+            /// route when it has one (a redirected colonist's route starts at the node it redirected from and differs from
+            /// the shortest path, and may end at its own origin), else the shortest path from Origin to Target. Empty when
+            /// neither exists (same planet, unknown or unpathed pair): a planet's own name is never in its path table, so
+            /// GetPath(origin, target) must not be called for such a pair.
+            /// </summary>
+            public List<Vector2> OrderPathPoints(GameAI.GameAIOrder order)
+            {
+                var points = new List<Vector2>();
+                if (order.Route != null && order.Route.Count >= 2)
+                {
+                    foreach (var name in order.Route)
+                        if (_planets.TryGetValue(name, out var routePlanet)) points.Add(routePlanet.Position);
+                    return points;
+                }
+                if (order.Origin != order.Target && order.Origin != null && order.Target != null
+                    && _planets.TryGetValue(order.Origin, out var origin)
+                    && origin.DistanceMapToPathingList.ContainsKey(order.Target))
+                    foreach (var node in GetPath(order.Origin, order.Target).PathNodes)
+                        points.Add(node.Position);
+                return points;
+            }
+
             /// <summary>The connection cost between two adjacent planets; 0 when they are not adjacent or unknown.</summary>
             public float EdgeCost(string a, string b)
             {

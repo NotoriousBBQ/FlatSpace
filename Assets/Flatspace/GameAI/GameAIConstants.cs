@@ -108,6 +108,12 @@ public class GameAIConstants : ScriptableObject
     // any territory to serve). Requires maxPathNodesForKnowledge to be at least this large, otherwise knowledge
     // becomes the tighter gate again and this constant has no effect.
     public int maxPathNodesForColonization = 6;
+    // A colonist already in flight whose route now crosses a blockade is detoured to its own target first (ColonistRedirect).
+    // When a diversion to another target is also available, the detour is declined for it if the detour's real route cost is
+    // more than this many times the diversion's real route cost: long detours stay exposed to later blockades (on 4p.json 79% of
+    // them never arrived against 11% of diversions). 0 (or below) = always detour first. With no diversion candidate the
+    // detour is always taken.
+    public float colonistDetourDivertRatio = 2f;
 
     [Header("Knowledge")]
     // PlayerKnowledge.Update grants knowledge out to this many path nodes from each vision source (2 = source +

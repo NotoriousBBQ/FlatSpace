@@ -160,6 +160,29 @@ namespace FlatSpace.AI
         }
 
         /// <summary>
+        /// The last route node an order has passed (fraction at or below its progress), or the route's first node
+        /// (the order's Origin when it carries no route) when none has been. A colonist is treated as standing on it.
+        /// </summary>
+        public string CurrentNode(GameAI.GameAIOrder order)
+        {
+            var progress = Progress(order.TimingDelay, order.TotalDelay);
+            var current = order.Route != null && order.Route.Count >= 2 ? order.Route[0] : order.Origin;
+            foreach (var node in RouteFor(order))
+            {
+                if (node.Fraction > progress + Epsilon) break;
+                current = node.Name;
+            }
+            return current;
+        }
+
+        /// <summary>The route nodes an order has not yet passed, in order (the target last).</summary>
+        public List<string> NodesAhead(GameAI.GameAIOrder order)
+        {
+            var progress = Progress(order.TimingDelay, order.TotalDelay);
+            return RouteFor(order).Where(n => n.Fraction > progress + Epsilon).Select(n => n.Name).ToList();
+        }
+
+        /// <summary>
         /// Once per turn, after in-flight delays were decremented and before orders execute: applies blockades to the
         /// orders that passed a planet this turn. Colony orders are removed (colonist and food rider are lost, the
         /// origin already paid for them); food and grotsits shipments lose the blockade value at every blockaded
@@ -195,10 +218,16 @@ namespace FlatSpace.AI
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
                 cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value });
-                orders.RemoveAll(o => o.PlayerId == order.PlayerId && o.Origin == order.Origin && o.Target == order.Target
-                    && (o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
-                        || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider));
-                _map.GetPlanet(order.Target)?.SetPopulationTransferInProgress(order.PlayerId, false);
+                // Only this colonist and ITS rider (matched on player, origin, target and the colonist's own delay) go: a
+                // diverted colonist can share origin and target with another one, which must survive this cut.
+                orders.Remove(order);
+                var rider = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider
+                    && o.PlayerId == order.PlayerId && o.Origin == order.Origin && o.Target == order.Target
+                    && o.TimingDelay == order.TimingDelay);
+                if (rider != null) orders.Remove(rider);
+                if (!orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
+                                        && o.PlayerId == order.PlayerId && o.Target == order.Target))
+                    _map.GetPlanet(order.Target)?.SetPopulationTransferInProgress(order.PlayerId, false);
                 AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name, 0f);
                 return;
             }
