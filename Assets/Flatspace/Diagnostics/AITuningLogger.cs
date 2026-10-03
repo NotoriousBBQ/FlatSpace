@@ -250,6 +250,14 @@ public static class AITuningLogger
             string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A colonist arrived at a full planet and docked as a colony ship: T&lt;turn&gt;|P&lt;id&gt;|ColonistDocked|planet|amount.</summary>
+    public static void LogColonistDocked(int turnNumber, int playerId, string planetName, int amount)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistDocked", planetName,
+            amount.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
     /// <summary>A shipment was sent through unavoidable blockades: T&lt;turn&gt;|P&lt;id&gt;|ShipmentLossy|origin-&gt;target|amount|loss.</summary>
     public static void LogShipmentLossy(int turnNumber, int playerId, string origin, string target, float amount, float loss)
     {

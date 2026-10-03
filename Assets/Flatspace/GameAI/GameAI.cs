@@ -220,12 +220,9 @@ namespace FlatSpace
                 switch (executableOrder.Type)
                 {
                     case GameAIOrder.OrderType.OrderTypePopulationTransport:
-                        targetPlanet.ChangePopulation(Convert.ToInt32(executableOrder.Data), executableOrder.PlayerId);
-
-                        if (targetPlanet.IsPopulationTransferInProgress(executableOrder.PlayerId))
-                        {
-                            targetPlanet.SetPopulationTransferInProgress(executableOrder.PlayerId, false);
-                        }
+                        if (ApplyColonistArrival(targetPlanet, executableOrder))
+                            AITuningLogger.LogColonistDocked(Gameboard.Instance.TurnNumber, executableOrder.PlayerId,
+                                targetPlanet.PlanetName, Convert.ToInt32(executableOrder.Data));
 
                         var arrivingPlayerAI = Gameboard.Instance.players[executableOrder.PlayerId].playerAI;
                         if (arrivingPlayerAI.IsCoverageGap(targetPlanet,
@@ -315,6 +312,25 @@ namespace FlatSpace
             {
                 target.Food += Convert.ToSingle(order.Data);
             }
+
+            // A colonist lands: below max population it joins the planet as before; at or above max the colonist docks as a
+            // colony ship for the order's player instead (eligible for the next colonization pass). The ship's research
+            // snapshot is rebuilt from the owner's current research (a colonist order carries none) via the default dock,
+            // which needs Gameboard.Instance; the self-check passes its own. Returns true when a ship docked.
+            public static bool ApplyColonistArrival(Planet target, GameAIOrder order, Action<Planet, int> dockColonyShip = null)
+            {
+                target.SetPopulationTransferInProgress(order.PlayerId, false);
+                if (target.Population.Count >= target.MaxPopulation)
+                {
+                    (dockColonyShip ?? DefaultDockColonyShip)(target, order.PlayerId);
+                    return true;
+                }
+                target.ChangePopulation(Convert.ToInt32(order.Data), order.PlayerId);
+                return false;
+            }
+
+            private static void DefaultDockColonyShip(Planet target, int owner)
+                => target.DockShipRebuiltSnapshot(Ship.ShipKind.ColonyShip, owner);
 
             // Immediate: takes the fleet's ships off the origin planet (same first-N ships the payload was read from).
             public static void ApplyShipDeparture(Planet origin, GameAIOrder order)

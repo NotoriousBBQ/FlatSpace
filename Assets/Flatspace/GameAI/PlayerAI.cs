@@ -446,10 +446,21 @@ namespace FlatSpace
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
                 return planet.PlayerWithMostPopulation() != Player.playerID;
             }
+            // The wider target set for a colonist already in flight (see ColonistRedirect): known, and empty, or my
+            // colonist is already inbound, or colonized below max population (my own planets included). Full planets are
+            // excluded. Ordinary launches keep IsValidColonizationTarget. Public for the self-check.
+            public bool IsDiversionTarget(Planet planet)
+            {
+                if (!AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;
+                if (planet.Population.Count == 0)                                return true;
+                if (planet.IsPopulationTransferInProgress(Player.playerID))       return true;
+                return planet.Population.Count < planet.MaxPopulation;
+            }
             // Consolidate tilts colonization toward chokepoints: a target's choice cost is its route cost divided by
             // 1 + colonizationChokepointWeight x its chokepoint percentile, so a hub may be farther and still win. Expand,
             // a weight of 0 (or below) and unknown planets leave it at 1 (nearest first). The order delay never uses it.
-            private float ColonizationCostDivisor(string targetName)
+            // Public for ColonistRedirect (diversion choice) and the self-check.
+            public float ColonizationCostDivisor(string targetName)
             {
                 if (Strategy != AIStrategy.AIStrategyConsolidate) return 1f;
                 var weight = AIMap.GameAIConstants.colonizationChokepointWeight;

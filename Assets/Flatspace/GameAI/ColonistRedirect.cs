@@ -68,5 +68,42 @@ namespace FlatSpace.AI
             result.Cost = bestRoute.Cost;
             return result;
         }
+
+        /// <summary>
+        /// Applies a Plan result to the colonist order: new route, delay restarted from the new route's real cost (at
+        /// least 1), and for a divert the new target. Its food rider (matched on player, origin, old target and the
+        /// colonist's own delay, so a twin colonist's rider is never touched) follows; the transfer flags follow a divert.
+        /// </summary>
+        public static void Apply(GameAIMap map, List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder colonist, Result result)
+        {
+            if (result.Kind == RedirectKind.None) return;
+
+            var oldTarget = colonist.Target;
+            var oldDelay = colonist.TimingDelay;
+            var rider = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider
+                                         && o.PlayerId == colonist.PlayerId && o.Origin == colonist.Origin
+                                         && o.Target == oldTarget && o.TimingDelay == oldDelay);
+
+            var delay = Math.Max(1, Convert.ToInt32(result.Cost / map.GameAIConstants.defaultTravelSpeed));
+            colonist.Route = new List<string>(result.Nodes);
+            colonist.TotalDelay = delay;
+            colonist.TimingDelay = delay;
+            if (rider != null)
+            {
+                rider.TotalDelay = delay;
+                rider.TimingDelay = delay;
+            }
+
+            if (result.Kind != RedirectKind.Divert) return;
+
+            colonist.Target = result.Target;
+            if (rider != null) rider.Target = result.Target;
+
+            var stillHeadingThere = orders.Exists(o => o != colonist
+                && o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
+                && o.PlayerId == colonist.PlayerId && o.Target == oldTarget);
+            if (!stillHeadingThere) map.GetPlanet(oldTarget)?.SetPopulationTransferInProgress(colonist.PlayerId, false);
+            map.GetPlanet(result.Target)?.SetPopulationTransferInProgress(colonist.PlayerId);
+        }
     }
 }
