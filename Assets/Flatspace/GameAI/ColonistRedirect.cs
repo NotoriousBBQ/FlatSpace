@@ -22,10 +22,11 @@ namespace FlatSpace.AI
             public List<string> Nodes;       // the new route, from CurrentNode; null for None
             public float Cost;               // the REAL route cost (never tilted by the divisor); 0 for None
             public List<string> BlockedAhead = new List<string>();   // remaining route nodes the view says are blockaded
+            public float DeclinedDetourCost = -1f;   // a Divert chosen over an available detour: that detour's real cost; else -1
         }
 
         public static Result Plan(GameAIMap map, BlockadeSystem blockade, GameAI.GameAIOrder order, BlockadeView view,
-            int maxNodes, Func<Planet, bool> isCandidate, Func<string, float> costDivisor)
+            int maxNodes, Func<Planet, bool> isCandidate, Func<string, float> costDivisor, float detourDivertRatio = 0f)
         {
             var result = new Result { Target = order.Target, CurrentNode = blockade.CurrentNode(order) };
             if (view == null || order.TimingDelay <= 0) return result;
@@ -34,7 +35,8 @@ namespace FlatSpace.AI
             if (result.BlockedAhead.Count == 0) return result;
 
             var detour = RoutePlanner.PlanRoute(map, result.CurrentNode, order.Target, view, maxNodes);
-            if (detour != null)
+            // A detour is taken at once unless the ratio rule is on, in which case a diversion is looked for first.
+            if (detour != null && detourDivertRatio <= 0f)
             {
                 result.Kind = RedirectKind.Detour;
                 result.Nodes = detour.Nodes;
@@ -61,7 +63,17 @@ namespace FlatSpace.AI
                 }
             }
 
+            // A detour is kept unless a diversion exists and the detour costs more than the ratio times the diversion's real cost.
+            if (detour != null && (bestRoute == null || detour.Cost <= detourDivertRatio * bestRoute.Cost))
+            {
+                result.Kind = RedirectKind.Detour;
+                result.Nodes = detour.Nodes;
+                result.Cost = detour.Cost;
+                return result;
+            }
+
             if (bestRoute == null) return result;
+            if (detour != null) result.DeclinedDetourCost = detour.Cost;
             result.Kind = RedirectKind.Divert;
             result.Target = bestTarget;
             result.Nodes = bestRoute.Nodes;

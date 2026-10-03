@@ -16,6 +16,7 @@ public static class ColonistRedirectSelfCheck
         ok &= RunArrivalCheck();
         ok &= RunSharedTargetCutCheck();
         ok &= RunOrderPathPointsCheck();
+        ok &= RunDetourRatioCheck();
         Debug.Log(ok
             ? "[ColonistRedirectSelfCheck] ALL PASSED"
             : "[ColonistRedirectSelfCheck] FAILURES (see errors above)");
@@ -361,6 +362,45 @@ public static class ColonistRedirectSelfCheck
             ok &= Check(home.Origin == home.Target && homePoints.Count == 2
                         && homePoints[1] == s.Map.GetPlanet("A").Position,
                 "a colonist diverted to its own origin is drawn along its route home (B>A) without throwing");
+        }
+        return ok;
+    }
+
+    // A detour whose real cost is more than detourDivertRatio x the best diversion's real cost is declined for that
+    // diversion. In the diamond, B blockaded: the detour A>C>D costs about 361, the diversion A>C about 180 (C is the
+    // only candidate), so the cost ratio is about 2.0 -- the checks use 1.5 and 3 and stay clear of that boundary.
+    public static bool RunDetourRatioCheck()
+    {
+        var ok = true;
+        using (var s = BlockadeAvoidanceSelfCheck.Scenario.Diamond())
+        {
+            var bs = new BlockadeSystem(s.Map, s.Research);
+            System.Func<Planet, bool> onlyC = p => p.PlanetName == "C";
+            ColonistRedirect.Result Run(float ratio, System.Func<Planet, bool> candidate)
+                => ColonistRedirect.Plan(s.Map, bs, Colonist(0), BlockadeView.Of("B"), 6, candidate, name => 1f, ratio);
+
+            var low = Run(1.5f, onlyC);
+            ok &= Check(low.Kind == ColonistRedirect.RedirectKind.Divert && low.Target == "C"
+                        && string.Join(">", low.Nodes) == "A>C" && low.Cost < 200f
+                        && low.DeclinedDetourCost > 300f,
+                "ratio 1.5: a detour costing about twice the diversion is declined; the diversion A>C is taken and the detour cost reported");
+
+            var high = Run(3f, onlyC);
+            ok &= Check(high.Kind == ColonistRedirect.RedirectKind.Detour && high.Target == "D"
+                        && string.Join(">", high.Nodes) == "A>C>D" && high.DeclinedDetourCost < 0f,
+                "ratio 3: the detour is within three times the diversion, so it is kept");
+
+            var off = Run(0f, onlyC);
+            ok &= Check(off.Kind == ColonistRedirect.RedirectKind.Detour && off.DeclinedDetourCost < 0f,
+                "ratio 0 switches the rule off: detour first, as before");
+
+            var none = Run(0.1f, p => false);
+            ok &= Check(none.Kind == ColonistRedirect.RedirectKind.Detour && none.DeclinedDetourCost < 0f,
+                "no diversion candidate: the detour is still taken however small the ratio");
+
+            var noDetourNeeded = ColonistRedirect.Plan(s.Map, bs, Colonist(0), BlockadeView.Of(), 6, onlyC, name => 1f, 1.5f);
+            ok &= Check(noDetourNeeded.Kind == ColonistRedirect.RedirectKind.None && noDetourNeeded.DeclinedDetourCost < 0f,
+                "nothing blocked ahead: the ratio rule never fires");
         }
         return ok;
     }

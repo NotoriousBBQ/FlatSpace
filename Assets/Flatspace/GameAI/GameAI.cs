@@ -241,7 +241,8 @@ namespace FlatSpace
                     if (ai == null || ai.CurrentBlockadeView == null) continue;
 
                     var result = ColonistRedirect.Plan(GameAIMap, blockade, colonist, ai.CurrentBlockadeView, maxNodes,
-                        ai.IsDiversionTarget, ai.ColonizationCostDivisor);
+                        ai.IsDiversionTarget, ai.ColonizationCostDivisor,
+                        GameAIMap.GameAIConstants.colonistDetourDivertRatio);
                     if (result.Kind == ColonistRedirect.RedirectKind.None)
                     {
                         if (result.BlockedAhead.Count > 0 && _redirectFailedLogged.Add(colonist))
@@ -254,7 +255,7 @@ namespace FlatSpace
                     var blocked = ai.BlockedNodeSummary(result.BlockedAhead);
                     ColonistRedirect.Apply(GameAIMap, CurrentAIOrders, colonist, result);
                     AITuningLogger.LogColonistRedirect(turn, colonist.PlayerId, colonist.Origin, oldTarget,
-                        result.Kind.ToString(), result.Target, result.Nodes, result.Cost, blocked);
+                        result.Kind.ToString(), result.Target, result.Nodes, result.Cost, blocked, result.DeclinedDetourCost);
                 }
             }
 

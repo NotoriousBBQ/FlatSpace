@@ -258,14 +258,15 @@ public static class AITuningLogger
             amount.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
-    /// <summary>A colonist in flight was redirected: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirect|origin-&gt;oldTarget|Detour or Divert|newTarget|nodes joined by '&gt;'|cost|blocked planets (name=value joined by ',', '-' when none).</summary>
+    /// <summary>A colonist in flight was redirected: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirect|origin-&gt;oldTarget|Detour or Divert|newTarget|nodes joined by '&gt;'|cost|blocked planets (name=value joined by ',', '-' when none)|declined detour cost ('-' unless a diversion was chosen over an available detour).</summary>
     public static void LogColonistRedirect(int turnNumber, int playerId, string origin, string oldTarget, string kind,
-        string newTarget, IEnumerable<string> nodes, float cost, string blockedSummary)
+        string newTarget, IEnumerable<string> nodes, float cost, string blockedSummary, float declinedDetourCost = -1f)
     {
         if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ColonistRedirect", $"{origin}->{oldTarget}", kind,
-            newTarget, string.Join(">", nodes), cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture),
-            blockedSummary) });
+            newTarget, string.Join(">", nodes), cost.ToString("0.#", ci), blockedSummary,
+            declinedDetourCost < 0f ? "-" : declinedDetourCost.ToString("0.#", ci)) });
     }
 
     /// <summary>A colonist in flight could not be saved from a blockade ahead: T&lt;turn&gt;|P&lt;id&gt;|ColonistRedirectFailed|origin-&gt;target|blocked planets. Once per order.</summary>
