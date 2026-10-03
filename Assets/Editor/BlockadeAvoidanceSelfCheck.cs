@@ -43,7 +43,7 @@ public static class BlockadeAvoidanceSelfCheck
     private static bool Near(float a, float b) => Mathf.Abs(a - b) < 0.01f;
 
     // Explicit positions: every planet needs a distinct position (PathingSystem.FindPath tie-break fragility).
-    private static PlanetSpawnData Spawn(string name, float x, float y, IEnumerable<string> connections = null,
+    public static PlanetSpawnData Spawn(string name, float x, float y, IEnumerable<string> connections = null,
         int initialPopulation = 0)
     {
         var resourceData = ScriptableObject.CreateInstance<PlanetResourceData>();
@@ -60,7 +60,7 @@ public static class BlockadeAvoidanceSelfCheck
         return spawn;
     }
 
-    private static GameAIMap Build(GameObject go, GameAIConstants constants, params PlanetSpawnData[] spawns)
+    public static GameAIMap Build(GameObject go, GameAIConstants constants, params PlanetSpawnData[] spawns)
     {
         var map = go.AddComponent<GameAIMap>();
         map.GameAIMapInit(new List<PlanetSpawnData>(spawns), constants);
@@ -475,7 +475,7 @@ public static class BlockadeAvoidanceSelfCheck
 
     // The diamond with player 0 present at A: 5 inhabitants (a full planet, ready to colonize), B and C not valid
     // targets (a colonist is already inbound), D the only target. Player 0's research catalog holds MakeResearch().
-    private sealed class Scenario : System.IDisposable
+    public sealed class Scenario : System.IDisposable
     {
         public GameObject MapGo, PlayerGo;
         public GameAIMap Map;
