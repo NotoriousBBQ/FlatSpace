@@ -49,7 +49,8 @@ assertions (`Debug.LogError` on failure, a summary `Debug.Log` at the end) reach
 `FlatSpace → AI → Run Grotsits Short Self-Check` in `Assets/Editor/GrotsitsShortSelfCheck.cs` (the `GrotsitsShortTracker` start/end transitions);
 `FlatSpace → AI → Run Blockade Breaking Self-Check` in `Assets/Editor/BlockadeBreakSelfCheck.cs` (blockade target candidates and ranking, offense-sized force, in-flight offense, the `BlockadeTargetTracker` transitions, the offense research boost);
 `FlatSpace → AI → Run Chokepoint Self-Check` in `Assets/Editor/ChokepointSelfCheck.cs` (betweenness percentile, the map's chokepoints, garrison category 4 and the Consolidate garrison, the `ChokepointGarrison` numbers; the chokepoint blockade ranking and colonization tilt are in `BlockadeBreakSelfCheck`);
-`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance, Grotsits Short, Blockade Breaking, Chokepoint; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
+`FlatSpace → AI → Run Colonist Redirect Self-Check` in `Assets/Editor/ColonistRedirectSelfCheck.cs` (the redirect planner, applying a redirect to the order, its food rider and the transfer flags, the diversion candidate rule and the colonist arrival rule);
+`FlatSpace → AI → Run All AI Self-Checks` in `Assets/Editor/AllAISelfChecks.cs` (runs every AI suite: Player Knowledge, PlayerAI Resource, Ship Transport, Distribution Center, Warship, Blockade Avoidance, Grotsits Short, Blockade Breaking, Chokepoint, Colonist Redirect; each suite exposes `public static bool RunChecks()`; add new AI suites to its list);
 `FlatSpace → UI → Run Fleet Summary Self-Check` in `Assets/Editor/FleetSummarySelfCheck.cs`, which covers only
 the per-player grouping in `FleetSummary`, not the icons themselves — those need a Play-mode look) or
 a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50 seeds)"). When
@@ -603,6 +604,25 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   colony is sink-only (`PlanetState.Held` makes `Spare` 0, it still receives ships up to its garrison). The same applies to
   `HeldPlanet` when it is a colony of mine. The hold ends when the rival's ships leave. A blockade the rival keeps
   reinforcing can pin the force there (the sticky first rank); the tuning log shows it.
+- **Colonist redirect (colonists already in flight):** `ColonistRedirect` (`Assets/Flatspace/GameAI/ColonistRedirect.cs`, pure)
+  re-plans a colonist whose REMAINING route now crosses a planet in its owner's `BlockadeView` (visible planets plus blockade
+  memory; never the live values). `GameAI.RedirectColonists` runs it once per turn right after `ApplyBlockades` (so a colonist
+  just cut is already gone), for every `OrderTypePopulationTransport` with `TimingDelay > 0`. The colonist counts as standing on
+  the last route node it passed (`BlockadeSystem.CurrentNode`/`NodesAhead`); progress along the edge it was crossing is thrown
+  away. Order of preference: (1) a clean `RoutePlanner.PlanRoute` from that node to the SAME target, however long (a detour);
+  (2) a divert: the best other candidate by `route.Cost / ColonizationCostDivisor` (ties by name) from the wider set
+  `PlayerAI.IsDiversionTarget` (known, and empty, or my colonist already inbound, or colonized below max population, my own
+  planets included; `CanSupportColony` is not applied, the origin already paid); (3) neither: the colonist continues and is cut as
+  before. Ordinary launches keep `IsValidColonizationTarget`. `ColonistRedirect.Apply` replaces the order's `Route`, restarts
+  `TotalDelay`/`TimingDelay` at `max(1, route.Cost / defaultTravelSpeed)`, moves the food rider (matched on player, origin, old
+  target and the colonist's own delay, so a twin colonist's rider is untouched) and, for a divert, moves the
+  `PopulationTransferInProgress` flag (the old target's flag stays while another colonist of the player still heads there). The
+  order keeps its real `Origin`. No claim tracking: several colonists may divert to one planet. **Arrival rule (every colonist):**
+  `GameAI.ApplyColonistArrival` adds the colonist when `Population.Count < MaxPopulation`, otherwise docks one colony ship for the
+  order's player (`DockShipRebuiltSnapshot`, since a colonist order carries no research snapshot), eligible for the next
+  colonization pass; a planet held by another player below max still takes the colonist. Accepted limits: edge progress is lost
+  on a redirect, a stale view can redirect needlessly, and a diverted colonist may land on a planet that filled in transit (it
+  docks). No new tunable and no save change (route, target and delays already ride on `OrderSave`).
 
 ### Connectivity (chokepoints)
 
@@ -694,7 +714,7 @@ started on as `T0|P-1|BoardConfig|<name>` — the `BoardConfiguration` asset's n
 so a log can be tied back to its board config for map/ownership analysis; `InitGame` can run twice per match, e.g.
 the scene's default board and then a designer load, so the LAST `BoardConfig` line is the real board), a colony
 ship's food rider as `ColonyRider|<origin>-><target>|<amount>`, and colony failures as `PopulationLoss|<planet>`
-plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), a populated planet becoming short of grotsits or recovering as `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>` (owner's player id; transitions only, through `GrotsitsShortTracker`, fed by `GameAI.LogGrotsitsShortChanges` right after the planets update; capacity is `Planet.GetGrotsitsCapacity()`, upkeep `GetImprovementMaintenanceCost()`, demand is about population + upkeep; a planet that empties while short logs an `End`; log-only state, so a load logs each planet still short once more), every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player, beside it `ChokepointGarrison|<colonized>|<boardTotal>|<shipsOnThem>|<allShips>` per player (chokepoints it colonizes, chokepoints on the board, its docked warships on those, and all its docked warships), the board's top chokepoints once per match as `T0|P-1|Chokepoints|<planet>=<betweenness>%<percentile>,...` (top 10; like `BoardConfig`, the last `InitGame` is the real board), and a Consolidate colonist sent somewhere other than the nearest candidate because of the chokepoint tilt as `ChokepointColonize|<origin>-><target>|<routeCost>|<percentile>|<nearestTarget>|<nearestCost>` (per launch, no tracker)) for
+plus `PlanetDead|<planet>` (the dead result carries no player, so it logs as `P-1`; pair it with the loss before it), a populated planet becoming short of grotsits or recovering as `GrotsitsShort|<planet>|<Start or End>|<population>|<capacity>|<upkeep>|<morale>` (owner's player id; transitions only, through `GrotsitsShortTracker`, fed by `GameAI.LogGrotsitsShortChanges` right after the planets update; capacity is `Planet.GetGrotsitsCapacity()`, upkeep `GetImprovementMaintenanceCost()`, demand is about population + upkeep; a planet that empties while short logs an `End`; log-only state, so a load logs each planet still short once more), every 25 turns `Economy|<planets>|<planetsShortOfGrotsits>|<meanMorale>|<totalUpkeep>` per player, beside it `ChokepointGarrison|<colonized>|<boardTotal>|<shipsOnThem>|<allShips>` per player (chokepoints it colonizes, chokepoints on the board, its docked warships on those, and all its docked warships), the board's top chokepoints once per match as `T0|P-1|Chokepoints|<planet>=<betweenness>%<percentile>,...` (top 10; like `BoardConfig`, the last `InitGame` is the real board), and a Consolidate colonist sent somewhere other than the nearest candidate because of the chokepoint tilt as `ChokepointColonize|<origin>-><target>|<routeCost>|<percentile>|<nearestTarget>|<nearestCost>` (per launch, no tracker), a colonist in flight saved from a blockade ahead as `ColonistRedirect|<origin>-><oldTarget>|<Detour or Divert>|<newTarget>|<nodes joined by >>|<cost>|<blocked planets>` (once per redirect; blocked planets as `name=value` joined by `,`, `-` when none), one that could not be saved as `ColonistRedirectFailed|<origin>-><target>|<blocked planets>` (once per order, through a log-only set in `GameAI`, so a load logs each still-failing order once more), and a colonist arriving at a full planet as `ColonistDocked|<planet>|<amount>` (per arrival, no tracker)) for
 reviewing AI behavior after a match, since the in-game notification panel is transient and UI-only.
 It's opt-in and off by default, mirroring the fog-of-war debug view's precedent, with **two**
 independent ways to turn it on (OR'd together, so either one enables it): `Gameboard`'s own

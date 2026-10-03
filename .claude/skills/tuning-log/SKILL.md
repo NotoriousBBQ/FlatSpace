@@ -254,6 +254,15 @@ user asked about one specific thing.
     were cut 91, 74 and 98 times with 3, 0 and 5 targets before this line existed.
   - **Research boost:** `OffenseResearchBoost|<item>|<multiplier>` should appear only while a `Blockade` line for that
     player is recent; compare the turn the first Warship Offense item completed against a run without blockades.
+  - **Colonist redirect:** `ColonistRedirect|<origin>-><oldTarget>|<Detour or Divert>|<newTarget>|<nodes>|<cost>|<blocked>` is
+    logged once per redirect, `ColonistRedirectFailed|<origin>-><target>|<blocked>` once per colonist that could not be saved,
+    `ColonistDocked|<planet>|<amount>` for each colonist arriving at a full planet. Report, per player: redirects by kind
+    (Detour against Divert), failures, docked colonists, and colonist losses (`OrderBlocked|OrderTypePopulationTransport`)
+    against the earlier runs on the same board (the 4p.json runs of 2026-10-02 12:40-12:48 are the pre-redirect baseline).
+    A divert's new target should usually show a colonization soon after (`ColonizeArrive`/`PopulationLoss` at it); a
+    `ColonistDocked` planet's colony ship should launch within a few turns (`ColonizerReady` then a colonist from it). The
+    same order must never log `ColonistRedirect` twice for the same blocked node, and `ColonistRedirectFailed` repeating
+    every turn for one order is a bug (it is once per order).
 
 ## 4. Compare against a previous run when one exists
 
