@@ -447,8 +447,9 @@ namespace FlatSpace
                 return planet.PlayerWithMostPopulation() != Player.playerID;
             }
             // The wider target set for a colonist already in flight (see ColonistRedirect): known, and empty, or my
-            // colonist is already inbound, or colonized below max population (my own planets included). Full planets are
-            // excluded. Ordinary launches keep IsValidColonizationTarget. Public for the self-check.
+            // colonist is already inbound, or colonized below max population (my own planets included). A full planet is
+            // excluded unless my colonist is already inbound (then it is a candidate and the arrival rule decides: dock on my
+            // own planet, join a contested one). Ordinary launches keep IsValidColonizationTarget. Public for the self-check.
             public bool IsDiversionTarget(Planet planet)
             {
                 if (!AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;

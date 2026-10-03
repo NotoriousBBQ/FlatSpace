@@ -14,6 +14,7 @@ public static class ColonistRedirectSelfCheck
         ok &= RunApplyCheck();
         ok &= RunCandidateCheck();
         ok &= RunArrivalCheck();
+        ok &= RunSharedTargetCutCheck();
         Debug.Log(ok
             ? "[ColonistRedirectSelfCheck] ALL PASSED"
             : "[ColonistRedirectSelfCheck] FAILURES (see errors above)");
@@ -275,6 +276,49 @@ public static class ColonistRedirectSelfCheck
             for (var i = 0; i < 3; i++) c.Population.Add(new Planet.Inhabitant { Player = 1 });
             var contested = GameAI.ApplyColonistArrival(c, Colonist(10, "C"), dock);
             ok &= Check(!contested && c.Population.Count == 4, "a planet held by another player below max still takes the colonist");
+
+            // A FULL planet owned by someone else is never given a foreign colony ship: the colonist joins it as before
+            // (a contested planet), because colony-ship queries do not check a ship's owner.
+            var b = s.Map.GetPlanet("B");
+            b.Owner = 1;
+            for (var i = 0; i < b.MaxPopulation; i++) b.Population.Add(new Planet.Inhabitant { Player = 1 });
+            var dockedBefore = docked.Count;
+            var foreignFull = GameAI.ApplyColonistArrival(b, Colonist(10, "B"), dock);
+            ok &= Check(!foreignFull && docked.Count == dockedBefore && b.Population.Count == b.MaxPopulation + 1
+                        && !b.DockedShips.Exists(sh => sh.Kind == Ship.ShipKind.ColonyShip),
+                "a full planet owned by another player takes the colonist (contest) and never gets my colony ship");
+        }
+        return ok;
+    }
+
+    // A blockade cut on one colonist must not remove another colonist of the same player with the same origin and target
+    // (a divert can create such twins), nor its rider, nor the target's inbound flag while that colonist still flies there.
+    public static bool RunSharedTargetCutCheck()
+    {
+        var ok = true;
+        using (var s = BlockadeAvoidanceSelfCheck.Scenario.Diamond())
+        {
+            s.Blockade("C");   // player 1 holds C: a colonist passing C is cut
+            var flying = Colonist(2);                                  // A>B>D, clean
+            var flyingRider = Rider(2);
+            var cut = Colonist(5, "D", new List<string> { "A", "C", "D" });   // passes C this turn (C is at ~50%)
+            var cutRider = Rider(5);
+            var orders = new List<GameAI.GameAIOrder> { flying, flyingRider, cut, cutRider };
+            s.Map.GetPlanet("D").SetPopulationTransferInProgress(0);
+
+            var cuts = new BlockadeSystem(s.Map, s.Research).Apply(orders, 1);
+            ok &= Check(cuts.Count == 1 && cuts[0].Planet == "C", "exactly one cut, at C");
+            ok &= Check(!orders.Contains(cut) && !orders.Contains(cutRider), "the cut colonist and its own rider are removed");
+            ok &= Check(orders.Contains(flying) && orders.Contains(flyingRider),
+                "a twin colonist (same origin and target) and its rider survive the other's cut");
+            ok &= Check(s.Map.GetPlanet("D").IsPopulationTransferInProgress(0),
+                "the target's inbound flag stays while the surviving colonist still heads there");
+
+            // With no twin left, the flag is cleared as before.
+            var lone = new List<GameAI.GameAIOrder> { Colonist(5, "D", new List<string> { "A", "C", "D" }), Rider(5) };
+            new BlockadeSystem(s.Map, s.Research).Apply(lone, 2);
+            ok &= Check(lone.Count == 0 && !s.Map.GetPlanet("D").IsPopulationTransferInProgress(0),
+                "a lone cut colonist: both orders removed and the flag cleared as before");
         }
         return ok;
     }

@@ -357,14 +357,17 @@ namespace FlatSpace
                 target.Food += Convert.ToSingle(order.Data);
             }
 
-            // A colonist lands: below max population it joins the planet as before; at or above max the colonist docks as a
-            // colony ship for the order's player instead (eligible for the next colonization pass). The ship's research
-            // snapshot is rebuilt from the owner's current research (a colonist order carries none) via the default dock,
-            // which needs Gameboard.Instance; the self-check passes its own. Returns true when a ship docked.
+            // A colonist lands: below max population it joins the planet as before; at or above max on a planet the order's
+            // player owns it docks as a colony ship instead (eligible for the next colonization pass). A full planet owned by
+            // someone else (or tied) still takes the colonist, as before: colony-ship queries (CheckColonizationReady,
+            // UndockShip, PlanetHasColonyShip) do not check a ship's owner, so a foreign ship docked there would be launched
+            // by that planet's owner or sit unused. The ship's research snapshot is rebuilt from the owner's current research
+            // (a colonist order carries none) via the default dock, which needs Gameboard.Instance; the self-check passes its
+            // own. Returns true when a ship docked.
             public static bool ApplyColonistArrival(Planet target, GameAIOrder order, Action<Planet, int> dockColonyShip = null)
             {
                 target.SetPopulationTransferInProgress(order.PlayerId, false);
-                if (target.Population.Count >= target.MaxPopulation)
+                if (target.Population.Count >= target.MaxPopulation && target.Owner == order.PlayerId)
                 {
                     (dockColonyShip ?? DefaultDockColonyShip)(target, order.PlayerId);
                     return true;

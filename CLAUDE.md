@@ -618,9 +618,14 @@ turns its `ShipAction`s (`ShipMatrix.cs`) into the order trio described under Or
   target and the colonist's own delay, so a twin colonist's rider is untouched) and, for a divert, moves the
   `PopulationTransferInProgress` flag (the old target's flag stays while another colonist of the player still heads there). The
   order keeps its real `Origin`. No claim tracking: several colonists may divert to one planet. **Arrival rule (every colonist):**
-  `GameAI.ApplyColonistArrival` adds the colonist when `Population.Count < MaxPopulation`, otherwise docks one colony ship for the
-  order's player (`DockShipRebuiltSnapshot`, since a colonist order carries no research snapshot), eligible for the next
-  colonization pass; a planet held by another player below max still takes the colonist. Accepted limits: edge progress is lost
+  `GameAI.ApplyColonistArrival` adds the colonist when `Population.Count < MaxPopulation`; at or above max on a planet the order's
+  player OWNS it docks one colony ship for that player (`DockShipRebuiltSnapshot`, since a colonist order carries no research
+  snapshot), eligible for the next colonization pass. A full planet owned by someone else (or tied) still takes the colonist as
+  before, because colony-ship queries (`CheckColonizationReady`, `UndockShip`, `PlanetHasColonyShip`) never check a ship's owner,
+  so a foreign ship docked there would be launched by that planet's owner or sit unused; a planet held by another player below
+  max also still takes the colonist. A blockade cut on a colonist (`BlockadeSystem.ApplyToColony`) removes only that order and ITS
+  rider (matched on player, origin, target and the colonist's delay), and clears the target's flag only when no other colonist of
+  the player still heads there, because a divert can leave two colonists with the same origin and target. Accepted limits: edge progress is lost
   on a redirect, a stale view can redirect needlessly, and a diverted colonist may land on a planet that filled in transit (it
   docks). No new tunable and no save change (route, target and delays already ride on `OrderSave`).
 

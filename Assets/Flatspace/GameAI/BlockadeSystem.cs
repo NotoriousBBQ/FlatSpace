@@ -218,10 +218,16 @@ namespace FlatSpace.AI
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
                 cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value });
-                orders.RemoveAll(o => o.PlayerId == order.PlayerId && o.Origin == order.Origin && o.Target == order.Target
-                    && (o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
-                        || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider));
-                _map.GetPlanet(order.Target)?.SetPopulationTransferInProgress(order.PlayerId, false);
+                // Only this colonist and ITS rider (matched on player, origin, target and the colonist's own delay) go: a
+                // diverted colonist can share origin and target with another one, which must survive this cut.
+                orders.Remove(order);
+                var rider = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider
+                    && o.PlayerId == order.PlayerId && o.Origin == order.Origin && o.Target == order.Target
+                    && o.TimingDelay == order.TimingDelay);
+                if (rider != null) orders.Remove(rider);
+                if (!orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport
+                                        && o.PlayerId == order.PlayerId && o.Target == order.Target))
+                    _map.GetPlanet(order.Target)?.SetPopulationTransferInProgress(order.PlayerId, false);
                 AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name, 0f);
                 return;
             }
