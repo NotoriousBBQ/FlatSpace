@@ -18,6 +18,9 @@ public static class DiplomacySelfCheck
         ok &= RunFleetStrengthCheck();
         ok &= RunHostilityCheck();
         ok &= RunStanceMatrixCheck();
+        ok &= RunAmassTablesCheck();
+        ok &= RunConsolidateLikeSeamsCheck();
+        ok &= RunAmassRunsTheRoutineCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -327,6 +330,164 @@ public static class DiplomacySelfCheck
             new List<ScoreMatrixChoiceElement> { new ScoreMatrixChoiceElement { Target = "X", Cost = 1f } });
         var both2 = independent.GenerateActionList((d, ch) => new ScoreMatrixAction { Origin = d.Target, Target = ch.Target });
         ok &= Check(both2.Count == 2, "IndependentRows: both rows get X");
+        return ok;
+    }
+
+    private static CatalogItem Item(string subType)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.subType = subType;
+        return item;
+    }
+
+    public static bool RunAmassTablesCheck()
+    {
+        var ok = true;
+        var items = new List<CatalogItem>();
+        try
+        {
+            CatalogItem I(string subType) { var i = Item(subType); items.Add(i); return i; }
+            var research = new (string subType, float weight)[]
+                { ("Food", 1.0f), ("Industry", 2.5f), ("Grotsits", 2.0f), ("Research", 1.0f), ("ColonyShip", 0.5f), ("Warship", 4.0f) };
+            foreach (var (subType, weight) in research)
+                ok &= Check(Near(PlayerAI.GetResearchWeight(I(subType), PlayerAI.AIStrategy.AIStrategyAmass), weight),
+                    $"Amass research weight for {subType} is {weight}");
+
+            var industry = new (string subType, float weight)[]
+            {
+                ("Food", 1.0f), ("Industry", 1.5f), ("Grotsits", 1.5f), ("Research", 0.5f), ("ColonyShip", 0.5f),
+                ("Warship", 4.0f), ("WarshipUpdate", 4.0f),
+            };
+            foreach (var (subType, weight) in industry)
+                ok &= Check(Near(PlayerAI.GetIndustryStrategyWeight(I(subType), PlayerAI.AIStrategy.AIStrategyAmass), weight),
+                    $"Amass industry weight for {subType} is {weight}");
+
+            ok &= Check(PlayerAI.GetIndustryStrategyWeight(I("Warship"), PlayerAI.AIStrategy.AIStrategyAmass)
+                        > PlayerAI.GetIndustryStrategyWeight(I("Warship"), PlayerAI.AIStrategy.AIStrategyConsolidate),
+                "Amass builds warships harder than Consolidate");
+            ok &= Check(PlayerAI.GetIndustryStrategyWeight(I("Warship"), PlayerAI.AIStrategy.AIStrategyConsolidate) == 2.5f,
+                "Consolidate's Warship weight is unchanged");
+        }
+        finally { foreach (var i in items) Object.DestroyImmediate(i); }
+        return ok;
+    }
+
+    // Every "Consolidate only" rule now covers Amass: the warship multiplier, the colonization tilt, the planner's garrisons.
+    public static bool RunConsolidateLikeSeamsCheck()
+    {
+        var ok = true;
+        ok &= Check(PlayerAI.IsConsolidateLike(PlayerAI.AIStrategy.AIStrategyConsolidate)
+                    && PlayerAI.IsConsolidateLike(PlayerAI.AIStrategy.AIStrategyAmass)
+                    && !PlayerAI.IsConsolidateLike(PlayerAI.AIStrategy.AIStrategyExpand)
+                    && !PlayerAI.IsConsolidateLike(PlayerAI.AIStrategy.AIStrategyNone),
+            "IsConsolidateLike is Consolidate and Amass only");
+
+        var go = new GameObject("DipSelfCheckMap_Seams");
+        var playerGo = new GameObject("DipSelfCheckPlayer_Seams");
+        var template = WarshipSelfCheck.MakeTemplate();
+        var constants = WarshipSelfCheck.MakeConstants(template);
+        try
+        {
+            constants.chokepointPercentile = 0.9f;
+            constants.colonizationChokepointWeight = 0.5f;
+            constants.garrisonOuter = 6;
+            constants.garrisonHighTraffic = 2;
+            constants.warshipShortfallBoost = 2f;
+            constants.warshipsPerColonizedPlanet = 100f;
+            var map = go.AddComponent<GameAIMap>();
+            map.GameAIMapInit(ChokepointSelfCheck.HubSpawns(), constants);
+            foreach (var n in new[] { "A", "H", "X1", "X2", "X3", "Y" })
+            {
+                map.GetPlanet(n).Owner = 0;
+                map.GetPlanet(n).Population.Add(new Planet.Inhabitant { Player = 0 });
+            }
+
+            var player = playerGo.AddComponent<Player>();
+            var ai = playerGo.AddComponent<PlayerAI>();
+            ai.Player = player;
+            ai.AIMap = map;
+            player.playerID = 0;
+
+            var consolidate = new ShipTransportPlanner(map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            var amass = new ShipTransportPlanner(map, 0, PlayerAI.AIStrategy.AIStrategyAmass);
+            var expand = new ShipTransportPlanner(map, 0, PlayerAI.AIStrategy.AIStrategyExpand);
+            foreach (var n in new[] { "H", "X1", "A" })
+                ok &= Check(amass.MaintainsGarrison(map.GetPlanet(n)) == consolidate.MaintainsGarrison(map.GetPlanet(n)),
+                    $"Amass garrisons {n} exactly as Consolidate does");
+            ok &= Check(consolidate.MaintainsGarrison(map.GetPlanet("H")) && !consolidate.MaintainsGarrison(map.GetPlanet("X1")),
+                "precondition: the chokepoint H garrisons under Consolidate, a leaf does not");
+            ok &= Check(expand.MaintainsGarrison(map.GetPlanet("X1")), "Expand still garrisons every planet");
+            ok &= Check(amass.TargetRank(map.GetPlanet("H")) == consolidate.TargetRank(map.GetPlanet("H")),
+                "Amass ranks garrison targets as Consolidate does");
+
+            ok &= Check(Near(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyAmass),
+                             ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyConsolidate)),
+                "the warship shortfall multiplier is the same under Amass and Consolidate");
+            ok &= Check(Near(ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyExpand), 1f)
+                        && ai.ComputeWarshipMultiplier(PlayerAI.AIStrategy.AIStrategyAmass) > 1f,
+                "Expand has no multiplier; a fleet shortfall boosts Amass above 1");
+
+            ai.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
+            ok &= Check(Near(ai.ColonizationCostDivisor("H"), 1.5f), "Amass tilts colonization toward the chokepoint like Consolidate (1 + 0.5 x 1)");
+            ai.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+            ok &= Check(Near(ai.ColonizationCostDivisor("H"), 1f), "Expand never tilts");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
+        }
+        return ok;
+    }
+
+    // Amass used to be an empty case (a frozen player). It now runs the Expand routine: a food shortage is answered.
+    public static bool RunAmassRunsTheRoutineCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("DipSelfCheckMap_Amass");
+        var playerGo = new GameObject("DipSelfCheckPlayer_Amass");
+        var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            var map = mapGo.AddComponent<GameAIMap>();
+            map.GameAIMapInit(new List<PlanetSpawnData>
+            {
+                ChokepointSelfCheck.Spawn("Shortage", 0f, 0f, new[] { "Surplus" }),
+                ChokepointSelfCheck.Spawn("Surplus", 100f, 0f, new[] { "Shortage" }),
+            }, constants);
+            map.GetPlanet("Surplus").Population.Add(new Planet.Inhabitant { Player = 0 });
+
+            var player = playerGo.AddComponent<Player>();
+            var ai = playerGo.AddComponent<PlayerAI>();
+            ai.Player = player;
+            ai.AIMap = map;
+            player.playerID = 0;
+            ai.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
+
+            var results = new List<Planet.PlanetUpdateResult>
+            {
+                new Planet.PlanetUpdateResult("Shortage",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage, 10f, playerID: 0),
+                new Planet.PlanetUpdateResult("Surplus",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 20f, playerID: 0),
+            };
+            var orders = new List<GameAI.GameAIOrder>();
+            ai.ProcessResults(results, orders);
+            ok &= Check(orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport
+                                           && o.Origin == "Surplus" && o.Target == "Shortage"),
+                "an Amass player still ships food to its shortage (the economy keeps running)");
+            ok &= Check(ai.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "ProcessResults does not change an Amass player's strategy by itself");
+        }
+        finally
+        {
+            Object.DestroyImmediate(playerGo);
+            Object.DestroyImmediate(mapGo);
+            Object.DestroyImmediate(constants);
+        }
         return ok;
     }
 

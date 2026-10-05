@@ -24,6 +24,14 @@ namespace FlatSpace
                 AIStrategyAmass
             }
 
+            /// <summary>
+            /// Consolidate and Amass share every rule written as "Consolidate only" (the warship fleet-shortfall boost, the
+            /// ColonyShip boost while targets remain, the chokepoint colonization tilt, the planner's garrisons, the assault and the
+            /// blockade-breaking targets). Amass differs only through its own weight tables and the war gate on the assault.
+            /// </summary>
+            public static bool IsConsolidateLike(AIStrategy strategy)
+                => strategy == AIStrategy.AIStrategyConsolidate || strategy == AIStrategy.AIStrategyAmass;
+
             public AIStrategy Strategy { get; set; } = AIStrategy.AIStrategyExpand;
             public Player      Player  { get; set; }
             public GameAIMap   AIMap   { get; set; }
@@ -162,10 +170,10 @@ namespace FlatSpace
                 {
                     case AIStrategy.AIStrategyExpand:
                     case AIStrategy.AIStrategyConsolidate:
-                        // Consolidate has no behavior of its own yet; it plays like Expand.
-                        ProcessResultsStrategyExpand(results, Player, ref orders);
-                        break;
                     case AIStrategy.AIStrategyAmass:
+                        // Consolidate and Amass have no routine of their own; they play like Expand (Amass with its own
+                        // weight tables, see the research and industry tables below).
+                        ProcessResultsStrategyExpand(results, Player, ref orders);
                         break;
                 }
             }
@@ -457,13 +465,13 @@ namespace FlatSpace
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return true;
                 return planet.Population.Count < planet.MaxPopulation;
             }
-            // Consolidate tilts colonization toward chokepoints: a target's choice cost is its route cost divided by
+            // Consolidate and Amass tilt colonization toward chokepoints: a target's choice cost is its route cost divided by
             // 1 + colonizationChokepointWeight x its chokepoint percentile, so a hub may be farther and still win. Expand,
             // a weight of 0 (or below) and unknown planets leave it at 1 (nearest first). The order delay never uses it.
             // Public for ColonistRedirect (diversion choice) and the self-check.
             public float ColonizationCostDivisor(string targetName)
             {
-                if (Strategy != AIStrategy.AIStrategyConsolidate) return 1f;
+                if (!IsConsolidateLike(Strategy)) return 1f;
                 var weight = AIMap.GameAIConstants.colonizationChokepointWeight;
                 return weight <= 0f ? 1f : 1f + weight * AIMap.Chokepoint(targetName);
             }
@@ -956,7 +964,7 @@ namespace FlatSpace
             private const float ColonyShipUrgentBoost = 2f;
 
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
-            // 1.0f = neutral. Add an entry for AIStrategyAmass when needed.
+            // 1.0f = neutral. Amass has its own table (AmassResearchWeights).
             private static readonly Dictionary<string, float> ExpandResearchWeights =
                 new Dictionary<string, float>
                 {
@@ -977,12 +985,22 @@ namespace FlatSpace
                     { "ColonyShip",    0.5f },  // ships useful but secondary
                     { "Warship",       2.5f },  // Updated priority
                 };
+            private static readonly Dictionary<string, float> AmassResearchWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          1.0f },
+                    { "Industry",      2.5f },
+                    { "Grotsits",      2.0f },
+                    { "Research",      1.0f },
+                    { "ColonyShip",    0.5f },
+                    { "Warship",       4.0f },  // at war: weapons first
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     { AIStrategy.AIStrategyExpand,      ExpandResearchWeights },
                     { AIStrategy.AIStrategyConsolidate, ConsolidateResearchWeights },
-                    // AIStrategyAmass — add when needed
+                    { AIStrategy.AIStrategyAmass,       AmassResearchWeights },
                 };
 
             private void ProcessResearch(
@@ -1157,7 +1175,7 @@ namespace FlatSpace
 
             // ── Industry ─────────────────────────────────────────────────────
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
-            // 1.0f = neutral. Add an entry for AIStrategyAmass when needed.
+            // 1.0f = neutral. Amass has its own table (AmassIndustryWeights).
             private static readonly Dictionary<string, float> ExpandIndustryWeights =
                 new Dictionary<string, float>
                 {
@@ -1181,12 +1199,23 @@ namespace FlatSpace
                     { "Warship",       2.5f },  // highest priority
                     { "WarshipUpdate", 2.5f },  // same as Warship
                 };
+            private static readonly Dictionary<string, float> AmassIndustryWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          1.0f },
+                    { "Industry",      1.5f },
+                    { "Grotsits",      1.5f },
+                    { "Research",      0.5f },
+                    { "ColonyShip",    0.5f },  // a player at war colonizes less
+                    { "Warship",       4.0f },
+                    { "WarshipUpdate", 4.0f },  // same as Warship
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     { AIStrategy.AIStrategyExpand,      ExpandIndustryWeights },
                     { AIStrategy.AIStrategyConsolidate, ConsolidateIndustryWeights },
-                    // AIStrategyAmass — add when needed
+                    { AIStrategy.AIStrategyAmass,       AmassIndustryWeights },
                 };
 
             public static float GetIndustryStrategyWeight(CatalogItem item, AIStrategy strategy)
@@ -1269,7 +1298,7 @@ namespace FlatSpace
                     p.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID)
                     + p.GetIncomingShips(Ship.ShipKind.WarShip, Player.playerID));
 
-            /// <summary>The Warship production multiplier for a strategy; 1 for anything but Consolidate.</summary>
+            /// <summary>The Warship production multiplier for a strategy; 1 for Expand and None.</summary>
             public float ComputeWarshipMultiplier(AIStrategy strategy)
                 => ComputeWarshipMultiplier(strategy, out _, out _);
 
@@ -1277,7 +1306,7 @@ namespace FlatSpace
             {
                 wanted = 0;
                 have = 0;
-                if (strategy != AIStrategy.AIStrategyConsolidate) return 1f;
+                if (!IsConsolidateLike(strategy)) return 1f;
                 wanted = WantedWarships();
                 have = OwnedWarships();
                 return WarshipShortfallMultiplier(wanted, have,
@@ -1301,7 +1330,7 @@ namespace FlatSpace
                         return 0f;                       // nothing left to colonize — exclude (no useless colony ships)
                     if (IsValidColonizer(planetName))
                         return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
-                    if (Strategy == AIStrategy.AIStrategyConsolidate)
+                    if (IsConsolidateLike(Strategy))
                         return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
@@ -1318,7 +1347,7 @@ namespace FlatSpace
                 if (item.subType == "Warship")
                 {
                     var shortfall = 1f;                  // Expand has no fleet cap
-                    if (Strategy == AIStrategy.AIStrategyConsolidate)
+                    if (IsConsolidateLike(Strategy))
                     {
                         if (_warshipMultiplierThisTurn == null)
                         {
@@ -1511,7 +1540,7 @@ namespace FlatSpace
             /// </summary>
             public List<ShipAction> PlanShipActions(int turnNumber)
             {
-                if (Strategy != AIStrategy.AIStrategyConsolidate)
+                if (!IsConsolidateLike(Strategy))
                     return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
 
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);

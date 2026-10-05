@@ -74,7 +74,7 @@ namespace FlatSpace
             /// (a Prime or Desert chokepoint holds that category's garrison, not garrisonHighTraffic). To garrison more planets under Consolidate later, change this one method.
             /// </summary>
             public bool MaintainsGarrison(Planet planet)
-                => _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate
+                => !PlayerAI.IsConsolidateLike(_strategy)
                    || IsOuter(planet)
                    || (IsColonized(planet) && IsChokepoint(planet));
 
@@ -115,7 +115,7 @@ namespace FlatSpace
             public int TargetRank(Planet planet)
             {
                 var category = Category(planet);
-                if (category == NoCategory || _strategy != PlayerAI.AIStrategy.AIStrategyConsolidate)
+                if (category == NoCategory || !PlayerAI.IsConsolidateLike(_strategy))
                     return category;
                 return (IsOuter(planet) ? 0 : 100) + category;
             }
@@ -226,7 +226,7 @@ namespace FlatSpace
                     });
                 }
 
-                LastRound = _strategy == PlayerAI.AIStrategy.AIStrategyConsolidate ? 1 : ComputeRound(states);
+                LastRound = PlayerAI.IsConsolidateLike(_strategy) ? 1 : ComputeRound(states);
                 foreach (var state in states)
                 {
                     state.RoundGarrison = state.Garrison * LastRound;
