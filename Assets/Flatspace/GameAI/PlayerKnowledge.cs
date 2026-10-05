@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FlatSpace
 {
@@ -37,6 +38,28 @@ namespace FlatSpace
                 }
                 return false;
             }
+
+            /// <summary>
+            /// The other players holding population or a docked ship on a planet this player knows, ascending. Ownerless
+            /// ships (Owner &lt; 0) are not a player. HasContact (any such presence, ownerless included) is left as it was.
+            /// </summary>
+            public List<int> ContactPlayers(GameAIMap map, int playerId)
+            {
+                var found = new SortedSet<int>();
+                foreach (var name in KnownPlanets(playerId))
+                {
+                    var planet = map.GetPlanet(name);
+                    if (planet == null) continue;
+                    foreach (var inhabitant in planet.Population)
+                        if (inhabitant.Player != playerId && inhabitant.Player >= 0) found.Add(inhabitant.Player);
+                    foreach (var ship in planet.DockedShips)
+                        if (ship.Owner != playerId && ship.Owner >= 0) found.Add(ship.Owner);
+                }
+                return found.ToList();
+            }
+
+            public bool HasContactWith(GameAIMap map, int playerId, int rivalId)
+                => ContactPlayers(map, playerId).Contains(rivalId);
 
             /// <summary>
             /// Grants knowledge out to maxPathNodesForKnowledge path nodes from each vision source: a BFS

@@ -122,6 +122,26 @@ public class GameAIConstants : ScriptableObject
     // underneath whichever of those is wider.
     public int maxPathNodesForKnowledge = 6;
 
+    [Header("Diplomacy")]
+    // False = today's behaviour: every rival with contact is an enemy, no stance matrix, no Amass switch. GameAI.InitGameAI
+    // copies this onto GameAIMap.Diplomacy.Enabled; a GameAIMap a self-check builds directly stays in that legacy mode.
+    public bool diplomacyEnabled = true;
+    // Hostility toward a rival grows each turn by: its blockade cuts on my orders x hostilityPerCut, its warships docked on or
+    // beside my planets x hostilityPerNearShip, and hostilityStrengthWeight x log2(my fleet strength / its visible fleet
+    // strength), clamped to +-2 (a stronger player drifts toward war). It then decays by hostilityDecay a turn and is clamped
+    // to 0..hostilityMax.
+    public float hostilityPerCut = 5f;
+    public float hostilityPerNearShip = 0.5f;
+    public float hostilityStrengthWeight = 1f;
+    public float hostilityDecay = 0.05f;
+    public float hostilityMax = 100f;
+    // War probability = 1 / (1 + e^(-(hostility - stanceMidpoint) / stanceSteepness)). The stance held now has its weight
+    // multiplied by stanceStickiness, and a stance is not reconsidered for stanceHoldTurns turns after it changes.
+    public float stanceMidpoint = 30f;
+    public float stanceSteepness = 8f;
+    public float stanceStickiness = 3f;
+    public int stanceHoldTurns = 10;
+
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
     // AI may designate one Distribution Center per resource (Food and/or Grotsits).
