@@ -32,6 +32,8 @@ public static class DiplomacySelfCheck
         ok &= RunLostContactWarCanEndCheck();
         ok &= RunPeacefulHoldsReleaseCheck();
         ok &= RunNearShipsIgnoreRivalGarrisonCheck();
+        ok &= RunStanceOrderCheck();
+        ok &= RunStanceOrdersEmittedCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -590,6 +592,24 @@ public static class DiplomacySelfCheck
         return ok;
     }
 
+    private static void ApplyStanceOrders(Fixture f, List<GameAI.GameAIOrder> orders, int turn)
+    {
+        foreach (var order in orders.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
+                                                || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeMakePeace))
+            GameAI.ApplyStanceOrder(f.Map.Diplomacy, order, turn);
+    }
+
+    // One diplomacy turn the way GameAI runs it: the start-of-turn war state (switch, forced-war lines), the decision, then
+    // the emitted stance orders executed (ProcessNewOrders). Returns the orders so a case can inspect them.
+    private static List<GameAI.GameAIOrder> Turn(Fixture f, int turn)
+    {
+        f.AI.ApplyWarState(turn);
+        var orders = new List<GameAI.GameAIOrder>();
+        f.AI.UpdateDiplomacy(turn, orders);
+        ApplyStanceOrders(f, orders, turn);
+        return orders;
+    }
+
     // P1 holds B (a neighbour of player 0's A). Diplomacy on.
     private static Fixture WithRival()
     {
@@ -614,7 +634,7 @@ public static class DiplomacySelfCheck
             f.Ships("A", 1, 1);                                    // a rival ship on my planet: near term 0.5 (on its own B it would be a garrison)
             f.Map.Diplomacy.RecordCut(0, 1);
             f.Map.Diplomacy.RecordCut(0, 1);                       // two cuts: 10
-            f.AI.UpdateDiplomacy(10);
+            Turn(f, 10);
 
             var pair = f.Map.Diplomacy.Get(0, 1);
             ok &= Check(Near(pair.CutsTerm, 10f) && Near(pair.NearTerm, 0.5f) && Near(pair.StrengthTerm, 1f),
@@ -624,13 +644,89 @@ public static class DiplomacySelfCheck
             ok &= Check(pair.Stance == Stance.Peace, "below the midpoint the stance stays Peace");
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and the strategy stays Consolidate");
 
-            // Above the midpoint: War, and the strategy follows in the same call.
+            // Above the midpoint: War, and the strategy follows at the next turn's start.
             pair.Hostility = 100f;
             f.Map.Diplomacy.Set(0, 1, pair);
-            f.AI.UpdateDiplomacy(20);
+            Turn(f, 20);
             ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War, "hostility 95+ is War");
+            f.AI.ApplyWarState(21);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "war switches Consolidate to Amass");
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).PWar, 1f), "the war probability is kept for the log");
+        }
+        return ok;
+    }
+
+    // The decision is an order: UpdateDiplomacy writes no stance and changes no strategy. Executing the order commits the stance,
+    // and the strategy follows only at the start of the next turn (ApplyWarState).
+    public static bool RunStanceOrdersEmittedCheck()
+    {
+        var ok = true;
+        using (var f = WithRival())
+        {
+            var pair = f.Map.Diplomacy.Get(0, 1);
+            pair.Hostility = 100f;
+            f.Map.Diplomacy.Set(0, 1, pair);
+
+            var orders = new List<GameAI.GameAIOrder>();
+            f.AI.UpdateDiplomacy(20, orders);
+            var declare = orders.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar).ToList();
+            ok &= Check(declare.Count == 1 && orders.Count == 1, "hostility 100 emits exactly one order: Declare War");
+            ok &= Check(declare.Count == 1 && declare[0].PlayerId == 0 && System.Convert.ToInt32(declare[0].Data) == 1
+                        && declare[0].TimingType == GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate
+                        && declare[0].Origin == string.Empty && declare[0].Target == string.Empty,
+                "the order is immediate, from player 0, Data is rival 1, no planets");
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace, "UpdateDiplomacy itself writes no stance");
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and does not switch the strategy");
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).PWar, 1f), "the war probability is stored for the Stance log line");
+
+            ApplyStanceOrders(f, orders, 20);
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War, "executing the order commits War");
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "the strategy still waits for the next turn's start");
+            f.AI.ApplyWarState(21);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "the next turn's ApplyWarState switches Consolidate to Amass");
+
+            // Review focus 1: the matrix picks the held stance again: no order, so no churn.
+            var again = new List<GameAI.GameAIOrder>();
+            pair = f.Map.Diplomacy.Get(0, 1);
+            pair.Hostility = 100f;
+            f.Map.Diplomacy.Set(0, 1, pair);
+            f.AI.UpdateDiplomacy(40, again);
+            ok &= Check(again.Count == 0, "a decision equal to the held stance emits no order");
+
+            // Peace: hostility falls below the midpoint, a Make Peace order, then Amass returns on the next start.
+            pair = f.Map.Diplomacy.Get(0, 1);
+            pair.Hostility = 0f;
+            f.Map.Diplomacy.Set(0, 1, pair);
+            var peace = new List<GameAI.GameAIOrder>();
+            f.AI.UpdateDiplomacy(60, peace);
+            ok &= Check(peace.Count == 1 && peace[0].Type == GameAI.GameAIOrder.OrderType.OrderTypeMakePeace,
+                "hostility 0 against a War stance emits Make Peace");
+            ApplyStanceOrders(f, peace, 60);
+            f.AI.ApplyWarState(61);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and Amass returns to Consolidate at the next start");
+        }
+
+        // A rival's declaration is first seen on the next turn, never the turn it is committed.
+        using (var f = WithRival())
+        {
+            f.Map.Diplomacy.SetStance(1, 0, Stance.War, 5);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate && f.AI.WarForcedRivals.Count == 0,
+                "committing the rival's declaration changes nothing by itself");
+            f.AI.ApplyWarState(6);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass && f.AI.WarForcedRivals.Contains(1),
+                "the next ApplyWarState sees the forced war: Amass and the WarForced bookkeeping");
+        }
+
+        // Legacy: nothing emitted, nothing switched.
+        using (var f = WithRival())
+        {
+            f.Map.Diplomacy.Enabled = false;
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 5);
+            var orders = new List<GameAI.GameAIOrder>();
+            f.AI.UpdateDiplomacy(6, orders);
+            f.AI.ApplyWarState(7);
+            ok &= Check(orders.Count == 0 && f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate,
+                "legacy: no stance order and ApplyWarState never switches to Amass");
         }
         return ok;
     }
@@ -641,19 +737,19 @@ public static class DiplomacySelfCheck
         using (var f = WithRival())
         {
             f.Map.Diplomacy.SetStance(0, 1, Stance.War, 5);
-            f.AI.UpdateDiplomacy(6);                               // inside the hold: the stance is kept, the war is real
+            Turn(f, 6);                               // inside the hold: the stance is kept, the war is real
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "any war: Consolidate becomes Amass");
 
             f.Map.Diplomacy.SetStance(0, 1, Stance.Peace, 7);
-            f.AI.UpdateDiplomacy(8);
+            Turn(f, 8);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "peace with everyone: Amass returns to Consolidate");
 
             f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
             f.Map.Diplomacy.SetStance(0, 1, Stance.War, 9);
-            f.AI.UpdateDiplomacy(10);
+            Turn(f, 10);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyExpand, "an Expand player is never switched by diplomacy");
             f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyNone;
-            f.AI.UpdateDiplomacy(11);
+            Turn(f, 11);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyNone, "nor a None player");
 
             // Review focus 1: a war survives losing contact; the declarer does not flicker back to Consolidate.
@@ -661,7 +757,7 @@ public static class DiplomacySelfCheck
             f.P("B").Population.Clear();
             f.Know(2);
             ok &= Check(f.Map.Knowledge.ContactPlayers(f.Map, 0).Count == 0, "precondition: the rival left, no contact now");
-            f.AI.UpdateDiplomacy(12);
+            Turn(f, 12);
             ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War && f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass,
                 "my own War stance stands without contact: still at war, still Amass");
 
@@ -670,10 +766,10 @@ public static class DiplomacySelfCheck
             f.Know(3);
             f.Map.Diplomacy.SetStance(0, 2, Stance.War, 20);
             f.Map.Diplomacy.SetStance(0, 1, Stance.Peace, 20);
-            f.AI.UpdateDiplomacy(21);
+            Turn(f, 21);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "at war with one of two rivals: Amass stays");
             f.Map.Diplomacy.SetStance(0, 2, Stance.Peace, 22);
-            f.AI.UpdateDiplomacy(23);
+            Turn(f, 23);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "peace with both: back to Consolidate");
         }
         return ok;
@@ -686,14 +782,14 @@ public static class DiplomacySelfCheck
         using (var f = WithRival())
         {
             f.Map.Diplomacy.SetStance(1, 0, Stance.War, 5);        // player 1 declares on me
-            f.AI.UpdateDiplomacy(6);
+            Turn(f, 6);
             ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace, "my own stance is not changed by being declared on");
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "I have contact: the declaration forces me into war and Amass");
             ok &= Check(f.AI.WarForcedRivals.Contains(1), "the forced war is tracked for the WarForced log line");
 
             // Review focus 2: it ends when the declarer returns to Peace while contact holds.
             f.Map.Diplomacy.SetStance(1, 0, Stance.Peace, 7);
-            f.AI.UpdateDiplomacy(8);
+            Turn(f, 8);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate && f.AI.WarForcedRivals.Count == 0,
                 "the declarer's Peace ends the forced war and I return to Consolidate");
         }
@@ -703,7 +799,7 @@ public static class DiplomacySelfCheck
             f.P("B").Population.Clear();
             f.Know(2);                                             // no contact with player 1
             f.Map.Diplomacy.SetStance(1, 0, Stance.War, 5);
-            f.AI.UpdateDiplomacy(6);
+            Turn(f, 6);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate && f.AI.WarForcedRivals.Count == 0,
                 "a declaration from a player I have never met changes nothing until contact");
         }
@@ -717,11 +813,11 @@ public static class DiplomacySelfCheck
         using (var f = WithRival())
         {
             f.Map.Diplomacy.RecordCut(0, 2);                       // player 2: no contact
-            f.AI.UpdateDiplomacy(10);
+            Turn(f, 10);
             ok &= Check(f.Map.Diplomacy.TakeCuts(0, 2) == 0, "a cut by a player I have no contact with does not wait around");
             f.Colonize("C", 2);
             f.Know(3);
-            f.AI.UpdateDiplomacy(11);
+            Turn(f, 11);
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 2).CutsTerm, 0f), "so it cannot inflate hostility once we do meet");
         }
 
@@ -729,7 +825,7 @@ public static class DiplomacySelfCheck
         {
             f.Map.Diplomacy.Enabled = false;                       // legacy
             f.Map.Diplomacy.SetStance(0, 1, Stance.War, 5);
-            f.AI.UpdateDiplomacy(6);
+            Turn(f, 6);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "legacy: UpdateDiplomacy does nothing, never Amass");
             ok &= Check(f.AI.WarRivals().SetEquals(new[] { 1 }) && f.AI.AssaultWarFilter() == null,
                 "legacy: every contact player is an enemy and the assault gets no filter");
@@ -817,7 +913,7 @@ public static class DiplomacySelfCheck
             f.Know(2);
             ok &= Check(f.Map.Knowledge.ContactPlayers(f.Map, 0).Count == 0, "precondition: no contact with player 1");
 
-            f.AI.UpdateDiplomacy(50);                              // 40 decays to 38: still above the midpoint, the war stands
+            Turn(f, 50);                              // 40 decays to 38: still above the midpoint, the war stands
             ok &= Check(Near(f.Map.Diplomacy.Hostility(0, 1), 38f), "without contact the hostility still decays (5% a turn)");
             ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War && f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass,
                 "above the midpoint the war without contact stands");
@@ -825,10 +921,45 @@ public static class DiplomacySelfCheck
             pair = f.Map.Diplomacy.Get(0, 1);
             pair.Hostility = 31f;
             f.Map.Diplomacy.Set(0, 1, pair);
-            f.AI.UpdateDiplomacy(51);                              // 31 decays to 29.45: below the midpoint
+            Turn(f, 51);                              // 31 decays to 29.45: below the midpoint
             ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace, "below the midpoint the war without contact ends");
+            f.AI.ApplyWarState(52);
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and Amass returns to Consolidate");
         }
+        return ok;
+    }
+
+    // Stance changes are orders: ApplyStanceOrder is the one place a stance order is decoded and applied (GameAI.ExecuteOrder
+    // calls it too), and an order with no planets must not trip a planet lookup.
+    public static bool RunStanceOrderCheck()
+    {
+        var ok = true;
+        GameAI.GameAIOrder Order(GameAI.GameAIOrder.OrderType type, int me, int rival) => new GameAI.GameAIOrder
+        {
+            Type = type,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+            Data = rival,
+            Origin = string.Empty,
+            Target = string.Empty,
+            PlayerId = me,
+        };
+
+        var d = new DiplomacyState();
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 0, 1), 7),
+            "a Declare War order against a Peace pair reports a change");
+        ok &= Check(d.StanceToward(0, 1) == Stance.War && d.Get(0, 1).LastChangeTurn == 7,
+            "the order sets War and stamps the turn (the hold starts there)");
+        ok &= Check(d.StanceToward(1, 0) == Stance.Peace, "the rival's own stance is not touched by being declared on");
+        ok &= Check(!GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 0, 1), 8),
+            "a second Declare War reports no change and keeps the first turn");
+        ok &= Check(d.Get(0, 1).LastChangeTurn == 7, "so the hold is not restarted");
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeMakePeace, 0, 1), 20),
+            "a Make Peace order against a War pair reports a change");
+        ok &= Check(d.StanceToward(0, 1) == Stance.Peace && d.Get(0, 1).LastChangeTurn == 20, "Peace, stamped turn 20");
+
+        using (var f = Fixture.Line())
+            ok &= Check(f.Map.GetPlanet(string.Empty) == null,
+                "an order with an empty Target looks up no planet (GetPlanet(\"\") is null, not an exception)");
         return ok;
     }
 

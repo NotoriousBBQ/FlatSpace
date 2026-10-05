@@ -21,6 +21,7 @@ public static class AllAISelfChecks
             ("Chokepoint", ChokepointSelfCheck.RunChecks),
             ("Colonist Redirect", ColonistRedirectSelfCheck.RunChecks),
             ("Diplomacy", DiplomacySelfCheck.RunChecks),
+            ("Simultaneity", SimultaneitySelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

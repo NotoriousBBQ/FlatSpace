@@ -270,7 +270,9 @@ user asked about one specific thing.
   - **Diplomacy:** `Stance|<rival>|<Peace or War>|<hostility>|<cutsTerm>|<nearTerm>|<strengthTerm>|<pWar>` is one line per stance
     change, `WarForced|<rival>|<Start or End>` one per war a rival declared on a player that has contact with it,
     `Hostility|<rival>|<H>|<myStrength>|<rivalStrength>|<nearShips>` every 25 turns per player and rival with contact, and
-    `StrategyChange` now also logs Consolidate to Amass and back. Report: the first `Stance ... War` turn per player and pair;
+    `StrategyChange` now also logs Consolidate to Amass and back. Stances commit through orders (`Stance` is logged when the
+    order executes), so a rival's declaration is first seen (`WarForced Start`, the Amass switch) one `ProcessResults` after it
+    was decided, which is intended. Report: the first `Stance ... War` turn per player and pair;
     the share of players in Amass over time (from `StrategyChange`); war length (a War to the next Peace per pair); forced
     wars (`WarForced Start`) against chosen ones (`Stance ... War`) and the turns between a declaration and the forced start;
     **stance flips** within 20 turns of the previous change for the same pair (the stickiness check: many means raise
