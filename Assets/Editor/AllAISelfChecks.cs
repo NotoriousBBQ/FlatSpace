@@ -22,6 +22,7 @@ public static class AllAISelfChecks
             ("Colonist Redirect", ColonistRedirectSelfCheck.RunChecks),
             ("Diplomacy", DiplomacySelfCheck.RunChecks),
             ("Simultaneity", SimultaneitySelfCheck.RunChecks),
+            ("Combat", CombatSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

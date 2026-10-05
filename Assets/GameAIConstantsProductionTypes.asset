@@ -59,3 +59,12 @@ MonoBehaviour:
   distributionCenterFoodTargetStock: 50
   distributionCenterGrotsitsTargetStock: 50
   stanceSteepness: 4
+  combatDamageK: 20
+  repairFractionPerTurn: 0.1
+  hostilityPerShipLost: 1
+  lossWindowTurns: 10
+  significantLossFraction: 0.3
+  significantLossHostilityDrop: 4
+  surrenderTruceTurns: 30
+  surrenderMidpoint: 0.6
+  surrenderSteepness: 0.1

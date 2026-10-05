@@ -142,6 +142,26 @@ public class GameAIConstants : ScriptableObject
     public float stanceStickiness = 3f;
     public int stanceHoldTurns = 10;
 
+    [Header("Ship combat")]
+    // Warships of players at war that share a planet fight once a turn (CombatSystem). A hit does offense x K / (K + the target's
+    // Defense). A damaged warship heals repairFractionPerTurn of its Health stat a turn while docked at a planet its owner
+    // populates with no at-war warship present.
+    public float combatDamageK = 20f;
+    public float repairFractionPerTurn = 0.1f;
+    // Hostility toward a rival grows by hostilityPerShipLost for each of my warships it destroyed, and falls by
+    // significantLossHostilityDrop a turn while the share of my fleet strength it destroyed over the last lossWindowTurns
+    // is at least significantLossFraction.
+    public float hostilityPerShipLost = 1f;
+    public int lossWindowTurns = 10;
+    public float significantLossFraction = 0.3f;
+    public float significantLossHostilityDrop = 4f;
+    // Surrender: a stance choice offered while I am at war and weaker, weighted 1 / (1 + e^(-(loss share - surrenderMidpoint)
+    // / surrenderSteepness)). It ends the war for both sides and locks the pair against new declarations (and forced wars)
+    // for surrenderTruceTurns.
+    public int surrenderTruceTurns = 30;
+    public float surrenderMidpoint = 0.6f;
+    public float surrenderSteepness = 0.1f;
+
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
     // AI may designate one Distribution Center per resource (Food and/or Grotsits).
