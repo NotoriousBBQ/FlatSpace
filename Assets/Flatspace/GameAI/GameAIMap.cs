@@ -34,6 +34,7 @@ namespace FlatSpace
             private Dictionary<string, Planet> _planets;
             public GameAIConstants GameAIConstants { get; private set; }
             public PlayerKnowledge Knowledge { get; private set; }
+            public DiplomacyState Diplomacy { get; private set; }
 
             public List<Planet> PlanetList
             {
@@ -108,6 +109,7 @@ namespace FlatSpace
                 GameAIConstants = gameAIConstants;
                 _planets = new Dictionary<string, Planet>();
                 Knowledge = new PlayerKnowledge();
+                Diplomacy = new DiplomacyState();
 
                 foreach (var planetSpawnData in spawnDataList)
                 {

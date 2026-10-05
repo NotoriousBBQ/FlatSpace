@@ -107,6 +107,7 @@ namespace FlatSpace
             {
                 GameAIMap = this.AddComponent<GameAIMap>() as GameAIMap;
                 GameAIMap.GameAIMapInit(spawnDataList, gameAIConstants);
+                GameAIMap.Diplomacy.Enabled = gameAIConstants.diplomacyEnabled;
             }
 
             // Which planets are short of grotsits right now, so GrotsitsShort is logged on change only (log-only state).
@@ -177,6 +178,13 @@ namespace FlatSpace
                     var chokepoints = GameAIMap.ChokepointSummary(player);
                     AITuningLogger.LogChokepointGarrison(turnNumber, player, chokepoints.colonized, chokepoints.boardTotal,
                         chokepoints.shipsOnThem, chokepoints.allShips);
+                    if (GameAIMap.Diplomacy.Enabled)
+                        foreach (var rival in GameAIMap.Knowledge.ContactPlayers(GameAIMap, player))
+                        {
+                            var pair = GameAIMap.Diplomacy.Get(player, rival);
+                            AITuningLogger.LogHostility(turnNumber, player, rival, pair.Hostility, pair.MyStrength,
+                                pair.RivalStrength, pair.NearShips);
+                        }
                 }
             }
 
@@ -215,6 +223,7 @@ namespace FlatSpace
                 foreach (var cut in cuts)
                 {
                     if (cut.PlayerId < 0 || cut.PlayerId >= Gameboard.Instance.players.Count) continue;
+                    GameAIMap.Diplomacy.RecordCut(cut.PlayerId, cut.BlockerId);   // hostility toward the blocker (see UpdateDiplomacy)
                     var owner = Gameboard.Instance.players[cut.PlayerId];
                     if (owner && owner.playerAI) owner.playerAI.LearnBlockade(cut.Planet, cut.Value, turn);
                 }

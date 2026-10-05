@@ -63,7 +63,8 @@ Once per turn, per rival with contact:
   only `PlayerId`, `Planet` and `Value` today, so it gains `BlockerId` (the player whose offense set the blockade value at that
   node, the same player the `Blockade` log line already names). `GameAI.ApplyBlockades` already routes each cut to the owner.
 - **near (2):** `hostilityPerNearShip` (0.5) per rival warship docked on a planet I hold or beside one of my populated planets
-  (known planets only).
+  (known planets only). **Review amendment (2026-10-04, the user's pick):** ships docked on a planet the rival populates and I do not
+  are its garrison and are not counted (under the default garrisons a shared border otherwise drifted to war within about 10 turns).
 - **strength (4):** `hostilityStrengthWeight` (1.0) x log2(myStrength / rivalStrength), clamped to +-2. A rival with no visible
   fleet counts as +2, two empty fleets as 0. A stronger player drifts toward war, a weaker one toward peace.
 - **decay (5):** `hostilityDecay` (0.05) per turn. With only the strength term the steady state is about 40.
@@ -111,6 +112,9 @@ enemy-occupied target must belong to one of them. Blockade-breaking targets (`Ch
 `WantedWarships`:** the assault's required force is added whenever a known enemy planet exists, so a Consolidate player at peace with
 everyone no longer wants that force, and only Amass does. Peaceful players want fewer warships than before; war players the same.
 The blockade ranking and the committed-force rules are not touched.
+**Review amendments (2026-10-04, the user's picks):** `AssaultPlanner.ContestedHolds` (the standoff hold) skips a planet populated by a
+player outside the war set (and not by me) unless it is blockaded against me, so a force goes home after peace instead of feeding
+the rival's hostility; and a War stance toward a rival with no contact keeps a decay-only row so the war can end.
 
 ### Legacy switch
 `GameAIConstants.diplomacyEnabled` (default true). When false: every rival with contact counts as at war, there is no stance matrix

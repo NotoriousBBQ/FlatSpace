@@ -249,6 +249,8 @@ namespace FlatSpace
                         "Grotsits", playerSave.grotsitsDistributionCenters ?? new List<string>());
                     players[playerSave.playerId].playerAI.RestoreRememberedBlockades(
                         playerSave.rememberedBlockades?.ConvertAll(b => b.ToEntry()));
+                    GameAI.GameAIMap.Diplomacy.Restore(playerSave.playerId,
+                        playerSave.stances?.ConvertAll(s => s.ToEntry()));
 
                 }
                 GameAI.SetSimulationStats(gameSave);

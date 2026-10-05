@@ -120,6 +120,13 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
     }
     public SortedDictionary<TScoreMatrixDecisionElement, List<TScoreMatrixChoiceElement>> MatrixElements;
 
+    /// <summary>
+    /// False (default): a chosen choice is removed from every other row, so one surplus is never spent twice. True: rows are
+    /// independent decisions (only the chosen row loses it), e.g. one stance decision per rival, where "War" toward one rival
+    /// must not take "War" away from another.
+    /// </summary>
+    public bool IndependentRows { get; set; }
+
     private static int DefaultChoiceCompare(TScoreMatrixChoiceElement x, TScoreMatrixChoiceElement y)
         => (x.Cost - x.Surplus).CompareTo(y.Cost - y.Surplus);
 
@@ -154,10 +161,17 @@ public class ScoreMatrix<TScoreMatrixDecisionElement, TScoreMatrixChoiceElement,
                     ? WeightedPick(decision.Value, weightSelector)
                     : decision.Value[0];
                 actionList.Add(actionFactory(decision.Key, chosenChoice));
-                foreach (var remaining in MatrixElements)
+                if (IndependentRows)
                 {
-                    if (remaining.Value.Count > 0)
-                        remaining.Value.RemoveAll(v => v.Equals(chosenChoice));
+                    decision.Value.RemoveAll(v => v.Equals(chosenChoice));
+                }
+                else
+                {
+                    foreach (var remaining in MatrixElements)
+                    {
+                        if (remaining.Value.Count > 0)
+                            remaining.Value.RemoveAll(v => v.Equals(chosenChoice));
+                    }
                 }
                 choiceIndex++;
 

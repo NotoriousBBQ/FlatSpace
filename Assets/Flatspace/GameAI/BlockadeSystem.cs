@@ -24,6 +24,7 @@ namespace FlatSpace.AI
             public int PlayerId;
             public string Planet;
             public float Value;
+            public int BlockerId;   // the player whose docked offense set Value (see Value(...)'s `blocker`)
         }
 
         private const float Epsilon = 0.0001f;
@@ -217,7 +218,7 @@ namespace FlatSpace.AI
                 if (value <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
-                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value });
+                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker });
                 // Only this colonist and ITS rider (matched on player, origin, target and the colonist's own delay) go: a
                 // diverted colonist can share origin and target with another one, which must survive this cut.
                 orders.Remove(order);
@@ -251,7 +252,7 @@ namespace FlatSpace.AI
                 if (value <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
-                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value });
+                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker });
                 var remaining = System.Convert.ToSingle(order.Data) - value;
                 AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name,
                     System.Math.Max(0f, remaining));

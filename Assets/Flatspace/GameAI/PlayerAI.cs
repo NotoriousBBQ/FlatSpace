@@ -24,6 +24,14 @@ namespace FlatSpace
                 AIStrategyAmass
             }
 
+            /// <summary>
+            /// Consolidate and Amass share every rule written as "Consolidate only" (the warship fleet-shortfall boost, the
+            /// ColonyShip boost while targets remain, the chokepoint colonization tilt, the planner's garrisons, the assault and the
+            /// blockade-breaking targets). Amass differs only through its own weight tables and the war gate on the assault.
+            /// </summary>
+            public static bool IsConsolidateLike(AIStrategy strategy)
+                => strategy == AIStrategy.AIStrategyConsolidate || strategy == AIStrategy.AIStrategyAmass;
+
             public AIStrategy Strategy { get; set; } = AIStrategy.AIStrategyExpand;
             public Player      Player  { get; set; }
             public GameAIMap   AIMap   { get; set; }
@@ -162,12 +170,15 @@ namespace FlatSpace
                 {
                     case AIStrategy.AIStrategyExpand:
                     case AIStrategy.AIStrategyConsolidate:
-                        // Consolidate has no behavior of its own yet; it plays like Expand.
+                    case AIStrategy.AIStrategyAmass:
+                        // Consolidate and Amass have no routine of their own; they play like Expand (Amass with its own
+                        // weight tables, see the research and industry tables below).
                         ProcessResultsStrategyExpand(results, Player, ref orders);
                         break;
-                    case AIStrategy.AIStrategyAmass:
-                        break;
                 }
+
+                // After the routine and the blockade view: a new strategy takes effect on the next turn's routine.
+                UpdateDiplomacy(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
             }
 
             /// <summary>
@@ -184,6 +195,139 @@ namespace FlatSpace
                 AITuningLogger.LogStrategyChange(turnNumber, Player.playerID,
                     AIStrategy.AIStrategyExpand.ToString(), AIStrategy.AIStrategyConsolidate.ToString());
                 return true;
+            }
+
+            // ── Diplomacy ────────────────────────────────────────────────────
+
+            /// <summary>
+            /// The players I am at war with right now. Diplomacy off (legacy, and any map a self-check builds directly): every
+            /// player I have contact with is an enemy, as before. On: my own War stances plus the wars rivals declared on me
+            /// that I have contact with (DiplomacyState.WarRivals).
+            /// </summary>
+            public SortedSet<int> WarRivals()
+            {
+                var contact = AIMap.Knowledge.ContactPlayers(AIMap, Player.playerID);
+                return AIMap.Diplomacy.Enabled
+                    ? AIMap.Diplomacy.WarRivals(Player.playerID, contact)
+                    : new SortedSet<int>(contact);
+            }
+
+            /// <summary>What the assault may attack: null (every other player) while diplomacy is off, else the war set.</summary>
+            public System.Collections.Generic.ISet<int> AssaultWarFilter() => AIMap.Diplomacy.Enabled ? WarRivals() : null;
+
+            // Rivals whose forced war (declared on me, I have contact) was already logged as Start, so Start and End are logged
+            // on a change only. Log-only state: not saved (a load logs each current forced war once more).
+            private readonly HashSet<int> _warForcedLogged = new HashSet<int>();
+
+            /// <summary>The rivals whose declaration currently forces me into war (I have not declared on them). Public for the self-check.</summary>
+            public IReadOnlyCollection<int> WarForcedRivals => _warForcedLogged;
+
+            /// <summary>
+            /// Once per turn, after the strategy routine: updates the hostility score toward each rival I have contact with,
+            /// lets the stance matrix decide each rival that is not held, logs the changes, then switches Consolidate to Amass
+            /// while I am at war with anyone and Amass back to Consolidate once I am at war with nobody. Expand and None are
+            /// never switched here (first contact still moves Expand to Consolidate in TryEnterConsolidate). Does nothing while
+            /// diplomacy is off. Public (and free of Gameboard.Instance) so the self-check can drive it directly.
+            /// </summary>
+            public void UpdateDiplomacy(int turn)
+            {
+                var diplomacy = AIMap.Diplomacy;
+                if (!diplomacy.Enabled) return;
+
+                var me = Player.playerID;
+                var constants = AIMap.GameAIConstants;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var contact = AIMap.Knowledge.ContactPlayers(AIMap, me);
+                var myStrength = FleetStrength.Mine(AIMap, me, stats);
+
+                var rows = new List<StanceMatrix.Row>();
+                foreach (var rival in contact)
+                {
+                    var pair = diplomacy.Get(me, rival);
+                    var rivalStrength = FleetStrength.VisibleOf(AIMap, me, rival, stats);
+                    var nearShips = HostilityCalculator.CountNearShips(AIMap, me, rival);
+                    var result = HostilityCalculator.Compute(new HostilityCalculator.Inputs
+                    {
+                        Previous = pair.Hostility,
+                        Cuts = diplomacy.TakeCuts(me, rival),
+                        NearShips = nearShips,
+                        MyStrength = myStrength,
+                        RivalStrength = rivalStrength,
+                    }, constants);
+                    pair.Hostility = result.Hostility;
+                    pair.CutsTerm = result.CutsTerm;
+                    pair.NearTerm = result.NearTerm;
+                    pair.StrengthTerm = result.StrengthTerm;
+                    pair.MyStrength = myStrength;
+                    pair.RivalStrength = rivalStrength;
+                    pair.NearShips = nearShips;
+                    diplomacy.Set(me, rival, pair);
+                    rows.Add(new StanceMatrix.Row
+                    {
+                        Rival = rival,
+                        Hostility = result.Hostility,
+                        Current = pair.Stance,
+                        TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
+                    });
+                }
+                // A war I declared on a rival I no longer have contact with must still be able to end (my own War stance counts
+                // without contact): its hostility only decays (no cuts, near ships or strength term) and the matrix decides it
+                // like any other row, so Amass cannot outlive a rival that is gone.
+                foreach (var rival in diplomacy.Rivals(me)
+                             .Where(r => !contact.Contains(r) && diplomacy.StanceToward(me, r) == Stance.War).ToList())
+                {
+                    var pair = diplomacy.Get(me, rival);
+                    pair.Hostility = HostilityCalculator.Compute(
+                        new HostilityCalculator.Inputs { Previous = pair.Hostility }, constants).Hostility;
+                    pair.CutsTerm = 0f;
+                    pair.NearTerm = 0f;
+                    pair.StrengthTerm = 0f;
+                    diplomacy.Set(me, rival, pair);
+                    rows.Add(new StanceMatrix.Row
+                    {
+                        Rival = rival,
+                        Hostility = pair.Hostility,
+                        Current = Stance.War,
+                        TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
+                    });
+                }
+                diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later
+
+                foreach (var decision in StanceMatrix.Decide(me, rows, constants))
+                {
+                    if (!diplomacy.SetStance(me, decision.Rival, decision.Stance, turn)) continue;
+                    var pair = diplomacy.Get(me, decision.Rival);
+                    pair.PWar = decision.PWar;
+                    diplomacy.Set(me, decision.Rival, pair);
+                    AITuningLogger.LogStance(turn, me, decision.Rival, decision.Stance.ToString(), pair.Hostility,
+                        pair.CutsTerm, pair.NearTerm, pair.StrengthTerm, decision.PWar);
+                }
+
+                // Wars the rival declared on me (I have contact, I did not declare): logged when they start and end.
+                var warRivals = WarRivals();
+                var forced = new HashSet<int>(warRivals.Where(r => diplomacy.StanceToward(me, r) != Stance.War));
+                foreach (var rival in forced.Where(r => !_warForcedLogged.Contains(r)).ToList())
+                {
+                    _warForcedLogged.Add(rival);
+                    AITuningLogger.LogWarForced(turn, me, rival, true);
+                }
+                foreach (var rival in _warForcedLogged.Where(r => !forced.Contains(r)).ToList())
+                {
+                    _warForcedLogged.Remove(rival);
+                    AITuningLogger.LogWarForced(turn, me, rival, false);
+                }
+
+                var atWar = warRivals.Count > 0;
+                if (Strategy == AIStrategy.AIStrategyConsolidate && atWar)
+                    SwitchStrategy(AIStrategy.AIStrategyAmass, turn);
+                else if (Strategy == AIStrategy.AIStrategyAmass && !atWar)
+                    SwitchStrategy(AIStrategy.AIStrategyConsolidate, turn);
+            }
+
+            private void SwitchStrategy(AIStrategy to, int turn)
+            {
+                AITuningLogger.LogStrategyChange(turn, Player.playerID, Strategy.ToString(), to.ToString());
+                Strategy = to;
             }
 
             // ── Strategy: Expand ─────────────────────────────────────────────
@@ -457,13 +601,13 @@ namespace FlatSpace
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return true;
                 return planet.Population.Count < planet.MaxPopulation;
             }
-            // Consolidate tilts colonization toward chokepoints: a target's choice cost is its route cost divided by
+            // Consolidate and Amass tilt colonization toward chokepoints: a target's choice cost is its route cost divided by
             // 1 + colonizationChokepointWeight x its chokepoint percentile, so a hub may be farther and still win. Expand,
             // a weight of 0 (or below) and unknown planets leave it at 1 (nearest first). The order delay never uses it.
             // Public for ColonistRedirect (diversion choice) and the self-check.
             public float ColonizationCostDivisor(string targetName)
             {
-                if (Strategy != AIStrategy.AIStrategyConsolidate) return 1f;
+                if (!IsConsolidateLike(Strategy)) return 1f;
                 var weight = AIMap.GameAIConstants.colonizationChokepointWeight;
                 return weight <= 0f ? 1f : 1f + weight * AIMap.Chokepoint(targetName);
             }
@@ -956,7 +1100,7 @@ namespace FlatSpace
             private const float ColonyShipUrgentBoost = 2f;
 
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
-            // 1.0f = neutral. Add an entry for AIStrategyAmass when needed.
+            // 1.0f = neutral. Amass has its own table (AmassResearchWeights).
             private static readonly Dictionary<string, float> ExpandResearchWeights =
                 new Dictionary<string, float>
                 {
@@ -977,12 +1121,22 @@ namespace FlatSpace
                     { "ColonyShip",    0.5f },  // ships useful but secondary
                     { "Warship",       2.5f },  // Updated priority
                 };
+            private static readonly Dictionary<string, float> AmassResearchWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          1.0f },
+                    { "Industry",      2.5f },
+                    { "Grotsits",      2.0f },
+                    { "Research",      1.0f },
+                    { "ColonyShip",    0.5f },
+                    { "Warship",       4.0f },  // at war: weapons first
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     { AIStrategy.AIStrategyExpand,      ExpandResearchWeights },
                     { AIStrategy.AIStrategyConsolidate, ConsolidateResearchWeights },
-                    // AIStrategyAmass — add when needed
+                    { AIStrategy.AIStrategyAmass,       AmassResearchWeights },
                 };
 
             private void ProcessResearch(
@@ -1157,7 +1311,7 @@ namespace FlatSpace
 
             // ── Industry ─────────────────────────────────────────────────────
             // Roulette-wheel weight per item subType. Higher = more likely to be picked.
-            // 1.0f = neutral. Add an entry for AIStrategyAmass when needed.
+            // 1.0f = neutral. Amass has its own table (AmassIndustryWeights).
             private static readonly Dictionary<string, float> ExpandIndustryWeights =
                 new Dictionary<string, float>
                 {
@@ -1181,12 +1335,23 @@ namespace FlatSpace
                     { "Warship",       2.5f },  // highest priority
                     { "WarshipUpdate", 2.5f },  // same as Warship
                 };
+            private static readonly Dictionary<string, float> AmassIndustryWeights =
+                new Dictionary<string, float>
+                {
+                    { "Food",          1.0f },
+                    { "Industry",      1.5f },
+                    { "Grotsits",      1.5f },
+                    { "Research",      0.5f },
+                    { "ColonyShip",    0.5f },  // a player at war colonizes less
+                    { "Warship",       4.0f },
+                    { "WarshipUpdate", 4.0f },  // same as Warship
+                };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
                 {
                     { AIStrategy.AIStrategyExpand,      ExpandIndustryWeights },
                     { AIStrategy.AIStrategyConsolidate, ConsolidateIndustryWeights },
-                    // AIStrategyAmass — add when needed
+                    { AIStrategy.AIStrategyAmass,       AmassIndustryWeights },
                 };
 
             public static float GetIndustryStrategyWeight(CatalogItem item, AIStrategy strategy)
@@ -1223,14 +1388,14 @@ namespace FlatSpace
 
             /// <summary>
             /// The fleet Consolidate wants: round-1 garrisons for every outer planet and every colonized
-            /// chokepoint (from the Consolidate transport planner), plus the assault's required force whenever a known enemy planet exists
+            /// chokepoint (from the Consolidate transport planner), plus the assault's required force whenever a known planet of a player I am at war with exists
             /// (not ChooseTarget, which is null while I hold no warships, exactly when I most need to build).
             /// </summary>
             public int WantedWarships()
             {
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, AIStrategy.AIStrategyConsolidate);
                 var garrisons = transport.BuildStates().Sum(s => s.RoundGarrison);
-                var assault = new AssaultPlanner(AIMap, Player.playerID);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, warRivals: AssaultWarFilter());
                 var unbounded = garrisons + (assault.HasKnownEnemyPlanet() ? assault.RequiredForce() : 0);
 
                 // Bounded by my economy: the assault force follows the enemies' fleets, which follow mine.
@@ -1269,7 +1434,7 @@ namespace FlatSpace
                     p.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID)
                     + p.GetIncomingShips(Ship.ShipKind.WarShip, Player.playerID));
 
-            /// <summary>The Warship production multiplier for a strategy; 1 for anything but Consolidate.</summary>
+            /// <summary>The Warship production multiplier for a strategy; 1 for Expand and None.</summary>
             public float ComputeWarshipMultiplier(AIStrategy strategy)
                 => ComputeWarshipMultiplier(strategy, out _, out _);
 
@@ -1277,7 +1442,7 @@ namespace FlatSpace
             {
                 wanted = 0;
                 have = 0;
-                if (strategy != AIStrategy.AIStrategyConsolidate) return 1f;
+                if (!IsConsolidateLike(strategy)) return 1f;
                 wanted = WantedWarships();
                 have = OwnedWarships();
                 return WarshipShortfallMultiplier(wanted, have,
@@ -1301,7 +1466,7 @@ namespace FlatSpace
                         return 0f;                       // nothing left to colonize — exclude (no useless colony ships)
                     if (IsValidColonizer(planetName))
                         return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
-                    if (Strategy == AIStrategy.AIStrategyConsolidate)
+                    if (IsConsolidateLike(Strategy))
                         return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
@@ -1318,7 +1483,7 @@ namespace FlatSpace
                 if (item.subType == "Warship")
                 {
                     var shortfall = 1f;                  // Expand has no fleet cap
-                    if (Strategy == AIStrategy.AIStrategyConsolidate)
+                    if (IsConsolidateLike(Strategy))
                     {
                         if (_warshipMultiplierThisTurn == null)
                         {
@@ -1511,11 +1676,12 @@ namespace FlatSpace
             /// </summary>
             public List<ShipAction> PlanShipActions(int turnNumber)
             {
-                if (Strategy != AIStrategy.AIStrategyConsolidate)
+                if (!IsConsolidateLike(Strategy))
                     return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
 
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
-                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
+                    AssaultWarFilter());
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 

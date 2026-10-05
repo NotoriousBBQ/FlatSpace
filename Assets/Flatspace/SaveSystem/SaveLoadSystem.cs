@@ -113,6 +113,28 @@ public class SaveLoadSystem : MonoBehaviour
                 => new BlockadeMemory.Entry { Planet = planet, Value = value, Turn = turn };
         }
 
+        // One (player, rival) stance, see DiplomacyState. The effective war is derived, so only this is saved.
+        [Serializable]
+        public struct StanceSave
+        {
+            public int rival;
+            public int stance;          // a Stance, as an int
+            public float hostility;
+            public int lastChangeTurn;
+
+            public static StanceSave From(DiplomacyState.Entry e)
+                => new StanceSave { rival = e.Rival, stance = (int)e.Stance, hostility = e.Hostility, lastChangeTurn = e.LastChangeTurn };
+
+            public DiplomacyState.Entry ToEntry()
+                => new DiplomacyState.Entry
+                {
+                    Rival = rival,
+                    Stance = (Stance)stance,
+                    Hostility = hostility,
+                    LastChangeTurn = lastChangeTurn,
+                };
+        }
+
         [Serializable]
         public struct PlayerSave
         {
@@ -130,6 +152,8 @@ public class SaveLoadSystem : MonoBehaviour
             public List<string> grotsitsDistributionCenters;
             // Null in older saves: no blockades remembered.
             public List<RememberedBlockadeSave> rememberedBlockades;
+            // Null in older saves: every stance is Peace at 0 hostility.
+            public List<StanceSave> stances;
         }
 
         [Serializable]
@@ -185,6 +209,7 @@ public class SaveLoadSystem : MonoBehaviour
                         rememberedBlockades = Gameboard.Instance.players[i].playerAI
                             .RememberedBlockades(Gameboard.Instance.TurnNumber)
                             .ConvertAll(RememberedBlockadeSave.From),
+                        stances = gameAI.GameAIMap.Diplomacy.Snapshot(i).ConvertAll(StanceSave.From),
                     });
             }
             

@@ -410,6 +410,36 @@ public static class AITuningLogger
             boardTotal.ToString(), shipsOnThem.ToString(), allShips.ToString()) });
     }
 
+    /// <summary>A stance changed: Stance|rival|Peace or War|hostility|cutsTerm|nearTerm|strengthTerm|pWar (on a change only).</summary>
+    public static void LogStance(int turnNumber, int playerId, int rival, string stance, float hostility, float cutsTerm,
+        float nearTerm, float strengthTerm, float pWar)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Stance", rival.ToString(ci), stance,
+            hostility.ToString("0.#", ci), cutsTerm.ToString("0.#", ci), nearTerm.ToString("0.#", ci),
+            strengthTerm.ToString("0.##", ci), pWar.ToString("0.##", ci)) });
+    }
+
+    /// <summary>A war arrived or ended through the rival's stance: WarForced|rival|Start or End (on a change only).</summary>
+    public static void LogWarForced(int turnNumber, int playerId, int rival, bool started)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "WarForced",
+            rival.ToString(System.Globalization.CultureInfo.InvariantCulture), started ? "Start" : "End") });
+    }
+
+    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips.</summary>
+    public static void LogHostility(int turnNumber, int playerId, int rival, float hostility, float myStrength,
+        float rivalStrength, int nearShips)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Hostility", rival.ToString(ci),
+            hostility.ToString("0.#", ci), myStrength.ToString("0", ci), rivalStrength.ToString("0", ci),
+            nearShips.ToString(ci)) });
+    }
+
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>
     public static void LogBoardConfig(string boardName)
     {

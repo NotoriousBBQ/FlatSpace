@@ -20,6 +20,7 @@ public static class AllAISelfChecks
             ("Blockade Breaking", BlockadeBreakSelfCheck.RunChecks),
             ("Chokepoint", ChokepointSelfCheck.RunChecks),
             ("Colonist Redirect", ColonistRedirectSelfCheck.RunChecks),
+            ("Diplomacy", DiplomacySelfCheck.RunChecks),
         };
 
         var failed = new List<string>();
