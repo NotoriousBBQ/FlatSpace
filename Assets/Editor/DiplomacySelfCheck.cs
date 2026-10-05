@@ -24,6 +24,10 @@ public static class DiplomacySelfCheck
         ok &= RunAssaultGateCheck();
         ok &= RunWarRivalsCheck();
         ok &= RunWantedFleetGateCheck();
+        ok &= RunUpdateDiplomacyCheck();
+        ok &= RunStrategySwitchCheck();
+        ok &= RunForcedWarCheck();
+        ok &= RunCutsAndLegacyCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -578,6 +582,154 @@ public static class DiplomacySelfCheck
 
             ok &= Check(atPeace == f.Constants.garrisonOuter, "at peace the wanted fleet is just the garrisons");
             ok &= Check(legacy > atPeace && atWar == legacy, "legacy and war both add the assault force; peace does not");
+        }
+        return ok;
+    }
+
+    // P1 holds B (a neighbour of player 0's A). Diplomacy on.
+    private static Fixture WithRival()
+    {
+        var f = Fixture.Line();
+        f.Colonize("B", 1);
+        f.Know(2);
+        f.Map.Diplomacy.Enabled = true;
+        f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+        // A very steep curve: below the midpoint the war probability is exactly 0, above it exactly 1 (no roulette luck).
+        f.Constants.stanceSteepness = 0.01f;
+        f.Constants.stanceMidpoint = 30f;
+        return f;
+    }
+
+    // One turn of hostility and the stance decision.
+    public static bool RunUpdateDiplomacyCheck()
+    {
+        var ok = true;
+        using (var f = WithRival())
+        {
+            f.Ships("A", 0, 2);                                    // I am much stronger: the strength term is +1 (2100 against 1050)
+            f.Ships("B", 1, 1);                                    // a rival ship beside my planet: near term 0.5
+            f.Map.Diplomacy.RecordCut(0, 1);
+            f.Map.Diplomacy.RecordCut(0, 1);                       // two cuts: 10
+            f.AI.UpdateDiplomacy(10);
+
+            var pair = f.Map.Diplomacy.Get(0, 1);
+            ok &= Check(Near(pair.CutsTerm, 10f) && Near(pair.NearTerm, 0.5f) && Near(pair.StrengthTerm, 1f),
+                "the terms are charged: 2 cuts x 5, 1 ship x 0.5, log2(2100/1050) = 1");
+            ok &= Check(Near(pair.Hostility, 10f + 0.5f + 1f), "hostility = 10 + 0.5 + 1 after one turn from 0");
+            ok &= Check(pair.NearShips == 1 && pair.MyStrength > pair.RivalStrength, "the log-only numbers are stored");
+            ok &= Check(pair.Stance == Stance.Peace, "below the midpoint the stance stays Peace");
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and the strategy stays Consolidate");
+
+            // Above the midpoint: War, and the strategy follows in the same call.
+            pair.Hostility = 100f;
+            f.Map.Diplomacy.Set(0, 1, pair);
+            f.AI.UpdateDiplomacy(20);
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War, "hostility 95+ is War");
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "war switches Consolidate to Amass");
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).PWar, 1f), "the war probability is kept for the log");
+        }
+        return ok;
+    }
+
+    public static bool RunStrategySwitchCheck()
+    {
+        var ok = true;
+        using (var f = WithRival())
+        {
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 5);
+            f.AI.UpdateDiplomacy(6);                               // inside the hold: the stance is kept, the war is real
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "any war: Consolidate becomes Amass");
+
+            f.Map.Diplomacy.SetStance(0, 1, Stance.Peace, 7);
+            f.AI.UpdateDiplomacy(8);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "peace with everyone: Amass returns to Consolidate");
+
+            f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 9);
+            f.AI.UpdateDiplomacy(10);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyExpand, "an Expand player is never switched by diplomacy");
+            f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyNone;
+            f.AI.UpdateDiplomacy(11);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyNone, "nor a None player");
+
+            // Review focus 1: a war survives losing contact; the declarer does not flicker back to Consolidate.
+            f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+            f.P("B").Population.Clear();
+            f.Know(2);
+            ok &= Check(f.Map.Knowledge.ContactPlayers(f.Map, 0).Count == 0, "precondition: the rival left, no contact now");
+            f.AI.UpdateDiplomacy(12);
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War && f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass,
+                "my own War stance stands without contact: still at war, still Amass");
+
+            // War with one of two rivals keeps Amass; peace with that one but war with the other too.
+            f.Colonize("C", 2);
+            f.Know(3);
+            f.Map.Diplomacy.SetStance(0, 2, Stance.War, 20);
+            f.Map.Diplomacy.SetStance(0, 1, Stance.Peace, 20);
+            f.AI.UpdateDiplomacy(21);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "at war with one of two rivals: Amass stays");
+            f.Map.Diplomacy.SetStance(0, 2, Stance.Peace, 22);
+            f.AI.UpdateDiplomacy(23);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "peace with both: back to Consolidate");
+        }
+        return ok;
+    }
+
+    // A war the rival declared forces mine once I have contact (spec rule B), and ends when the rival returns to Peace.
+    public static bool RunForcedWarCheck()
+    {
+        var ok = true;
+        using (var f = WithRival())
+        {
+            f.Map.Diplomacy.SetStance(1, 0, Stance.War, 5);        // player 1 declares on me
+            f.AI.UpdateDiplomacy(6);
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace, "my own stance is not changed by being declared on");
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass, "I have contact: the declaration forces me into war and Amass");
+            ok &= Check(f.AI.WarForcedRivals.Contains(1), "the forced war is tracked for the WarForced log line");
+
+            // Review focus 2: it ends when the declarer returns to Peace while contact holds.
+            f.Map.Diplomacy.SetStance(1, 0, Stance.Peace, 7);
+            f.AI.UpdateDiplomacy(8);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate && f.AI.WarForcedRivals.Count == 0,
+                "the declarer's Peace ends the forced war and I return to Consolidate");
+        }
+
+        using (var f = WithRival())
+        {
+            f.P("B").Population.Clear();
+            f.Know(2);                                             // no contact with player 1
+            f.Map.Diplomacy.SetStance(1, 0, Stance.War, 5);
+            f.AI.UpdateDiplomacy(6);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate && f.AI.WarForcedRivals.Count == 0,
+                "a declaration from a player I have never met changes nothing until contact");
+        }
+        return ok;
+    }
+
+    // Review focus 4 and 5: cuts by a blocker I have no contact with are dropped; diplomacy off is legacy.
+    public static bool RunCutsAndLegacyCheck()
+    {
+        var ok = true;
+        using (var f = WithRival())
+        {
+            f.Map.Diplomacy.RecordCut(0, 2);                       // player 2: no contact
+            f.AI.UpdateDiplomacy(10);
+            ok &= Check(f.Map.Diplomacy.TakeCuts(0, 2) == 0, "a cut by a player I have no contact with does not wait around");
+            f.Colonize("C", 2);
+            f.Know(3);
+            f.AI.UpdateDiplomacy(11);
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 2).CutsTerm, 0f), "so it cannot inflate hostility once we do meet");
+        }
+
+        using (var f = WithRival())
+        {
+            f.Map.Diplomacy.Enabled = false;                       // legacy
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 5);
+            f.AI.UpdateDiplomacy(6);
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "legacy: UpdateDiplomacy does nothing, never Amass");
+            ok &= Check(f.AI.WarRivals().SetEquals(new[] { 1 }) && f.AI.AssaultWarFilter() == null,
+                "legacy: every contact player is an enemy and the assault gets no filter");
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).Hostility, 0f), "legacy: no hostility is computed");
         }
         return ok;
     }

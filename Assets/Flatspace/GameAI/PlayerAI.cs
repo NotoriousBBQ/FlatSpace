@@ -176,6 +176,9 @@ namespace FlatSpace
                         ProcessResultsStrategyExpand(results, Player, ref orders);
                         break;
                 }
+
+                // After the routine and the blockade view: a new strategy takes effect on the next turn's routine.
+                UpdateDiplomacy(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
             }
 
             /// <summary>
@@ -211,6 +214,100 @@ namespace FlatSpace
 
             /// <summary>What the assault may attack: null (every other player) while diplomacy is off, else the war set.</summary>
             public ISet<int> AssaultWarFilter() => AIMap.Diplomacy.Enabled ? WarRivals() : null;
+
+            // Rivals whose forced war (declared on me, I have contact) was already logged as Start, so Start and End are logged
+            // on a change only. Log-only state: not saved (a load logs each current forced war once more).
+            private readonly HashSet<int> _warForcedLogged = new HashSet<int>();
+
+            /// <summary>The rivals whose declaration currently forces me into war (I have not declared on them). Public for the self-check.</summary>
+            public IReadOnlyCollection<int> WarForcedRivals => _warForcedLogged;
+
+            /// <summary>
+            /// Once per turn, after the strategy routine: updates the hostility score toward each rival I have contact with,
+            /// lets the stance matrix decide each rival that is not held, logs the changes, then switches Consolidate to Amass
+            /// while I am at war with anyone and Amass back to Consolidate once I am at war with nobody. Expand and None are
+            /// never switched here (first contact still moves Expand to Consolidate in TryEnterConsolidate). Does nothing while
+            /// diplomacy is off. Public (and free of Gameboard.Instance) so the self-check can drive it directly.
+            /// </summary>
+            public void UpdateDiplomacy(int turn)
+            {
+                var diplomacy = AIMap.Diplomacy;
+                if (!diplomacy.Enabled) return;
+
+                var me = Player.playerID;
+                var constants = AIMap.GameAIConstants;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var contact = AIMap.Knowledge.ContactPlayers(AIMap, me);
+                var myStrength = FleetStrength.Mine(AIMap, me, stats);
+
+                var rows = new List<StanceMatrix.Row>();
+                foreach (var rival in contact)
+                {
+                    var pair = diplomacy.Get(me, rival);
+                    var rivalStrength = FleetStrength.VisibleOf(AIMap, me, rival, stats);
+                    var nearShips = HostilityCalculator.CountNearShips(AIMap, me, rival);
+                    var result = HostilityCalculator.Compute(new HostilityCalculator.Inputs
+                    {
+                        Previous = pair.Hostility,
+                        Cuts = diplomacy.TakeCuts(me, rival),
+                        NearShips = nearShips,
+                        MyStrength = myStrength,
+                        RivalStrength = rivalStrength,
+                    }, constants);
+                    pair.Hostility = result.Hostility;
+                    pair.CutsTerm = result.CutsTerm;
+                    pair.NearTerm = result.NearTerm;
+                    pair.StrengthTerm = result.StrengthTerm;
+                    pair.MyStrength = myStrength;
+                    pair.RivalStrength = rivalStrength;
+                    pair.NearShips = nearShips;
+                    diplomacy.Set(me, rival, pair);
+                    rows.Add(new StanceMatrix.Row
+                    {
+                        Rival = rival,
+                        Hostility = result.Hostility,
+                        Current = pair.Stance,
+                        TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
+                    });
+                }
+                diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later
+
+                foreach (var decision in StanceMatrix.Decide(me, rows, constants))
+                {
+                    if (!diplomacy.SetStance(me, decision.Rival, decision.Stance, turn)) continue;
+                    var pair = diplomacy.Get(me, decision.Rival);
+                    pair.PWar = decision.PWar;
+                    diplomacy.Set(me, decision.Rival, pair);
+                    AITuningLogger.LogStance(turn, me, decision.Rival, decision.Stance.ToString(), pair.Hostility,
+                        pair.CutsTerm, pair.NearTerm, pair.StrengthTerm, decision.PWar);
+                }
+
+                // Wars the rival declared on me (I have contact, I did not declare): logged when they start and end.
+                var warRivals = WarRivals();
+                var forced = new HashSet<int>(warRivals.Where(r => diplomacy.StanceToward(me, r) != Stance.War));
+                foreach (var rival in forced.Where(r => !_warForcedLogged.Contains(r)).ToList())
+                {
+                    _warForcedLogged.Add(rival);
+                    AITuningLogger.LogWarForced(turn, me, rival, true);
+                }
+                foreach (var rival in _warForcedLogged.Where(r => !forced.Contains(r)).ToList())
+                {
+                    _warForcedLogged.Remove(rival);
+                    AITuningLogger.LogWarForced(turn, me, rival, false);
+                }
+
+                var atWar = warRivals.Count > 0;
+                if (Strategy == AIStrategy.AIStrategyConsolidate && atWar)
+                    SwitchStrategy(AIStrategy.AIStrategyAmass, turn);
+                else if (Strategy == AIStrategy.AIStrategyAmass && !atWar)
+                    SwitchStrategy(AIStrategy.AIStrategyConsolidate, turn);
+            }
+
+            private void SwitchStrategy(AIStrategy to, int turn)
+            {
+                AITuningLogger.LogStrategyChange(turn, Player.playerID, Strategy.ToString(), to.ToString());
+                Strategy = to;
+            }
 
             // ── Strategy: Expand ─────────────────────────────────────────────
 
