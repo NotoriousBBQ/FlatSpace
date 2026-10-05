@@ -156,10 +156,43 @@ namespace FlatSpace
                 foreach (var ship in destroyed) planet.DestroyDockedShip(ship);
             }
 
-            // Repair and the colony-ship rule follow in the next task; their seams are empty until then.
-            private static void Repair(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants) { }
+            // After combat, a damaged warship heals repairFractionPerTurn of its Health stat while docked at a planet its owner
+            // populates with no warship of a player it is at war with there.
+            private static void Repair(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants)
+            {
+                if (constants.repairFractionPerTurn <= 0f) return;
+                foreach (var ship in planet.DockedShips)
+                {
+                    if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner == Planet.NoOwner || ship.Damage <= 0f) continue;
+                    if (planet.Owner != ship.Owner || planet.Population.Count == 0) continue;
+                    var enemyHere = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner
+                        && s.Owner != ship.Owner && map.Diplomacy.IsAtWar(ship.Owner, s.Owner, true));
+                    if (enemyHere) continue;
+                    var max = stats.Health(ship.Template, ship.ResearchSnapshot);
+                    ship.Damage = Math.Max(0f, ship.Damage - constants.repairFractionPerTurn * max);
+                }
+            }
 
-            private static void DestroyStrandedColonyShips(Planet planet, GameAIMap map, List<Planet.PlanetUpdateResult> results) { }
+            // After combat and repair: a player with colony ships here but no warship, where a player at war with it has a
+            // warship, loses its colony ships. Everywhere, a planet the owner populates included.
+            private static void DestroyStrandedColonyShips(Planet planet, GameAIMap map, List<Planet.PlanetUpdateResult> results)
+            {
+                var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner != Planet.NoOwner)
+                    .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
+                foreach (var owner in owners)
+                {
+                    if (planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == owner)) continue;
+                    var raiders = planet.DockedShips
+                        .Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner && s.Owner != owner
+                                    && map.Diplomacy.IsAtWar(owner, s.Owner, true))
+                        .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
+                    if (raiders.Count == 0) continue;
+                    var count = planet.UndockShips(Ship.ShipKind.ColonyShip, owner, int.MaxValue);
+                    results.Add(new Planet.PlanetUpdateResult(planet.PlanetName,
+                        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost,
+                        new ColonyLoss { Count = count, ByPlayer = raiders[0] }, owner));
+                }
+            }
         }
     }
 }

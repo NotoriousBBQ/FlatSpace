@@ -17,6 +17,7 @@ public static class CombatSelfCheck
         ok &= RunDamageTravelsCheck();
         ok &= RunEffectiveReadersCheck();
         ok &= RunCombatResolutionCheck();
+        ok &= RunRepairAndColonyShipCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -379,6 +380,100 @@ public static class CombatSelfCheck
             ok &= Check(Near(DamageOf(f, "A", 1, 0), 8f) && Near(DamageOf(f, "A", 1, 1), 0f),
                 "the ship with no Health stat is never targeted and the real ship takes the 8");
             Object.DestroyImmediate(zero);
+        }
+        return ok;
+    }
+
+    // Repair: gradual, at home, not with an at-war enemy present. Colony ships: destroyed when the owner has no warship left
+    // and an at-war rival has one, everywhere, after combat.
+    public static bool RunRepairAndColonyShipCheck()
+    {
+        var ok = true;
+        const Planet.PlanetUpdateResult.PlanetUpdateResultType colonyLost =
+            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost;
+
+        using (var f = Fixture.Line())    // repair at home: 50 - 0.1 x 100 = 40
+        {
+            f.Colonize("A", 0);
+            f.Ships("A", 0, 1, 50f);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 40f), "a damaged ship at its owner's populated planet heals 10% of its Health stat a turn");
+            for (var i = 0; i < 5; i++) Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 0f), "and never below 0 damage");
+        }
+
+        using (var f = Fixture.Line())    // no repair away from home
+        {
+            f.Colonize("A", 1);            // someone else's planet
+            f.Ships("A", 0, 1, 50f);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 50f), "no repair at a planet the owner does not hold");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.P("A").Owner = 0;             // owned but unpopulated
+            f.Ships("A", 0, 1, 50f);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 50f), "no repair at an unpopulated planet");
+        }
+
+        using (var f = Fixture.Line())    // an at-war enemy present: no repair (the enemy's 8 damage lands, nothing heals)
+        {
+            f.Colonize("A", 0);
+            f.Ships("A", 0, 1, 50f); f.Ships("A", 1, 1); f.War(0, 1);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 58f), "with an at-war enemy docked there: 50 + 8 and no healing");
+        }
+        using (var f = Fixture.Line())    // a peaceful rival does not stop repair
+        {
+            f.Colonize("A", 0);
+            f.Ships("A", 0, 1, 50f); f.Ships("A", 1, 1);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 40f), "a rival at peace does not stop repair");
+        }
+
+        using (var f = Fixture.Line())    // colony ship, owner has no warship, at-war rival arrives alone: destroyed, even on its own planet
+        {
+            f.Colonize("A", 0);
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Ships("A", 1, 1); f.War(0, 1);
+            var results = Results();
+            Resolve(f, results);
+            var lost = results.Where(r => r.Result == colonyLost).ToList();
+            ok &= Check(f.P("A").DockedShips.All(s => s.Kind != Ship.ShipKind.ColonyShip),
+                "the owner's colony ship is destroyed when its planet holds no warship of the owner and an at-war rival has one");
+            ok &= Check(lost.Count == 1 && lost[0].PlayerID == 0 && ((ColonyLoss)lost[0].Data).Count == 1 && ((ColonyLoss)lost[0].Data).ByPlayer == 1,
+                "one ColonyShipsLost result: owner 0, 1 ship, by player 1");
+        }
+        using (var f = Fixture.Line())    // the owner keeps a warship: the colony ship lives
+        {
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Ships("A", 0, 1); f.Ships("A", 1, 1); f.War(0, 1);
+            Resolve(f, Results());
+            ok &= Check(f.P("A").DockedShips.Any(s => s.Kind == Ship.ShipKind.ColonyShip), "a surviving warship protects the colony ship");
+        }
+        using (var f = Fixture.Line())    // the owner's last warship dies in the same turn: the rule runs after combat
+        {
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Ships("A", 0, 1, 95f); f.Ships("A", 1, 3); f.War(0, 1);
+            Resolve(f, Results());
+            ok &= Check(f.P("A").DockedShips.All(s => s.Owner != 0), "the last warship and then the colony ship are gone in the same turn");
+        }
+        using (var f = Fixture.Line())    // peace, or only a rival colony ship, or legacy: nothing happens
+        {
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Ships("A", 1, 1);
+            Resolve(f, Results());
+            ok &= Check(f.P("A").DockedShips.Any(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner == 0), "a rival at peace does not kill colony ships");
+            f.War(0, 1);
+            f.P("A").UndockShips(Ship.ShipKind.WarShip, 1, 9);
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 1, new List<string>());
+            Resolve(f, Results());
+            ok &= Check(f.P("A").DockedShips.Count(s => s.Kind == Ship.ShipKind.ColonyShip) == 2, "a rival's colony ship is not a warship: nothing dies");
+            f.P("A").DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());
+            f.Map.Diplomacy.Enabled = false;
+            Resolve(f, Results());
+            ok &= Check(f.P("A").DockedShips.Count(s => s.Kind == Ship.ShipKind.ColonyShip) == 2, "legacy mode: nothing dies");
         }
         return ok;
     }
