@@ -42,7 +42,10 @@ namespace FlatSpace
                     // Appended last: OrderType serializes as an int. Immediate; Data is the rival's player id (an int),
                     // PlayerId the player that decided; Origin and Target are empty. Executed by ApplyStanceOrder.
                     OrderTypeDeclareWar,
-                    OrderTypeMakePeace
+                    OrderTypeMakePeace,
+                    // Appended last. Immediate; Data is the rival's player id; executed by ApplySurrender: both stances go
+                    // to Peace and the pair is locked against declarations for surrenderTruceTurns.
+                    OrderTypeSurrender
                 }
 
                 public enum OrderTimingType
@@ -136,6 +139,7 @@ namespace FlatSpace
 
             public void GameAIUpdate()
             {
+                GameAIMap.Diplomacy.Turn = Gameboard.Instance.TurnNumber;   // the truce is tested against it
                 var gameAIOrders = new List<GameAIOrder>();
                 var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
                 ProcessCurrentOrders();
@@ -385,6 +389,17 @@ namespace FlatSpace
                         }
                         break;
                     }
+                    case GameAIOrder.OrderType.OrderTypeSurrender:
+                    {
+                        var surrenderTurn = Gameboard.Instance.TurnNumber;
+                        var surrenderRival = Convert.ToInt32(executableOrder.Data);
+                        ApplySurrender(GameAIMap.Diplomacy, executableOrder, surrenderTurn,
+                            GameAIMap.GameAIConstants.surrenderTruceTurns);
+                        var surrenderPair = GameAIMap.Diplomacy.Get(executableOrder.PlayerId, surrenderRival);
+                        AITuningLogger.LogSurrender(surrenderTurn, executableOrder.PlayerId, surrenderRival, surrenderPair.LossShare,
+                            surrenderPair.PSurrender, surrenderPair.TruceUntil);
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -398,8 +413,27 @@ namespace FlatSpace
             // when the stance changed (the caller logs on that). Pure: no Gameboard.Instance.
             public static bool ApplyStanceOrder(DiplomacyState diplomacy, GameAIOrder order, int turn)
             {
+                var rival = Convert.ToInt32(order.Data);
                 var stance = order.Type == GameAIOrder.OrderType.OrderTypeDeclareWar ? Stance.War : Stance.Peace;
-                return diplomacy.SetStance(order.PlayerId, Convert.ToInt32(order.Data), stance, turn);
+                if (stance == Stance.War && diplomacy.InTruce(order.PlayerId, rival, turn)) return false;   // locked by a surrender
+                return diplomacy.SetStance(order.PlayerId, rival, stance, turn);
+            }
+
+            // Immediate: the player surrenders to the rival in order.Data. Both stances go to Peace and both pair rows are locked
+            // against new declarations (and forced wars) until turn + truceTurns. Pure: no Gameboard.Instance.
+            public static bool ApplySurrender(DiplomacyState diplomacy, GameAIOrder order, int turn, int truceTurns)
+            {
+                var me = order.PlayerId;
+                var rival = Convert.ToInt32(order.Data);
+                diplomacy.SetStance(me, rival, Stance.Peace, turn);
+                diplomacy.SetStance(rival, me, Stance.Peace, turn);
+                foreach (var key in new[] { (me, rival), (rival, me) })
+                {
+                    var pair = diplomacy.Get(key.Item1, key.Item2);
+                    pair.TruceUntil = turn + truceTurns;
+                    diplomacy.Set(key.Item1, key.Item2, pair);
+                }
+                return true;
             }
 
             // Delayed: the food a colony ship carried lands with the colonist. Deliberately its own order, separate

@@ -34,6 +34,7 @@ public static class DiplomacySelfCheck
         ok &= RunNearShipsIgnoreRivalGarrisonCheck();
         ok &= RunStanceOrderCheck();
         ok &= RunStanceOrdersEmittedCheck();
+        ok &= RunTruceAndSurrenderOrderCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -603,6 +604,7 @@ public static class DiplomacySelfCheck
     // the emitted stance orders executed (ProcessNewOrders). Returns the orders so a case can inspect them.
     private static List<GameAI.GameAIOrder> Turn(Fixture f, int turn)
     {
+        f.Map.Diplomacy.Turn = turn;   // the truce is tested against it (no truce in the older cases, so nothing else changes)
         f.AI.ApplyWarState(turn);
         var orders = new List<GameAI.GameAIOrder>();
         f.AI.UpdateDiplomacy(turn, orders);
@@ -960,6 +962,65 @@ public static class DiplomacySelfCheck
         using (var f = Fixture.Line())
             ok &= Check(f.Map.GetPlanet(string.Empty) == null,
                 "an order with an empty Target looks up no planet (GetPlanet(\"\") is null, not an exception)");
+        return ok;
+    }
+
+    // A surrender ends the war for both sides and locks the pair: no Declare War, no forced war, until the truce ends.
+    public static bool RunTruceAndSurrenderOrderCheck()
+    {
+        var ok = true;
+        GameAI.GameAIOrder Order(GameAI.GameAIOrder.OrderType type, int me, int rival) => new GameAI.GameAIOrder
+        {
+            Type = type,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+            Data = rival,
+            Origin = string.Empty,
+            Target = string.Empty,
+            PlayerId = me,
+        };
+
+        var d = new DiplomacyState { Enabled = true };
+        d.SetStance(0, 1, Stance.War, 5);
+        d.SetStance(1, 0, Stance.War, 5);                       // both declared
+        ok &= Check(GameAI.ApplySurrender(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeSurrender, 0, 1), 20, 30),
+            "a surrender reports a change");
+        ok &= Check(d.StanceToward(0, 1) == Stance.Peace && d.StanceToward(1, 0) == Stance.Peace,
+            "both stances go to Peace (a one-sided surrender ends the war for both)");
+        ok &= Check(d.Get(0, 1).TruceUntil == 50 && d.Get(1, 0).TruceUntil == 50, "both pair rows are locked until turn 20 + 30");
+        d.Turn = 30;
+        ok &= Check(d.InTruce(0, 1, 30) && d.InTruce(1, 0, 30), "turn 30 is inside the truce, from either side");
+        ok &= Check(!d.InTruce(0, 1, 50) && !d.InTruce(0, 2, 30), "the truce ends at turn 50 and covers only that pair");
+
+        ok &= Check(!GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 30),
+            "a Declare War inside the truce is refused");
+        ok &= Check(d.StanceToward(1, 0) == Stance.Peace, "and the stance stays Peace");
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeMakePeace, 1, 0), 30) == false,
+            "Make Peace still works (nothing to change: already Peace)");
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 50),
+            "after the truce a Declare War is accepted again");
+
+        // A rival's earlier declaration must not force a war during the truce.
+        var forced = new DiplomacyState { Enabled = true };
+        forced.SetStance(1, 0, Stance.War, 5);
+        forced.Turn = 6;
+        ok &= Check(forced.IsAtWar(0, 1, true), "precondition: without a truce player 1's declaration forces player 0 into war");
+        GameAI.ApplySurrender(forced, Order(GameAI.GameAIOrder.OrderType.OrderTypeSurrender, 0, 1), 6, 30);
+        forced.SetStance(1, 0, Stance.War, 7);                  // a stale declaration set again inside the truce
+        forced.Turn = 7;
+        ok &= Check(!forced.IsAtWar(0, 1, true) && !forced.IsAtWar(1, 0, true), "inside a truce the pair is not at war, whatever the stances say");
+        ok &= Check(!forced.WarRivals(0, new[] { 1 }).Contains(1), "and WarRivals leaves the truce partner out");
+        forced.Turn = 36;
+        ok &= Check(forced.IsAtWar(0, 1, true), "once the truce ends the stale declaration counts again");
+
+        // Saves: the truce survives a snapshot and an older entry loads with none.
+        var snap = d.Snapshot(0);
+        var back = new DiplomacyState();
+        back.Restore(0, snap);
+        ok &= Check(back.Get(0, 1).TruceUntil == 50, "TruceUntil survives Snapshot and Restore");
+        var entry = SaveLoadSystem.GameSave.StanceSave.From(new DiplomacyState.Entry { Rival = 1, Stance = Stance.Peace, TruceUntil = 77 }).ToEntry();
+        ok &= Check(entry.TruceUntil == 77, "StanceSave carries truceUntil");
+        var old = JsonUtility.FromJson<SaveLoadSystem.GameSave.StanceSave>("{\"rival\":1,\"stance\":1,\"hostility\":10,\"lastChangeTurn\":3}");
+        ok &= Check(old.truceUntil == 0, "an older stance save loads with no truce");
         return ok;
     }
 
