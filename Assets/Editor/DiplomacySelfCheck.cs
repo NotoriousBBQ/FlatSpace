@@ -21,6 +21,9 @@ public static class DiplomacySelfCheck
         ok &= RunAmassTablesCheck();
         ok &= RunConsolidateLikeSeamsCheck();
         ok &= RunAmassRunsTheRoutineCheck();
+        ok &= RunAssaultGateCheck();
+        ok &= RunWarRivalsCheck();
+        ok &= RunWantedFleetGateCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -487,6 +490,94 @@ public static class DiplomacySelfCheck
             Object.DestroyImmediate(playerGo);
             Object.DestroyImmediate(mapGo);
             Object.DestroyImmediate(constants);
+        }
+        return ok;
+    }
+
+    // A(P0, warships) - B - C(P2 population) - D(P1 population). The assault attacks only the players in the war set; a null
+    // set (diplomacy off) keeps today's rule, every other player is an enemy.
+    public static bool RunAssaultGateCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("C", 2);
+            f.Colonize("D", 1);
+            f.Ships("A", 0, 2);
+            f.Ships("D", 1, 2);
+            f.Ships("C", 2, 3);
+            f.Know();
+            var stats = new WarshipStats(f.Research);
+            AssaultPlanner Planner(ISet<int> war) => new AssaultPlanner(f.Map, 0, null, stats, null, 0, war);
+
+            ok &= Check(Planner(null).ChooseEnemyTarget().PlanetName == "C", "no war set (legacy): the cheapest enemy planet, C");
+            ok &= Check(Planner(new HashSet<int> { 1 }).ChooseEnemyTarget().PlanetName == "D", "at war with 1 only: D");
+            ok &= Check(Planner(new HashSet<int> { 2 }).ChooseEnemyTarget().PlanetName == "C", "at war with 2 only: C");
+            ok &= Check(Planner(new HashSet<int>()).ChooseEnemyTarget() == null, "at war with nobody: no enemy target");
+
+            ok &= Check(Planner(null).HasKnownEnemyPlanet() && Planner(new HashSet<int> { 1 }).HasKnownEnemyPlanet(),
+                "a known enemy planet exists in legacy mode and at war with 1");
+            ok &= Check(!Planner(new HashSet<int>()).HasKnownEnemyPlanet(), "at peace with everyone there is no known enemy planet");
+
+            ok &= Check(Planner(null).EnemyWarshipTotal() == 5, "legacy: 2 + 3 enemy warships");
+            ok &= Check(Planner(new HashSet<int> { 1 }).EnemyWarshipTotal() == 2, "at war with 1: only its 2 ships size the force");
+            ok &= Check(Planner(new HashSet<int> { 2 }).EnemyWarshipTotal() == 3, "at war with 2: only its 3 ships");
+            ok &= Check(Planner(new HashSet<int>()).EnemyWarshipTotal() == 0, "at peace: no enemy fleet");
+
+            // Ownerless ships are never an enemy fleet, in either mode.
+            f.Ships("B", Planet.NoOwner, 4);
+            ok &= Check(Planner(null).EnemyWarshipTotal() == 5, "ownerless ships are not an enemy fleet");
+        }
+        return ok;
+    }
+
+    // WarRivals on PlayerAI: legacy = every contact player; diplomacy on = the derived war set.
+    public static bool RunWarRivalsCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("B", 1);
+            f.Colonize("C", 2);
+            f.Ships("B", Planet.NoOwner, 1);
+            f.Know();
+
+            ok &= Check(!f.Map.Diplomacy.Enabled, "precondition: a map a fixture builds is in legacy mode");
+            ok &= Check(f.AI.WarRivals().SetEquals(new[] { 1, 2 }), "legacy: every contact player is an enemy (ownerless ships are not a player)");
+            ok &= Check(f.AI.AssaultWarFilter() == null, "legacy: the assault gets no filter");
+
+            f.Map.Diplomacy.Enabled = true;
+            ok &= Check(f.AI.WarRivals().Count == 0, "diplomacy on, all Peace: no war");
+            ok &= Check(f.AI.AssaultWarFilter() != null && f.AI.AssaultWarFilter().Count == 0, "diplomacy on: an empty filter, nobody to attack");
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 3);
+            f.Map.Diplomacy.SetStance(2, 0, Stance.War, 3);
+            ok &= Check(f.AI.WarRivals().SetEquals(new[] { 1, 2 }), "my own War on 1 and 2's War on me (I have contact) both make war");
+        }
+        return ok;
+    }
+
+    // WantedWarships adds the assault force only while there is a known enemy planet in the war set.
+    public static bool RunWantedFleetGateCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Constants.warshipsPerColonizedPlanet = 100f;
+            f.Constants.assaultMinimumShips = 3;
+            f.Constants.garrisonOuter = 6;
+            f.Colonize("D", 1);
+            f.Ships("D", 1, 2);
+            f.Know();
+            f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+            var legacy = f.AI.WantedWarships();                       // outer garrison + the assault force
+            f.Map.Diplomacy.Enabled = true;
+            var atPeace = f.AI.WantedWarships();                      // outer garrison only
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 3);
+            var atWar = f.AI.WantedWarships();
+
+            ok &= Check(atPeace == f.Constants.garrisonOuter, "at peace the wanted fleet is just the garrisons");
+            ok &= Check(legacy > atPeace && atWar == legacy, "legacy and war both add the assault force; peace does not");
         }
         return ok;
     }

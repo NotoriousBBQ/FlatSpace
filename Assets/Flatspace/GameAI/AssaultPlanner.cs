@@ -8,7 +8,7 @@ namespace FlatSpace
     namespace AI
     {
         /// <summary>
-        /// Consolidate only. Picks a known enemy-occupied planet, sizes the force to the enemy's known
+        /// Consolidate and Amass only. Picks a known enemy-occupied planet, sizes the force to the enemy's known
         /// docked fleet, and sends the ships home defence left spare. Pure with respect to the
         /// simulation and free of Gameboard.Instance so the Editor self-check can drive it directly.
         /// </summary>
@@ -28,13 +28,16 @@ namespace FlatSpace
             private readonly WarshipStats _stats;
             private readonly BlockadeMemory _memory;
             private readonly int _turn;
+            private readonly ISet<int> _warRivals;
 
             /// <summary>
             /// `view`, `stats` and `memory` are optional: without a view nothing is a blockade target and the planner behaves
             /// exactly as it did before blockade breaking existed. `turn` is only used to test BlockadeMemory for recent cuts.
+            /// `warRivals` is the set of players I am at war with: only their planets are enemy-occupied and only their docked
+            /// warships size the force. Null (the default, and diplomacy off) means every other player is an enemy.
             /// </summary>
             public AssaultPlanner(GameAIMap map, int playerId, BlockadeView view = null, WarshipStats stats = null,
-                BlockadeMemory memory = null, int turn = 0)
+                BlockadeMemory memory = null, int turn = 0, ISet<int> warRivals = null)
             {
                 _map = map;
                 _playerId = playerId;
@@ -43,14 +46,17 @@ namespace FlatSpace
                 _stats = stats;
                 _memory = memory;
                 _turn = turn;
+                _warRivals = warRivals;
             }
+
+            private bool IsRival(int player) => player != _playerId && (_warRivals == null || _warRivals.Contains(player));
 
             private int CountWarships(Planet planet)
                 => planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == _playerId);
 
-            /// <summary>Another player's population is present (same test as PlayerKnowledge.HasContact).</summary>
+            /// <summary>A player I am at war with has population here (without a war set: any other player; same test as PlayerKnowledge.HasContact).</summary>
             public bool IsEnemyOccupied(Planet planet)
-                => planet.Population.Exists(p => p.Player != _playerId);
+                => planet.Population.Exists(p => IsRival(p.Player));
 
             /// <summary>
             /// A planet I colonize (same test as ShipTransportPlanner.IsColonized). It may still hold a few
@@ -87,7 +93,7 @@ namespace FlatSpace
                     var planet = _map.GetPlanet(name);
                     if (planet == null) continue;
                     total += planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip
-                                                           && s.Owner >= 0 && s.Owner != _playerId);
+                                                           && s.Owner >= 0 && IsRival(s.Owner));
                 }
                 return total;
             }

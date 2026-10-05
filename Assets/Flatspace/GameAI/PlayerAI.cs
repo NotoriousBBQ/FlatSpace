@@ -194,6 +194,24 @@ namespace FlatSpace
                 return true;
             }
 
+            // ── Diplomacy ────────────────────────────────────────────────────
+
+            /// <summary>
+            /// The players I am at war with right now. Diplomacy off (legacy, and any map a self-check builds directly): every
+            /// player I have contact with is an enemy, as before. On: my own War stances plus the wars rivals declared on me
+            /// that I have contact with (DiplomacyState.WarRivals).
+            /// </summary>
+            public SortedSet<int> WarRivals()
+            {
+                var contact = AIMap.Knowledge.ContactPlayers(AIMap, Player.playerID);
+                return AIMap.Diplomacy.Enabled
+                    ? AIMap.Diplomacy.WarRivals(Player.playerID, contact)
+                    : new SortedSet<int>(contact);
+            }
+
+            /// <summary>What the assault may attack: null (every other player) while diplomacy is off, else the war set.</summary>
+            public ISet<int> AssaultWarFilter() => AIMap.Diplomacy.Enabled ? WarRivals() : null;
+
             // ── Strategy: Expand ─────────────────────────────────────────────
 
             private void ProcessResultsStrategyExpand(
@@ -1252,14 +1270,14 @@ namespace FlatSpace
 
             /// <summary>
             /// The fleet Consolidate wants: round-1 garrisons for every outer planet and every colonized
-            /// chokepoint (from the Consolidate transport planner), plus the assault's required force whenever a known enemy planet exists
+            /// chokepoint (from the Consolidate transport planner), plus the assault's required force whenever a known planet of a player I am at war with exists
             /// (not ChooseTarget, which is null while I hold no warships, exactly when I most need to build).
             /// </summary>
             public int WantedWarships()
             {
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, AIStrategy.AIStrategyConsolidate);
                 var garrisons = transport.BuildStates().Sum(s => s.RoundGarrison);
-                var assault = new AssaultPlanner(AIMap, Player.playerID);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, warRivals: AssaultWarFilter());
                 var unbounded = garrisons + (assault.HasKnownEnemyPlanet() ? assault.RequiredForce() : 0);
 
                 // Bounded by my economy: the assault force follows the enemies' fleets, which follow mine.
@@ -1544,7 +1562,8 @@ namespace FlatSpace
                     return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
 
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
-                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
+                    AssaultWarFilter());
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
