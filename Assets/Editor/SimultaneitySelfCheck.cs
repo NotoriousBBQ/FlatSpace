@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using FlatSpace.AI;
+using Flatspace.Objects.Production;
 
 // Every player decides against the same world: running the players' ProcessResults in forward and in reversed order over
 // the same state must give each player the same orders, the same stances and the same strategy. The orders are compared by
