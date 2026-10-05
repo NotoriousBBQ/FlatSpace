@@ -164,6 +164,9 @@ namespace FlatSpace
             {
                 // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
                 TryEnterConsolidate(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
+                // Stances committed by last turn's orders: the Consolidate/Amass switch and the forced-war lines read them here,
+                // before this turn's routine, so a new strategy takes effect on this turn's routine as it always has.
+                ApplyWarState(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
                 RefreshBlockadeView();
 
                 switch (Strategy)
@@ -177,8 +180,9 @@ namespace FlatSpace
                         break;
                 }
 
-                // After the routine and the blockade view: a new strategy takes effect on the next turn's routine.
-                UpdateDiplomacy(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
+                // After the routine and the blockade view. The stance decision is an order, executed with the rest in
+                // ProcessNewOrders after every player has decided.
+                UpdateDiplomacy(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0, orders);
             }
 
             /// <summary>
@@ -223,13 +227,14 @@ namespace FlatSpace
             public IReadOnlyCollection<int> WarForcedRivals => _warForcedLogged;
 
             /// <summary>
-            /// Once per turn, after the strategy routine: updates the hostility score toward each rival I have contact with,
-            /// lets the stance matrix decide each rival that is not held, logs the changes, then switches Consolidate to Amass
-            /// while I am at war with anyone and Amass back to Consolidate once I am at war with nobody. Expand and None are
-            /// never switched here (first contact still moves Expand to Consolidate in TryEnterConsolidate). Does nothing while
-            /// diplomacy is off. Public (and free of Gameboard.Instance) so the self-check can drive it directly.
+            /// Once per turn, after the strategy routine: updates the hostility score toward each rival I have contact with
+            /// (my own private view, written directly), lets the stance matrix decide each rival that is not held and emits an
+            /// order for each decision that differs from the held stance. It writes no stance and changes no strategy: the
+            /// orders are executed in ProcessNewOrders after every player has decided, and ApplyWarState reads them next
+            /// turn. Does nothing while diplomacy is off. Public (and free of Gameboard.Instance) so the self-check can drive
+            /// it directly.
             /// </summary>
-            public void UpdateDiplomacy(int turn)
+            public void UpdateDiplomacy(int turn, List<GameAI.GameAIOrder> orders)
             {
                 var diplomacy = AIMap.Diplomacy;
                 if (!diplomacy.Enabled) return;
@@ -295,15 +300,32 @@ namespace FlatSpace
 
                 foreach (var decision in StanceMatrix.Decide(me, rows, constants))
                 {
-                    if (!diplomacy.SetStance(me, decision.Rival, decision.Stance, turn)) continue;
+                    if (diplomacy.StanceToward(me, decision.Rival) == decision.Stance) continue;   // the held stance again: nothing to order
                     var pair = diplomacy.Get(me, decision.Rival);
-                    pair.PWar = decision.PWar;
+                    pair.PWar = decision.PWar;   // read by GameAI.ExecuteOrder when the order logs the Stance line
                     diplomacy.Set(me, decision.Rival, pair);
-                    AITuningLogger.LogStance(turn, me, decision.Rival, decision.Stance.ToString(), pair.Hostility,
-                        pair.CutsTerm, pair.NearTerm, pair.StrengthTerm, decision.PWar);
+                    orders.Add(MakeOrder(
+                        decision.Stance == Stance.War
+                            ? GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
+                            : GameAI.GameAIOrder.OrderType.OrderTypeMakePeace,
+                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        0, 0, decision.Rival, string.Empty, string.Empty));
                 }
+            }
 
-                // Wars the rival declared on me (I have contact, I did not declare): logged when they start and end.
+            /// <summary>
+            /// At the start of ProcessResults, from the stances the previous turn's orders committed: logs the wars a rival
+            /// declared on me (I have contact, I did not declare) when they start and end, then switches Consolidate to Amass
+            /// while I am at war with anyone and Amass back to Consolidate once I am at war with nobody. Expand and None are
+            /// never switched here. Does nothing while diplomacy is off. Public (and free of Gameboard.Instance) so the
+            /// self-check can drive it directly.
+            /// </summary>
+            public void ApplyWarState(int turn)
+            {
+                var diplomacy = AIMap.Diplomacy;
+                if (!diplomacy.Enabled) return;
+                var me = Player.playerID;
+
                 var warRivals = WarRivals();
                 var forced = new HashSet<int>(warRivals.Where(r => diplomacy.StanceToward(me, r) != Stance.War));
                 foreach (var rival in forced.Where(r => !_warForcedLogged.Contains(r)).ToList())
