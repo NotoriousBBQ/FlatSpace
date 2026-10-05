@@ -57,7 +57,7 @@ namespace FlatSpace.AI
             var sum = 0f;
             foreach (var ship in planet.DockedShips)
                 if (ship.Kind == Ship.ShipKind.WarShip && ship.Owner == owner)
-                    sum += _stats.Offense(ship.Template, ship.ResearchSnapshot);
+                    sum += _stats.EffectiveOffense(ship);
             return sum;
         }
 

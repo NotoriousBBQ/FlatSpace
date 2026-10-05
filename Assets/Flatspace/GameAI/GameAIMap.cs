@@ -353,7 +353,8 @@ namespace FlatSpace
                     if (order.Fleet == null || order.Fleet.Kind != Ship.ShipKind.WarShip) continue;
                     var target = GetPlanet(order.Target);
                     if (target == null) continue;
-                    var offense = order.Fleet.Snapshots.Sum(snapshot => stats.Offense(template, snapshot));
+                    var offense = order.Fleet.Snapshots
+                        .Select((snapshot, i) => stats.EffectiveOffense(template, snapshot, order.Fleet.DamageAt(i))).Sum();
                     target.AddIncomingOffense(Ship.ShipKind.WarShip, order.PlayerId, offense);
                 }
             }

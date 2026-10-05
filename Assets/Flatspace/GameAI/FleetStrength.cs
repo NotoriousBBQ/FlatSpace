@@ -17,8 +17,9 @@ namespace FlatSpace
                 foreach (var ship in ships)
                 {
                     if (ship.Kind != Ship.ShipKind.WarShip) continue;
-                    var offense = stats.Offense(ship.Template, ship.ResearchSnapshot);
-                    var durability = stats.Health(ship.Template, ship.ResearchSnapshot)
+                    // A damaged ship counts for less: effective offense x (current health + Defense).
+                    var offense = stats.EffectiveOffense(ship);
+                    var durability = stats.CurrentHealth(ship)
                                      + stats.Defense(ship.Template, ship.ResearchSnapshot);
                     sum += offense * durability;
                 }

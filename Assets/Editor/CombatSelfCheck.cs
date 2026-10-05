@@ -15,6 +15,7 @@ public static class CombatSelfCheck
         var ok = RunTunableDefaultsCheck();
         ok &= RunEffectiveStatsCheck();
         ok &= RunDamageTravelsCheck();
+        ok &= RunEffectiveReadersCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -198,6 +199,54 @@ public static class CombatSelfCheck
                     "a fleet order carries the damage of the ships it takes (10 and 20)");
             }
             finally { Object.DestroyImmediate(go); }
+        }
+        return ok;
+    }
+
+    // Every reader of a ship's offense sees the effective (damaged) value. Undamaged ships are unchanged (the old checks pin that).
+    public static bool RunEffectiveReadersCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1);             // Off 10, health 100, Def 5: strength 10 x 105 = 1050
+            f.Ships("A", 0, 1, 50f);        // Off 5, health 50, Def 5: strength 5 x 55 = 275
+            ok &= Check(Near(FleetStrength.Of(f.P("A").DockedShips.Where(s => s.Owner == 0), f.Stats), 1325f),
+                "fleet strength = effective offense x (current health + Defense): 1050 + 275");
+
+            var blockade = new BlockadeSystem(f.Map, f.Research);
+            ok &= Check(Near(blockade.DockedOffense(f.P("A"), 0), 15f), "blockade value counts effective offense: 10 + 5");
+
+            var planner = new AssaultPlanner(f.Map, 0, null, f.Stats);
+            ok &= Check(Near(planner.CommittedOffense(f.P("A")), 15f), "the assault's committed offense counts effective offense");
+
+            var orders = new List<GameAI.GameAIOrder>
+            {
+                new GameAI.GameAIOrder
+                {
+                    Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                    PlayerId = 0,
+                    Data = 2,
+                    Target = "B",
+                    Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                    {
+                        Kind = Ship.ShipKind.WarShip,
+                        Snapshots = new List<List<string>> { new List<string>(), new List<string>() },
+                        Damage = new List<float> { 50f, 0f },
+                    },
+                },
+            };
+            f.Map.RecomputeIncomingOffense(orders, f.Stats);
+            ok &= Check(Near(f.P("B").GetIncomingOffense(Ship.ShipKind.WarShip, 0), 15f),
+                "in-flight offense uses the payload's damage: 5 + 10");
+
+            f.Template.shipName = "Warship";
+            ok &= Check(FleetUIController.FormatShipRow(f.P("A").DockedShips[1], f.Research)
+                        == "WarShip - Warship (Spd 150, HP 50/100, Off 5/10, Def 5)",
+                "a damaged ship's fleet row shows current/maximum health and effective/base offense");
+            ok &= Check(FleetUIController.FormatShipRow(f.P("A").DockedShips[0], f.Research)
+                        == "WarShip - Warship (Spd 150, HP 100, Off 10, Def 5)",
+                "an undamaged ship's row is unchanged");
         }
         return ok;
     }

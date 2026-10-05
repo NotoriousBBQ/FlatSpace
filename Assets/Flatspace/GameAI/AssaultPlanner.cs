@@ -139,7 +139,7 @@ namespace FlatSpace
                 var sum = 0f;
                 foreach (var ship in planet.DockedShips)
                     if (ship.Kind == Ship.ShipKind.WarShip && ship.Owner == _playerId)
-                        sum += _stats.Offense(ship.Template, ship.ResearchSnapshot);
+                        sum += _stats.EffectiveOffense(ship);
                 return sum;
             }
 
@@ -164,7 +164,7 @@ namespace FlatSpace
                         continue;
                     var rivalHere = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip
                         && s.Owner != _playerId && s.Owner != Planet.NoOwner
-                        && _stats.Offense(s.Template, s.ResearchSnapshot) > 0f);
+                        && _stats.EffectiveOffense(s) > 0f);
                     if (rivalHere) holds.Add(planet.PlanetName);
                 }
                 return holds;
