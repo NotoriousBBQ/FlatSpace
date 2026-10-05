@@ -147,7 +147,9 @@ namespace FlatSpace
             /// Planets where my warships and another player's are both docked: a standoff I am holding. A blockade I have
             /// just broken is one: its value is 0 or less, so it has left my BlockadeView, yet if my ships left the blockade
             /// would re-form at once. The home plan keeps these ships where they are for as long as the rival stays. Empty
-            /// without warship stats.
+            /// without warship stats. With a war set, a planet a player outside it populates (and I do not) is not held unless
+            /// it is blockaded against me: after peace the force goes home instead of sitting beside the rival's planet, where
+            /// it would feed the rival's hostility and re-start the war. Breaking a blockade needs no war.
             /// </summary>
             public List<string> ContestedHolds()
             {
@@ -156,6 +158,10 @@ namespace FlatSpace
                 foreach (var planet in _map.PlanetList)
                 {
                     if (DockedOffense(planet) <= 0f) continue;
+                    if (_warRivals != null && !IsBlockadeTarget(planet)
+                        && !planet.Population.Exists(p => p.Player == _playerId)
+                        && planet.Population.Exists(p => p.Player != _playerId && !_warRivals.Contains(p.Player)))
+                        continue;
                     var rivalHere = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip
                         && s.Owner != _playerId && s.Owner != Planet.NoOwner
                         && _stats.Offense(s.Template, s.ResearchSnapshot) > 0f);

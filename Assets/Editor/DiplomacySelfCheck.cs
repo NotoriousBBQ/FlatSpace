@@ -30,6 +30,8 @@ public static class DiplomacySelfCheck
         ok &= RunCutsAndLegacyCheck();
         ok &= RunStanceSaveCheck();
         ok &= RunLostContactWarCanEndCheck();
+        ok &= RunPeacefulHoldsReleaseCheck();
+        ok &= RunNearShipsIgnoreRivalGarrisonCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -609,7 +611,7 @@ public static class DiplomacySelfCheck
         using (var f = WithRival())
         {
             f.Ships("A", 0, 2);                                    // I am much stronger: the strength term is +1 (2100 against 1050)
-            f.Ships("B", 1, 1);                                    // a rival ship beside my planet: near term 0.5
+            f.Ships("A", 1, 1);                                    // a rival ship on my planet: near term 0.5 (on its own B it would be a garrison)
             f.Map.Diplomacy.RecordCut(0, 1);
             f.Map.Diplomacy.RecordCut(0, 1);                       // two cuts: 10
             f.AI.UpdateDiplomacy(10);
@@ -732,6 +734,68 @@ public static class DiplomacySelfCheck
             ok &= Check(f.AI.WarRivals().SetEquals(new[] { 1 }) && f.AI.AssaultWarFilter() == null,
                 "legacy: every contact player is an enemy and the assault gets no filter");
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).Hostility, 0f), "legacy: no hostility is computed");
+        }
+        return ok;
+    }
+
+    // Review finding: after peace the assault force must go home. A standoff on a planet a peaceful rival populates is no
+    // longer held (the held ships would sit beside the rival's planet and feed its hostility), unless the planet is
+    // blockaded against me (breaking a blockade needs no war).
+    public static bool RunPeacefulHoldsReleaseCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("D", 1);
+            f.Ships("D", 0, 2);                                    // my ships (offense 20) beside player 1's...
+            f.Ships("D", 1, 2);                                    // ...equal offense, so D is not blockaded
+            f.Know();
+            var stats = new WarshipStats(f.Research);
+            AssaultPlanner Planner(ISet<int> war, BlockadeView view = null) => new AssaultPlanner(f.Map, 0, view, stats, null, 0, war);
+
+            ok &= Check(Planner(null).ContestedHolds().SequenceEqual(new[] { "D" }), "legacy (no war set): the standoff at D is held");
+            ok &= Check(Planner(new HashSet<int> { 1 }).ContestedHolds().SequenceEqual(new[] { "D" }), "at war with 1: held");
+            ok &= Check(Planner(new HashSet<int> { 2 }).ContestedHolds().Count == 0,
+                "at war with someone else only: player 1's planet is not held, the ships may go home");
+            ok &= Check(Planner(new HashSet<int>()).ContestedHolds().Count == 0, "at peace with everyone: nothing is held on a rival's planet");
+
+            // A planet I hold is still held against a peaceful rival's docked ships (it is my own colony).
+            f.Colonize("A", 0);
+            f.Ships("A", 0, 1);
+            f.Ships("A", 1, 1);
+            ok &= Check(Planner(new HashSet<int>()).ContestedHolds().SequenceEqual(new[] { "A" }),
+                "my own colony with a rival's ships docked is still a held standoff at peace");
+
+            // Blockaded against me: held even at peace (breaking a blockade needs no war).
+            f.Ships("D", 1, 1);                                    // 30 against my 20: value 10
+            var view = BlockadeView.Build(f.Map, 0, new BlockadeSystem(f.Map, f.Research), new BlockadeMemory(), 5,
+                f.Constants.blockadeMemoryTurns);
+            ok &= Check(view.IsBlockaded("D"), "precondition: D is blockaded against me");
+            ok &= Check(Planner(new HashSet<int>(), view).ContestedHolds().Contains("D"),
+                "a blockaded planet stays held at peace");
+        }
+        return ok;
+    }
+
+    // Review finding: a rival's garrison on its own planets beside mine is not a threat. Only its ships on my planets or on
+    // planets it does not populate count toward the near-ship term.
+    public static bool RunNearShipsIgnoreRivalGarrisonCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 1, 1);                                    // on a planet I hold: counts
+            f.Ships("B", 1, 2);                                    // beside it, B empty: counts
+            f.Know();
+            ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 1) == 3, "precondition: 1 + 2 near ships");
+
+            f.Colonize("B", 1);                                    // now B is player 1's own planet, its garrison
+            ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 1) == 1,
+                "the 2 ships docked on the rival's own planet B are a garrison, not a threat; the 1 on my A still counts");
+
+            f.Colonize("B", 0);                                    // B populated by both: my territory too
+            ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 1) == 3,
+                "a planet I populate as well still counts the rival's ships on it");
         }
         return ok;
     }

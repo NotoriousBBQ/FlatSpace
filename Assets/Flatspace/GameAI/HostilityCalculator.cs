@@ -58,7 +58,10 @@ namespace FlatSpace
                 };
             }
 
-            /// <summary>The rival's docked warships on planets I hold or beside my populated planets (known planets only).</summary>
+            /// <summary>
+            /// The rival's docked warships on planets I hold or beside my populated planets (known planets only). Ships docked
+            /// on a planet the rival populates and I do not are its garrison, not a threat, and are not counted.
+            /// </summary>
             public static int CountNearShips(GameAIMap map, int me, int rival)
             {
                 var near = new HashSet<string>();
@@ -75,6 +78,7 @@ namespace FlatSpace
                     if (!map.Knowledge.IsKnown(me, name)) continue;
                     var planet = map.GetPlanet(name);
                     if (planet == null) continue;
+                    if (planet.Population.Exists(p => p.Player == rival) && !planet.Population.Exists(p => p.Player == me)) continue;
                     count += planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == rival);
                 }
                 return count;
