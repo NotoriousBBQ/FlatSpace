@@ -94,12 +94,12 @@ public static class SimultaneitySelfCheck
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 20f, playerID: p));
             }
             map.Knowledge.Update(map, 3, 8);
-            foreach (var pair in new[] { (0, 1), (1, 0) })
-            {
-                var entry = map.Diplomacy.Get(pair.Item1, pair.Item2);
-                entry.Hostility = 100f;
-                map.Diplomacy.Set(pair.Item1, pair.Item2, entry);
-            }
+            // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
+            // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it
+            // ran after player 0, which is exactly what this check must catch.
+            var seed = map.Diplomacy.Get(0, 1);
+            seed.Hostility = 100f;
+            map.Diplomacy.Set(0, 1, seed);
 
             var order = Enumerable.Range(0, 3).ToList();
             if (reversed) order.Reverse();
@@ -150,8 +150,14 @@ public static class SimultaneitySelfCheck
 
         ok &= Check(forward[0].Orders.Any(s => s.StartsWith("OrderTypeDeclareWar|0|")),
             "precondition: player 0 declares war on 1 (the stance path is exercised)");
+        ok &= Check(!forward[1].Orders.Any(s => s.StartsWith("OrderTypeDeclareWar|1|")),
+            "precondition: player 1 declares nothing, its war is forced on it by player 0");
         ok &= Check(forward[0].StrategyNextTurn == "AIStrategyAmass" && forward[2].StrategyNextTurn == "AIStrategyConsolidate",
             "precondition: the declarer is Amass at the next turn's start, the calm player is not");
+        foreach (var run in new[] { ("forward", forward), ("reverse", reverse) })
+            ok &= Check(run.Item2[1].StrategyAfterRound == "AIStrategyConsolidate" && run.Item2[1].StrategyNextTurn == "AIStrategyAmass",
+                $"{run.Item1}: the forced player is still Consolidate right after the round and Amass at the next turn's start " +
+                $"(got {run.Item2[1].StrategyAfterRound} then {run.Item2[1].StrategyNextTurn}), whatever the player order");
 
         for (var p = 0; p < 3; ++p)
         {
