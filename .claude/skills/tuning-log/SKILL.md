@@ -282,6 +282,18 @@ user asked about one specific thing.
     player the assaulting player is at war with. A run from before diplomacy is comparable only with `diplomacyEnabled` false
     (everyone an enemy, no Amass). The wanted fleet of a Consolidate player at peace is lower than before, so fewer warships
     there is expected.
+  - **Ship combat:** `Combat|<planet>|<attacker>-><victim>|<damageDealt>|<shipsDestroyed>` (P = the attacker) is an event per
+    planet and directed pair each turn they fight, so a standoff repeats; `ColonyShipsLost|<planet>|<owner>|<count>|<byPlayer>`
+    per event; `LossDrop|<rival>|<Start or End>|<lossShare>` when a player's loss share crosses 0.3 (state change only);
+    `Surrender|<rival>|<lossShare>|<pSurrender>|<truceUntil>` once per surrender; `FleetHealth|<warships>|<damaged>|<meanHealthPct>`
+    every 25 turns per player. Report per run: fights (distinct planet and pair, turns each lasts, total damage and ships
+    destroyed per attacker; who wins and how fast), fleet size over time against the earlier no-combat runs (warship starts, the
+    fleet-cap discipline must still hold with zero violations), colony ships lost and where (and whether expansion slowed:
+    `ColonizeStart`/`ColonizeArrive` against the diplomacy-orders baselines), how often `LossDrop` starts and how long it lasts,
+    surrenders (count, the `lossShare` and `pSurrender` at the time, the truce, whether a new declaration followed within 30
+    turns: it must not), and `FleetHealth` (does the damaged share and the mean health recover between fights, i.e. does repair
+    keep pace). Also re-read hostility saturation (the 25-turn `Hostility` lines against the earlier baselines): ship losses
+    now feed it. The surrender terms are tuning levers to revisit with the diplomacy tuning, not yet tuned.
 
 ## 4. Compare against a previous run when one exists
 
