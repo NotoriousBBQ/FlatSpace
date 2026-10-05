@@ -192,6 +192,7 @@ namespace FlatSpace
             private void LogEconomySummary(int turnNumber, int playerCount)
             {
                 if (turnNumber % 25 != 0) return;
+                var healthStats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
                 for (var player = 0; player < playerCount; player++)
                 {
                     var owned = GameAIMap.PlanetList.FindAll(p => p.Owner == player && p.Population.Count > 0);
@@ -209,6 +210,16 @@ namespace FlatSpace
                             AITuningLogger.LogHostility(turnNumber, player, rival, pair.Hostility, pair.MyStrength,
                                 pair.RivalStrength, pair.NearShips);
                         }
+                    // How hurt the player's warships are, so a log shows whether repair keeps pace with combat.
+                    var fleet = GameAIMap.PlanetList.SelectMany(p => p.DockedShips)
+                        .Where(s => s.Owner == player && s.Kind == Ship.ShipKind.WarShip).ToList();
+                    if (fleet.Count > 0)
+                        AITuningLogger.LogFleetHealth(turnNumber, player, fleet.Count, fleet.Count(s => s.Damage > 0f),
+                            100f * fleet.Average(s =>
+                            {
+                                var max = healthStats.Health(s.Template, s.ResearchSnapshot);
+                                return max <= 0f ? 0f : healthStats.CurrentHealth(s) / max;
+                            }));
                 }
             }
 

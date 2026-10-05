@@ -167,6 +167,8 @@ namespace FlatSpace
                 // Stances committed by last turn's orders: the Consolidate/Amass switch and the forced-war lines read them here,
                 // before this turn's routine, so a new strategy takes effect on this turn's routine as it always has.
                 ApplyWarState(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
+                // This turn's combat losses (WarshipsLost results for my player) feed the hostility loss terms below.
+                RecordLosses(results, Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
                 RefreshBlockadeView();
 
                 switch (Strategy)
@@ -226,6 +228,40 @@ namespace FlatSpace
             /// <summary>The rivals whose declaration currently forces me into war (I have not declared on them). Public for the self-check.</summary>
             public IReadOnlyCollection<int> WarForcedRivals => _warForcedLogged;
 
+            // Per rival, the warships it destroyed (turn, ships, strength) over the last lossWindowTurns. Player-private and not
+            // saved: a load starts the window empty (like the pending blockade cuts).
+            private readonly Dictionary<int, List<(int turn, float ships, float strength)>> _losses
+                = new Dictionary<int, List<(int turn, float ships, float strength)>>();
+            // Rivals whose significant-loss drop was logged as Start (log-only, so a load logs each current one once more).
+            private readonly HashSet<int> _lossDropLogged = new HashSet<int>();
+
+            /// <summary>Reads this turn's WarshipsLost results for my own player (the list is shared by every player).</summary>
+            public void RecordLosses(List<Planet.PlanetUpdateResult> results, int turn)
+            {
+                foreach (var result in results)
+                {
+                    if (result.Result != Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost) continue;
+                    if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
+                    if (!_losses.TryGetValue(loss.Attacker, out var list))
+                        _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength)>();
+                    list.Add((turn, loss.Ships, loss.StrengthLost));
+                }
+            }
+
+            /// <summary>lost / (current + lost) over the window, 0 when both are 0; prunes entries older than the window.</summary>
+            public float LossShareToward(int rival, int turn, float myStrength)
+            {
+                if (!_losses.TryGetValue(rival, out var list)) return 0f;
+                var window = AIMap.GameAIConstants.lossWindowTurns;
+                list.RemoveAll(e => turn - e.turn >= window);
+                var lost = list.Sum(e => e.strength);
+                var total = myStrength + lost;
+                return total <= 0f ? 0f : lost / total;
+            }
+
+            private float ShipsLostThisTurn(int rival, int turn)
+                => _losses.TryGetValue(rival, out var list) ? list.Where(e => e.turn == turn).Sum(e => e.ships) : 0f;
+
             /// <summary>
             /// Once per turn, after the strategy routine: updates the hostility score toward each rival I have contact with
             /// (my own private view, written directly), lets the stance matrix decide each rival that is not held and emits an
@@ -244,6 +280,7 @@ namespace FlatSpace
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
                 var contact = AIMap.Knowledge.ContactPlayers(AIMap, me);
                 var myStrength = FleetStrength.Mine(AIMap, me, stats);
+                var warRivals = WarRivals();   // committed stances: a war at this moment (my own, or a forced one)
 
                 var rows = new List<StanceMatrix.Row>();
                 foreach (var rival in contact)
@@ -251,6 +288,8 @@ namespace FlatSpace
                     var pair = diplomacy.Get(me, rival);
                     var rivalStrength = FleetStrength.VisibleOf(AIMap, me, rival, stats);
                     var nearShips = HostilityCalculator.CountNearShips(AIMap, me, rival);
+                    var lossShare = LossShareToward(rival, turn, myStrength);
+                    LogLossDropChange(turn, rival, lossShare, constants);
                     var result = HostilityCalculator.Compute(new HostilityCalculator.Inputs
                     {
                         Previous = pair.Hostility,
@@ -258,6 +297,8 @@ namespace FlatSpace
                         NearShips = nearShips,
                         MyStrength = myStrength,
                         RivalStrength = rivalStrength,
+                        ShipsLost = ShipsLostThisTurn(rival, turn),
+                        LossShare = lossShare,
                     }, constants);
                     pair.Hostility = result.Hostility;
                     pair.CutsTerm = result.CutsTerm;
@@ -273,6 +314,11 @@ namespace FlatSpace
                         Hostility = result.Hostility,
                         Current = pair.Stance,
                         TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
+                        LossShare = lossShare,
+                        AtWar = warRivals.Contains(rival),
+                        MyStrength = myStrength,
+                        RivalStrength = rivalStrength,
+                        Truce = diplomacy.InTruce(me, rival, turn),
                     });
                 }
                 // A war I declared on a rival I no longer have contact with must still be able to end (my own War stance counts
@@ -294,12 +340,30 @@ namespace FlatSpace
                         Hostility = pair.Hostility,
                         Current = Stance.War,
                         TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
+                        LossShare = LossShareToward(rival, turn, myStrength),
+                        AtWar = true,
+                        MyStrength = myStrength,
+                        RivalStrength = 0f,   // out of contact the rival's fleet is not visible, so I am never "weaker": no surrender to it
+                        Truce = diplomacy.InTruce(me, rival, turn),
                     });
                 }
                 diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later
 
                 foreach (var decision in StanceMatrix.Decide(me, rows, constants))
                 {
+                    if (decision.Surrender)
+                    {
+                        // A surrender is an order too (executed in ProcessNewOrders): both stances go to Peace and the pair is locked.
+                        var row = rows.First(r => r.Rival == decision.Rival);
+                        var surrenderPair = diplomacy.Get(me, decision.Rival);
+                        surrenderPair.LossShare = row.LossShare;                                       // read by the Surrender log line
+                        surrenderPair.PSurrender = StanceMatrix.SurrenderWeight(row.LossShare, constants);
+                        diplomacy.Set(me, decision.Rival, surrenderPair);
+                        orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeSurrender,
+                            GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                            0, 0, decision.Rival, string.Empty, string.Empty));
+                        continue;
+                    }
                     if (diplomacy.StanceToward(me, decision.Rival) == decision.Stance) continue;   // the held stance again: nothing to order
                     var pair = diplomacy.Get(me, decision.Rival);
                     pair.PWar = decision.PWar;   // read by GameAI.ExecuteOrder when the order logs the Stance line
@@ -311,6 +375,16 @@ namespace FlatSpace
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                         0, 0, decision.Rival, string.Empty, string.Empty));
                 }
+            }
+
+            // LossDrop Start/End when the loss share crosses significantLossFraction (log-only state, so no repeat every turn).
+            private void LogLossDropChange(int turn, int rival, float lossShare, GameAIConstants constants)
+            {
+                var significant = lossShare >= constants.significantLossFraction;
+                if (significant && _lossDropLogged.Add(rival))
+                    AITuningLogger.LogLossDrop(turn, Player.playerID, rival, true, lossShare);
+                else if (!significant && _lossDropLogged.Remove(rival))
+                    AITuningLogger.LogLossDrop(turn, Player.playerID, rival, false, lossShare);
             }
 
             /// <summary>

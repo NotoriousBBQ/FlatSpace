@@ -168,6 +168,24 @@ public static class AITuningLogger
             pSurrender.ToString("0.###", ci), truceUntil.ToString(ci)) });
     }
 
+    /// <summary>The significant-loss hostility drop started or ended: T&lt;turn&gt;|P&lt;id&gt;|LossDrop|rival|Start or End|lossShare.</summary>
+    public static void LogLossDrop(int turnNumber, int me, int rival, bool started, float lossShare)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, me, "LossDrop", rival.ToString(ci), started ? "Start" : "End",
+            lossShare.ToString("0.##", ci)) });
+    }
+
+    /// <summary>Every 25 turns per player: T&lt;turn&gt;|P&lt;id&gt;|FleetHealth|warships|damaged|meanHealthPct.</summary>
+    public static void LogFleetHealth(int turnNumber, int me, int warships, int damaged, float meanHealthPct)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, me, "FleetHealth", warships.ToString(ci), damaged.ToString(ci),
+            meanHealthPct.ToString("0.#", ci)) });
+    }
+
     public static void LogStrategyChange(int turnNumber, int playerId, string from, string to)
     {
         if (_currentLogPath == null) return;
