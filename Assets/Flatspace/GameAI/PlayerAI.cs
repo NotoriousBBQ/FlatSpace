@@ -1773,7 +1773,12 @@ namespace FlatSpace
                     return;
                 }
 
-                var fleet = new GameAI.GameAIOrder.ShipFleetPayload { Kind = action.Kind, Snapshots = snapshots };
+                var fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                {
+                    Kind = action.Kind,
+                    Snapshots = snapshots,
+                    Damage = origin.PeekShipDamage(action.Kind, Player.playerID, action.Count, skipShips),
+                };
                 // At least 1: a Delayed order with TimingDelay <= 0 is both queued AND executed
                 // immediately by ProcessNewOrders, which would dock the fleet twice.
                 var delay = Math.Max(1, Convert.ToInt32(action.Cost / AIMap.GameAIConstants.defaultTravelSpeed));

@@ -404,14 +404,16 @@ namespace FlatSpace
                 {
                     if (needed <= 0f) break;
                     sentByOrigin.TryGetValue(source.Name, out var skip);
-                    var snapshots = _map.GetPlanet(source.Name)
-                        .PeekShipSnapshots(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
+                    var sourcePlanet = _map.GetPlanet(source.Name);
+                    var snapshots = sourcePlanet.PeekShipSnapshots(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
+                    var damages = sourcePlanet.PeekShipDamage(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
 
                     var taken = 0;
-                    foreach (var snapshot in snapshots)
+                    for (var i = 0; i < snapshots.Count; i++)
                     {
                         if (needed <= 0f) break;
-                        var shipOffense = _stats != null ? _stats.Offense(template, snapshot) : 0f;
+                        // A wounded ship sends less offense: the force is sized by what each ship deals now.
+                        var shipOffense = _stats != null ? _stats.EffectiveOffense(template, snapshots[i], damages[i]) : 0f;
                         needed -= shipOffense;
                         offense += shipOffense;
                         taken++;

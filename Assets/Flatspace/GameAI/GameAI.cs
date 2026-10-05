@@ -78,14 +78,18 @@ namespace FlatSpace
                 {
                     public Ship.ShipKind Kind = Ship.ShipKind.WarShip;
                     public List<List<string>> Snapshots = new List<List<string>>();
+                    public List<float> Damage = new List<float>();   // one per snapshot; a short or empty list means full health
+
+                    public float DamageAt(int index) => index >= 0 && index < Damage.Count ? Damage[index] : 0f;
 
                     public List<SaveLoadSystem.GameSave.ShipSave> ToSave(int owner)
                     {
-                        return Snapshots.Select(snapshot => new SaveLoadSystem.GameSave.ShipSave
+                        return Snapshots.Select((snapshot, i) => new SaveLoadSystem.GameSave.ShipSave
                         {
                             kind = Kind,
                             owner = owner,
                             researchSnapshot = new List<string>(snapshot),
+                            damage = DamageAt(i),
                         }).ToList();
                     }
 
@@ -99,6 +103,7 @@ namespace FlatSpace
                             Snapshots = ships
                                 .Select(s => new List<string>(s.researchSnapshot ?? new List<string>()))
                                 .ToList(),
+                            Damage = ships.Select(s => s.damage).ToList(),
                         };
                     }
                 }
@@ -436,7 +441,7 @@ namespace FlatSpace
                 for (var i = 0; i < count; i++)
                 {
                     if (order.Fleet != null && i < order.Fleet.Snapshots.Count)
-                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i]);
+                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i], order.Fleet.DamageAt(i));
                     else
                         target.DockShipRebuiltSnapshot(kind, order.PlayerId);
                 }

@@ -51,6 +51,7 @@ public class SaveLoadSystem : MonoBehaviour
             public Ship.ShipKind kind;
             public int owner;
             public List<string> researchSnapshot;
+            public float damage;   // damage taken, 0 = full health (older saves have no key and load at full health)
         }
 
         [Serializable]
@@ -243,7 +244,8 @@ public class SaveLoadSystem : MonoBehaviour
                     {
                         kind = ship.Kind,
                         owner = ship.Owner,
-                        researchSnapshot = new List<string>(ship.ResearchSnapshot)
+                        researchSnapshot = new List<string>(ship.ResearchSnapshot),
+                        damage = ship.Damage
                     });
                 }
 
