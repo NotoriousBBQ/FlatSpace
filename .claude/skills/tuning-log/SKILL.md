@@ -267,6 +267,19 @@ user asked about one specific thing.
     (a `Divert` whose last field is not `-`: the declined detour cost, which is above `colonistDetourDivertRatio` times that
     divert's `cost`). Baseline before the rule (4p.json, 8 runs): 14 detours averaging cost 1787, 79% never arrived; 84 diverts
     averaging 533, 11% never arrived. A detour still long after the rule means no diversion candidate existed.
+  - **Diplomacy:** `Stance|<rival>|<Peace or War>|<hostility>|<cutsTerm>|<nearTerm>|<strengthTerm>|<pWar>` is one line per stance
+    change, `WarForced|<rival>|<Start or End>` one per war a rival declared on a player that has contact with it,
+    `Hostility|<rival>|<H>|<myStrength>|<rivalStrength>|<nearShips>` every 25 turns per player and rival with contact, and
+    `StrategyChange` now also logs Consolidate to Amass and back. Report: the first `Stance ... War` turn per player and pair;
+    the share of players in Amass over time (from `StrategyChange`); war length (a War to the next Peace per pair); forced
+    wars (`WarForced Start`) against chosen ones (`Stance ... War`) and the turns between a declaration and the forced start;
+    **stance flips** within 20 turns of the previous change for the same pair (the stickiness check: many means raise
+    `stanceStickiness` or `stanceHoldTurns`); where hostility settles (the `Hostility` lines against the 30 midpoint, and which
+    term dominates in the `Stance` lines); warship starts per planet-turn while in Amass against while in Consolidate (the
+    table's effect), and fleet-cap violations (must stay 0 under Amass); and that `AssaultTarget` lines only name planets of a
+    player the assaulting player is at war with. A run from before diplomacy is comparable only with `diplomacyEnabled` false
+    (everyone an enemy, no Amass). The wanted fleet of a Consolidate player at peace is lower than before, so fewer warships
+    there is expected.
 
 ## 4. Compare against a previous run when one exists
 
