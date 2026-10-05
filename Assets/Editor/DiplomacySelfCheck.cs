@@ -28,6 +28,7 @@ public static class DiplomacySelfCheck
         ok &= RunStrategySwitchCheck();
         ok &= RunForcedWarCheck();
         ok &= RunCutsAndLegacyCheck();
+        ok &= RunStanceSaveCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -731,6 +732,50 @@ public static class DiplomacySelfCheck
                 "legacy: every contact player is an enemy and the assault gets no filter");
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).Hostility, 0f), "legacy: no hostility is computed");
         }
+        return ok;
+    }
+
+    public static bool RunStanceSaveCheck()
+    {
+        var ok = true;
+        var entry = new DiplomacyState.Entry { Rival = 2, Stance = Stance.War, Hostility = 61.5f, LastChangeTurn = 140 };
+        var back = SaveLoadSystem.GameSave.StanceSave.From(entry).ToEntry();
+        ok &= Check(back.Rival == 2 && back.Stance == Stance.War && Near(back.Hostility, 61.5f) && back.LastChangeTurn == 140,
+            "From and ToEntry are inverse");
+
+        var save = new SaveLoadSystem.GameSave.PlayerSave
+        {
+            playerId = 1,
+            stances = new List<SaveLoadSystem.GameSave.StanceSave> { SaveLoadSystem.GameSave.StanceSave.From(entry) },
+        };
+        var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlayerSave>(JsonUtility.ToJson(save));
+        ok &= Check(loaded.stances != null && loaded.stances.Count == 1 && loaded.stances[0].rival == 2
+                    && loaded.stances[0].stance == (int)Stance.War && Near(loaded.stances[0].hostility, 61.5f)
+                    && loaded.stances[0].lastChangeTurn == 140,
+            "a PlayerSave's stances survive a JsonUtility round trip");
+
+        var state = new DiplomacyState();
+        state.SetStance(1, 2, Stance.War, 140);
+        var pair = state.Get(1, 2);
+        pair.Hostility = 61.5f;
+        state.Set(1, 2, pair);
+        var restored = new DiplomacyState();
+        restored.Restore(1, JsonUtility.FromJson<SaveLoadSystem.GameSave.PlayerSave>(
+            JsonUtility.ToJson(new SaveLoadSystem.GameSave.PlayerSave
+            {
+                playerId = 1,
+                stances = state.Snapshot(1).ConvertAll(SaveLoadSystem.GameSave.StanceSave.From),
+            })).stances.ConvertAll(s => s.ToEntry()));
+        ok &= Check(restored.StanceToward(1, 2) == Stance.War && Near(restored.Hostility(1, 2), 61.5f)
+                    && restored.TurnsSinceChange(1, 2, 150) == 10,
+            "the whole path state -> save -> JSON -> restore keeps stance, hostility and the hold");
+
+        var older = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlayerSave>("{\"playerId\":1}");
+        var none = new DiplomacyState();
+        none.SetStance(1, 2, Stance.War, 5);
+        none.Restore(1, older.stances?.ConvertAll(s => s.ToEntry()));
+        ok &= Check(none.StanceToward(1, 2) == Stance.Peace && none.Snapshot(1).Count == 0,
+            "an older save (no stances) restores all Peace");
         return ok;
     }
 
