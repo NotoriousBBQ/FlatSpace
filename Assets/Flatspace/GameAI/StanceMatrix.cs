@@ -100,6 +100,43 @@ namespace FlatSpace
             public static float PeaceWeight(Row row, GameAIConstants constants)
                 => (1f - WarProbability(row.Hostility, constants)) * (row.Current == Stance.Peace ? constants.stanceStickiness : 1f);
 
+            public struct ChoiceWeights
+            {
+                public float Peace;
+                public float War;
+                public float Surrender;
+            }
+
+            /// <summary>
+            /// The weights a row offers. When a surrender is on offer its weight IS its probability: Surrender / (Peace + War +
+            /// Surrender) equals SurrenderWeight, held or not, so the logged pSurrender is the real chance (without the scaling
+            /// the stickiness on Peace and War shrank it once the stance hold ended). Inside the hold the stance held keeps
+            /// 1 - surrender and the other stance has no weight; inside a truce there is no War and no Surrender.
+            /// </summary>
+            public static ChoiceWeights Weights(Row row, GameAIConstants constants)
+            {
+                var surrender = CanSurrender(row) ? SurrenderWeight(row.LossShare, constants) : 0f;
+                float peace, war;
+                if (row.TurnsSinceChange < constants.stanceHoldTurns)
+                {
+                    peace = row.Current == Stance.Peace ? 1f - surrender : 0f;
+                    war = row.Current == Stance.War ? 1f - surrender : 0f;
+                }
+                else
+                {
+                    peace = PeaceWeight(row, constants);
+                    war = row.Truce ? 0f : WarWeight(row, constants);
+                    var sum = peace + war;
+                    if (surrender > 0f && sum > 0f)
+                    {
+                        var scale = (1f - surrender) / sum;
+                        peace *= scale;
+                        war *= scale;
+                    }
+                }
+                return new ChoiceWeights { Peace = peace, War = war, Surrender = surrender };
+            }
+
             public static List<Decision> Decide(int player, List<Row> rows, GameAIConstants constants)
             {
                 var matrix = new ScoreMatrix<StanceDecisionElement, StanceChoiceElement, StanceAction>(new StanceDecisionComparer())
@@ -111,27 +148,30 @@ namespace FlatSpace
                 foreach (var row in rows.OrderBy(r => r.Rival))
                 {
                     var held = row.TurnsSinceChange < constants.stanceHoldTurns;   // held since its last change
-                    var surrenderWeight = CanSurrender(row) ? SurrenderWeight(row.LossShare, constants) : 0f;
-                    if (held && surrenderWeight <= 0f) continue;
+                    var w = Weights(row, constants);
+                    if (held && w.Surrender <= 0f) continue;
                     pWar[row.Rival] = WarProbability(row.Hostility, constants);
                     var choices = new List<StanceChoiceElement>();
                     if (held)
                     {
                         // A surrender needs no hold: inside the hold the row is only "keep the stance" or "surrender".
-                        choices.Add(new StanceChoiceElement { Rival = row.Rival, Stance = row.Current, Weight = 1f - surrenderWeight });
+                        choices.Add(new StanceChoiceElement
+                        {
+                            Rival = row.Rival, Stance = row.Current, Weight = row.Current == Stance.War ? w.War : w.Peace,
+                        });
                     }
                     else
                     {
-                        choices.Add(new StanceChoiceElement { Rival = row.Rival, Stance = Stance.Peace, Weight = PeaceWeight(row, constants) });
+                        choices.Add(new StanceChoiceElement { Rival = row.Rival, Stance = Stance.Peace, Weight = w.Peace });
                         // Inside a truce the War choice is left out altogether: a zero-weight choice could still be picked when
                         // every weight in the row is 0 (a ScoreMatrix row picks uniformly then).
                         if (!row.Truce)
-                            choices.Add(new StanceChoiceElement { Rival = row.Rival, Stance = Stance.War, Weight = WarWeight(row, constants) });
+                            choices.Add(new StanceChoiceElement { Rival = row.Rival, Stance = Stance.War, Weight = w.War });
                     }
-                    if (surrenderWeight > 0f)
+                    if (w.Surrender > 0f)
                         choices.Add(new StanceChoiceElement
                         {
-                            Rival = row.Rival, Stance = Stance.Peace, IsSurrender = true, Weight = surrenderWeight,
+                            Rival = row.Rival, Stance = Stance.Peace, IsSurrender = true, Weight = w.Surrender,
                         });
                     matrix.MatrixElements.Add(
                         new StanceDecisionElement { Target = row.Rival.ToString(CultureInfo.InvariantCulture), Priority = -rank++ },

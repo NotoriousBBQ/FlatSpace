@@ -49,6 +49,11 @@ public static class SimultaneitySelfCheck
         constants.defaultTravelSpeed = 1f;
         constants.stanceSteepness = 0.01f;     // exactly 0 or 1 war probability: no roulette luck in the stance
         constants.stanceMidpoint = 30f;
+        if (withLosses)
+        {
+            constants.surrenderMidpoint = 0.1f;    // a loss share of about 0.59 then gives a surrender weight of exactly 1
+            constants.surrenderSteepness = 0.01f;
+        }
         var research = WarshipSelfCheck.MakeResearch();
         var mapGo = new GameObject("SimultaneityMap");
         var gos = new List<GameObject> { mapGo };
@@ -100,6 +105,9 @@ public static class SimultaneitySelfCheck
                 // Combat losses reach every player through the shared results list: player 1 lost 5 ships to player 0 (a loss
                 // share above the significant threshold) while player 0 is the stronger side, so the loss terms and the Surrender
                 // choice are exercised in both player orders.
+                // Player 0 is already at war with player 1 (the stance was committed earlier), so player 1 is at war, weaker (2 ships
+                // against 5) and has lost most of its fleet: it must be offered, and with these constants take, a Surrender.
+                map.Diplomacy.SetStance(0, 1, Stance.War, 0);
                 WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 0, 3);
                 results.Add(new Planet.PlanetUpdateResult("C",
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost,
@@ -128,6 +136,9 @@ public static class SimultaneitySelfCheck
             foreach (var o in all.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
                                              || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeMakePeace))
                 GameAI.ApplyStanceOrder(map.Diplomacy, o, 10);
+            foreach (var o in all.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeSurrender))
+                GameAI.ApplySurrender(map.Diplomacy, o, 10, constants.surrenderTruceTurns);
+            map.Diplomacy.Turn = 11;
             foreach (var p in order) ais[p].ApplyWarState(11);
 
             var outcome = new Dictionary<int, Outcome>();
@@ -160,6 +171,11 @@ public static class SimultaneitySelfCheck
         var ok = true;
         var forward = RunRound(reversed: false, withLosses: true);
         var reverse = RunRound(reversed: true, withLosses: true);
+        // Precondition (review): the fight must really exercise Surrender, or the equality below compares nothing.
+        ok &= Check(forward[1].Orders.Any(s => s.StartsWith("OrderTypeSurrender|1|")) && reverse[1].Orders.Any(s => s.StartsWith("OrderTypeSurrender|1|")),
+            "precondition: the beaten, weaker player 1 emits a Surrender order in both player orders");
+        ok &= Check(forward[1].Stances.Contains("0:Peace") && forward[0].Stances.Contains("1:Peace"),
+            "precondition: the executed surrender leaves both players at Peace");
         for (var p = 0; p < 3; ++p)
         {
             ok &= Check(forward[p].Orders.SequenceEqual(reverse[p].Orders),

@@ -1114,6 +1114,35 @@ public static class DiplomacySelfCheck
         }
         finally { Object.DestroyImmediate(c); }
 
+        // The chance of surrendering is the surrender weight itself, held or not (review: with stickiness it used to shrink once the
+        // stance hold ended, so the logged pSurrender overstated it). Surrender / (Peace + War + Surrender) == SurrenderWeight.
+        var d = ScriptableObject.CreateInstance<GameAIConstants>();   // the real defaults: stickiness 3, surrender 0.6 / 0.1
+        try
+        {
+            var sw = StanceMatrix.SurrenderWeight(0.6f, d);           // 0.5
+            StanceMatrix.Row Hot(int sinceChange, Stance current, bool atWar = true, bool truce = false)
+                => new StanceMatrix.Row
+                {
+                    Rival = 1, Hostility = 40f, Current = current, TurnsSinceChange = sinceChange, LossShare = 0.6f,
+                    AtWar = atWar, MyStrength = 10f, RivalStrength = 100f, Truce = truce,
+                };
+            foreach (var current in new[] { Stance.War, Stance.Peace })
+                foreach (var since in new[] { 1, 100 })       // inside the hold, and after it
+                {
+                    var w = StanceMatrix.Weights(Hot(since, current), d);
+                    var total = w.Peace + w.War + w.Surrender;
+                    ok &= Check(Near(w.Surrender / total, sw),
+                        $"P(surrender) is the surrender weight {sw} (current {current}, {since} turns since a change), got {w.Surrender / total}");
+                }
+            var calm = StanceMatrix.Weights(Hot(100, Stance.War, atWar: false), d);
+            ok &= Check(calm.Surrender == 0f && Near(calm.Peace, StanceMatrix.PeaceWeight(Hot(100, Stance.War, atWar: false), d))
+                        && Near(calm.War, StanceMatrix.WarWeight(Hot(100, Stance.War, atWar: false), d)),
+                "no surrender on offer: Peace and War keep their plain weights, unchanged");
+            var locked = StanceMatrix.Weights(Hot(100, Stance.Peace, truce: true), d);
+            ok &= Check(locked.War == 0f && locked.Surrender == 0f, "inside a truce there is no War and no Surrender weight");
+        }
+        finally { Object.DestroyImmediate(d); }
+
         // End to end: PlayerAI emits OrderTypeSurrender, stores the numbers for the log line, and the order executes.
         using (var f = WithRival())
         {
