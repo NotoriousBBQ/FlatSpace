@@ -366,7 +366,7 @@ public static class DiplomacySelfCheck
 
             var industry = new (string subType, float weight)[]
             {
-                ("Food", 1.0f), ("Industry", 1.5f), ("Grotsits", 1.5f), ("Research", 0.5f), ("ColonyShip", 0.5f),
+                ("Food", 1.0f), ("Industry", 1.5f), ("Grotsits", 1.5f), ("Research", 0.5f), ("ColonyShip", 1.0f),
                 ("Warship", 4.0f), ("WarshipUpdate", 4.0f),
             };
             foreach (var (subType, weight) in industry)

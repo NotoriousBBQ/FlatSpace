@@ -1342,7 +1342,7 @@ namespace FlatSpace
                     { "Industry",      1.5f },
                     { "Grotsits",      1.5f },
                     { "Research",      0.5f },
-                    { "ColonyShip",    0.5f },  // a player at war colonizes less
+                    { "ColonyShip",    1.0f },  // as Consolidate: 0.5 left ~10 planets unclaimed by T375 on 4p.json (arrivals -23%)
                     { "Warship",       4.0f },
                     { "WarshipUpdate", 4.0f },  // same as Warship
                 };

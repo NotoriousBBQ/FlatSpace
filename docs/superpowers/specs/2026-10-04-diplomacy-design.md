@@ -98,7 +98,7 @@ A missing strategy key falls back to a neutral weight, so every key gets an entr
 | Research, Consolidate | 1.0 | 3.0 | 2.0 | 1.0 | 0.5 | 2.5 | |
 | **Research, Amass** | 1.0 | 2.5 | 2.0 | 1.0 | 0.5 | **4.0** | |
 | Industry, Consolidate | 1.0 | 2.0 | 1.5 | 1.0 | 1.0 | 2.5 | 2.5 |
-| **Industry, Amass** | 1.0 | 1.5 | 1.5 | 0.5 | 0.5 | **4.0** | **4.0** |
+| **Industry, Amass** | 1.0 | 1.5 | 1.5 | 0.5 | 1.0 | **4.0** | **4.0** |
 
 These are tuning starting points. `ProcessResults`'s Amass case runs the Expand routine (like Consolidate). The rules written as
 "Consolidate only" (the Warship fleet-shortfall boost, the ColonyShip x2 while targets remain, the chokepoint colonization tilt, the
