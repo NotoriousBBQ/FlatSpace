@@ -16,6 +16,7 @@ public static class CombatSelfCheck
         ok &= RunEffectiveStatsCheck();
         ok &= RunDamageTravelsCheck();
         ok &= RunEffectiveReadersCheck();
+        ok &= RunCombatResolutionCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -247,6 +248,137 @@ public static class CombatSelfCheck
             ok &= Check(FleetUIController.FormatShipRow(f.P("A").DockedShips[0], f.Research)
                         == "WarShip - Warship (Spd 150, HP 100, Off 10, Def 5)",
                 "an undamaged ship's row is unchanged");
+        }
+        return ok;
+    }
+
+    private static List<Planet.PlanetUpdateResult> Results() => new List<Planet.PlanetUpdateResult>();
+
+    private static List<CombatReport> Resolve(Fixture f, List<Planet.PlanetUpdateResult> results)
+        => CombatSystem.Resolve(f.Map, f.Stats, f.Constants, 1, results);
+
+    private static float DamageOf(Fixture f, string planet, int owner, int index)
+        => f.P(planet).DockedShips.Where(s => s.Owner == owner).ElementAt(index).Damage;
+
+    private const Planet.PlanetUpdateResult.PlanetUpdateResultType WarshipsLost =
+        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost;
+
+    // Who fights, how much damage lands, which ship it lands on, simultaneity, the hostility-weighted split, one pool per victim.
+    public static bool RunCombatResolutionCheck()
+    {
+        var ok = true;
+
+        using (var f = Fixture.Line())    // peace: nothing happens
+        {
+            f.Ships("A", 0, 2); f.Ships("A", 1, 2);
+            var results = Results();
+            ok &= Check(Resolve(f, results).Count == 0 && results.Count == 0 && DamageOf(f, "A", 0, 0) == 0f,
+                "players at peace do not fight");
+        }
+
+        using (var f = Fixture.Line())    // war 3 against 2: simultaneous, first ship takes it all (factor 20/25 = 0.8)
+        {
+            f.Ships("A", 0, 3); f.Ships("A", 1, 2); f.War(0, 1);
+            var results = Results();
+            var reports = Resolve(f, results);
+            ok &= Check(Near(DamageOf(f, "A", 1, 0), 24f) && Near(DamageOf(f, "A", 1, 1), 0f),
+                "player 0's pool of 30 lands on player 1's first ship: 30 x 0.8 = 24");
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 16f) && Near(DamageOf(f, "A", 0, 1), 0f),
+                "simultaneous: player 1's pool of 20 lands on player 0's first ship: 16");
+            ok &= Check(results.Count == 0, "no ship died, so no loss result");
+            ok &= Check(reports.Count == 2 && Near(reports.First(r => r.Attacker == 0).DamageDealt, 24f)
+                        && Near(reports.First(r => r.Attacker == 1).DamageDealt, 16f),
+                "one report per directed pair with the damage dealt");
+        }
+
+        using (var f = Fixture.Line())    // focus fire: most damaged first, overflow carries, a dying ship still fires
+        {
+            f.Ships("A", 0, 10);
+            f.Ships("A", 1, 1, 90f);      // dock order first: health 10
+            f.Ships("A", 1, 1);           // health 100
+            f.War(0, 1);
+            var results = Results();
+            Resolve(f, results);
+            var survivors = f.P("A").DockedShips.Where(s => s.Owner == 1).ToList();
+            ok &= Check(survivors.Count == 1 && Near(survivors[0].Damage, 70f),
+                "pool 100: the weakest ship (needs 10 / 0.8 = 12.5) dies, the rest 87.5 x 0.8 = 70 lands on the next");
+            ok &= Check(Near(DamageOf(f, "A", 0, 0), 8.8f),
+                "the dying ship still fired this turn: 1 + 10 = 11 offense, x 0.8 = 8.8 on player 0's first ship");
+            var loss = results.Where(r => r.Result == WarshipsLost).ToList();
+            ok &= Check(loss.Count == 1 && loss[0].PlayerID == 1 && loss[0].Name == "A", "one WarshipsLost result, victim player 1, at A");
+            var data = loss.Count == 1 ? (CombatLoss)loss[0].Data : null;
+            ok &= Check(data != null && data.Attacker == 0 && Near(data.Ships, 1f) && Near(data.StrengthLost, 15f),
+                "attacker 0, 1 ship, strength 15 (effective offense 1 x (health 10 + Defense 5))");
+        }
+
+        using (var f = Fixture.Line())    // defense: Defense 15 gives 20/35
+        {
+            f.Ships("A", 0, 3);
+            f.P("A").DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "Def 1", "Def 2", "Def 3", "Def 4", "Def 5" });
+            f.War(0, 1);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 1, 0), 30f * 20f / 35f), "Defense 15 lowers a hit to 20/35 of its offense");
+        }
+
+        foreach (var reversedDock in new[] { false, true })    // three players: hostility-weighted split, one pool per victim
+        {
+            using (var f = Fixture.Line())
+            {
+                foreach (var owner in reversedDock ? new[] { 2, 1, 0 } : new[] { 0, 1, 2 }) f.Ships("A", owner, 1);
+                f.War(0, 1); f.War(0, 2);
+                var h01 = f.Map.Diplomacy.Get(0, 1); h01.Hostility = 30f; f.Map.Diplomacy.Set(0, 1, h01);
+                var h02 = f.Map.Diplomacy.Get(0, 2); h02.Hostility = 10f; f.Map.Diplomacy.Set(0, 2, h02);
+                Resolve(f, Results());
+                var tag = reversedDock ? " (docked in reverse order)" : "";
+                ok &= Check(Near(DamageOf(f, "A", 1, 0), 6f), "player 0's pool of 10 splits 30:10, so player 1 takes 7.5 x 0.8 = 6" + tag);
+                ok &= Check(Near(DamageOf(f, "A", 2, 0), 2f), "and player 2 takes 2.5 x 0.8 = 2" + tag);
+                ok &= Check(Near(DamageOf(f, "A", 0, 0), 16f),
+                    "one pool per victim: players 1 and 2 are at war with 0 only, their 10 + 10 land together: 20 x 0.8 = 16" + tag);
+            }
+        }
+
+        using (var f = Fixture.Line())    // attribution: the victim's loss is shared by each attacker's part of its pool
+        {
+            f.Ships("A", 0, 3); f.Ships("A", 2, 1); f.Ships("A", 1, 1, 95f);
+            f.War(0, 1); f.War(2, 1);
+            var results = Results();
+            Resolve(f, results);
+            var losses = results.Where(r => r.Result == WarshipsLost).OrderBy(r => ((CombatLoss)r.Data).Attacker).ToList();
+            ok &= Check(losses.Count == 2 && ((CombatLoss)losses[0].Data).Attacker == 0 && ((CombatLoss)losses[1].Data).Attacker == 2,
+                "one loss result per attacker");
+            ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).Ships, 0.75f) && Near(((CombatLoss)losses[1].Data).Ships, 0.25f),
+                "the one ship lost is shared 30:10 = 0.75 and 0.25");
+            ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).StrengthLost, 3.75f)
+                        && Near(((CombatLoss)losses[1].Data).StrengthLost, 1.25f),
+                "its strength 0.5 x (5 + 5) = 5 is shared the same way");
+        }
+
+        using (var f = Fixture.Line())    // legacy mode: no stances, no combat
+        {
+            f.Ships("A", 0, 2); f.Ships("A", 1, 2); f.War(0, 1);
+            f.Map.Diplomacy.Enabled = false;
+            var results = Results();
+            ok &= Check(Resolve(f, results).Count == 0 && DamageOf(f, "A", 1, 0) == 0f && results.Count == 0, "legacy mode: combat is off");
+        }
+
+        using (var f = Fixture.Line())    // ownerless ships neither fire nor take fire
+        {
+            f.Ships("A", 0, 1); f.Ships("A", 1, 1); f.Ships("A", Planet.NoOwner, 5); f.War(0, 1);
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 1, 0), 8f), "ownerless ships add nothing to a pool: 10 x 0.8 = 8");
+            ok &= Check(Near(DamageOf(f, "A", Planet.NoOwner, 0), 0f), "and take no damage");
+        }
+
+        using (var f = Fixture.Line())    // a Health stat of 0: no division by zero, takes no part
+        {
+            f.Ships("A", 0, 1); f.Ships("A", 1, 1); f.Ships("A", 1, 1); f.War(0, 1);
+            var zero = WarshipSelfCheck.MakeTemplate();
+            zero.shipHealth = 0f; zero.shipHealthMax = 0f;
+            f.P("A").DockedShips.Where(s => s.Owner == 1).Last().Template = zero;
+            Resolve(f, Results());
+            ok &= Check(Near(DamageOf(f, "A", 1, 0), 8f) && Near(DamageOf(f, "A", 1, 1), 0f),
+                "the ship with no Health stat is never targeted and the real ship takes the 8");
+            Object.DestroyImmediate(zero);
         }
         return ok;
     }

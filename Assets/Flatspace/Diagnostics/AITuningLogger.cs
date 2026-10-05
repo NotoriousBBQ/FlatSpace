@@ -127,6 +127,12 @@ public static class AITuningLogger
                 case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeDead:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "PlanetDead", result.Name));
                     break;
+                // Colony ships destroyed in combat: planet, owner, how many, and the lowest-numbered rival that did it.
+                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost:
+                    if (result.Data is FlatSpace.AI.ColonyLoss colonyLoss)
+                        lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonyShipsLost", result.Name,
+                            result.PlayerID.ToString(), colonyLoss.Count.ToString(), colonyLoss.ByPlayer.ToString()));
+                    break;
             }
         }
         AppendLines(lines);
@@ -142,6 +148,15 @@ public static class AITuningLogger
     {
         if (_currentLogPath == null || string.IsNullOrEmpty(itemName)) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ResearchComplete", itemName) });
+    }
+
+    /// <summary>Combat at a planet: T&lt;turn&gt;|P&lt;attacker&gt;|Combat|planet|attacker-&gt;victim|damageDealt|shipsDestroyed (ships may be fractional: the attacker's share).</summary>
+    public static void LogCombat(int turnNumber, int attacker, string planet, int victim, float damage, float ships)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, attacker, "Combat", planet, $"{attacker}->{victim}",
+            damage.ToString("0.#", ci), ships.ToString("0.##", ci)) });
     }
 
     public static void LogStrategyChange(int turnNumber, int playerId, string from, string to)

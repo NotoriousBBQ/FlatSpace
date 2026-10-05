@@ -140,6 +140,7 @@ namespace FlatSpace
                 var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
+                RunCombat(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
@@ -153,6 +154,16 @@ namespace FlatSpace
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
+            }
+
+            // Docked warships of players at war fight before the planets update, so this turn's losses reach ProcessResults.
+            private void RunCombat(List<Planet.PlanetUpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                var turn = Gameboard.Instance.TurnNumber;
+                foreach (var report in CombatSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results))
+                    AITuningLogger.LogCombat(turn, report.Attacker, report.Planet, report.Victim, report.DamageDealt,
+                        report.ShipsDestroyed);
             }
 
             // One GrotsitsShort line when a populated planet becomes short of grotsits (Start) or recovers or empties (End), with
