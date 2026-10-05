@@ -138,7 +138,7 @@ public class GameAIConstants : ScriptableObject
     // War probability = 1 / (1 + e^(-(hostility - stanceMidpoint) / stanceSteepness)). The stance held now has its weight
     // multiplied by stanceStickiness, and a stance is not reconsidered for stanceHoldTurns turns after it changes.
     public float stanceMidpoint = 30f;
-    public float stanceSteepness = 8f;
+    public float stanceSteepness = 4f;   // 8 gave about 2.3% war per turn at hostility 0 (random early wars); 4 gives about 0.06%
     public float stanceStickiness = 3f;
     public int stanceHoldTurns = 10;
 

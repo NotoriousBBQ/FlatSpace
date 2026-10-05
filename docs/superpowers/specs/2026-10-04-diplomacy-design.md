@@ -76,7 +76,7 @@ A new variant of the `ScoreMatrix` machinery: one **independent row per rival** 
 is wrong here (War toward rival 1 must not remove War toward rival 2), so the variant decides each row on its own and reuses the
 same `WeightedPick` roulette (`weightSelector`). The generic class is not changed for its existing users.
 
-- Weights: `pWar = 1 / (1 + e^(-(H - stanceMidpoint) / stanceSteepness))` (midpoint 30, steepness 8); War gets `pWar`, Peace
+- Weights: `pWar = 1 / (1 + e^(-(H - stanceMidpoint) / stanceSteepness))` (midpoint 30, steepness 4 after the first tuning run; 8 at first); War gets `pWar`, Peace
   `1 - pWar`.
 - The current stance's weight is multiplied by `stanceStickiness` (3).
 - A row is not evaluated for `stanceHoldTurns` (10) turns after a change.
@@ -127,7 +127,7 @@ Peace at 0 hostility. The effective state is derived, so nothing else is saved.
 
 ## Tunables (`GameAIConstants`, all with in-code defaults, no asset edit needed)
 `diplomacyEnabled` true, `hostilityPerCut` 5, `hostilityPerNearShip` 0.5, `hostilityStrengthWeight` 1, `hostilityDecay` 0.05,
-`hostilityMax` 100, `stanceMidpoint` 30, `stanceSteepness` 8, `stanceStickiness` 3, `stanceHoldTurns` 10.
+`hostilityMax` 100, `stanceMidpoint` 30, `stanceSteepness` 4 (8 at first; raised the curve's steepness after the first tuning run showed random early wars at hostility 0), `stanceStickiness` 3, `stanceHoldTurns` 10.
 
 ## Proposed tuning log output
 All in `T<turn>|P<playerId>|<EventCode>|<fields...>`. Added in the task that builds the stance matrix and the strategy switch.
