@@ -15,6 +15,8 @@ public static class DiplomacySelfCheck
         var ok = RunDiplomacyStateCheck();
         ok &= RunContactPlayersCheck();
         ok &= RunCutAttributionCheck();
+        ok &= RunFleetStrengthCheck();
+        ok &= RunHostilityCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -171,6 +173,86 @@ public static class DiplomacySelfCheck
                         && !f.Map.Knowledge.HasContactWith(f.Map, 0, 3),
                 "contact is per rival");
             ok &= Check(!f.Map.Knowledge.ContactPlayers(f.Map, 0).Contains(0), "I am never my own contact");
+        }
+        return ok;
+    }
+
+    // Strength = sum over docked warships of Offense x (Health + Defense). The test template is offense 10, health 100,
+    // defense 5, so one unresearched ship is 10 x 105 = 1050.
+    public static bool RunFleetStrengthCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            var stats = new WarshipStats(f.Research);
+            f.Ships("A", 0, 2);
+            f.Ships("B", 1, 3);
+            f.Ships("D", 1, 4);                      // beyond what player 0 knows once knowledge is small
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+
+            ok &= Check(Near(FleetStrength.Of(f.P("A").DockedShips.Where(s => s.Owner == 0), stats), 2100f),
+                "two warships are 2 x 1050; the colony ship adds nothing");
+            ok &= Check(Near(FleetStrength.Of(new List<Ship>(), stats), 0f), "no ships: 0");
+            ok &= Check(Near(FleetStrength.Mine(f.Map, 0, stats), 2100f), "Mine counts my docked warships anywhere");
+
+            f.Map.Knowledge.Update(f.Map, 3, 2);     // source + direct neighbours: player 0 knows A and B only
+            ok &= Check(f.Map.Knowledge.IsKnown(0, "B") && !f.Map.Knowledge.IsKnown(0, "D"), "precondition: B known, D unknown");
+            ok &= Check(Near(FleetStrength.VisibleOf(f.Map, 0, 1, stats), 3150f),
+                "the rival's strength counts only on planets I know: 3 x 1050 on B, not the ships on D");
+            ok &= Check(Near(FleetStrength.VisibleOf(f.Map, 0, 2, stats), 0f), "a player with no ships there is 0");
+
+            var withResearch = new List<string> { "Off 1" };      // one Offense tier: +4 offense (10 to 14)
+            f.P("B").DockShipFromSave(Ship.ShipKind.WarShip, 1, withResearch);
+            ok &= Check(FleetStrength.VisibleOf(f.Map, 0, 1, stats) > 3150f + 1050f,
+                "a researched ship is worth more than an unresearched one");
+        }
+        return ok;
+    }
+
+    public static bool RunHostilityCheck()
+    {
+        var ok = true;
+        var c = ScriptableObject.CreateInstance<GameAIConstants>();   // defaults: cut 5, near 0.5, weight 1, decay 0.05, max 100
+        try
+        {
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(2000f, 1000f, 1f), 1f), "twice as strong: log2(2) = +1");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(4000f, 1000f, 1f), 2f), "four times as strong: +2");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(16000f, 1000f, 1f), 2f), "sixteen times as strong clamps at +2");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(1000f, 4000f, 1f), -2f), "a quarter as strong: -2");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(1000f, 64000f, 1f), -2f), "far weaker clamps at -2");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(500f, 0f, 1f), 2f), "a rival with no visible fleet counts as +2");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(0f, 500f, 1f), -2f), "no fleet against a fleet: -2");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(0f, 0f, 1f), 0f), "two empty fleets: 0");
+            ok &= Check(Near(HostilityCalculator.StrengthTerm(2000f, 1000f, 3f), 3f), "the weight scales the term");
+
+            var decayOnly = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 100f }, c);
+            ok &= Check(Near(decayOnly.Hostility, 95f), "no inputs: 100 decays by 5% to 95");
+
+            var all = HostilityCalculator.Compute(new HostilityCalculator.Inputs
+                { Previous = 0f, Cuts = 2, NearShips = 4, MyStrength = 1000f, RivalStrength = 1000f }, c);
+            ok &= Check(Near(all.CutsTerm, 10f) && Near(all.NearTerm, 2f) && Near(all.StrengthTerm, 0f) && Near(all.Hostility, 12f),
+                "2 cuts x 5 + 4 ships x 0.5 + an even fleet = 12");
+
+            var high = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 100f, Cuts = 10 }, c);
+            ok &= Check(Near(high.Hostility, 100f), "clamped to the maximum of 100");
+            var low = HostilityCalculator.Compute(new HostilityCalculator.Inputs
+                { Previous = 0f, MyStrength = 1000f, RivalStrength = 64000f }, c);
+            ok &= Check(Near(low.Hostility, 0f), "clamped at 0: a weaker player is never below neutral");
+        }
+        finally { Object.DestroyImmediate(c); }
+
+        // Near ships: rival warships docked on a planet I hold or beside one of my populated planets, known planets only.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 1, 1);                       // on a planet I hold
+            f.Ships("B", 1, 2);                       // beside it
+            f.Ships("C", 1, 3);                       // two hops away: not near
+            f.Ships("B", 2, 5);                       // another rival's ships do not count
+            f.Ships("A", 0, 4);                       // my own ships do not count
+            f.Know();
+            ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 1) == 3, "1 on my planet + 2 beside it = 3; C is too far");
+            ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 2) == 5, "per rival: player 2's 5 ships on B");
+            ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 3) == 0, "a rival with no ships: 0");
         }
         return ok;
     }
