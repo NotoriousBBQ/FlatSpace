@@ -17,6 +17,13 @@ This is NOT the spec. It records the owner's answers so the combat brainstorm ca
 11. **Surrender:** a third choice in `StanceMatrix` beside Peace and War, driven by a "surrender terms" weight. A surrender ends the war for both sides (both stances to Peace) and locks the pair against new declarations and forced wars for a tunable number of turns. Surrender is an ORDER. Ship the terms at plain defaults; revisit them with the diplomacy tuning (memory note `surrender-terms-revisit-with-diplomacy`).
 12. **Structure:** a new pure `CombatSystem` (no `Gameboard.Instance`), run once per turn in `GameAI.GameAIUpdate()` after arrivals and before `UpdateAllPlanets`, appending new `PlanetUpdateResult` types (warship damaged, warship destroyed, colony ship destroyed, each with owner and attacker, appended last in the enum) to the shared list. `PlayerAI` reads them (filtering by `PlayerID`) for the loss terms and the surrender decision. Repair runs after combat. Own `CombatSelfCheck` in Run All AI Self-Checks.
 
+## Decided after the diplomacy-orders work merged (2026-10-05, `7b88aa4`)
+13. **No offense floor:** effective Offense is purely proportional to current health (Offense x current health / the ship's Health stat). The rout is handled when retreat logic is designed (elements 4 and 5).
+14. **Colony ships die everywhere:** a player's docked colony ships at a planet are destroyed at the end of the combat step when that player has no docked warships left there and a war rival has docked warships there, including on a planet the owner populates. Log it.
+15. **Hostility defaults (GameAIConstants):** `hostilityPerShipLost` 1 (the owner changed it from 2), `lossWindowTurns` 10, `significantLossFraction` 0.3, `significantLossHostilityDrop` 4 per turn while significant.
+16. **Surrender defaults:** `surrenderTruceTurns` 30 (the pair cannot declare on each other and a rival's declaration cannot force a war between them); surrender weight = logistic of my loss share, `surrenderMidpoint` 0.6, `surrenderSteepness` 0.1; offered only while I am at war with that rival and my strength is below its; Peace stays as today.
+17. **Damage travels with the ship:** `ShipFleetPayload` gets a parallel per-ship list (saved with the order through `ShipSave`); arrival docks each ship with the damage it left with; no repair in flight.
+
 ## Sequence the owner set (2026-10-05)
 1. Retrofit diplomacy to the order pattern (stance changes as orders: Declare War, Make Peace, Surrender, executed in `ProcessNewOrders`).
 2. Simultaneity of `ProcessResults` across players.
