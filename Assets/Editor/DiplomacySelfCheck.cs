@@ -29,6 +29,7 @@ public static class DiplomacySelfCheck
         ok &= RunForcedWarCheck();
         ok &= RunCutsAndLegacyCheck();
         ok &= RunStanceSaveCheck();
+        ok &= RunLostContactWarCanEndCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -731,6 +732,38 @@ public static class DiplomacySelfCheck
             ok &= Check(f.AI.WarRivals().SetEquals(new[] { 1 }) && f.AI.AssaultWarFilter() == null,
                 "legacy: every contact player is an enemy and the assault gets no filter");
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).Hostility, 0f), "legacy: no hostility is computed");
+        }
+        return ok;
+    }
+
+    // Review finding: a War stance toward a rival I no longer have contact with must still be able to end, otherwise the
+    // player stays in Amass for the rest of the match. Its hostility decays (no cuts, near ships or strength term) and the
+    // matrix decides it like any other row.
+    public static bool RunLostContactWarCanEndCheck()
+    {
+        var ok = true;
+        using (var f = WithRival())
+        {
+            f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 5);
+            var pair = f.Map.Diplomacy.Get(0, 1);
+            pair.Hostility = 40f;
+            f.Map.Diplomacy.Set(0, 1, pair);
+            f.P("B").Population.Clear();
+            f.Know(2);
+            ok &= Check(f.Map.Knowledge.ContactPlayers(f.Map, 0).Count == 0, "precondition: no contact with player 1");
+
+            f.AI.UpdateDiplomacy(50);                              // 40 decays to 38: still above the midpoint, the war stands
+            ok &= Check(Near(f.Map.Diplomacy.Hostility(0, 1), 38f), "without contact the hostility still decays (5% a turn)");
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War && f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyAmass,
+                "above the midpoint the war without contact stands");
+
+            pair = f.Map.Diplomacy.Get(0, 1);
+            pair.Hostility = 31f;
+            f.Map.Diplomacy.Set(0, 1, pair);
+            f.AI.UpdateDiplomacy(51);                              // 31 decays to 29.45: below the midpoint
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace, "below the midpoint the war without contact ends");
+            ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and Amass returns to Consolidate");
         }
         return ok;
     }

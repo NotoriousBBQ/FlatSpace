@@ -270,6 +270,27 @@ namespace FlatSpace
                         TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
                     });
                 }
+                // A war I declared on a rival I no longer have contact with must still be able to end (my own War stance counts
+                // without contact): its hostility only decays (no cuts, near ships or strength term) and the matrix decides it
+                // like any other row, so Amass cannot outlive a rival that is gone.
+                foreach (var rival in diplomacy.Rivals(me)
+                             .Where(r => !contact.Contains(r) && diplomacy.StanceToward(me, r) == Stance.War).ToList())
+                {
+                    var pair = diplomacy.Get(me, rival);
+                    pair.Hostility = HostilityCalculator.Compute(
+                        new HostilityCalculator.Inputs { Previous = pair.Hostility }, constants).Hostility;
+                    pair.CutsTerm = 0f;
+                    pair.NearTerm = 0f;
+                    pair.StrengthTerm = 0f;
+                    diplomacy.Set(me, rival, pair);
+                    rows.Add(new StanceMatrix.Row
+                    {
+                        Rival = rival,
+                        Hostility = pair.Hostility,
+                        Current = Stance.War,
+                        TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
+                    });
+                }
                 diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later
 
                 foreach (var decision in StanceMatrix.Decide(me, rows, constants))
