@@ -213,7 +213,7 @@ namespace FlatSpace
             }
 
             /// <summary>What the assault may attack: null (every other player) while diplomacy is off, else the war set.</summary>
-            public ISet<int> AssaultWarFilter() => AIMap.Diplomacy.Enabled ? WarRivals() : null;
+            public System.Collections.Generic.ISet<int> AssaultWarFilter() => AIMap.Diplomacy.Enabled ? WarRivals() : null;
 
             // Rivals whose forced war (declared on me, I have contact) was already logged as Start, so Start and End are logged
             // on a change only. Log-only state: not saved (a load logs each current forced war once more).
