@@ -32,6 +32,7 @@ public static class DiplomacySelfCheck
         ok &= RunLostContactWarCanEndCheck();
         ok &= RunPeacefulHoldsReleaseCheck();
         ok &= RunNearShipsIgnoreRivalGarrisonCheck();
+        ok &= RunStanceOrderCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -829,6 +830,40 @@ public static class DiplomacySelfCheck
             ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace, "below the midpoint the war without contact ends");
             ok &= Check(f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate, "and Amass returns to Consolidate");
         }
+        return ok;
+    }
+
+    // Stance changes are orders: ApplyStanceOrder is the one place a stance order is decoded and applied (GameAI.ExecuteOrder
+    // calls it too), and an order with no planets must not trip a planet lookup.
+    public static bool RunStanceOrderCheck()
+    {
+        var ok = true;
+        GameAI.GameAIOrder Order(GameAI.GameAIOrder.OrderType type, int me, int rival) => new GameAI.GameAIOrder
+        {
+            Type = type,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+            Data = rival,
+            Origin = string.Empty,
+            Target = string.Empty,
+            PlayerId = me,
+        };
+
+        var d = new DiplomacyState();
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 0, 1), 7),
+            "a Declare War order against a Peace pair reports a change");
+        ok &= Check(d.StanceToward(0, 1) == Stance.War && d.Get(0, 1).LastChangeTurn == 7,
+            "the order sets War and stamps the turn (the hold starts there)");
+        ok &= Check(d.StanceToward(1, 0) == Stance.Peace, "the rival's own stance is not touched by being declared on");
+        ok &= Check(!GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 0, 1), 8),
+            "a second Declare War reports no change and keeps the first turn");
+        ok &= Check(d.Get(0, 1).LastChangeTurn == 7, "so the hold is not restarted");
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeMakePeace, 0, 1), 20),
+            "a Make Peace order against a War pair reports a change");
+        ok &= Check(d.StanceToward(0, 1) == Stance.Peace && d.Get(0, 1).LastChangeTurn == 20, "Peace, stamped turn 20");
+
+        using (var f = Fixture.Line())
+            ok &= Check(f.Map.GetPlanet(string.Empty) == null,
+                "an order with an empty Target looks up no planet (GetPlanet(\"\") is null, not an exception)");
         return ok;
     }
 

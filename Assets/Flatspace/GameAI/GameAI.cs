@@ -38,7 +38,11 @@ namespace FlatSpace
                     OrderTypeShipTransferInProgress,
                     // Appended last: OrderType serializes as an int. Delayed; Data is the food a colony ship
                     // carries, added to the target planet when the colonist lands.
-                    OrderTypeColonyFoodRider
+                    OrderTypeColonyFoodRider,
+                    // Appended last: OrderType serializes as an int. Immediate; Data is the rival's player id (an int),
+                    // PlayerId the player that decided; Origin and Target are empty. Executed by ApplyStanceOrder.
+                    OrderTypeDeclareWar,
+                    OrderTypeMakePeace
                 }
 
                 public enum OrderTimingType
@@ -101,7 +105,7 @@ namespace FlatSpace
             }
             public GameAIMap GameAIMap { get; private set; }
             public List<GameAIOrder> CurrentAIOrders { get; private set; } = new List<GameAIOrder>();
-            public static readonly Random Rand = new Random();
+            public static Random Rand = new Random();   // not readonly: SimultaneitySelfCheck re-seeds it per player
 
             public void InitGameAI(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
             {
@@ -351,6 +355,20 @@ namespace FlatSpace
                     case GameAIOrder.OrderType.OrderTypeColonyFoodRider:
                         ApplyColonyFoodRider(targetPlanet, executableOrder);
                         break;
+                    case GameAIOrder.OrderType.OrderTypeDeclareWar:
+                    case GameAIOrder.OrderType.OrderTypeMakePeace:
+                    {
+                        var stanceTurn = Gameboard.Instance.TurnNumber;
+                        if (ApplyStanceOrder(GameAIMap.Diplomacy, executableOrder, stanceTurn))
+                        {
+                            var stanceRival = Convert.ToInt32(executableOrder.Data);
+                            var stancePair = GameAIMap.Diplomacy.Get(executableOrder.PlayerId, stanceRival);
+                            AITuningLogger.LogStance(stanceTurn, executableOrder.PlayerId, stanceRival,
+                                stancePair.Stance.ToString(), stancePair.Hostility, stancePair.CutsTerm,
+                                stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar);
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -359,6 +377,14 @@ namespace FlatSpace
 
             private static Ship.ShipKind FleetKind(GameAIOrder order)
                 => order.Fleet != null ? order.Fleet.Kind : Ship.ShipKind.WarShip;
+
+            // Immediate: player order.PlayerId takes its stance toward the rival in order.Data to War or Peace. True only
+            // when the stance changed (the caller logs on that). Pure: no Gameboard.Instance.
+            public static bool ApplyStanceOrder(DiplomacyState diplomacy, GameAIOrder order, int turn)
+            {
+                var stance = order.Type == GameAIOrder.OrderType.OrderTypeDeclareWar ? Stance.War : Stance.Peace;
+                return diplomacy.SetStance(order.PlayerId, Convert.ToInt32(order.Data), stance, turn);
+            }
 
             // Delayed: the food a colony ship carried lands with the colonist. Deliberately its own order, separate
             // from the food shipping system (no FoodShipmentIncoming flag), so neither system has to know the other.
