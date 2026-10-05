@@ -58,3 +58,4 @@ MonoBehaviour:
   minPlanetsForSecondDistributionCenter: 60
   distributionCenterFoodTargetStock: 50
   distributionCenterGrotsitsTargetStock: 50
+  stanceSteepness: 4
