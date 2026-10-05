@@ -17,6 +17,7 @@ public static class DiplomacySelfCheck
         ok &= RunCutAttributionCheck();
         ok &= RunFleetStrengthCheck();
         ok &= RunHostilityCheck();
+        ok &= RunStanceMatrixCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -254,6 +255,78 @@ public static class DiplomacySelfCheck
             ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 2) == 5, "per rival: player 2's 5 ships on B");
             ok &= Check(HostilityCalculator.CountNearShips(f.Map, 0, 3) == 0, "a rival with no ships: 0");
         }
+        return ok;
+    }
+
+    // Deterministic cases use a very steep curve (steepness 0.01), so the war probability is exactly 0 below the midpoint and
+    // exactly 1 above it; the roulette then never picks a zero-weight stance.
+    public static bool RunStanceMatrixCheck()
+    {
+        var ok = true;
+        var c = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            ok &= Check(Near(StanceMatrix.WarProbability(30f, c), 0.5f), "at the midpoint the war probability is 0.5");
+            ok &= Check(StanceMatrix.WarProbability(0f, c) < 0.05f && StanceMatrix.WarProbability(100f, c) > 0.95f,
+                "the default curve is low at 0 and high at 100");
+            ok &= Check(StanceMatrix.WarProbability(20f, c) < StanceMatrix.WarProbability(40f, c), "it rises with hostility");
+
+            var peaceRow = new StanceMatrix.Row { Rival = 1, Hostility = 30f, Current = Stance.Peace, TurnsSinceChange = 99 };
+            var warRow = new StanceMatrix.Row { Rival = 1, Hostility = 30f, Current = Stance.War, TurnsSinceChange = 99 };
+            ok &= Check(Near(StanceMatrix.PeaceWeight(peaceRow, c), 1.5f) && Near(StanceMatrix.WarWeight(peaceRow, c), 0.5f),
+                "at 0.5 the held stance (Peace) is x3: Peace 1.5, War 0.5");
+            ok &= Check(Near(StanceMatrix.WarWeight(warRow, c), 1.5f) && Near(StanceMatrix.PeaceWeight(warRow, c), 0.5f),
+                "the held stance (War) is x3: War 1.5, Peace 0.5");
+
+            c.stanceSteepness = 0.01f;
+            c.stanceMidpoint = 30f;
+            c.stanceHoldTurns = 10;
+
+            // Rows are independent: two rivals can both get War (one shared matrix would hand War to only one of them).
+            var both = StanceMatrix.Decide(0, new List<StanceMatrix.Row>
+            {
+                new StanceMatrix.Row { Rival = 1, Hostility = 100f, Current = Stance.Peace, TurnsSinceChange = 99 },
+                new StanceMatrix.Row { Rival = 2, Hostility = 100f, Current = Stance.Peace, TurnsSinceChange = 99 },
+            }, c);
+            ok &= Check(both.Count == 2 && both.All(d => d.Stance == Stance.War) && both.Select(d => d.Rival).SequenceEqual(new[] { 1, 2 }),
+                "two rivals above the midpoint both get War, in rival order");
+            ok &= Check(both.All(d => Near(d.PWar, 1f)), "the decision carries the war probability for the log");
+
+            var mixed = StanceMatrix.Decide(0, new List<StanceMatrix.Row>
+            {
+                new StanceMatrix.Row { Rival = 1, Hostility = 0f, Current = Stance.War, TurnsSinceChange = 99 },
+                new StanceMatrix.Row { Rival = 2, Hostility = 100f, Current = Stance.War, TurnsSinceChange = 99 },
+            }, c);
+            ok &= Check(mixed.Count == 2 && mixed[0].Stance == Stance.Peace && mixed[1].Stance == Stance.War,
+                "below the midpoint War becomes Peace, above it War stays War");
+
+            var held = StanceMatrix.Decide(0, new List<StanceMatrix.Row>
+            {
+                new StanceMatrix.Row { Rival = 1, Hostility = 100f, Current = Stance.Peace, TurnsSinceChange = 3 },
+                new StanceMatrix.Row { Rival = 2, Hostility = 100f, Current = Stance.Peace, TurnsSinceChange = 10 },
+            }, c);
+            ok &= Check(held.Count == 1 && held[0].Rival == 2, "a row within stanceHoldTurns of its last change is not decided; at the hold it is");
+            ok &= Check(StanceMatrix.Decide(0, new List<StanceMatrix.Row>(), c).Count == 0, "no rows: no decisions");
+        }
+        finally { Object.DestroyImmediate(c); }
+
+        // The generic matrix is unchanged by default: a choice claimed by one row is removed from the others.
+        var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>(new ScoreMatrixDecisionComparer());
+        matrix.MatrixElements.Add(new ScoreMatrixDecisionElement { Target = "R1", Priority = 2f },
+            new List<ScoreMatrixChoiceElement> { new ScoreMatrixChoiceElement { Target = "X", Cost = 1f } });
+        matrix.MatrixElements.Add(new ScoreMatrixDecisionElement { Target = "R2", Priority = 1f },
+            new List<ScoreMatrixChoiceElement> { new ScoreMatrixChoiceElement { Target = "X", Cost = 1f } });
+        var shared = matrix.GenerateActionList((d, ch) => new ScoreMatrixAction { Origin = d.Target, Target = ch.Target });
+        ok &= Check(shared.Count == 1, "default: both rows want X, only one gets it");
+
+        var independent = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>(new ScoreMatrixDecisionComparer())
+            { IndependentRows = true };
+        independent.MatrixElements.Add(new ScoreMatrixDecisionElement { Target = "R1", Priority = 2f },
+            new List<ScoreMatrixChoiceElement> { new ScoreMatrixChoiceElement { Target = "X", Cost = 1f } });
+        independent.MatrixElements.Add(new ScoreMatrixDecisionElement { Target = "R2", Priority = 1f },
+            new List<ScoreMatrixChoiceElement> { new ScoreMatrixChoiceElement { Target = "X", Cost = 1f } });
+        var both2 = independent.GenerateActionList((d, ch) => new ScoreMatrixAction { Origin = d.Target, Target = ch.Target });
+        ok &= Check(both2.Count == 2, "IndependentRows: both rows get X");
         return ok;
     }
 
