@@ -309,6 +309,18 @@ public static class RetreatSelfCheck
             planner = new ShipTransportPlanner(f.Map, 0) { Retreating = new List<string> { "C" } };
             ok &= Check(!planner.BuildStates().Any(s => s.Planet.PlanetName == "C"), "a retreating planet has no state: neither a source nor a sink");
         }
+        // A planet inside its retreat cooldown is not refilled by the garrison planner (it stays a source for any ship still there).
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Colonize("A", 0);                                        // outer (B is uncolonized): it carries a garrison
+            f.Ships("A", 0, 2);
+            var plain = new ShipTransportPlanner(f.Map, 0).BuildStates().First(s => s.Planet.PlanetName == "A");
+            ok &= Check(plain.Garrison > 0, "precondition: the outer colony A carries a garrison without a cooldown");
+            var blocked = new ShipTransportPlanner(f.Map, 0) { RefillBlocked = new List<string> { "A" } }
+                .BuildStates().First(s => s.Planet.PlanetName == "A");
+            ok &= Check(blocked.Garrison == 0 && blocked.Deficit == 0, "inside the cooldown A's garrison is 0, so it is never a target");
+            ok &= Check(blocked.Spare == 2, "its two docked ships are still spare: the cooldown only stops refills, it does not pin ships");
+        }
         using (var f = CombatSelfCheck.Fixture.Line())
         {
             f.Ships("A", 0, 1);

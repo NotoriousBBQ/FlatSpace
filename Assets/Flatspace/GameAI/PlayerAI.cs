@@ -1779,6 +1779,10 @@ namespace FlatSpace
             // Tier 3 retreats still travelling: (planet, the turn they land, the blockade value they were planned on). Log-only, not saved.
             private readonly List<(string planet, int landTurn, float remembered)> _retreatPending = new List<(string planet, int landTurn, float remembered)>();
 
+            /// <summary>Planets still inside their retreat cooldown this turn: off the assault target list and not refilled by the garrison planner.</summary>
+            private List<string> CooldownPlanets(int turnNumber)
+                => _retreatCooldown.Where(kv => kv.Value > turnNumber).Select(kv => kv.Key).ToList();
+
             /// <summary>The first turn a planet I retreated from may be an assault target again; 0 when there is no cooldown. Public for the self-check.</summary>
             public int RetreatCooldownUntil(string planet) => _retreatCooldown.TryGetValue(planet, out var until) ? until : 0;
 
@@ -1864,12 +1868,13 @@ namespace FlatSpace
 
                 if (!IsConsolidateLike(Strategy))
                 {
-                    actions.AddRange(new ShipTransportPlanner(AIMap, Player.playerID) { Retreating = retreat.Retreating }.Plan());
+                    actions.AddRange(new ShipTransportPlanner(AIMap, Player.playerID)
+                        { Retreating = retreat.Retreating, RefillBlocked = CooldownPlanets(turnNumber) }.Plan());
                     return actions;
                 }
 
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
-                var excluded = new HashSet<string>(_retreatCooldown.Where(kv => kv.Value > turnNumber).Select(kv => kv.Key));
+                var excluded = new HashSet<string>(CooldownPlanets(turnNumber));
                 excluded.UnionWith(retreat.Retreating);
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
                     AssaultWarFilter()) { ExcludedTargets = excluded };
@@ -1890,6 +1895,7 @@ namespace FlatSpace
                     HeldPlanet  = targetName,
                     HeldPlanets = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList(),
                     Retreating  = retreat.Retreating,
+                    RefillBlocked = CooldownPlanets(turnNumber),
                 };
                 var homeActions = transport.Plan();
                 actions.AddRange(homeActions);

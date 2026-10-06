@@ -42,6 +42,14 @@ namespace FlatSpace
 
             private bool IsRetreating(string planetName) => Retreating != null && Retreating.Contains(planetName);
 
+            /// <summary>
+            /// Planets inside their retreat cooldown (a group was just wiped or withdrawn there): their garrison is 0 this turn so the
+            /// plan never sends ships back into the fight, while any ship still docked there stays a spare source.
+            /// </summary>
+            public ICollection<string> RefillBlocked { get; set; } = new List<string>();
+
+            private bool IsRefillBlocked(string planetName) => RefillBlocked != null && RefillBlocked.Contains(planetName);
+
             private bool IsHeld(string planetName)
                 => planetName == HeldPlanet || (HeldPlanets != null && HeldPlanets.Contains(planetName));
 
@@ -229,7 +237,7 @@ namespace FlatSpace
                         Planet   = planet,
                         Category = categories.Count == 0 ? NoCategory : categories.Min(),
                         Rank     = TargetRank(planet),
-                        Garrison = GarrisonOf(categories),
+                        Garrison = IsRefillBlocked(planet.PlanetName) ? 0 : GarrisonOf(categories),
                         Docked   = CountWarships(planet),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });
