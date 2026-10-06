@@ -153,14 +153,14 @@ public class GameAIConstants : ScriptableObject
     // is at least significantLossFraction.
     public float hostilityPerShipLost = 1f;
     public int lossWindowTurns = 10;
-    public float significantLossFraction = 0.3f;
+    public float significantLossFraction = 0.08f;   // per-rival 10-turn shares reach 0.02-0.14 on both boards (2026-10-05 logs); 0.3 then 0.2 never fired
     public float significantLossHostilityDrop = 4f;
     // Surrender: a stance choice offered while I am at war and weaker, weighted 1 / (1 + e^(-(loss share - surrenderMidpoint)
     // / surrenderSteepness)). It ends the war for both sides and locks the pair against new declarations (and forced wars)
     // for surrenderTruceTurns.
     public int surrenderTruceTurns = 30;
-    public float surrenderMidpoint = 0.6f;
-    public float surrenderSteepness = 0.1f;
+    public float surrenderMidpoint = 0.15f;   // 0.6 was above any share the runs reached; 0.3 was still above the per-rival maximum 0.14
+    public float surrenderSteepness = 0.015f;   // 0.1 gave 0.0025 at share 0: surrenders with no losses; 0.015 gives 0.00005
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's

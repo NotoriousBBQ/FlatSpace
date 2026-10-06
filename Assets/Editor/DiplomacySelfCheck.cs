@@ -1039,12 +1039,12 @@ public static class DiplomacySelfCheck
         var c = ScriptableObject.CreateInstance<GameAIConstants>();
         try
         {
-            var plain = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f, ShipsLost = 3f, LossShare = 0.1f }, c);
+            var plain = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f, ShipsLost = 3f, LossShare = 0.05f }, c);
             ok &= Check(Near(plain.Hostility, 10f * 0.95f + 3f) && Near(plain.LossTerm, 3f),
-                "3 ships lost add 3 (hostilityPerShipLost 1); a 10% loss share is below the 30% threshold");
+                "3 ships lost add 3 (hostilityPerShipLost 1); a 5% loss share is below the 8% threshold");
             var big = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 20f, ShipsLost = 2f, LossShare = 0.5f }, c);
             ok &= Check(Near(big.Hostility, 20f * 0.95f + 2f - 4f) && Near(big.LossTerm, -2f),
-                "a 50% loss share (>= 30%) subtracts 4 a turn: 19 + 2 - 4");
+                "a 50% loss share (>= 8%) subtracts 4 a turn: 19 + 2 - 4");
             var floor = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 1f, LossShare = 0.9f }, c);
             ok &= Check(Near(floor.Hostility, 0f), "hostility is clamped at 0");
             var none = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f }, c);
@@ -1078,7 +1078,7 @@ public static class DiplomacySelfCheck
             // Deterministic roulette: a very steep stance curve and surrender curve, and no stickiness, so at hostility 100 with the
             // War stance held the War weight (1 x 0) and the Peace weight (1 - 1) are both 0 and only Surrender has weight.
             c.stanceSteepness = 0.01f; c.stanceMidpoint = 30f; c.stanceStickiness = 0f; c.surrenderSteepness = 0.01f;
-            ok &= Check(Near(StanceMatrix.SurrenderWeight(0.6f, c), 0.5f), "at the midpoint (0.6) the surrender weight is 0.5");
+            ok &= Check(Near(StanceMatrix.SurrenderWeight(c.surrenderMidpoint, c), 0.5f), "at the midpoint the surrender weight is 0.5");
             ok &= Check(StanceMatrix.SurrenderWeight(0.9f, c) > 0.9f && StanceMatrix.SurrenderWeight(0.1f, c) < 0.01f,
                 "a heavy loss share is near 1, a light one near 0");
 
@@ -1116,14 +1116,14 @@ public static class DiplomacySelfCheck
 
         // The chance of surrendering is the surrender weight itself, held or not (review: with stickiness it used to shrink once the
         // stance hold ended, so the logged pSurrender overstated it). Surrender / (Peace + War + Surrender) == SurrenderWeight.
-        var d = ScriptableObject.CreateInstance<GameAIConstants>();   // the real defaults: stickiness 3, surrender 0.6 / 0.1
+        var d = ScriptableObject.CreateInstance<GameAIConstants>();   // the real defaults: stickiness 3, surrender midpoint 0.15 / steepness 0.015
         try
         {
-            var sw = StanceMatrix.SurrenderWeight(0.6f, d);           // 0.5
+            var sw = StanceMatrix.SurrenderWeight(d.surrenderMidpoint, d);   // 0.5
             StanceMatrix.Row Hot(int sinceChange, Stance current, bool atWar = true, bool truce = false)
                 => new StanceMatrix.Row
                 {
-                    Rival = 1, Hostility = 40f, Current = current, TurnsSinceChange = sinceChange, LossShare = 0.6f,
+                    Rival = 1, Hostility = 40f, Current = current, TurnsSinceChange = sinceChange, LossShare = d.surrenderMidpoint,
                     AtWar = atWar, MyStrength = 10f, RivalStrength = 100f, Truce = truce,
                 };
             foreach (var current in new[] { Stance.War, Stance.Peace })

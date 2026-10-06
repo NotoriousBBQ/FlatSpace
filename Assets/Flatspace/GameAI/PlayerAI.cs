@@ -307,6 +307,7 @@ namespace FlatSpace
                     pair.MyStrength = myStrength;
                     pair.RivalStrength = rivalStrength;
                     pair.NearShips = nearShips;
+                    pair.LossShare = lossShare;   // log-only: the per-rival share the Hostility line reports (and the Surrender line on a surrender)
                     diplomacy.Set(me, rival, pair);
                     rows.Add(new StanceMatrix.Row
                     {

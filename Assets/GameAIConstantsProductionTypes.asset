@@ -63,8 +63,8 @@ MonoBehaviour:
   repairFractionPerTurn: 0.1
   hostilityPerShipLost: 1
   lossWindowTurns: 10
-  significantLossFraction: 0.3
+  significantLossFraction: 0.08
   significantLossHostilityDrop: 4
   surrenderTruceTurns: 30
-  surrenderMidpoint: 0.6
-  surrenderSteepness: 0.1
+  surrenderMidpoint: 0.15
+  surrenderSteepness: 0.015
