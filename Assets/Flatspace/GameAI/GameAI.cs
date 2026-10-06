@@ -181,9 +181,12 @@ namespace FlatSpace
 
             /// <summary>Public and free of Gameboard.Instance so the self-check can drive it. Nothing is appended while diplomacy is off.</summary>
             public static void AppendFightProjections(GameAIMap map, WarshipStats stats, GameAIConstants constants,
-                List<GameAIOrder> orders, List<Planet.UpdateResult> results)
+                List<GameAIOrder> orders, List<Planet.UpdateResult> results, System.Random rand = null)
             {
                 if (!map.Diplomacy.Enabled) return;
+                // Each projection also carries the player's imperfect-intel samples (FightProjector.ProjectPerceived). They are drawn
+                // here, once, before any player decides, so a player's decision never depends on who decides first.
+                rand = rand ?? Rand;
                 foreach (var planet in map.PlanetList)
                 {
                     var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner)
@@ -191,7 +194,7 @@ namespace FlatSpace
                     if (owners.Count < 2) continue;
                     foreach (var owner in owners)
                     {
-                        var projection = FightProjector.Project(map, planet, owner, stats, constants, orders);
+                        var projection = FightProjector.ProjectPerceived(map, planet, owner, stats, constants, orders, rand);
                         if (projection != null)
                             results.Add(new Planet.UpdateResult(planet.PlanetName,
                                 Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection, projection, owner));

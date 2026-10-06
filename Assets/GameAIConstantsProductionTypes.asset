@@ -73,3 +73,6 @@ MonoBehaviour:
   retreatSteepness: 0.1
   retreatProjectionTurns: 20
   retreatCooldownTurns: 10
+  retreatRivalUncertainty: 0.25
+  retreatUncertaintySamples: 8
+  retreatDestinationCostExponent: 2

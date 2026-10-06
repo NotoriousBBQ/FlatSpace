@@ -124,9 +124,11 @@ public static class SimultaneitySelfCheck
                 WarshipSelfCheck.DockWarships(map.GetPlanet("D"), 0, 1);
                 WarshipSelfCheck.DockWarships(map.GetPlanet("D"), 1, 3);
                 constants.retreatSteepness = 0.001f;
+                constants.retreatDestinationCostExponent = 50f;    // the strictly nearest destination: no luck in which planet it picks
                 var retreatStats = new WarshipStats(research);
                 map.Knowledge.Update(map, 3, 8);        // player 0's new ship at D makes D known to it
-                GameAI.AppendFightProjections(map, retreatStats, constants, new List<GameAI.GameAIOrder>(), results);
+                // The imperfect-intel samples are drawn here, once, before any player decides: the same seed for both player orders.
+                GameAI.AppendFightProjections(map, retreatStats, constants, new List<GameAI.GameAIOrder>(), results, new System.Random(900));
             }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
             // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it

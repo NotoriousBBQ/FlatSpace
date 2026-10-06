@@ -24,7 +24,8 @@ namespace FlatSpace.AI
             public string Destination;
             public int Tier;
             public int Ships;
-            public float LossFraction;
+            public float LossFraction;        // the perceived loss the decision used (the mean over the imperfect-intel samples)
+            public float ExactLossFraction;   // the exact projection's loss, for the log
             public float RivalSurvivorsFraction;
             public float RouteCost;
             public float PRetreat;
@@ -85,7 +86,7 @@ namespace FlatSpace.AI
         {
             var plan = new Plan();
             var rows = new List<RetreatMatrix.Row>();
-            var destinations = new Dictionary<string, Destination>();
+            var destinations = new Dictionary<string, List<Destination>>();
             var byPlanet = new Dictionary<string, FightProjection>();
             foreach (var projection in projections.Where(p => p != null && p.Player == _me).OrderBy(p => p.Planet, StringComparer.Ordinal))
             {
@@ -94,29 +95,34 @@ namespace FlatSpace.AI
                 var group = MyWarships(planet);
                 if (group.Count == 0) continue;
 
+                // The decision reads the perceived values: the mean loss over the imperfect-intel samples, the rival standing in at
+                // least half of them, my group wiped in at least half of them (all three fall back to the exact projection when
+                // it carries no samples).
                 var own = planet.Owner == _me && planet.Population.Count > 0;
-                var loss = projection.ProjectedLossFraction;
-                var gated = projection.RivalSurvives && (own ? projection.MyGroupWiped : loss >= _constants.retreatCheckFraction);
+                var loss = projection.PerceivedLossFraction;
+                var rivalSurvives = projection.PerceivedRivalSurvivesShare >= 0.5f;
+                var wiped = projection.PerceivedWipedShare >= 0.5f;
+                var gated = rivalSurvives && (own ? wiped : loss >= _constants.retreatCheckFraction);
                 if (!gated)
                 {
-                    if (own && projection.RivalSurvives && loss >= _constants.retreatCheckFraction)
+                    if (own && rivalSurvives && loss >= _constants.retreatCheckFraction)
                         plan.Holds.Add(new Hold { Planet = projection.Planet, Reason = HoldOwnPlanetNotWiped, LossFraction = loss });
                     continue;
                 }
 
                 var offense = group.Sum(s => _stats.EffectiveOffense(s));
-                var destination = BestDestination(planet, offense);
-                if (destination == null)
+                var candidates = Destinations(planet, offense);
+                if (candidates.Count == 0)
                 {
                     plan.Holds.Add(new Hold { Planet = projection.Planet, Reason = HoldNoDestination, LossFraction = loss });
                     continue;
                 }
-                destinations[projection.Planet] = destination;
+                destinations[projection.Planet] = candidates;
                 byPlanet[projection.Planet] = projection;
                 rows.Add(new RetreatMatrix.Row
                 {
-                    Planet = projection.Planet, Ships = group.Count, LossFraction = loss, Destination = destination.Planet,
-                    Tier = destination.Tier, PathCost = destination.Cost,
+                    Planet = projection.Planet, Ships = group.Count, LossFraction = loss,
+                    Candidates = candidates.Select(c => new RetreatMatrix.Candidate { Planet = c.Planet, Tier = c.Tier, PathCost = c.Cost }).ToList(),
                 });
             }
 
@@ -125,17 +131,17 @@ namespace FlatSpace.AI
                 var projection = byPlanet[decision.Planet];
                 if (!decision.Retreat)
                 {
-                    plan.Stays.Add(new Stay { Planet = decision.Planet, LossFraction = projection.ProjectedLossFraction, PRetreat = decision.PRetreat });
+                    plan.Stays.Add(new Stay { Planet = decision.Planet, LossFraction = projection.PerceivedLossFraction, PRetreat = decision.PRetreat });
                     continue;
                 }
-                var destination = destinations[decision.Planet];
+                var destination = destinations[decision.Planet].First(c => c.Planet == decision.Action.Target);
                 plan.Actions.Add(decision.Action);
                 plan.Retreating.Add(decision.Planet);
                 var retreat = new Retreat
                 {
                     Planet = decision.Planet, Destination = destination.Planet, Tier = destination.Tier, Ships = decision.Action.Count,
-                    LossFraction = projection.ProjectedLossFraction, RivalSurvivorsFraction = projection.RivalSurvivorsFraction,
-                    RouteCost = destination.Cost, PRetreat = decision.PRetreat,
+                    LossFraction = projection.PerceivedLossFraction, ExactLossFraction = projection.ProjectedLossFraction,
+                    RivalSurvivorsFraction = projection.RivalSurvivorsFraction, RouteCost = destination.Cost, PRetreat = decision.PRetreat,
                 };
                 if (destination.Tier == 3)
                 {
@@ -150,13 +156,14 @@ namespace FlatSpace.AI
         private List<Ship> MyWarships(Planet planet)
             => planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == _me).ToList();
 
-        private Destination BestDestination(Planet from, float groupOffense)
+        /// <summary>Every valid destination in the best (first non-empty) tier, ordered by cost then name; empty when none qualifies.</summary>
+        private List<Destination> Destinations(Planet from, float groupOffense)
         {
             var known = _map.Knowledge.KnownPlanets(_me).OrderBy(n => n, StringComparer.Ordinal).ToList();
             var maxNodes = _constants.maxPathNodesForShipTransport;
             for (var tier = 1; tier <= 3; tier++)
             {
-                Destination best = null;
+                var found = new List<Destination>();
                 foreach (var name in known)
                 {
                     if (name == from.PlanetName) continue;
@@ -164,11 +171,12 @@ namespace FlatSpace.AI
                     if (planet == null || TierOf(planet, groupOffense) != tier) continue;
                     var route = RoutePlanner.PlanRoute(_map, from.PlanetName, name, tier == 3 ? _warView.Without(name) : _warView, maxNodes);
                     if (route == null) continue;
-                    if (best == null || route.Cost < best.Cost) best = new Destination { Planet = name, Tier = tier, Cost = route.Cost };
+                    found.Add(new Destination { Planet = name, Tier = tier, Cost = route.Cost });
                 }
-                if (best != null) return best;
+                if (found.Count > 0)
+                    return found.OrderBy(d => d.Cost).ThenBy(d => d.Planet, StringComparer.Ordinal).ToList();
             }
-            return null;
+            return new List<Destination>();
         }
 
         // 0 = not a destination.

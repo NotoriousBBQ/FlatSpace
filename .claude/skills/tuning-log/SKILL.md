@@ -297,7 +297,11 @@ user asked about one specific thing.
     **Since 2026-10-06 `lossShare` is the strength drop I took from the rival (damage included) / strength ENGAGED against the rival over the window** (the `Hostility` line's
     last field `engagedStrength` is its denominator; guard `NF >= 10`; older logs divide by the whole fleet and read 0.02-0.14,
     so the two are not comparable, and the surrender terms need recalibrating to the new range).
-  - **Retreat:** `Retreat|<planet>|<destination>|<tier>|<ships>|<projectedLossPct>|<rivalSurvivorsPct>|<routeCost>|<cooldownUntil>|<pRetreat>`
+  - **Retreat:** `Retreat|<planet>|<destination>|<tier>|<ships>|<projectedLossPct>|<rivalSurvivorsPct>|<routeCost>|<cooldownUntil>|<pRetreat>|<exactLossPct>`
+    (since 2026-10-06 `projectedLossPct` is the PERCEIVED loss, the mean over the imperfect-intel samples, and `exactLossPct` is
+    the exact projection's; older logs have no last field, so guard `NF`; with imperfect intel retreats should no longer all sit at
+    100% loss and `pRetreat` should spread, and the destination is a weighted pick so one planet should not take every retreat;
+    repeat retreats from one planet within 10 turns should fall now that a planet in its cooldown is not refilled)
     (tier 3 appends `|<rememberedBlockade>|<myOffense>`) is one line per retreat order; `RetreatStay|<planet>|<projectedLossPct>|<pRetreat>`
     and `RetreatHeld|<planet>|<NoDestination or OwnPlanetNotWiped>|<projectedLossPct>` are on-change lines for a gated fight whose
     ships stayed (the roll kept them, or no destination existed); `RetreatArrive|<planet>|<rememberedBlockade>|<rivalOffense>`

@@ -47,14 +47,20 @@ namespace FlatSpace
         /// </summary>
         public static class RetreatMatrix
         {
+            /// <summary>A valid destination in the best tier, with its route cost.</summary>
+            public struct Candidate
+            {
+                public string Planet;
+                public int Tier;
+                public float PathCost;
+            }
+
             public struct Row
             {
                 public string Planet;
                 public int Ships;
-                public float LossFraction;     // the projected share of the group's strength lost
-                public string Destination;     // empty or null = none: the row can only Stay
-                public int Tier;
-                public float PathCost;
+                public float LossFraction;          // the perceived share of the group's strength lost
+                public List<Candidate> Candidates;  // every valid destination in the best tier; empty or null = none, the row can only Stay
             }
 
             public struct Decision
@@ -69,6 +75,20 @@ namespace FlatSpace
             {
                 var steepness = Math.Max(constants.retreatSteepness, 0.0001f);
                 return (float)(1.0 / (1.0 + Math.Exp(-(lossFraction - constants.retreatLossFraction) / steepness)));
+            }
+
+            /// <summary>
+            /// The share of the retreat weight each destination gets: (cheapest cost / its cost) ^ exponent, normalised to 1 (costs are
+            /// floored at 1). Exponent 0 shares equally; a large exponent gives the nearest almost everything.
+            /// </summary>
+            public static float[] DestinationShares(IList<float> costs, float exponent)
+            {
+                if (costs == null || costs.Count == 0) return new float[0];
+                var floored = costs.Select(c => Math.Max(c, 1f)).ToList();
+                var cheapest = floored.Min();
+                var raw = floored.Select(c => Math.Pow(cheapest / c, exponent)).ToList();
+                var total = raw.Sum();
+                return raw.Select(w => (float)(w / total)).ToArray();
             }
 
             public static List<Decision> Decide(List<Row> rows, GameAIConstants constants)
@@ -87,12 +107,18 @@ namespace FlatSpace
                     {
                         new RetreatChoiceElement { Planet = row.Planet, Retreat = false, Destination = string.Empty, Ships = row.Ships, Weight = 1f - p },
                     };
-                    if (!string.IsNullOrEmpty(row.Destination))
-                        choices.Add(new RetreatChoiceElement
-                        {
-                            Planet = row.Planet, Retreat = true, Destination = row.Destination, Ships = row.Ships,
-                            PathCost = row.PathCost, Weight = p,
-                        });
+                    // One Retreat choice per destination: its weight is the retreat weight times its share, so a single roulette
+                    // pick decides both whether to go and where (never predictably the nearest unless the exponent is large).
+                    if (row.Candidates != null && row.Candidates.Count > 0)
+                    {
+                        var shares = DestinationShares(row.Candidates.Select(c => c.PathCost).ToList(), constants.retreatDestinationCostExponent);
+                        for (var i = 0; i < row.Candidates.Count; i++)
+                            choices.Add(new RetreatChoiceElement
+                            {
+                                Planet = row.Planet, Retreat = true, Destination = row.Candidates[i].Planet, Ships = row.Ships,
+                                PathCost = row.Candidates[i].PathCost, Weight = p * shares[i],
+                            });
+                    }
                     matrix.MatrixElements.Add(new RetreatDecisionElement { Target = row.Planet, Priority = -rank++ }, choices);
                 }
 

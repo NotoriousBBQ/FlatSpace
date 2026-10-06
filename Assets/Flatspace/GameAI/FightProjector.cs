@@ -22,6 +22,23 @@ namespace FlatSpace.AI
         public int Turns;                   // rounds projected
         public List<int> Rivals = new List<int>();   // war rivals with warships at the planet, ascending
 
+        /// <summary>The same fight with the rival seen at `Factor` of its offense and health (imperfect intel).</summary>
+        public struct Sample
+        {
+            public float Factor;
+            public float LossFraction;
+            public bool RivalSurvives;
+            public bool Wiped;
+        }
+        public List<Sample> Samples = new List<Sample>();
+
+        /// <summary>The mean projected loss over the samples (the exact loss when there are none): what the retreat decision reads.</summary>
+        public float PerceivedLossFraction => Samples.Count == 0 ? ProjectedLossFraction : Samples.Average(s => s.LossFraction);
+        /// <summary>The share of samples where a war rival is still standing at the end (1 or 0 from the exact projection when there are none).</summary>
+        public float PerceivedRivalSurvivesShare => Samples.Count == 0 ? (RivalSurvives ? 1f : 0f) : Samples.Count(s => s.RivalSurvives) / (float)Samples.Count;
+        /// <summary>The share of samples where my group is wiped out (1 or 0 from the exact projection when there are none).</summary>
+        public float PerceivedWipedShare => Samples.Count == 0 ? (MyGroupWiped ? 1f : 0f) : Samples.Count(s => s.Wiped) / (float)Samples.Count;
+
         public bool MyGroupWiped => MyStrengthLeft <= 0f;
         public float ProjectedLossFraction
             => MyStrength <= 0f ? 0f : Math.Min(1f, Math.Max(0f, 1f - MyStrengthLeft / MyStrength));
@@ -35,8 +52,37 @@ namespace FlatSpace.AI
     /// </summary>
     public static class FightProjector
     {
+        /// <summary>
+        /// The exact projection plus retreatUncertaintySamples samples of the same fight with the rival seen at 1 +- retreatRivalUncertainty
+        /// (one factor per sample, stratified over the range with one random phase from `rand`, so the samples always straddle 1). With
+        /// no `rand`, no samples or no uncertainty the exact projection is returned alone. Null when there is no fight.
+        /// </summary>
+        public static FightProjection ProjectPerceived(GameAIMap map, Planet planet, int player, WarshipStats stats,
+            GameAIConstants constants, IEnumerable<GameAI.GameAIOrder> orders, Random rand)
+        {
+            var orderList = orders as IList<GameAI.GameAIOrder> ?? orders?.ToList();
+            var exact = Project(map, planet, player, stats, constants, orderList);
+            if (exact == null) return null;
+            var n = constants.retreatUncertaintySamples;
+            var uncertainty = constants.retreatRivalUncertainty;
+            if (rand == null || n <= 0 || uncertainty <= 0f) return exact;
+            var phase = rand.NextDouble();
+            for (var i = 0; i < n; i++)
+            {
+                var factor = 1f + uncertainty * (float)(2.0 * (i + phase) / n - 1.0);
+                var sample = Project(map, planet, player, stats, constants, orderList, factor);
+                exact.Samples.Add(new FightProjection.Sample
+                {
+                    Factor = factor, LossFraction = sample.ProjectedLossFraction,
+                    RivalSurvives = sample.RivalSurvives, Wiped = sample.MyGroupWiped,
+                });
+            }
+            return exact;
+        }
+
+        /// <summary>`rivalFactor` scales the offense and health of every war rival's ship (damage scales with it, so health fractions are unchanged).</summary>
         public static FightProjection Project(GameAIMap map, Planet planet, int player, WarshipStats stats,
-            GameAIConstants constants, IEnumerable<GameAI.GameAIOrder> orders)
+            GameAIConstants constants, IEnumerable<GameAI.GameAIOrder> orders, float rivalFactor = 1f)
         {
             if (map == null || planet == null || stats == null || !map.Diplomacy.Enabled) return null;
 
@@ -54,6 +100,12 @@ namespace FlatSpace.AI
             Func<int, int, bool> atWar = (a, b) => map.Diplomacy.IsAtWar(a, b, true);
             var rivals = units.Select(u => u.Owner).Distinct().Where(o => o != player && atWar(player, o)).OrderBy(o => o).ToList();
             if (rivals.Count == 0 || !units.Any(u => u.Owner == player)) return null;
+
+            // Imperfect intel: the rival seen at `rivalFactor` of its offense and health (the same health fraction, the same Defense).
+            if (rivalFactor != 1f)
+                units = units.Select(u => rivals.Contains(u.Owner)
+                    ? CombatUnit.Make(u.Id, u.Owner, u.Index, u.BaseOffense * rivalFactor, u.Max * rivalFactor, u.Defense, (u.Max - u.Health) * rivalFactor)
+                    : u).ToList();
 
             // My own fleets heading here: they join before the combat of the projected round equal to their delay.
             var inbound = new List<(int round, CombatUnit unit)>();

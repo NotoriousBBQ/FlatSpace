@@ -168,10 +168,10 @@ public static class AITuningLogger
             pSurrender.ToString("0.###", ci), truceUntil.ToString(ci)) });
     }
 
-    /// <summary>A group left a lost fight: T&lt;turn&gt;|P&lt;id&gt;|Retreat|planet|destination|tier|ships|projectedLossPct|rivalSurvivorsPct|routeCost|cooldownUntil|pRetreat (tier 3 appends |rememberedBlockade|myOffense).</summary>
+    /// <summary>A group left a lost fight: T&lt;turn&gt;|P&lt;id&gt;|Retreat|planet|destination|tier|ships|projectedLossPct (the perceived loss the decision used)|rivalSurvivorsPct|routeCost|cooldownUntil|pRetreat|exactLossPct (tier 3 appends |rememberedBlockade|myOffense).</summary>
     public static void LogRetreat(int turnNumber, int playerId, string planet, string destination, int tier, int ships,
         float lossFraction, float rivalSurvivorsFraction, float routeCost, int cooldownUntil, float pRetreat,
-        float rememberedBlockade, float myOffense)
+        float exactLossFraction, float rememberedBlockade, float myOffense)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
@@ -179,7 +179,7 @@ public static class AITuningLogger
         {
             planet, destination, tier.ToString(ci), ships.ToString(ci), (100f * lossFraction).ToString("0", ci),
             (100f * rivalSurvivorsFraction).ToString("0", ci), routeCost.ToString("0", ci), cooldownUntil.ToString(ci),
-            pRetreat.ToString("0.###", ci),
+            pRetreat.ToString("0.###", ci), (100f * exactLossFraction).ToString("0", ci),
         };
         if (tier == 3)
         {

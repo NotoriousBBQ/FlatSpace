@@ -1808,7 +1808,7 @@ namespace FlatSpace
                     _retreatCooldown[retreat.Planet] = cooldownUntil;
                     AITuningLogger.LogRetreat(turnNumber, Player.playerID, retreat.Planet, retreat.Destination, retreat.Tier, retreat.Ships,
                         retreat.LossFraction, retreat.RivalSurvivorsFraction, retreat.RouteCost, cooldownUntil, retreat.PRetreat,
-                        retreat.RememberedBlockade, retreat.MyOffense);
+                        retreat.ExactLossFraction, retreat.RememberedBlockade, retreat.MyOffense);
                     if (retreat.Tier == 3)
                     {
                         var delay = Math.Max(1, Convert.ToInt32(retreat.RouteCost / constants.defaultTravelSpeed));

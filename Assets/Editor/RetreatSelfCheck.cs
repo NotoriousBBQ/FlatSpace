@@ -22,6 +22,8 @@ public static class RetreatSelfCheck
         ok &= RunPlayerAIRetreatCheck();
         ok &= RunRetreatTrackerCheck();
         ok &= RunLargestOtherOffenseCheck();
+        ok &= RunPerceivedProjectionCheck();
+        ok &= RunPerceivedPlannerCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -166,10 +168,65 @@ public static class RetreatSelfCheck
                 "0.3 gives about 12% and 0.7 about 88% with the default steepness 0.1");
             ok &= Check(RetreatMatrix.RetreatProbability(1f, c) > 0.99f && RetreatMatrix.RetreatProbability(0f, c) < 0.01f, "a wipe-out is near certain, no loss near never");
 
-            // A deterministic roll: a very steep curve gives exactly 0 or 1.
+            // The destination shares inside the best tier: cost^-exponent, relative to the cheapest, normalised.
+            var even = RetreatMatrix.DestinationShares(new[] { 100f, 100f }, 2f);
+            ok &= Check(Near(even[0], 0.5f) && Near(even[1], 0.5f), "equal costs share equally");
+            var quad = RetreatMatrix.DestinationShares(new[] { 100f, 200f }, 2f);
+            ok &= Check(Near(quad[0], 0.8f) && Near(quad[1], 0.2f), "exponent 2, costs 100 and 200: 80% and 20%");
+            var flat = RetreatMatrix.DestinationShares(new[] { 100f, 400f }, 0f);
+            ok &= Check(Near(flat[0], 0.5f) && Near(flat[1], 0.5f), "exponent 0 ignores the cost");
+            var steep = RetreatMatrix.DestinationShares(new[] { 100f, 200f }, 50f);
+            ok &= Check(steep[0] > 0.999f && steep[1] < 0.001f, "a huge exponent is the strictly nearest");
+            ok &= Check(Near(RetreatMatrix.DestinationShares(new[] { 0f }, 2f)[0], 1f), "a single candidate (even at cost 0) takes everything");
+
+            // A deterministic roll: a very steep curve gives exactly 0 or 1, and a huge cost exponent picks the nearest.
             c.retreatSteepness = 0.001f;
+            c.retreatDestinationCostExponent = 50f;
             RetreatMatrix.Row Row(string planet, float loss, string destination, int tier = 1, float cost = 100f)
-                => new RetreatMatrix.Row { Planet = planet, Ships = 3, LossFraction = loss, Destination = destination, Tier = tier, PathCost = cost };
+                => new RetreatMatrix.Row
+                {
+                    Planet = planet, Ships = 3, LossFraction = loss,
+                    Candidates = string.IsNullOrEmpty(destination)
+                        ? new List<RetreatMatrix.Candidate>()
+                        : new List<RetreatMatrix.Candidate> { new RetreatMatrix.Candidate { Planet = destination, Tier = tier, PathCost = cost } },
+                };
+            GameAI.Rand = new System.Random(7);
+
+            var twoCandidates = RetreatMatrix.Decide(new List<RetreatMatrix.Row>
+            {
+                new RetreatMatrix.Row
+                {
+                    Planet = "X", Ships = 3, LossFraction = 0.95f,
+                    Candidates = new List<RetreatMatrix.Candidate>
+                    {
+                        new RetreatMatrix.Candidate { Planet = "FAR", Tier = 1, PathCost = 300f },
+                        new RetreatMatrix.Candidate { Planet = "NEAR", Tier = 1, PathCost = 100f },
+                    },
+                },
+            }, c);
+            ok &= Check(twoCandidates.Count == 1 && twoCandidates[0].Retreat && twoCandidates[0].Action.Target == "NEAR" && Near(twoCandidates[0].Action.Cost, 100f),
+                "with several candidates one roll picks both whether and where: a huge exponent picks the nearest");
+            c.retreatDestinationCostExponent = 0f;
+            var seen = new HashSet<string>();
+            for (var seed = 0; seed < 40; seed++)
+            {
+                GameAI.Rand = new System.Random(seed);
+                var pick = RetreatMatrix.Decide(new List<RetreatMatrix.Row>
+                {
+                    new RetreatMatrix.Row
+                    {
+                        Planet = "X", Ships = 3, LossFraction = 0.95f,
+                        Candidates = new List<RetreatMatrix.Candidate>
+                        {
+                            new RetreatMatrix.Candidate { Planet = "FAR", Tier = 1, PathCost = 300f },
+                            new RetreatMatrix.Candidate { Planet = "NEAR", Tier = 1, PathCost = 100f },
+                        },
+                    },
+                }, c);
+                seen.Add(pick[0].Action.Target);
+            }
+            ok &= Check(seen.Contains("FAR") && seen.Contains("NEAR"), "with exponent 0 both destinations get picked over 40 seeds: the destination is not predictable");
+            c.retreatDestinationCostExponent = 50f;
             GameAI.Rand = new System.Random(7);
 
             var decisions = RetreatMatrix.Decide(new List<RetreatMatrix.Row> { Row("X", 0.95f, "H") }, c);
@@ -213,6 +270,7 @@ public static class RetreatSelfCheck
         void Prepare(CombatSelfCheck.Fixture f)
         {
             f.Constants.retreatSteepness = 0.001f;    // a deterministic roll
+            f.Constants.retreatDestinationCostExponent = 50f;   // and the strictly nearest destination
             GameAI.Rand = new System.Random(3);
         }
 
@@ -358,6 +416,7 @@ public static class RetreatSelfCheck
             using (var f = CombatSelfCheck.Fixture.Line())
             {
                 f.Constants.retreatSteepness = 0.001f;
+                f.Constants.retreatDestinationCostExponent = 50f;
                 f.Constants.maxPathNodesForKnowledge = 8;
                 f.Constants.maxPathNodesForShipTransport = 10;
                 f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("D", 1);
@@ -429,6 +488,97 @@ public static class RetreatSelfCheck
         return ok;
     }
 
+    // Imperfect intel: the projection is also run against a rival seen at a factor of 1 +- retreatRivalUncertainty, so an even
+    // fight reads as lost in some samples and won in others instead of exactly 0% or 100%.
+    public static bool RunPerceivedProjectionCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Ships("A", 0, 3); f.Ships("A", 1, 3); f.War(0, 1);
+            var none = new GameAI.GameAIOrder[0];
+            var weaker = FightProjector.Project(f.Map, f.P("A"), 0, f.Stats, f.Constants, none, 0.75f);
+            var stronger = FightProjector.Project(f.Map, f.P("A"), 0, f.Stats, f.Constants, none, 1.25f);
+            ok &= Check(!weaker.RivalSurvives && weaker.ProjectedLossFraction < 1f, "a rival seen at 0.75 of its offense and health: I win, with a loss under 100%");
+            ok &= Check(stronger.RivalSurvives && stronger.MyGroupWiped, "a rival seen at 1.25: it survives and my group is wiped");
+
+            var exact = Project(f, "A", 0);
+            var perceived = FightProjector.ProjectPerceived(f.Map, f.P("A"), 0, f.Stats, f.Constants, none, new System.Random(5));
+            ok &= Check(Near(perceived.ProjectedLossFraction, exact.ProjectedLossFraction), "the exact projection is kept as it was");
+            ok &= Check(perceived.Samples.Count == f.Constants.retreatUncertaintySamples, "one sample per retreatUncertaintySamples (8)");
+            ok &= Check(perceived.Samples.All(s => s.Factor >= 0.75f - 0.001f && s.Factor <= 1.25f + 0.001f)
+                        && perceived.Samples.Any(s => s.Factor < 1f) && perceived.Samples.Any(s => s.Factor > 1f),
+                "the factors are spread over 1 +- 25%, on both sides of 1 (a stratified draw with a random phase)");
+            ok &= Check(perceived.Samples.Any(s => s.RivalSurvives) && perceived.Samples.Any(s => !s.RivalSurvives),
+                "an even fight is judged lost in some samples and won in others");
+            ok &= Check(perceived.PerceivedLossFraction > 0f && perceived.PerceivedLossFraction < 1f
+                        && perceived.PerceivedRivalSurvivesShare > 0f && perceived.PerceivedRivalSurvivesShare < 1f,
+                "so the perceived loss and the share of samples where the rival survives are strictly between 0 and 1");
+
+            f.Constants.retreatRivalUncertainty = 0f;
+            var off = FightProjector.ProjectPerceived(f.Map, f.P("A"), 0, f.Stats, f.Constants, none, new System.Random(5));
+            ok &= Check(off.Samples.Count == 0 && Near(off.PerceivedLossFraction, off.ProjectedLossFraction),
+                "uncertainty 0 switches it off: no samples, the perceived loss is the exact loss");
+            f.Constants.retreatRivalUncertainty = 0.25f;
+            f.Constants.retreatUncertaintySamples = 0;
+            ok &= Check(FightProjector.ProjectPerceived(f.Map, f.P("A"), 0, f.Stats, f.Constants, none, new System.Random(5)).Samples.Count == 0,
+                "0 samples switches it off too");
+            f.Constants.retreatUncertaintySamples = 8;
+
+            var results = new List<Planet.UpdateResult>();
+            GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), results, new System.Random(3));
+            ok &= Check(results.Count == 2 && results.All(r => ((FightProjection)r.Data).Samples.Count == 8),
+                "the engine step appends the sampled projection for every player in the fight (drawn before any player decides)");
+        }
+        return ok;
+    }
+
+    private static FightProjection Sampled(FightProjection exact, params (float loss, bool survives, bool wiped)[] samples)
+    {
+        foreach (var s in samples)
+            exact.Samples.Add(new FightProjection.Sample { Factor = 1f, LossFraction = s.loss, RivalSurvives = s.survives, Wiped = s.wiped });
+        return exact;
+    }
+
+    // The planner reads the perceived values (the mean loss, the share of samples where the rival survives or the group is wiped).
+    public static bool RunPerceivedPlannerCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Constants.retreatSteepness = 0.001f; f.Constants.retreatDestinationCostExponent = 50f;
+            GameAI.Rand = new System.Random(3);
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("D", 1);
+            f.Ships("C", 0, 1); f.Ships("C", 1, 3); f.War(0, 1);
+
+            // The exact projection says "win, 0% lost"; the samples say 60% lost on average and the rival survives in half of them.
+            var gated = Plan(f, null, Sampled(Doomed("C", 0f, rivalSurvives: false),
+                (1f, true, true), (1f, true, true), (0.2f, false, false), (0.2f, false, false)));
+            ok &= Check(gated.Actions.Count == 1 && gated.Actions[0].Target == "B", "perceived loss 0.6 with the rival surviving in half the samples passes the gate");
+            ok &= Check(gated.Retreats.Count == 1 && Near(gated.Retreats[0].LossFraction, 0.6f) && Near(gated.Retreats[0].ExactLossFraction, 0f),
+                "the retreat records the perceived loss (0.6) and the exact one (0)");
+
+            var rare = Plan(f, null, Sampled(Doomed("C", 0f, rivalSurvives: false),
+                (1f, true, true), (0.5f, false, false), (0.5f, false, false), (0.5f, false, false)));
+            ok &= Check(rare.Actions.Count == 0, "the rival survives in only a quarter of the samples: under the half, no gate");
+        }
+        using (var f = CombatSelfCheck.Fixture.Line())    // my own colony: gated when a wipe-out is seen in at least half the samples
+        {
+            f.Constants.retreatSteepness = 0.001f; f.Constants.retreatDestinationCostExponent = 50f;
+            GameAI.Rand = new System.Random(3);
+            f.Colonize("B", 0); f.Colonize("C", 0); f.Colonize("D", 1);
+            f.Ships("C", 0, 2); f.Ships("C", 1, 3); f.War(0, 1);
+            var wipe = Plan(f, null, Sampled(Doomed("C", 0.5f),
+                (1f, true, true), (1f, true, true), (0.4f, true, false), (0.4f, true, false)));
+            ok &= Check(wipe.Actions.Count == 1 && wipe.Actions[0].Target == "B", "own colony: a wipe-out in half the samples (mean loss 0.7) retreats");
+            var hurt = Plan(f, null, Sampled(Doomed("C", 0.5f),
+                (1f, true, true), (0.8f, true, false), (0.8f, true, false), (0.8f, true, false)));
+            ok &= Check(hurt.Actions.Count == 0 && hurt.Holds.Count == 1 && hurt.Holds[0].Reason == RetreatPlanner.HoldOwnPlanetNotWiped,
+                "own colony: a wipe-out in only a quarter of the samples stays (RetreatHeld OwnPlanetNotWiped)");
+        }
+        return ok;
+    }
+
     // The five retreat tunables keep their documented in-code defaults.
     public static bool RunTunableDefaultsCheck()
     {
@@ -439,6 +589,8 @@ public static class RetreatSelfCheck
             ok &= Check(Near(c.retreatCheckFraction, 0.3f) && Near(c.retreatLossFraction, 0.5f), "retreatCheckFraction 0.3, retreatLossFraction 0.5");
             ok &= Check(Near(c.retreatSteepness, 0.1f), "retreatSteepness 0.1");
             ok &= Check(c.retreatProjectionTurns == 20 && c.retreatCooldownTurns == 10, "retreatProjectionTurns 20, retreatCooldownTurns 10");
+            ok &= Check(Near(c.retreatRivalUncertainty, 0.25f) && c.retreatUncertaintySamples == 8 && Near(c.retreatDestinationCostExponent, 2f),
+                "retreatRivalUncertainty 0.25, retreatUncertaintySamples 8, retreatDestinationCostExponent 2");
         }
         finally { Object.DestroyImmediate(c); }
         return ok;

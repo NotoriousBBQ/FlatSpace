@@ -172,6 +172,15 @@ public class GameAIConstants : ScriptableObject
     public float retreatSteepness = 0.1f;
     public int retreatProjectionTurns = 20;
     public int retreatCooldownTurns = 10;
+    // Imperfect intel (so a fight is not a perfect oracle that reads exactly 0% or 100%): besides the exact projection, each
+    // projection is run retreatUncertaintySamples more times with the rival seen at 1 +- retreatRivalUncertainty of its offense
+    // and health (one stratified factor per sample); the retreat decision reads the mean loss and the share of samples where the
+    // rival survives. 0 for either switches it off.
+    public float retreatRivalUncertainty = 0.25f;
+    public int retreatUncertaintySamples = 8;
+    // The destination is a roulette inside the best tier: each candidate's share is (cheapest cost / its cost) ^ this exponent,
+    // normalised. 0 = all equal, large = strictly the nearest.
+    public float retreatDestinationCostExponent = 2f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
