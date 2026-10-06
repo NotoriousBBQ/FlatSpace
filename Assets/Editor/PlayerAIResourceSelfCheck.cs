@@ -83,16 +83,16 @@ public static class PlayerAIResourceSelfCheck
             map.GetPlanet("P0Surplus").Population.Add(new Planet.Inhabitant { Player = 0 });
             map.GetPlanet("P1Surplus").Population.Add(new Planet.Inhabitant { Player = 1 });
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("P0Shortage",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("P0Shortage",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     10f, playerID: 0),
-                new Planet.PlanetUpdateResult("P0Surplus",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("P0Surplus",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     20f, playerID: 0),
-                new Planet.PlanetUpdateResult("P1Surplus",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("P1Surplus",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     20f, playerID: 1),
             };
 
@@ -155,16 +155,16 @@ public static class PlayerAIResourceSelfCheck
             map.GameAIMapInit(spawns, constants);
             map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("ShortageA",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("ShortageA",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -10f, playerID: 0),
-                new Planet.PlanetUpdateResult("ShortageB",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("ShortageB",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -15f, playerID: 0),
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     30f, playerID: 0),
             };
 
@@ -218,13 +218,13 @@ public static class PlayerAIResourceSelfCheck
             map.GameAIMapInit(spawns, constants);
             map.GetPlanet("SmallSource").Population.Add(new Planet.Inhabitant { Player = 0 });
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("BigShortage",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("BigShortage",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -50f, playerID: 0),
-                new Planet.PlanetUpdateResult("SmallSource",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("SmallSource",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     5f, playerID: 0),
             };
 
@@ -288,10 +288,10 @@ public static class PlayerAIResourceSelfCheck
             playerAI.AIMap = map;
             player.playerID = 0;
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     30f, playerID: 0),
             };
 
@@ -358,13 +358,13 @@ public static class PlayerAIResourceSelfCheck
             playerAI.AIMap = map;
             player.playerID = 0;
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     5f, playerID: 0),
-                new Planet.PlanetUpdateResult("Shortage",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("Shortage",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -5f, playerID: 0),
             };
 
@@ -440,17 +440,17 @@ public static class PlayerAIResourceSelfCheck
             playerAI.AIMap = map;
             player.playerID = 0;
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     8f, playerID: 0),
                 // DC ALSO has a real shortage this turn.
-                new Planet.PlanetUpdateResult("DC",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("DC",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -20f, playerID: 0),
-                new Planet.PlanetUpdateResult("Other",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("Other",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -8f, playerID: 0),
             };
 
@@ -517,14 +517,14 @@ public static class PlayerAIResourceSelfCheck
             playerAI.AIMap = map;
             player.playerID = 0;
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     30f, playerID: 0),
                 // DC is ALSO a real surplus source this turn, independent of its synthetic demand below.
-                new Planet.PlanetUpdateResult("DC",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("DC",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     5f, playerID: 0),
             };
 
@@ -589,16 +589,16 @@ public static class PlayerAIResourceSelfCheck
             playerAI.AIMap = map;
             player.playerID = 0;
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     5f, playerID: 0),
-                new Planet.PlanetUpdateResult("Mild",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("Mild",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -5f, playerID: 0),
-                new Planet.PlanetUpdateResult("Severe",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
+                new Planet.UpdateResult("Severe",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
                     -20f, playerID: 0),
             };
 
@@ -662,10 +662,10 @@ public static class PlayerAIResourceSelfCheck
             // Both already sticky-selected as Food DCs; this test is about shipping, not selection.
             playerAI.SetDistributionCenters("Food", new List<string> { "DC1", "DC2" });
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("DC1",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("DC1",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     30f, playerID: 0),
                 // DC2 reports nothing real -- its only demand is the synthetic DC-gap entry.
             };
@@ -732,10 +732,10 @@ public static class PlayerAIResourceSelfCheck
 
             playerAI.SetDistributionCenters("Food", new List<string> { "DC1" });
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Source",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                new Planet.UpdateResult("Source",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     30f, playerID: 0),
             };
 

@@ -49,6 +49,14 @@ namespace FlatSpace
                 _warRivals = warRivals;
             }
 
+            /// <summary>
+            /// Planets that may not be chosen as a target this turn: a planet I just retreated from (the cooldown) or am retreating
+            /// from now, so the assault does not send the same ships straight back. Null = none.
+            /// </summary>
+            public ISet<string> ExcludedTargets { get; set; }
+
+            private bool IsExcluded(string planetName) => ExcludedTargets != null && ExcludedTargets.Contains(planetName);
+
             private bool IsRival(int player) => player != _playerId && (_warRivals == null || _warRivals.Contains(player));
 
             private int CountWarships(Planet planet)
@@ -220,7 +228,7 @@ namespace FlatSpace
                 foreach (var name in _view.BlockadedNames.OrderBy(n => n, StringComparer.Ordinal))
                 {
                     var planet = _map.GetPlanet(name);
-                    if (planet == null) continue;
+                    if (planet == null || IsExcluded(name)) continue;
 
                     var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId);
                     var cost = own > 0 ? 0f : CheapestPathCost(holders, planet);
@@ -296,7 +304,7 @@ namespace FlatSpace
                 foreach (var name in _map.Knowledge.KnownPlanets(_playerId).OrderBy(n => n, StringComparer.Ordinal))
                 {
                     var planet = _map.GetPlanet(name);
-                    if (planet == null || !IsEnemyOccupied(planet) || IsHeldByMe(planet)) continue;
+                    if (planet == null || IsExcluded(name) || !IsEnemyOccupied(planet) || IsHeldByMe(planet)) continue;
 
                     var own = CountWarships(planet) + planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId);
                     // Ships already committed make a target valid without needing another holder to path from.

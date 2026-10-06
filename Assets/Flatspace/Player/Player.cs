@@ -74,7 +74,7 @@ public class Player : MonoBehaviour
             item.researched = true;
         }
     }
-    public void ProcessResults(List<Planet.PlanetUpdateResult> results, List<GameAI.GameAIOrder> orders)
+    public void ProcessResults(List<Planet.UpdateResult> results, List<GameAI.GameAIOrder> orders)
     {
         if (playerAI && aiDriven)
         {

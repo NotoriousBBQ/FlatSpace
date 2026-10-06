@@ -159,7 +159,7 @@ namespace FlatSpace
             // ── Entry point ──────────────────────────────────────────────────
 
             public void ProcessResults(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
@@ -228,35 +228,41 @@ namespace FlatSpace
             /// <summary>The rivals whose declaration currently forces me into war (I have not declared on them). Public for the self-check.</summary>
             public IReadOnlyCollection<int> WarForcedRivals => _warForcedLogged;
 
-            // Per rival, the warships it destroyed (turn, ships, strength) over the last lossWindowTurns. Player-private and not
-            // saved: a load starts the window empty (like the pending blockade cuts).
-            private readonly Dictionary<int, List<(int turn, float ships, float strength)>> _losses
-                = new Dictionary<int, List<(int turn, float ships, float strength)>>();
+            // Per rival, what it did to my warships over the last lossWindowTurns: (turn, ships destroyed, their strength, my
+            // strength engaged that turn). Player-private and not saved: a load starts the window empty (like the pending
+            // blockade cuts).
+            private readonly Dictionary<int, List<(int turn, float ships, float strength, float engaged)>> _losses
+                = new Dictionary<int, List<(int turn, float ships, float strength, float engaged)>>();
             // Rivals whose significant-loss drop was logged as Start (log-only, so a load logs each current one once more).
             private readonly HashSet<int> _lossDropLogged = new HashSet<int>();
 
             /// <summary>Reads this turn's WarshipsLost results for my own player (the list is shared by every player).</summary>
-            public void RecordLosses(List<Planet.PlanetUpdateResult> results, int turn)
+            public void RecordLosses(List<Planet.UpdateResult> results, int turn)
             {
                 foreach (var result in results)
                 {
-                    if (result.Result != Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost) continue;
+                    if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost) continue;
                     if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
                     if (!_losses.TryGetValue(loss.Attacker, out var list))
-                        _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength)>();
-                    list.Add((turn, loss.Ships, loss.StrengthLost));
+                        _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength, float engaged)>();
+                    list.Add((turn, loss.Ships, loss.StrengthDrop, loss.Engaged));   // the share's numerator is the strength drop (damage included), not only ships destroyed
                 }
             }
 
-            /// <summary>lost / (current + lost) over the window, 0 when both are 0; prunes entries older than the window.</summary>
-            public float LossShareToward(int rival, int turn, float myStrength)
+            /// <summary>How much of my engaged strength this rival took off me (the strength drop of every fight round, damage included) / my strength engaged against it, both totalled over the window; 0 when nothing was engaged. Prunes entries older than the window.</summary>
+            public float LossShareToward(int rival, int turn)
+            {
+                var engaged = EngagedToward(rival, turn);
+                return engaged <= 0f ? 0f : _losses[rival].Sum(e => e.strength) / engaged;
+            }
+
+            /// <summary>My strength engaged against this rival over the window (the loss share's denominator). Prunes entries older than the window.</summary>
+            public float EngagedToward(int rival, int turn)
             {
                 if (!_losses.TryGetValue(rival, out var list)) return 0f;
                 var window = AIMap.GameAIConstants.lossWindowTurns;
                 list.RemoveAll(e => turn - e.turn >= window);
-                var lost = list.Sum(e => e.strength);
-                var total = myStrength + lost;
-                return total <= 0f ? 0f : lost / total;
+                return list.Sum(e => e.engaged);
             }
 
             private float ShipsLostThisTurn(int rival, int turn)
@@ -288,7 +294,7 @@ namespace FlatSpace
                     var pair = diplomacy.Get(me, rival);
                     var rivalStrength = FleetStrength.VisibleOf(AIMap, me, rival, stats);
                     var nearShips = HostilityCalculator.CountNearShips(AIMap, me, rival);
-                    var lossShare = LossShareToward(rival, turn, myStrength);
+                    var lossShare = LossShareToward(rival, turn);
                     LogLossDropChange(turn, rival, lossShare, constants);
                     var result = HostilityCalculator.Compute(new HostilityCalculator.Inputs
                     {
@@ -308,6 +314,7 @@ namespace FlatSpace
                     pair.RivalStrength = rivalStrength;
                     pair.NearShips = nearShips;
                     pair.LossShare = lossShare;   // log-only: the per-rival share the Hostility line reports (and the Surrender line on a surrender)
+                    pair.Engaged = EngagedToward(rival, turn);   // log-only: the share's denominator
                     // Log-only: how much of the hostility ship losses account for, decayed like the hostility itself and fed only by the
                     // anger per ship lost (not the significant-loss drop), so a Stance line shows whether a war came from losses.
                     pair.LossAccum = pair.LossAccum * (1f - constants.hostilityDecay) + ShipsLostThisTurn(rival, turn) * constants.hostilityPerShipLost;
@@ -345,7 +352,7 @@ namespace FlatSpace
                         Hostility = pair.Hostility,
                         Current = Stance.War,
                         TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
-                        LossShare = LossShareToward(rival, turn, myStrength),
+                        LossShare = LossShareToward(rival, turn),
                         AtWar = true,
                         MyStrength = myStrength,
                         RivalStrength = 0f,   // out of contact the rival's fleet is not visible, so I am never "weaker": no surrender to it
@@ -434,7 +441,7 @@ namespace FlatSpace
             // ── Strategy: Expand ─────────────────────────────────────────────
 
             private void ProcessResultsStrategyExpand(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 Player                          player,
                 ref List<GameAI.GameAIOrder>    orders)
             {
@@ -444,7 +451,7 @@ namespace FlatSpace
                 ProcessGrotsitsShortage(results, orders);
                 ProcessResearch(results, orders);
                 ProcessIndustry(results, orders);
-                ProcessShipActions(orders);
+                ProcessShipActions(orders, results);
             }
 
             // ── Colonization ─────────────────────────────────────────────────
@@ -493,7 +500,7 @@ namespace FlatSpace
 
             /// <summary>The player's own surplus-reporting planets as of the last UpdateDistributionCenters
             /// call — one turn stale by the time an order executes, since order execution runs before this
-            /// turn's PlanetUpdateResults exist. Used by IsCoverageGap (Task 7).</summary>
+            /// turn's UpdateResults exist. Used by IsCoverageGap (Task 7).</summary>
             public List<string> LastFoodSurplusPlanets { get; private set; } = new List<string>();
             public List<string> LastGrotsitsSurplusPlanets { get; private set; } = new List<string>();
 
@@ -509,15 +516,15 @@ namespace FlatSpace
             /// Sticky, per-resource DC selection and pruning, once per turn. Public and free of
             /// Gameboard.Instance so the self-check can drive it directly.
             /// </summary>
-            public void UpdateDistributionCenters(List<Planet.PlanetUpdateResult> results, int turnNumber)
+            public void UpdateDistributionCenters(List<Planet.UpdateResult> results, int turnNumber)
             {
                 LastFoodSurplusPlanets = results
                     .Where(x => x.PlayerID == Player.playerID
-                             && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus)
+                             && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus)
                     .Select(x => x.Name).ToList();
                 LastGrotsitsSurplusPlanets = results
                     .Where(x => x.PlayerID == Player.playerID
-                             && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus)
+                             && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeGrotsitsSurplus)
                     .Select(x => x.Name).ToList();
 
                 UpdateDistributionCentersForResource(turnNumber, "Food", LastFoodSurplusPlanets, FoodDistributionCenters);
@@ -656,7 +663,7 @@ namespace FlatSpace
             /// lastKnownSurplusPlanets AND every planet in distributionCenters — i.e. sticky DC selection
             /// isn't giving this planet any path to get resupplied. Uses the CACHED last-known surplus set
             /// (LastFoodSurplusPlanets/LastGrotsitsSurplusPlanets), not this turn's live results, because
-            /// order execution (where this is called from) runs before this turn's PlanetUpdateResults
+            /// order execution (where this is called from) runs before this turn's UpdateResults
             /// exist — one turn stale, acceptable for a diagnostic. Public and free of Gameboard.Instance
             /// so the self-check can drive it directly.
             /// </summary>
@@ -715,12 +722,12 @@ namespace FlatSpace
 
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void ProcessColonizers(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 var colonizers = results.FindAll(
                     x => x.PlayerID == Player.playerID 
-                         && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
+                         && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady);
                 if (colonizers.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nobody is ready, so nobody is being held back
@@ -872,12 +879,12 @@ namespace FlatSpace
 
             // public for the self-check
             public void ProcessFoodShortage(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 ProcessResourceShipments(results,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).FoodShipmentIncoming,
                     FoodDistributionCenters,
                     AIMap.GameAIConstants.distributionCenterFoodTargetStock,
@@ -892,12 +899,12 @@ namespace FlatSpace
 
             // public for the self-check
             public void ProcessGrotsitsShortage(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 ProcessResourceShipments(results,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeGrotsitsShortage,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeGrotsitsSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).GrotsitsShipmentIncoming,
                     GrotsitsDistributionCenters,
                     AIMap.GameAIConstants.distributionCenterGrotsitsTargetStock,
@@ -948,9 +955,9 @@ namespace FlatSpace
             /// shortages always claim surplus first.
             /// </summary>
             private void ProcessResourceShipments(
-                List<Planet.PlanetUpdateResult>                  results,
-                Planet.PlanetUpdateResult.PlanetUpdateResultType shortageType,
-                Planet.PlanetUpdateResult.PlanetUpdateResultType surplusType,
+                List<Planet.UpdateResult>                  results,
+                Planet.UpdateResult.UpdateResultType shortageType,
+                Planet.UpdateResult.UpdateResultType surplusType,
                 Func<string, bool>                               incomingCheck,
                 List<string>                                     distributionCenters,
                 float                                             distributionCenterTargetStock,
@@ -983,7 +990,7 @@ namespace FlatSpace
                     if (dcPlanet == null) continue;
                     var gap = distributionCenterTargetStock - currentStockSelector(dcPlanet);
                     if (gap <= 0f) continue;
-                    shortages.Add(new Planet.PlanetUpdateResult(dcName, shortageType, -gap, Player.playerID));
+                    shortages.Add(new Planet.UpdateResult(dcName, shortageType, -gap, Player.playerID));
                     syntheticShortageNames.Add(dcName);
                 }
 
@@ -1065,8 +1072,8 @@ namespace FlatSpace
             /// match.
             /// </summary>
             private ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction> BuildResourceMatrix(
-                List<Planet.PlanetUpdateResult> shortages,
-                List<Planet.PlanetUpdateResult> surplusResults,
+                List<Planet.UpdateResult> shortages,
+                List<Planet.UpdateResult> surplusResults,
                 Dictionary<string, float>       remainingShortage,
                 Dictionary<string, float>       remainingSurplus,
                 List<string>                    syntheticShortageNames,
@@ -1241,13 +1248,13 @@ namespace FlatSpace
                 };
 
             private void ProcessResearch(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 var researchResults = results
                     .Where(p => p.PlayerID == Player.playerID 
-                                && p.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
-                        .PlanetUpdateResultTypeResearchProduced)
+                                && p.Result == Planet.UpdateResult.UpdateResultType
+                        .UpdateResultTypeResearchProduced)
                     .ToList();
 
                 if (researchResults.Count == 0) return;
@@ -1602,12 +1609,12 @@ namespace FlatSpace
             }
 
             private void ProcessIndustry(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 UpdatePlanetaryProduction(results, orders);
                 
-                // TODO: PlanetUpdateResultTypeIndustrySurplus — ship industry
+                // TODO: UpdateResultTypeIndustrySurplus — ship industry
             }
 
             /// <summary>
@@ -1615,7 +1622,7 @@ namespace FlatSpace
             /// or if the production queue is empty
             /// </summary>
             private void UpdatePlanetaryProduction(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 var matrix = BuildIndustryMatrix(results, Strategy);
@@ -1656,16 +1663,16 @@ namespace FlatSpace
             /// Returns null if there is nothing to do.
             /// </summary>
             private ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction> BuildIndustryMatrix(
-                List<Planet.PlanetUpdateResult>                  results,
+                List<Planet.UpdateResult>                  results,
                 AIStrategy        strategy)
             {
 
                 var productionCompleteResults = results.FindAll(x => x.PlayerID == Player.playerID
-                    && (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete 
-                        or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty))
+                    && (x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete 
+                        or Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty))
                     .OrderBy(x => x.Name).ThenBy(x => x.GetType()).ToList();
                 var surplusResults = productionCompleteResults.FindAll(x => x.PlayerID == Player.playerID
-                    && x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
+                    && x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustrySurplus);
                 
                 if (productionCompleteResults.Count == 0)
                     return null;
@@ -1747,7 +1754,7 @@ namespace FlatSpace
             /// Moves warships. The decisions live in ShipTransportPlanner (home garrisons) and, under
             /// Consolidate, AssaultPlanner; this turns each resulting ShipAction into orders.
             /// </summary>
-            public void ProcessShipActions(List<GameAI.GameAIOrder> orders)
+            public void ProcessShipActions(List<GameAI.GameAIOrder> orders, List<Planet.UpdateResult> results = null)
             {
                 // Self-checks call this with no Gameboard in the scene.
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
@@ -1755,7 +1762,7 @@ namespace FlatSpace
                 // Nothing is undocked until the orders execute, so a second fleet leaving the same
                 // origin this turn (home defence + assault) must skip the ships the first one takes.
                 var claimedByOrigin = new Dictionary<string, int>();
-                foreach (var action in PlanShipActions(turn))
+                foreach (var action in PlanShipActions(turn, results))
                 {
                     claimedByOrigin.TryGetValue(action.Origin, out var claimed);
                     EmitShipOrders(action, orders, claimed);
@@ -1764,6 +1771,84 @@ namespace FlatSpace
             }
 
             private string _lastLoggedAssaultTarget;
+
+            // A planet I retreated from -> the first turn it may be an assault target again (player-private, not saved: a load forgets it).
+            private readonly Dictionary<string, int> _retreatCooldown = new Dictionary<string, int>();
+            // Log-only: gated fights that stayed, reported on change only (see RetreatTracker).
+            private readonly RetreatTracker _retreatTracker = new RetreatTracker();
+            // Tier 3 retreats still travelling: (planet, the turn they land, the blockade value they were planned on). Log-only, not saved.
+            private readonly List<(string planet, int landTurn, float remembered)> _retreatPending = new List<(string planet, int landTurn, float remembered)>();
+
+            /// <summary>Planets still inside their retreat cooldown this turn: off the assault target list and not refilled by the garrison planner.</summary>
+            private List<string> CooldownPlanets(int turnNumber)
+                => _retreatCooldown.Where(kv => kv.Value > turnNumber).Select(kv => kv.Key).ToList();
+
+            /// <summary>The first turn a planet I retreated from may be an assault target again; 0 when there is no cooldown. Public for the self-check.</summary>
+            public int RetreatCooldownUntil(string planet) => _retreatCooldown.TryGetValue(planet, out var until) ? until : 0;
+
+            /// <summary>
+            /// Reads this player's FightProjection results and lets RetreatPlanner decide which groups leave and where; sets the
+            /// assault cooldown of each planet left. Empty when no results are given (a self-check calling the planners
+            /// directly) or diplomacy is off (no combat, no projections).
+            /// </summary>
+            private RetreatPlanner.Plan PlanRetreats(int turnNumber, List<Planet.UpdateResult> results)
+            {
+                if (results == null || !AIMap.Diplomacy.Enabled) return new RetreatPlanner.Plan();
+                LogRetreatArrivals(turnNumber);
+                var mine = results
+                    .Where(r => r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection
+                                && r.PlayerID == Player.playerID && r.Data is FightProjection)
+                    .Select(r => (FightProjection)r.Data).ToList();
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var plan = new RetreatPlanner(AIMap, Player.playerID, WarRivals(), _blockadeView, stats).Decide(mine);
+                var constants = AIMap.GameAIConstants;
+                foreach (var retreat in plan.Retreats)
+                {
+                    var cooldownUntil = turnNumber + constants.retreatCooldownTurns;
+                    _retreatCooldown[retreat.Planet] = cooldownUntil;
+                    AITuningLogger.LogRetreat(turnNumber, Player.playerID, retreat.Planet, retreat.Destination, retreat.Tier, retreat.Ships,
+                        retreat.LossFraction, retreat.RivalSurvivorsFraction, retreat.RouteCost, cooldownUntil, retreat.PRetreat,
+                        retreat.ExactLossFraction, retreat.RememberedBlockade, retreat.MyOffense);
+                    if (retreat.Tier == 3)
+                    {
+                        var delay = Math.Max(1, Convert.ToInt32(retreat.RouteCost / constants.defaultTravelSpeed));
+                        _retreatPending.Add((retreat.Destination, turnNumber + delay, retreat.RememberedBlockade));
+                    }
+                }
+                var standing = plan.Stays.Select(s => new RetreatTracker.Entry
+                    {
+                        Planet = s.Planet, Kind = RetreatTracker.KindStay, Reason = string.Empty, LossFraction = s.LossFraction, PRetreat = s.PRetreat,
+                    })
+                    .Concat(plan.Holds.Select(h => new RetreatTracker.Entry
+                    {
+                        Planet = h.Planet, Kind = RetreatTracker.KindHeld, Reason = h.Reason, LossFraction = h.LossFraction, PRetreat = 0f,
+                    }));
+                foreach (var entry in _retreatTracker.Update(standing))
+                {
+                    if (entry.Kind == RetreatTracker.KindStay)
+                        AITuningLogger.LogRetreatStay(turnNumber, Player.playerID, entry.Planet, entry.LossFraction, entry.PRetreat);
+                    else
+                        AITuningLogger.LogRetreatHeld(turnNumber, Player.playerID, entry.Planet, entry.Reason, entry.LossFraction);
+                }
+                return plan;
+            }
+
+            // A tier 3 retreat that has landed: log the blockade value it was planned on against the rival's docked offense found
+            // there now. The view's value would not do: it is the rival's offense MINUS mine, and mine have just docked, so it read 0
+            // in 34 of 36 arrivals (2026-10-06 logs) whatever the remembered value had been.
+            private void LogRetreatArrivals(int turnNumber)
+            {
+                var due = _retreatPending.Where(p => p.landTurn <= turnNumber).ToList();
+                if (due.Count == 0) return;
+                var blockade = new BlockadeSystem(AIMap, ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                foreach (var pending in due)
+                {
+                    var planet = AIMap.GetPlanet(pending.planet);
+                    var actual = planet != null ? blockade.LargestOtherDockedOffense(planet, Player.playerID) : 0f;
+                    AITuningLogger.LogRetreatArrive(turnNumber, Player.playerID, pending.planet, pending.remembered, actual);
+                    _retreatPending.Remove(pending);
+                }
+            }
 
             // Log-only: which blockade-breaking target the assault has, so start and end are logged on change only.
             private readonly BlockadeTargetTracker _blockadeTargets = new BlockadeTargetTracker();
@@ -1775,14 +1860,24 @@ namespace FlatSpace
             /// me first, else the enemy-occupied rule), plan home defence with those ships held out, then send whatever is
             /// still spare to the target. Public (and free of Gameboard.Instance) so the self-check can drive it directly.
             /// </summary>
-            public List<ShipAction> PlanShipActions(int turnNumber)
+            public List<ShipAction> PlanShipActions(int turnNumber, List<Planet.UpdateResult> results = null)
             {
+                // Retreats first: a group leaving a lost fight is claimed before any other planner can count on it.
+                var retreat = PlanRetreats(turnNumber, results);
+                var actions = new List<ShipAction>(retreat.Actions);
+
                 if (!IsConsolidateLike(Strategy))
-                    return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
+                {
+                    actions.AddRange(new ShipTransportPlanner(AIMap, Player.playerID)
+                        { Retreating = retreat.Retreating, RefillBlocked = CooldownPlanets(turnNumber) }.Plan());
+                    return actions;
+                }
 
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var excluded = new HashSet<string>(CooldownPlanets(turnNumber));
+                excluded.UnionWith(retreat.Retreating);
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
-                    AssaultWarFilter());
+                    AssaultWarFilter()) { ExcludedTargets = excluded };
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
@@ -1798,10 +1893,13 @@ namespace FlatSpace
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
                     HeldPlanet  = targetName,
-                    HeldPlanets = assault.ContestedHolds(),
+                    HeldPlanets = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList(),
+                    Retreating  = retreat.Retreating,
+                    RefillBlocked = CooldownPlanets(turnNumber),
                 };
-                var actions = transport.Plan();
-                actions.AddRange(assault.Plan(target, transport.LastStates, actions));
+                var homeActions = transport.Plan();
+                actions.AddRange(homeActions);
+                actions.AddRange(assault.Plan(target, transport.LastStates, homeActions));
 
                 var force = assault.LastBlockadeForce;
                 if (blockadeTarget != null && force.Ships > 0)

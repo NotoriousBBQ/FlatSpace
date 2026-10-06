@@ -155,6 +155,30 @@ garrison planner matters there). Colony ships do not retreat (out of scope; the 
   which was about the old measure).
 - A retreating group stops being engaged, so the share stops growing once it leaves; a lost fight reads as a high share.
 
+**Amendment (owner's decision 2026-10-06, after the whole-branch review):** the numerator is the victim's **strength drop** per
+round, not only the strength of ships destroyed. A ship worn down over several rounds dies with almost no strength left, so
+counting only destroyed ships read about 0.004 for a wipe-out by attrition (1 ship against 3) while every round added its full
+engaged strength to the denominator. `CombatLoss` gains `StrengthDrop` (start-of-round victim strength minus end-of-round
+strength, destroyed ships counted in full, damaged ships by their lower health, split among attackers by pool share like the
+rest) and `PlayerAI.RecordLosses` stores it as the numerator (about 0.5 for the same wipe-out). `StrengthLost` stays for the
+ships-destroyed accounting. Everything else in this section (the denominator, the window, the unchanged constants and their
+recalibration from logs) stands.
+
+**Amendment (owner's decision 2026-10-06, after the Play-mode runs; commits after `19759dd`, tag `retreat-v1-fallback`):** the
+first version was near-deterministic: 93-99% of retreats were at a projected loss of 100% (weight 0.99 or more), the destination
+was always the cheapest planet, and a retreated-from planet was refilled by the garrison planner and wiped again (about 45% of
+retreats). Three changes, all with tests first:
+1. **Imperfect intel.** `FightProjector.ProjectPerceived` adds `retreatUncertaintySamples` (8) samples of the same fight with the
+   rival seen at `1 +- retreatRivalUncertainty` (0.25) of its offense and health (`FightProjection.Samples`; one factor per sample,
+   stratified over the range with one random phase). The retreat decision reads the perceived values: the mean loss, the rival
+   surviving in at least half the samples, and for my own colony my group wiped in at least half. They are drawn in the engine
+   step (`GameAI.AppendFightProjections`) before any player decides.
+2. **A weighted destination.** Every valid destination of the best tier is a Retreat choice weighted by `(cheapest cost / cost) ^
+   retreatDestinationCostExponent` (2) times the retreat weight; the tier order stays strict.
+3. **No refill during the cooldown.** `ShipTransportPlanner.RefillBlocked`: a planet inside `retreatCooldownTurns` gets a garrison
+   of 0 (ships docked there stay spare).
+The `Retreat` log line gains `|<exactLossPct>` after `pRetreat`, and its `projectedLossPct` is the perceived loss.
+
 ## Tunables (`GameAIConstants`, in-code defaults, also written into `Assets/GameAIConstantsProductionTypes.asset`)
 `retreatCheckFraction` 0.3 (the gate), `retreatLossFraction` 0.5 (the curve's midpoint), `retreatSteepness` 0.1 (starting
 point: a retreat weight of about 12% at the gate of 0.3, 50% at 0.5 and 88% at 0.7; tuned from logs), `retreatProjectionTurns` 20,

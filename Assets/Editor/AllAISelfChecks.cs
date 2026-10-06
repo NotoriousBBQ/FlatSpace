@@ -23,6 +23,7 @@ public static class AllAISelfChecks
             ("Diplomacy", DiplomacySelfCheck.RunChecks),
             ("Simultaneity", SimultaneitySelfCheck.RunChecks),
             ("Combat", CombatSelfCheck.RunChecks),
+            ("Retreat", RetreatSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

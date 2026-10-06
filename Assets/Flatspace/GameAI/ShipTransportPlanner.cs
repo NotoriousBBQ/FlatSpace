@@ -34,6 +34,22 @@ namespace FlatSpace
             /// </summary>
             public ICollection<string> HeldPlanets { get; set; } = new List<string>();
 
+            /// <summary>
+            /// Planets whose docked warships are retreating this turn (RetreatPlanner): no state at all, so those ships are neither
+            /// a source of this plan nor a sink for it (the retreat has already claimed them).
+            /// </summary>
+            public ICollection<string> Retreating { get; set; } = new List<string>();
+
+            private bool IsRetreating(string planetName) => Retreating != null && Retreating.Contains(planetName);
+
+            /// <summary>
+            /// Planets inside their retreat cooldown (a group was just wiped or withdrawn there): their garrison is 0 this turn so the
+            /// plan never sends ships back into the fight, while any ship still docked there stays a spare source.
+            /// </summary>
+            public ICollection<string> RefillBlocked { get; set; } = new List<string>();
+
+            private bool IsRefillBlocked(string planetName) => RefillBlocked != null && RefillBlocked.Contains(planetName);
+
             private bool IsHeld(string planetName)
                 => planetName == HeldPlanet || (HeldPlanets != null && HeldPlanets.Contains(planetName));
 
@@ -175,7 +191,7 @@ namespace FlatSpace
                 // while a fleet is in flight): they are source-only so those ships are not stranded.
                 // The held (assault target) planet is excluded: those ships are the assault force.
                 var stranded = _map.PlanetList
-                    .Where(p => !IsColonized(p) && !IsHeld(p.PlanetName) && CountWarships(p) > 0)
+                    .Where(p => !IsColonized(p) && !IsHeld(p.PlanetName) && !IsRetreating(p.PlanetName) && CountWarships(p) > 0)
                     .ToList();
                 // Ships in flight still belong to the player, so they count toward the unlock total.
                 var totalWarships = colonized.Concat(stranded)
@@ -198,6 +214,7 @@ namespace FlatSpace
                 }
                 foreach (var planet in colonized)
                 {
+                    if (IsRetreating(planet.PlanetName)) continue;
                     if (!MaintainsGarrison(planet))
                     {
                         // Spare-only: no garrison, no category, every ship here is available.
@@ -220,7 +237,7 @@ namespace FlatSpace
                         Planet   = planet,
                         Category = categories.Count == 0 ? NoCategory : categories.Min(),
                         Rank     = TargetRank(planet),
-                        Garrison = GarrisonOf(categories),
+                        Garrison = IsRefillBlocked(planet.PlanetName) ? 0 : GarrisonOf(categories),
                         Docked   = CountWarships(planet),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });

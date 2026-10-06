@@ -294,6 +294,24 @@ user asked about one specific thing.
     turns: it must not), and `FleetHealth` (does the damaged share and the mean health recover between fights, i.e. does repair
     keep pace). Also re-read hostility saturation (the 25-turn `Hostility` lines against the earlier baselines): ship losses
     now feed it. The surrender terms are tuning levers to revisit with the diplomacy tuning, not yet tuned.
+    **Since 2026-10-06 `lossShare` is the strength drop I took from the rival (damage included) / strength ENGAGED against the rival over the window** (the `Hostility` line's
+    last field `engagedStrength` is its denominator; guard `NF >= 10`; older logs divide by the whole fleet and read 0.02-0.14,
+    so the two are not comparable, and the surrender terms need recalibrating to the new range).
+  - **Retreat:** `Retreat|<planet>|<destination>|<tier>|<ships>|<projectedLossPct>|<rivalSurvivorsPct>|<routeCost>|<cooldownUntil>|<pRetreat>|<exactLossPct>`
+    (since 2026-10-06 `projectedLossPct` is the PERCEIVED loss, the mean over the imperfect-intel samples, and `exactLossPct` is
+    the exact projection's; older logs have no last field, so guard `NF`; with imperfect intel retreats should no longer all sit at
+    100% loss and `pRetreat` should spread, and the destination is a weighted pick so one planet should not take every retreat;
+    repeat retreats from one planet within 10 turns should fall now that a planet in its cooldown is not refilled)
+    (tier 3 appends `|<rememberedBlockade>|<myOffense>`) is one line per retreat order; `RetreatStay|<planet>|<projectedLossPct>|<pRetreat>`
+    and `RetreatHeld|<planet>|<NoDestination or OwnPlanetNotWiped>|<projectedLossPct>` are on-change lines for a gated fight whose
+    ships stayed (the roll kept them, or no destination existed); `RetreatArrive|<planet>|<rememberedBlockade>|<rivalOffense>`
+    follows a tier 3 retreat when it lands (the second value is the largest single rival's docked offense on landing; logs from
+    made before the RetreatArrive fix on 2026-10-06 logged the blockade value instead, which reads 0 once my ships dock, so they cannot show staleness). Report per run: retreats per player and per tier (tier 3 should be rare), the
+    projected loss at which retreats happened against the `RetreatStay` losses (is the curve too timid or too eager: a
+    `RetreatStay` at a high loss followed by `Combat` destroying that player's ships on the planet within 3 turns is a retreat the
+    roll declined), `RetreatHeld NoDestination` counts, the stale-blockade gap in `RetreatArrive`, ships preserved (warships at T300
+    and `FleetHealth` against the earlier combat baselines; ships destroyed per run should fall), and that no planet named in a
+    `Retreat` line becomes an `AssaultTarget` or `BlockadeTarget` of that player within `cooldownUntil`.
 
 ## 4. Compare against a previous run when one exists
 

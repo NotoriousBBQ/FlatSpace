@@ -141,10 +141,11 @@ namespace FlatSpace
             {
                 GameAIMap.Diplomacy.Turn = Gameboard.Instance.TurnNumber;   // the truce is tested against it
                 var gameAIOrders = new List<GameAIOrder>();
-                var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
+                var planetUpdateResults = new List<Planet.UpdateResult>();
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
+                RunFightProjections(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
@@ -161,13 +162,44 @@ namespace FlatSpace
             }
 
             // Docked warships of players at war fight before the planets update, so this turn's losses reach ProcessResults.
-            private void RunCombat(List<Planet.PlanetUpdateResult> results)
+            private void RunCombat(List<Planet.UpdateResult> results)
             {
                 var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
                 var turn = Gameboard.Instance.TurnNumber;
                 foreach (var report in CombatSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results))
                     AITuningLogger.LogCombat(turn, report.Attacker, report.Planet, report.Victim, report.DamageDealt,
                         report.ShipsDestroyed);
+            }
+
+            // After combat: one FightProjection result per (planet, player) where that player's warships share a planet with a
+            // war rival's, so every player decides about leaving against the same projection (see FightProjector, RetreatPlanner).
+            private void RunFightProjections(List<Planet.UpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                AppendFightProjections(GameAIMap, stats, GameAIMap.GameAIConstants, CurrentAIOrders, results);
+            }
+
+            /// <summary>Public and free of Gameboard.Instance so the self-check can drive it. Nothing is appended while diplomacy is off.</summary>
+            public static void AppendFightProjections(GameAIMap map, WarshipStats stats, GameAIConstants constants,
+                List<GameAIOrder> orders, List<Planet.UpdateResult> results, System.Random rand = null)
+            {
+                if (!map.Diplomacy.Enabled) return;
+                // Each projection also carries the player's imperfect-intel samples (FightProjector.ProjectPerceived). They are drawn
+                // here, once, before any player decides, so a player's decision never depends on who decides first.
+                rand = rand ?? Rand;
+                foreach (var planet in map.PlanetList)
+                {
+                    var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner)
+                        .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
+                    if (owners.Count < 2) continue;
+                    foreach (var owner in owners)
+                    {
+                        var projection = FightProjector.ProjectPerceived(map, planet, owner, stats, constants, orders, rand);
+                        if (projection != null)
+                            results.Add(new Planet.UpdateResult(planet.PlanetName,
+                                Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection, projection, owner));
+                    }
+                }
             }
 
             // One GrotsitsShort line when a populated planet becomes short of grotsits (Start) or recovers or empties (End), with
@@ -208,7 +240,7 @@ namespace FlatSpace
                         {
                             var pair = GameAIMap.Diplomacy.Get(player, rival);
                             AITuningLogger.LogHostility(turnNumber, player, rival, pair.Hostility, pair.MyStrength,
-                                pair.RivalStrength, pair.NearShips, pair.LossShare, pair.LossAccum);
+                                pair.RivalStrength, pair.NearShips, pair.LossShare, pair.LossAccum, pair.Engaged);
                         }
                     // How hurt the player's warships are, so a log shows whether repair keeps pace with combat.
                     var fleet = GameAIMap.PlanetList.SelectMany(p => p.DockedShips)
@@ -513,13 +545,13 @@ namespace FlatSpace
                     ExecuteOrder(executableOrder);
             }
 
-            private void UpdateAllPlanets(List<Planet.PlanetUpdateResult> planetUpdateResults)
+            private void UpdateAllPlanets(List<Planet.UpdateResult> planetUpdateResults)
             {
                 GameAIMap.UpdateAllPlanets(planetUpdateResults);
             }
 
 
-            private void ProcessResults(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+            private void ProcessResults(List<Planet.UpdateResult> results, List<GameAIOrder> orders)
             {
                 for (var playerID = 0; playerID < Gameboard.Instance.players.Count(); ++playerID)
                 {

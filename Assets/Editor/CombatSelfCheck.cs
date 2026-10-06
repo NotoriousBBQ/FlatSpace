@@ -18,6 +18,8 @@ public static class CombatSelfCheck
         ok &= RunEffectiveReadersCheck();
         ok &= RunCombatResolutionCheck();
         ok &= RunRepairAndColonyShipCheck();
+        ok &= RunRoundCheck();
+        ok &= RunAttritionShareCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -34,7 +36,7 @@ public static class CombatSelfCheck
 
     // A(0,0) - B(100,0) - C(200,0) - D(300,0). Diplomacy is switched on (a map a fixture builds is legacy mode otherwise).
     // Template: Offense 10, Health 100, Defense 5; with combatDamageK 20 a hit does 0.8 of its offense.
-    private sealed class Fixture : System.IDisposable
+    public sealed class Fixture : System.IDisposable
     {
         public GameObject MapGo;
         public GameAIMap Map;
@@ -92,6 +94,64 @@ public static class CombatSelfCheck
         }
     }
 
+    // A fight lost by attrition over several rounds must still read as a heavy loss share: the numerator counts the strength
+    // every round takes (damage included), not only the strength of a ship at the round it dies.
+    public static bool RunAttritionShareCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1); f.Ships("A", 1, 3); f.War(0, 1);
+            float drop = 0f, engaged = 0f, destroyedOnly = 0f;
+            for (var round = 0; round < 8 && f.P("A").DockedShips.Any(s => s.Owner == 0); round++)
+            {
+                var results = Results();
+                Resolve(f, results);
+                foreach (var r in results.Where(r => r.Result == WarshipsLost && r.PlayerID == 0))
+                {
+                    var loss = (CombatLoss)r.Data;
+                    drop += loss.StrengthDrop; engaged += loss.Engaged; destroyedOnly += loss.StrengthLost;
+                }
+            }
+            ok &= Check(!f.P("A").DockedShips.Any(s => s.Owner == 0), "precondition: the lone ship was worn down and destroyed");
+            ok &= Check(engaged > 0f && drop / engaged > 0.35f && drop / engaged < 0.65f,
+                $"the window share is lost / engaged about 0.5 for a wipe-out by attrition (got {(engaged > 0f ? drop / engaged : 0f):0.###})");
+            ok &= Check(engaged > 0f && destroyedOnly / engaged < 0.03f, "the old numerator (only the ship's strength when it died) would read under 0.03");
+        }
+        return ok;
+    }
+
+    // The pure core: units in, damage / destroyed / per-attacker losses out, nothing mutated.
+    public static bool RunRoundCheck()
+    {
+        var ok = true;
+        CombatUnit Unit(int id, int owner) => CombatUnit.Make(id, owner, id, 10f, 100f, 5f, 0f);
+        System.Func<int, int, bool> war = (a, b) => a != b;
+        System.Func<int, int, float> hostility = (a, b) => 1f;
+
+        var outcome = CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), Unit(1, 1) }, war, hostility, 20f);
+        ok &= Check(outcome.Destroyed.Count == 0 && Near(outcome.Damage[0], 8f) && Near(outcome.Damage[1], 8f),
+            "1 against 1, offense 10 vs Defense 5, K 20: each takes 10 x 0.8 = 8, nobody dies");
+        ok &= Check(outcome.Losses.Count == 2 && outcome.Losses.All(l => Near(l.Engaged, 1050f) && l.Ships == 0f && l.StrengthLost == 0f),
+            "one loss entry per directed pair; the victim's engaged strength is 10 x (100 + 5) = 1050; nothing died");
+        ok &= Check(outcome.Losses.All(l => Near(l.StrengthDrop, 1050f - 9.2f * (92f + 5f))),
+            "the strength drop counts damage too: health 92 leaves offense 9.2 and strength 9.2 x 97 = 892.4, a drop of 157.6, though nothing died");
+
+        var weak = CombatUnit.Make(1, 1, 1, 10f, 100f, 5f, 90f);   // health 10, offense 1, strength 15
+        var lethal = CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), weak }, war, hostility, 20f);
+        ok &= Check(lethal.Destroyed.Count == 0 && Near(lethal.Damage[1], 8f), "a 10 pool needs 12.5 to kill a ship with 10 health: it survives with 8 more damage");
+        var bigPool = new List<CombatUnit> { Unit(0, 0), CombatUnit.Make(2, 0, 2, 10f, 100f, 5f, 0f), CombatUnit.Make(3, 0, 3, 10f, 100f, 5f, 0f), weak };
+        var kill = CombatSystem.Round(bigPool, war, hostility, 20f);
+        ok &= Check(kill.Destroyed.SequenceEqual(new[] { 1 }) && kill.Losses.Any(l => l.Victim == 1 && Near(l.Ships, 1f) && Near(l.StrengthLost, weak.Strength)),
+            "a 30 pool kills the 10-health ship (12.5 needed): destroyed, one ship and its strength attributed to the attacker");
+        ok &= Check(kill.Losses.Any(l => l.Victim == 1 && Near(l.StrengthDrop, weak.Strength)),
+            "a destroyed ship's whole strength is the drop (15), as before");
+
+        ok &= Check(CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), Unit(1, 0) }, war, hostility, 20f).Losses.Count == 0,
+            "one player alone: no fight, an empty outcome");
+        return ok;
+    }
+
     // The nine combat tunables keep their documented in-code defaults.
     public static bool RunTunableDefaultsCheck()
     {
@@ -101,17 +161,18 @@ public static class CombatSelfCheck
         {
             ok &= Check(Near(c.combatDamageK, 20f) && Near(c.repairFractionPerTurn, 0.1f), "combatDamageK 20, repairFractionPerTurn 0.1");
             ok &= Check(Near(c.hostilityPerShipLost, 1f) && c.lossWindowTurns == 10, "hostilityPerShipLost 1, lossWindowTurns 10");
-            ok &= Check(Near(c.significantLossFraction, 0.08f) && Near(c.significantLossHostilityDrop, 4f),
-                "significantLossFraction 0.08, significantLossHostilityDrop 4");
-            ok &= Check(c.surrenderTruceTurns == 30 && Near(c.surrenderMidpoint, 0.15f) && Near(c.surrenderSteepness, 0.015f),
-                "surrenderTruceTurns 30, surrenderMidpoint 0.15, surrenderSteepness 0.015");
-            // The default curve sits in the range real fights reach (a per-rival 10-turn loss share of 0.02-0.14 in the 2026-10-05 logs on both boards):
-            // no surrender without losses, a real chance at a heavy loss, near certain beyond it.
+            ok &= Check(Near(c.significantLossFraction, 0.15f) && Near(c.significantLossHostilityDrop, 4f),
+                "significantLossFraction 0.15, significantLossHostilityDrop 4");
+            ok &= Check(c.surrenderTruceTurns == 30 && Near(c.surrenderMidpoint, 0.3f) && Near(c.surrenderSteepness, 0.03f),
+                "surrenderTruceTurns 30, surrenderMidpoint 0.3, surrenderSteepness 0.03");
+            // The default curve sits in the range the engaged-force loss share reaches (2026-10-06 logs: median 0.11-0.13, p90 0.25-0.34 on the
+            // 25-turn lines, surrenders at a median of 0.17-0.18): no surrender without losses, rare at a routine share, even odds at
+            // a heavy one, near certain beyond it.
             ok &= Check(StanceMatrix.SurrenderWeight(0f, c) < 0.0001f, "no losses: the surrender weight is below 0.0001 (it was 0.002, which fired at share 0)");
-            ok &= Check(StanceMatrix.SurrenderWeight(0.05f, c) < 0.005f, "a 5% loss share: under 0.5% a turn");
-            ok &= Check(StanceMatrix.SurrenderWeight(0.1f, c) > 0.01f && StanceMatrix.SurrenderWeight(0.1f, c) < 0.1f, "a 10% loss share: a few percent");
-            ok &= Check(Near(StanceMatrix.SurrenderWeight(0.15f, c), 0.5f), "a 15% loss share: even odds");
-            ok &= Check(StanceMatrix.SurrenderWeight(0.2f, c) > 0.95f, "a 20% loss share: near certain");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.1f, c) < 0.005f, "a 10% loss share: under 0.5% a turn");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.2f, c) > 0.01f && StanceMatrix.SurrenderWeight(0.2f, c) < 0.1f, "a 20% loss share: a few percent");
+            ok &= Check(Near(StanceMatrix.SurrenderWeight(0.3f, c), 0.5f), "a 30% loss share: even odds");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.4f, c) > 0.95f, "a 40% loss share: near certain");
         }
         finally { Object.DestroyImmediate(c); }
         return ok;
@@ -260,16 +321,16 @@ public static class CombatSelfCheck
         return ok;
     }
 
-    private static List<Planet.PlanetUpdateResult> Results() => new List<Planet.PlanetUpdateResult>();
+    private static List<Planet.UpdateResult> Results() => new List<Planet.UpdateResult>();
 
-    private static List<CombatReport> Resolve(Fixture f, List<Planet.PlanetUpdateResult> results)
+    private static List<CombatReport> Resolve(Fixture f, List<Planet.UpdateResult> results)
         => CombatSystem.Resolve(f.Map, f.Stats, f.Constants, 1, results);
 
     private static float DamageOf(Fixture f, string planet, int owner, int index)
         => f.P(planet).DockedShips.Where(s => s.Owner == owner).ElementAt(index).Damage;
 
-    private const Planet.PlanetUpdateResult.PlanetUpdateResultType WarshipsLost =
-        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost;
+    private const Planet.UpdateResult.UpdateResultType WarshipsLost =
+        Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost;
 
     // Who fights, how much damage lands, which ship it lands on, simultaneity, the hostility-weighted split, one pool per victim.
     public static bool RunCombatResolutionCheck()
@@ -293,7 +354,14 @@ public static class CombatSelfCheck
                 "player 0's pool of 30 lands on player 1's first ship: 30 x 0.8 = 24");
             ok &= Check(Near(DamageOf(f, "A", 0, 0), 16f) && Near(DamageOf(f, "A", 0, 1), 0f),
                 "simultaneous: player 1's pool of 20 lands on player 0's first ship: 16");
-            ok &= Check(results.Count == 0, "no ship died, so no loss result");
+            ok &= Check(results.Count == 2 && results.All(r => r.Result == WarshipsLost && ((CombatLoss)r.Data).Ships == 0f),
+                "no ship died, but a fight turn still appends a zero-loss WarshipsLost result per victim");
+            ok &= Check(Near(((CombatLoss)results.First(r => r.PlayerID == 0).Data).Engaged, 3150f)
+                        && Near(((CombatLoss)results.First(r => r.PlayerID == 1).Data).Engaged, 2100f),
+                "each result carries its victim's engaged strength: player 0's 3 ships 3150, player 1's 2 ships 2100");
+            ok &= Check(Near(((CombatLoss)results.First(r => r.PlayerID == 0).Data).StrengthDrop, 1050f - 8.4f * (84f + 5f))
+                        && Near(((CombatLoss)results.First(r => r.PlayerID == 1).Data).StrengthDrop, 1050f - 7.6f * (76f + 5f)),
+                "and the strength drop of the damage with no kill: player 0's first ship at health 84 (302.4), player 1's at 76 (434.4)");
             ok &= Check(reports.Count == 2 && Near(reports.First(r => r.Attacker == 0).DamageDealt, 24f)
                         && Near(reports.First(r => r.Attacker == 1).DamageDealt, 16f),
                 "one report per directed pair with the damage dealt");
@@ -312,7 +380,7 @@ public static class CombatSelfCheck
                 "pool 100: the weakest ship (needs 10 / 0.8 = 12.5) dies, the rest 87.5 x 0.8 = 70 lands on the next");
             ok &= Check(Near(DamageOf(f, "A", 0, 0), 8.8f),
                 "the dying ship still fired this turn: 1 + 10 = 11 offense, x 0.8 = 8.8 on player 0's first ship");
-            var loss = results.Where(r => r.Result == WarshipsLost).ToList();
+            var loss = results.Where(r => r.Result == WarshipsLost && r.PlayerID == 1).ToList();
             ok &= Check(loss.Count == 1 && loss[0].PlayerID == 1 && loss[0].Name == "A", "one WarshipsLost result, victim player 1, at A");
             var data = loss.Count == 1 ? (CombatLoss)loss[0].Data : null;
             ok &= Check(data != null && data.Attacker == 0 && Near(data.Ships, 1f) && Near(data.StrengthLost, 15f),
@@ -351,7 +419,7 @@ public static class CombatSelfCheck
             f.War(0, 1); f.War(2, 1);
             var results = Results();
             Resolve(f, results);
-            var losses = results.Where(r => r.Result == WarshipsLost).OrderBy(r => ((CombatLoss)r.Data).Attacker).ToList();
+            var losses = results.Where(r => r.Result == WarshipsLost && r.PlayerID == 1).OrderBy(r => ((CombatLoss)r.Data).Attacker).ToList();
             ok &= Check(losses.Count == 2 && ((CombatLoss)losses[0].Data).Attacker == 0 && ((CombatLoss)losses[1].Data).Attacker == 2,
                 "one loss result per attacker");
             ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).Ships, 0.75f) && Near(((CombatLoss)losses[1].Data).Ships, 0.25f),
@@ -359,6 +427,8 @@ public static class CombatSelfCheck
             ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).StrengthLost, 3.75f)
                         && Near(((CombatLoss)losses[1].Data).StrengthLost, 1.25f),
                 "its strength 0.5 x (5 + 5) = 5 is shared the same way");
+            ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).Engaged, 3.75f) && Near(((CombatLoss)losses[1].Data).Engaged, 1.25f),
+                "the victim's engaged strength 5 is shared 30:10 like its loss, so two attackers count it once in total");
         }
 
         using (var f = Fixture.Line())    // legacy mode: no stances, no combat
@@ -396,8 +466,8 @@ public static class CombatSelfCheck
     public static bool RunRepairAndColonyShipCheck()
     {
         var ok = true;
-        const Planet.PlanetUpdateResult.PlanetUpdateResultType colonyLost =
-            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost;
+        const Planet.UpdateResult.UpdateResultType colonyLost =
+            Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonyShipsLost;
 
         using (var f = Fixture.Line())    // repair at home: 50 - 0.1 x 100 = 40
         {

@@ -104,7 +104,7 @@ public static class AITuningLogger
         AppendLines(lines);
     }
 
-    public static void LogPlanetEvents(int turnNumber, List<Planet.PlanetUpdateResult> results)
+    public static void LogPlanetEvents(int turnNumber, List<Planet.UpdateResult> results)
     {
         if (_currentLogPath == null) return;
         var lines = new List<string>();
@@ -112,23 +112,23 @@ public static class AITuningLogger
         {
             switch (result.Result)
             {
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "ProductionComplete",
                         result.Name, result.Data?.ToString() ?? string.Empty));
                     break;
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonizerReady", result.Name));
                     break;
                 // Colony failures: a lost inhabitant (with its player) and, when the last one goes, a dead planet
                 // (the dead result carries no player, so it logs as P-1; pair it with the PopulationLoss before it).
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationLoss:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypePopulationLoss:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "PopulationLoss", result.Name));
                     break;
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeDead:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeDead:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "PlanetDead", result.Name));
                     break;
                 // Colony ships destroyed in combat: planet, owner, how many, and the lowest-numbered rival that did it.
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonyShipsLost:
                     if (result.Data is FlatSpace.AI.ColonyLoss colonyLoss)
                         lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonyShipsLost", result.Name,
                             result.PlayerID.ToString(), colonyLoss.Count.ToString(), colonyLoss.ByPlayer.ToString()));
@@ -166,6 +166,54 @@ public static class AITuningLogger
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, me, "Surrender", rival.ToString(ci), lossShare.ToString("0.##", ci),
             pSurrender.ToString("0.###", ci), truceUntil.ToString(ci)) });
+    }
+
+    /// <summary>A group left a lost fight: T&lt;turn&gt;|P&lt;id&gt;|Retreat|planet|destination|tier|ships|projectedLossPct (the perceived loss the decision used)|rivalSurvivorsPct|routeCost|cooldownUntil|pRetreat|exactLossPct (tier 3 appends |rememberedBlockade|myOffense).</summary>
+    public static void LogRetreat(int turnNumber, int playerId, string planet, string destination, int tier, int ships,
+        float lossFraction, float rivalSurvivorsFraction, float routeCost, int cooldownUntil, float pRetreat,
+        float exactLossFraction, float rememberedBlockade, float myOffense)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var fields = new List<string>
+        {
+            planet, destination, tier.ToString(ci), ships.ToString(ci), (100f * lossFraction).ToString("0", ci),
+            (100f * rivalSurvivorsFraction).ToString("0", ci), routeCost.ToString("0", ci), cooldownUntil.ToString(ci),
+            pRetreat.ToString("0.###", ci), (100f * exactLossFraction).ToString("0", ci),
+        };
+        if (tier == 3)
+        {
+            fields.Add(rememberedBlockade.ToString("0.#", ci));
+            fields.Add(myOffense.ToString("0.#", ci));
+        }
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Retreat", fields.ToArray()) });
+    }
+
+    /// <summary>A gated fight that rolled Stay (on change only): T&lt;turn&gt;|P&lt;id&gt;|RetreatStay|planet|projectedLossPct|pRetreat.</summary>
+    public static void LogRetreatStay(int turnNumber, int playerId, string planet, float lossFraction, float pRetreat)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RetreatStay", planet,
+            (100f * lossFraction).ToString("0", ci), pRetreat.ToString("0.###", ci)) });
+    }
+
+    /// <summary>A fight the projection says to leave where the ships stay anyway (on change only): T&lt;turn&gt;|P&lt;id&gt;|RetreatHeld|planet|NoDestination or OwnPlanetNotWiped|projectedLossPct.</summary>
+    public static void LogRetreatHeld(int turnNumber, int playerId, string planet, string reason, float lossFraction)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RetreatHeld", planet, reason,
+            (100f * lossFraction).ToString("0", ci)) });
+    }
+
+    /// <summary>A tier 3 retreat landed: the blockade value it was planned on against the one found there: T&lt;turn&gt;|P&lt;id&gt;|RetreatArrive|planet|rememberedBlockade|actualBlockade.</summary>
+    public static void LogRetreatArrive(int turnNumber, int playerId, string planet, float remembered, float actual)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RetreatArrive", planet,
+            remembered.ToString("0.#", ci), actual.ToString("0.#", ci)) });
     }
 
     /// <summary>The significant-loss hostility drop started or ended: T&lt;turn&gt;|P&lt;id&gt;|LossDrop|rival|Start or End|lossShare.</summary>
@@ -471,15 +519,15 @@ public static class AITuningLogger
             rival.ToString(System.Globalization.CultureInfo.InvariantCulture), started ? "Start" : "End") });
     }
 
-    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips.</summary>
+    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips|lossShare|lossAccum|engagedStrength (older logs lack the last fields).</summary>
     public static void LogHostility(int turnNumber, int playerId, int rival, float hostility, float myStrength,
-        float rivalStrength, int nearShips, float lossShare = 0f, float lossAccum = 0f)
+        float rivalStrength, int nearShips, float lossShare = 0f, float lossAccum = 0f, float engaged = 0f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Hostility", rival.ToString(ci),
             hostility.ToString("0.#", ci), myStrength.ToString("0", ci), rivalStrength.ToString("0", ci),
-            nearShips.ToString(ci), lossShare.ToString("0.###", ci), lossAccum.ToString("0.#", ci)) });
+            nearShips.ToString(ci), lossShare.ToString("0.###", ci), lossAccum.ToString("0.#", ci), engaged.ToString("0", ci)) });
     }
 
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>

@@ -153,14 +153,34 @@ public class GameAIConstants : ScriptableObject
     // is at least significantLossFraction.
     public float hostilityPerShipLost = 1f;
     public int lossWindowTurns = 10;
-    public float significantLossFraction = 0.08f;   // per-rival 10-turn shares reach 0.02-0.14 on both boards (2026-10-05 logs); 0.3 then 0.2 never fired
+    public float significantLossFraction = 0.15f;   // engaged-force share (2026-10-06 logs): median 0.11-0.13 and p90 0.25-0.34 on the 25-turn lines; 0.08 (tuned to the old whole-fleet share) fired 28-62 times a run; before that 0.3 then 0.2 never fired
     public float significantLossHostilityDrop = 4f;
     // Surrender: a stance choice offered while I am at war and weaker, weighted 1 / (1 + e^(-(loss share - surrenderMidpoint)
     // / surrenderSteepness)). It ends the war for both sides and locks the pair against new declarations (and forced wars)
     // for surrenderTruceTurns.
     public int surrenderTruceTurns = 30;
-    public float surrenderMidpoint = 0.15f;   // 0.6 was above any share the runs reached; 0.3 was still above the per-rival maximum 0.14
-    public float surrenderSteepness = 0.015f;   // 0.1 gave 0.0025 at share 0: surrenders with no losses; 0.015 gives 0.00005
+    public float surrenderMidpoint = 0.3f;   // on the engaged-force share surrenders happened at a median 0.17-0.18 with 0.15 (14-33 a run, about half of all wars); 0.3 is where a heavy defeat lands (p90 at surrender 0.34-0.64)
+    public float surrenderSteepness = 0.03f;   // 0.1 gave 0.0025 at share 0: surrenders with no losses; 0.03 with midpoint 0.3 gives 0.00005 (0.04 would give 0.00055)
+
+    [Header("Retreat")]
+    // A fight planet is considered for retreat only when the projected fight (FightProjector) leaves a war rival alive and
+    // my group would lose at least retreatCheckFraction of its strength (at a planet I populate: only a wipe-out). Past that
+    // gate Stay or Retreat is a weighted roulette: the Retreat weight is 1 / (1 + e^(-(loss - retreatLossFraction) /
+    // retreatSteepness)). A retreated-from planet is off the assault target list for retreatCooldownTurns.
+    public float retreatCheckFraction = 0.3f;
+    public float retreatLossFraction = 0.5f;
+    public float retreatSteepness = 0.1f;
+    public int retreatProjectionTurns = 20;
+    public int retreatCooldownTurns = 10;
+    // Imperfect intel (so a fight is not a perfect oracle that reads exactly 0% or 100%): besides the exact projection, each
+    // projection is run retreatUncertaintySamples more times with the rival seen at 1 +- retreatRivalUncertainty of its offense
+    // and health (one stratified factor per sample); the retreat decision reads the mean loss and the share of samples where the
+    // rival survives. 0 for either switches it off.
+    public float retreatRivalUncertainty = 0.25f;
+    public int retreatUncertaintySamples = 8;
+    // The destination is a roulette inside the best tier: each candidate's share is (cheapest cost / its cost) ^ this exponent,
+    // normalised. 0 = all equal, large = strictly the nearest.
+    public float retreatDestinationCostExponent = 2f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
