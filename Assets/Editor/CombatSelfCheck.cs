@@ -18,6 +18,7 @@ public static class CombatSelfCheck
         ok &= RunEffectiveReadersCheck();
         ok &= RunCombatResolutionCheck();
         ok &= RunRepairAndColonyShipCheck();
+        ok &= RunRoundCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -34,7 +35,7 @@ public static class CombatSelfCheck
 
     // A(0,0) - B(100,0) - C(200,0) - D(300,0). Diplomacy is switched on (a map a fixture builds is legacy mode otherwise).
     // Template: Offense 10, Health 100, Defense 5; with combatDamageK 20 a hit does 0.8 of its offense.
-    private sealed class Fixture : System.IDisposable
+    public sealed class Fixture : System.IDisposable
     {
         public GameObject MapGo;
         public GameAIMap Map;
@@ -90,6 +91,33 @@ public static class CombatSelfCheck
             Object.DestroyImmediate(Constants);
             Object.DestroyImmediate(Template);
         }
+    }
+
+    // The pure core: units in, damage / destroyed / per-attacker losses out, nothing mutated.
+    public static bool RunRoundCheck()
+    {
+        var ok = true;
+        CombatUnit Unit(int id, int owner) => CombatUnit.Make(id, owner, id, 10f, 100f, 5f, 0f);
+        System.Func<int, int, bool> war = (a, b) => a != b;
+        System.Func<int, int, float> hostility = (a, b) => 1f;
+
+        var outcome = CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), Unit(1, 1) }, war, hostility, 20f);
+        ok &= Check(outcome.Destroyed.Count == 0 && Near(outcome.Damage[0], 8f) && Near(outcome.Damage[1], 8f),
+            "1 against 1, offense 10 vs Defense 5, K 20: each takes 10 x 0.8 = 8, nobody dies");
+        ok &= Check(outcome.Losses.Count == 2 && outcome.Losses.All(l => Near(l.Engaged, 1050f) && l.Ships == 0f && l.StrengthLost == 0f),
+            "one loss entry per directed pair; the victim's engaged strength is 10 x (100 + 5) = 1050; nothing died");
+
+        var weak = CombatUnit.Make(1, 1, 1, 10f, 100f, 5f, 90f);   // health 10, offense 1, strength 15
+        var lethal = CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), weak }, war, hostility, 20f);
+        ok &= Check(lethal.Destroyed.Count == 0 && Near(lethal.Damage[1], 8f), "a 10 pool needs 12.5 to kill a ship with 10 health: it survives with 8 more damage");
+        var bigPool = new List<CombatUnit> { Unit(0, 0), CombatUnit.Make(2, 0, 2, 10f, 100f, 5f, 0f), CombatUnit.Make(3, 0, 3, 10f, 100f, 5f, 0f), weak };
+        var kill = CombatSystem.Round(bigPool, war, hostility, 20f);
+        ok &= Check(kill.Destroyed.SequenceEqual(new[] { 1 }) && kill.Losses.Any(l => l.Victim == 1 && Near(l.Ships, 1f) && Near(l.StrengthLost, weak.Strength)),
+            "a 30 pool kills the 10-health ship (12.5 needed): destroyed, one ship and its strength attributed to the attacker");
+
+        ok &= Check(CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), Unit(1, 0) }, war, hostility, 20f).Losses.Count == 0,
+            "one player alone: no fight, an empty outcome");
+        return ok;
     }
 
     // The nine combat tunables keep their documented in-code defaults.
