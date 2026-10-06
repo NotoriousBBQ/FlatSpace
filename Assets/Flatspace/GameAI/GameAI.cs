@@ -208,7 +208,7 @@ namespace FlatSpace
                         {
                             var pair = GameAIMap.Diplomacy.Get(player, rival);
                             AITuningLogger.LogHostility(turnNumber, player, rival, pair.Hostility, pair.MyStrength,
-                                pair.RivalStrength, pair.NearShips, pair.LossShare);
+                                pair.RivalStrength, pair.NearShips, pair.LossShare, pair.LossAccum);
                         }
                     // How hurt the player's warships are, so a log shows whether repair keeps pace with combat.
                     var fleet = GameAIMap.PlanetList.SelectMany(p => p.DockedShips)
@@ -396,7 +396,7 @@ namespace FlatSpace
                             var stancePair = GameAIMap.Diplomacy.Get(executableOrder.PlayerId, stanceRival);
                             AITuningLogger.LogStance(stanceTurn, executableOrder.PlayerId, stanceRival,
                                 stancePair.Stance.ToString(), stancePair.Hostility, stancePair.CutsTerm,
-                                stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar);
+                                stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar, stancePair.LossAccum);
                         }
                         break;
                     }

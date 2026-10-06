@@ -1064,6 +1064,20 @@ public static class DiplomacySelfCheck
             ok &= Check(Near(f.AI.LossShareToward(1, 30, 0f), 1f), "my strength 0 with something lost: 1");
             ok &= Check(Near(f.AI.LossShareToward(3, 30, 0f), 0f), "both 0: 0, no division by zero");
         }
+
+        // The loss accumulator (log-only, for the tuning log): the part of the hostility that ship losses account for, decayed like the
+        // hostility itself and fed only by the anger per ship lost (not by the significant-loss drop).
+        using (var f = WithRival())
+        {
+            f.AI.RecordLosses(new List<Planet.PlanetUpdateResult> { Loss(0, 1, 3f, 100f) }, 10);
+            f.AI.UpdateDiplomacy(10, new List<GameAI.GameAIOrder>());
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).LossAccum, 3f), "3 ships lost this turn: the loss accumulator is 3 (hostilityPerShipLost 1)");
+            f.AI.UpdateDiplomacy(11, new List<GameAI.GameAIOrder>());
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).LossAccum, 3f * 0.95f), "a turn without losses: it decays by hostilityDecay (5%), 2.85");
+            f.AI.RecordLosses(new List<Planet.PlanetUpdateResult> { Loss(0, 1, 2f, 100f) }, 12);
+            f.AI.UpdateDiplomacy(12, new List<GameAI.GameAIOrder>());
+            ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).LossAccum, 3f * 0.95f * 0.95f + 2f), "2 more ships lost: decayed total plus 2");
+        }
         return ok;
     }
 

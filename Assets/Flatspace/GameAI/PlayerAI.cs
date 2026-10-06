@@ -308,6 +308,9 @@ namespace FlatSpace
                     pair.RivalStrength = rivalStrength;
                     pair.NearShips = nearShips;
                     pair.LossShare = lossShare;   // log-only: the per-rival share the Hostility line reports (and the Surrender line on a surrender)
+                    // Log-only: how much of the hostility ship losses account for, decayed like the hostility itself and fed only by the
+                    // anger per ship lost (not the significant-loss drop), so a Stance line shows whether a war came from losses.
+                    pair.LossAccum = pair.LossAccum * (1f - constants.hostilityDecay) + ShipsLostThisTurn(rival, turn) * constants.hostilityPerShipLost;
                     diplomacy.Set(me, rival, pair);
                     rows.Add(new StanceMatrix.Row
                     {
@@ -334,6 +337,7 @@ namespace FlatSpace
                     pair.CutsTerm = 0f;
                     pair.NearTerm = 0f;
                     pair.StrengthTerm = 0f;
+                    pair.LossAccum *= 1f - constants.hostilityDecay;   // no contact: it only decays, like the hostility
                     diplomacy.Set(me, rival, pair);
                     rows.Add(new StanceMatrix.Row
                     {

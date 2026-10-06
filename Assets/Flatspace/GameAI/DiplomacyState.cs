@@ -25,6 +25,7 @@ namespace FlatSpace
                 // Log-only: the last turn's terms and strengths. Not saved.
                 public float CutsTerm, NearTerm, StrengthTerm, PWar, MyStrength, RivalStrength;
                 public float LossShare, PSurrender;   // log-only: the numbers behind a Surrender order
+                public float LossAccum;               // log-only: the part of the hostility that ship losses account for (decayed like it)
                 public int NearShips;
                 // A surrender locks the pair until this turn (0 = no truce): no Declare War, and IsAtWar is false.
                 public int TruceUntil;

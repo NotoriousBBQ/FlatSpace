@@ -267,9 +267,9 @@ user asked about one specific thing.
     (a `Divert` whose last field is not `-`: the declined detour cost, which is above `colonistDetourDivertRatio` times that
     divert's `cost`). Baseline before the rule (4p.json, 8 runs): 14 detours averaging cost 1787, 79% never arrived; 84 diverts
     averaging 533, 11% never arrived. A detour still long after the rule means no diversion candidate existed.
-  - **Diplomacy:** `Stance|<rival>|<Peace or War>|<hostility>|<cutsTerm>|<nearTerm>|<strengthTerm>|<pWar>` is one line per stance
+  - **Diplomacy:** `Stance|<rival>|<Peace or War>|<hostility>|<cutsTerm>|<nearTerm>|<strengthTerm>|<pWar>|<lossAccum>` (lossAccum added 2026-10-05: the part of the hostility that ship losses account for; read lossAccum / hostility on each `Stance ... War` line to see how many wars come from losses; older logs lack it) is one line per stance
     change, `WarForced|<rival>|<Start or End>` one per war a rival declared on a player that has contact with it,
-    `Hostility|<rival>|<H>|<myStrength>|<rivalStrength>|<nearShips>|<lossShare>` (lossShare added 2026-10-05: the per-rival share of my fleet strength it destroyed over the 10-turn window, the number the loss drop and the Surrender weight read; older logs lack the field) every 25 turns per player and rival with contact, and
+    `Hostility|<rival>|<H>|<myStrength>|<rivalStrength>|<nearShips>|<lossShare>|<lossAccum>` (lossShare and lossAccum added 2026-10-05: lossShare is the per-rival share of my fleet strength it destroyed over the 10-turn window, the number the loss drop and the Surrender weight read; older logs lack the field) every 25 turns per player and rival with contact, and
     `StrategyChange` now also logs Consolidate to Amass and back. Stances commit through orders (`Stance` is logged when the
     order executes), so a rival's declaration is first seen (`WarForced Start`, the Amass switch) one `ProcessResults` after it
     was decided, which is intended. Report: the first `Stance ... War` turn per player and pair;
