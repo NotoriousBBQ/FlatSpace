@@ -17,6 +17,7 @@ public static class RetreatSelfCheck
         ok &= RunProjectionCheck();
         ok &= RunBlockadeViewCheck();
         ok &= RunRetreatMatrixCheck();
+        ok &= RunRetreatPlannerCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -185,6 +186,109 @@ public static class RetreatSelfCheck
             ok &= Check(decisions[0].Planet == "X" && decisions[1].Planet == "Y", "decisions come back ordered by planet name");
         }
         finally { Object.DestroyImmediate(c); }
+        return ok;
+    }
+
+    private static RetreatPlanner.Plan Plan(CombatSelfCheck.Fixture f, BlockadeView view, params FightProjection[] projections)
+    {
+        f.Map.Knowledge.Update(f.Map, 2, 8);
+        return new RetreatPlanner(f.Map, 0, new SortedSet<int> { 1 }, view, f.Stats).Decide(projections);
+    }
+
+    // A hand-made projection for the planner (the projector has its own check).
+    private static FightProjection Doomed(string planet, float lossFraction, bool rivalSurvives = true)
+        => new FightProjection
+        {
+            Planet = planet, Player = 0, MyShips = 1, MyStrength = 1000f, MyStrengthLeft = 1000f * (1f - lossFraction),
+            RivalStrength = 3000f, RivalStrengthLeft = 2500f, RivalSurvives = rivalSurvives, Turns = 5, Rivals = new List<int> { 1 },
+        };
+
+    public static bool RunRetreatPlannerCheck()
+    {
+        var ok = true;
+        void Prepare(CombatSelfCheck.Fixture f)
+        {
+            f.Constants.retreatSteepness = 0.001f;    // a deterministic roll
+            GameAI.Rand = new System.Random(3);
+        }
+
+        // Tier 1: my own populated planet with no war-rival ship, the cheapest path: B (100) over A (200).
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Prepare(f);
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("D", 1);
+            f.Ships("C", 0, 1); f.Ships("C", 1, 3); f.War(0, 1);
+            var plan = Plan(f, null, Doomed("C", 0.95f));
+            ok &= Check(plan.Actions.Count == 1 && plan.Actions[0].Origin == "C" && plan.Actions[0].Target == "B" && plan.Actions[0].Count == 1,
+                "tier 1: the group at C retreats to B, my nearest populated planet");
+            ok &= Check(plan.Retreats.Count == 1 && plan.Retreats[0].Tier == 1 && plan.Retreating.Contains("C"), "tier 1 recorded, C is retreating");
+        }
+
+        // The gate: a projected win, or a loss under retreatCheckFraction, never reaches the matrix.
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Prepare(f);
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("D", 1);
+            f.Ships("C", 0, 1); f.Ships("C", 1, 1); f.War(0, 1);
+            ok &= Check(Plan(f, null, Doomed("C", 0.95f, rivalSurvives: false)).Actions.Count == 0, "the rival does not survive the projection: stay");
+            ok &= Check(Plan(f, null, Doomed("C", 0.2f)).Actions.Count == 0, "a loss of 20% is under the 30% gate: stay, nothing rolled");
+        }
+
+        // Tier 2: A holds a war-rival warship, so the empty known planet B is the next choice.
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Prepare(f);
+            f.Colonize("A", 0); f.Colonize("D", 1);
+            f.Ships("A", 1, 1);                                        // a war rival's warship at my only populated planet
+            f.Ships("C", 0, 1); f.Ships("C", 1, 3); f.War(0, 1);
+            var plan = Plan(f, null, Doomed("C", 0.95f));
+            ok &= Check(plan.Actions.Count == 1 && plan.Actions[0].Target == "B" && plan.Retreats[0].Tier == 2,
+                "tier 2: A holds a war-rival warship, so the empty known planet B is chosen");
+        }
+
+        // Blockades count only when a war rival is the blocker, for the destination and the route.
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Prepare(f);
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("D", 1);
+            f.Ships("C", 0, 1); f.Ships("C", 1, 3); f.War(0, 1);
+            ok &= Check(Plan(f, BlockadeView.WithBlockers(("B", 5f, 2)), Doomed("C", 0.95f)).Actions[0].Target == "B",
+                "B blockaded by player 2, who is not a war rival: still the destination");
+            ok &= Check(Plan(f, BlockadeView.WithValues(("B", 5f)), Doomed("C", 0.95f)).Actions[0].Target == "B",
+                "a remembered blockade with an unknown blocker is ignored");
+            var byRival = Plan(f, BlockadeView.WithBlockers(("B", 5f, 1)), Doomed("C", 0.95f));
+            ok &= Check(byRival.Actions.Count == 0 || byRival.Actions[0].Target != "B",
+                "B blockaded by a war rival is not a destination, and the route C-B-A would cross it, so A is out too (tier 3 D may be chosen)");
+        }
+
+        // Tier 3: a war rival's planet whose remembered blockade is lower than my offense x (1 + margin).
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Prepare(f);
+            f.Colonize("D", 1);
+            f.Ships("C", 0, 1); f.War(0, 1);                           // my group's offense is 10; the rival has no ships docked here
+            // B is blockaded by the rival too, so the empty known planet B is not a tier 2 destination and tier 3 is reached.
+            var low = Plan(f, BlockadeView.WithBlockers(("B", 5f, 1), ("D", 5f, 1)), Doomed("C", 0.95f));
+            ok &= Check(low.Actions.Count == 1 && low.Actions[0].Target == "D" && low.Retreats[0].Tier == 3
+                        && Near(low.Retreats[0].RememberedBlockade, 5f) && Near(low.Retreats[0].MyOffense, 10f),
+                "tier 3: D is a war rival's planet with remembered blockade 5, under 10 / 1.1");
+            var high = Plan(f, BlockadeView.WithBlockers(("B", 5f, 1), ("D", 20f, 1)), Doomed("C", 0.95f));
+            ok &= Check(high.Actions.Count == 0 && high.Holds.Count == 1 && high.Holds[0].Reason == RetreatPlanner.HoldNoDestination,
+                "a remembered blockade of 20 is over 10 / 1.1: no destination, the ships stay (RetreatHeld NoDestination)");
+        }
+
+        // At a planet I populate, only a wipe-out is gated.
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Prepare(f);
+            f.Colonize("B", 0); f.Colonize("C", 0); f.Colonize("D", 1);
+            f.Ships("C", 0, 2); f.Ships("C", 1, 3); f.War(0, 1);
+            var hurt = Plan(f, null, Doomed("C", 0.6f));
+            ok &= Check(hurt.Actions.Count == 0 && hurt.Holds.Count == 1 && hurt.Holds[0].Reason == RetreatPlanner.HoldOwnPlanetNotWiped,
+                "my own colony, 60% projected loss: the garrison stays (RetreatHeld OwnPlanetNotWiped)");
+            var wiped = Plan(f, null, Doomed("C", 1f));
+            ok &= Check(wiped.Actions.Count == 1 && wiped.Actions[0].Target == "B", "my own colony, wiped out: the group retreats to B");
+        }
         return ok;
     }
 
