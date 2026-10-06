@@ -38,7 +38,9 @@ public class Planet : MonoBehaviour
             UpdateResultTypeColonizerReady,
             // Appended last: serialized as an int. Data is a CombatLoss / ColonyLoss (CombatSystem); PlayerID is the victim.
             UpdateResultTypeWarshipsLost,
-            UpdateResultTypeColonyShipsLost
+            UpdateResultTypeColonyShipsLost,
+            // Appended last: serialized as an int. Data is a FightProjection (FightProjector); PlayerID is the player it is about.
+            UpdateResultTypeFightProjection
         }
 
         public enum UpdateResultPriority
@@ -59,6 +61,7 @@ public class Planet : MonoBehaviour
             switch (Result)
             {
                 case ResultType.UpdateResultTypeNone:
+                case ResultType.UpdateResultTypeFightProjection:
                     Priority = ResultPriority.UpdateResultPriorityNone;
                     break;
                 case ResultType.UpdateResultTypeDead:

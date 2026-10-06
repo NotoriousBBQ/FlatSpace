@@ -14,6 +14,7 @@ public static class RetreatSelfCheck
     public static bool RunChecks()
     {
         var ok = RunTunableDefaultsCheck();
+        ok &= RunProjectionCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -27,6 +28,109 @@ public static class RetreatSelfCheck
     }
 
     private static bool Near(float a, float b) => Mathf.Abs(a - b) < 0.01f;
+
+    private static FightProjection Project(CombatSelfCheck.Fixture f, string planet, int player, params GameAI.GameAIOrder[] orders)
+        => FightProjector.Project(f.Map, f.P(planet), player, f.Stats, f.Constants, orders);
+
+    private static readonly List<string> MaxDefense = new List<string> { "Def 1", "Def 2", "Def 3", "Def 4", "Def 5" };
+
+    // The projection plays the fight to its end: a win, a wipe-out, defense, inbound reinforcements, no fight, a zero-health ship,
+    // a third player at war with neither side, legacy mode.
+    public static bool RunProjectionCheck()
+    {
+        var ok = true;
+
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Ships("A", 0, 3); f.Ships("A", 1, 1); f.War(0, 1);
+            var mine = Project(f, "A", 0);
+            ok &= Check(mine != null && !mine.RivalSurvives && mine.ProjectedLossFraction > 0f && mine.ProjectedLossFraction < 0.3f && !mine.MyGroupWiped,
+                "3 against 1: I win and lose a little");
+            ok &= Check(mine != null && mine.MyShips == 3 && Near(mine.MyStrength, 3150f) && mine.Rivals.SequenceEqual(new[] { 1 }), "3 ships, strength 3150, rival 1");
+            var theirs = Project(f, "A", 1);
+            ok &= Check(theirs != null && theirs.RivalSurvives && theirs.MyGroupWiped && Near(theirs.ProjectedLossFraction, 1f),
+                "1 against 3: wiped, and the rival survives");
+        }
+
+        using (var f = CombatSelfCheck.Fixture.Line())    // peace: nothing to project
+        {
+            f.Ships("A", 0, 2); f.Ships("A", 1, 2);
+            ok &= Check(Project(f, "A", 0) == null, "players at peace: no projection");
+        }
+
+        // Defense is counted exactly as combat counts it (K / (K + Defense)), not as a linear add-on.
+        float EvenFightLoss(bool highDefense)
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                if (highDefense) { f.P("A").DockShipFromSave(Ship.ShipKind.WarShip, 0, MaxDefense); f.P("A").DockShipFromSave(Ship.ShipKind.WarShip, 0, MaxDefense); }
+                else f.Ships("A", 0, 2);
+                f.Ships("A", 1, 2); f.War(0, 1);
+                return Project(f, "A", 0).ProjectedLossFraction;
+            }
+        }
+        ok &= Check(EvenFightLoss(true) < EvenFightLoss(false), "2 high-defense ships lose less of their strength than 2 plain ones against the same rival");
+
+        using (var f = CombatSelfCheck.Fixture.Line())    // inbound own reinforcements change the picture
+        {
+            f.Ships("A", 0, 1); f.Ships("A", 1, 3); f.War(0, 1);
+            var without = Project(f, "A", 0);
+            var fleet = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = 0, Target = "A", Origin = "B", TimingDelay = 2, Data = 3,
+                Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                {
+                    Kind = Ship.ShipKind.WarShip,
+                    Snapshots = new List<List<string>> { new List<string>(), new List<string>(), new List<string>() },
+                    Damage = new List<float>(),
+                },
+            };
+            var with = Project(f, "A", 0, fleet);
+            ok &= Check(without.MyGroupWiped && with.InboundShips == 3 && with.ProjectedLossFraction < without.ProjectedLossFraction,
+                "1 against 3 is a wipe-out; with 3 own ships landing in 2 turns the loss is smaller");
+            var theirsFleet = new GameAI.GameAIOrder
+            {
+                Type = fleet.Type, PlayerId = 1, Target = "A", TimingDelay = 2, Data = 3, Fleet = fleet.Fleet,
+            };
+            ok &= Check(Project(f, "A", 0, theirsFleet).InboundShips == 0, "a rival's in-flight fleet is not counted");
+            var elsewhere = new GameAI.GameAIOrder { Type = fleet.Type, PlayerId = 0, Target = "C", TimingDelay = 2, Data = 3, Fleet = fleet.Fleet };
+            ok &= Check(Project(f, "A", 0, elsewhere).InboundShips == 0, "my fleet heading to another planet is not counted");
+            var late = new GameAI.GameAIOrder { Type = fleet.Type, PlayerId = 0, Target = "A", TimingDelay = f.Constants.retreatProjectionTurns + 5, Data = 3, Fleet = fleet.Fleet };
+            ok &= Check(Project(f, "A", 0, late).InboundShips == 0, "a fleet landing beyond the projection cap is ignored");
+        }
+
+        using (var f = CombatSelfCheck.Fixture.Line())    // a ship at exactly 0 health does not fight, count or crash anything
+        {
+            f.Ships("A", 0, 1, 100f);     // 100 damage on a Health stat of 100: health 0
+            f.Ships("A", 0, 1);
+            f.Ships("A", 1, 1); f.War(0, 1);
+            var p = Project(f, "A", 0);
+            ok &= Check(p != null && p.MyShips == 1 && Near(p.MyStrength, 1050f), "the 0-health ship is not counted: 1 ship, strength 1050");
+        }
+
+        using (var f = CombatSelfCheck.Fixture.Line())    // a third player at war with neither side
+        {
+            f.Ships("A", 0, 1); f.Ships("A", 1, 1); f.Ships("A", 2, 5); f.War(0, 1);
+            var p = Project(f, "A", 0);
+            ok &= Check(p != null && p.Rivals.SequenceEqual(new[] { 1 }), "player 2 is nobody's war rival: only player 1 is mine");
+        }
+
+        using (var f = CombatSelfCheck.Fixture.Line())    // the wiring: one result per (planet, player) in a fight, none in legacy mode
+        {
+            f.Ships("A", 0, 3); f.Ships("A", 1, 1); f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), results);
+            ok &= Check(results.Count == 2 && results.All(r => r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection
+                                                                 && r.Data is FightProjection && r.Name == "A"),
+                "two projection results, one per player docked in the war fight at A");
+            ok &= Check(results.Select(r => r.PlayerID).OrderBy(i => i).SequenceEqual(new[] { 0, 1 }), "their PlayerIDs are 0 and 1");
+            f.Map.Diplomacy.Enabled = false;
+            var legacy = new List<Planet.UpdateResult>();
+            GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), legacy);
+            ok &= Check(legacy.Count == 0, "legacy mode: no projection results");
+        }
+        return ok;
+    }
 
     // The five retreat tunables keep their documented in-code defaults.
     public static bool RunTunableDefaultsCheck()

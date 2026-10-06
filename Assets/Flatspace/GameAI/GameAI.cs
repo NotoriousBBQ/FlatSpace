@@ -145,6 +145,7 @@ namespace FlatSpace
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
+                RunFightProjections(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
@@ -168,6 +169,34 @@ namespace FlatSpace
                 foreach (var report in CombatSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results))
                     AITuningLogger.LogCombat(turn, report.Attacker, report.Planet, report.Victim, report.DamageDealt,
                         report.ShipsDestroyed);
+            }
+
+            // After combat: one FightProjection result per (planet, player) where that player's warships share a planet with a
+            // war rival's, so every player decides about leaving against the same projection (see FightProjector, RetreatPlanner).
+            private void RunFightProjections(List<Planet.UpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                AppendFightProjections(GameAIMap, stats, GameAIMap.GameAIConstants, CurrentAIOrders, results);
+            }
+
+            /// <summary>Public and free of Gameboard.Instance so the self-check can drive it. Nothing is appended while diplomacy is off.</summary>
+            public static void AppendFightProjections(GameAIMap map, WarshipStats stats, GameAIConstants constants,
+                List<GameAIOrder> orders, List<Planet.UpdateResult> results)
+            {
+                if (!map.Diplomacy.Enabled) return;
+                foreach (var planet in map.PlanetList)
+                {
+                    var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner)
+                        .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
+                    if (owners.Count < 2) continue;
+                    foreach (var owner in owners)
+                    {
+                        var projection = FightProjector.Project(map, planet, owner, stats, constants, orders);
+                        if (projection != null)
+                            results.Add(new Planet.UpdateResult(planet.PlanetName,
+                                Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection, projection, owner));
+                    }
+                }
             }
 
             // One GrotsitsShort line when a populated planet becomes short of grotsits (Start) or recovers or empties (End), with
