@@ -294,6 +294,19 @@ user asked about one specific thing.
     turns: it must not), and `FleetHealth` (does the damaged share and the mean health recover between fights, i.e. does repair
     keep pace). Also re-read hostility saturation (the 25-turn `Hostility` lines against the earlier baselines): ship losses
     now feed it. The surrender terms are tuning levers to revisit with the diplomacy tuning, not yet tuned.
+    **Since 2026-10-06 `lossShare` is lost strength / strength ENGAGED against the rival over the window** (the `Hostility` line's
+    last field `engagedStrength` is its denominator; guard `NF >= 10`; older logs divide by the whole fleet and read 0.02-0.14,
+    so the two are not comparable, and the surrender terms need recalibrating to the new range).
+  - **Retreat:** `Retreat|<planet>|<destination>|<tier>|<ships>|<projectedLossPct>|<rivalSurvivorsPct>|<routeCost>|<cooldownUntil>|<pRetreat>`
+    (tier 3 appends `|<rememberedBlockade>|<myOffense>`) is one line per retreat order; `RetreatStay|<planet>|<projectedLossPct>|<pRetreat>`
+    and `RetreatHeld|<planet>|<NoDestination or OwnPlanetNotWiped>|<projectedLossPct>` are on-change lines for a gated fight whose
+    ships stayed (the roll kept them, or no destination existed); `RetreatArrive|<planet>|<rememberedBlockade>|<actualBlockade>`
+    follows a tier 3 retreat when it lands. Report per run: retreats per player and per tier (tier 3 should be rare), the
+    projected loss at which retreats happened against the `RetreatStay` losses (is the curve too timid or too eager: a
+    `RetreatStay` at a high loss followed by `Combat` destroying that player's ships on the planet within 3 turns is a retreat the
+    roll declined), `RetreatHeld NoDestination` counts, the stale-blockade gap in `RetreatArrive`, ships preserved (warships at T300
+    and `FleetHealth` against the earlier combat baselines; ships destroyed per run should fall), and that no planet named in a
+    `Retreat` line becomes an `AssaultTarget` or `BlockadeTarget` of that player within `cooldownUntil`.
 
 ## 4. Compare against a previous run when one exists
 

@@ -17,6 +17,7 @@ public static class SimultaneitySelfCheck
     {
         var ok = RunPlayerOrderIndependenceCheck();
         ok &= RunLossOrderIndependenceCheck();
+        ok &= RunRetreatOrderIndependenceCheck();
         Debug.Log(ok
             ? "[SimultaneitySelfCheck] ALL PASSED"
             : "[SimultaneitySelfCheck] FAILURES (see errors above)");
@@ -39,7 +40,7 @@ public static class SimultaneitySelfCheck
 
     // A(0,0) B C D E F(500,0) in a line. Players 0, 1 and 2 hold A+B, C+D and E+F; each has a food shortage on its first planet
     // and a surplus on its second. Players 0 and 1 are at hostility 100 toward each other (both will declare); player 2 is calm.
-    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false)
+    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false, bool withRetreat = false)
     {
         var template = WarshipSelfCheck.MakeTemplate();
         var constants = WarshipSelfCheck.MakeConstants(template);
@@ -113,6 +114,20 @@ public static class SimultaneitySelfCheck
                     Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
                     new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f, Engaged = 5100f }, 1));
             }
+            if (withRetreat)
+            {
+                // Player 0 has one warship at D (player 1's planet) against player 1's three: a lost fight for player 0, a won one
+                // for player 1. Both are at war; the projection results are built from the same state for every player, so the
+                // retreat decision (a roulette made deterministic below) must not depend on which player runs first.
+                map.Diplomacy.SetStance(0, 1, Stance.War, 0);
+                map.Diplomacy.SetStance(1, 0, Stance.War, 0);
+                WarshipSelfCheck.DockWarships(map.GetPlanet("D"), 0, 1);
+                WarshipSelfCheck.DockWarships(map.GetPlanet("D"), 1, 3);
+                constants.retreatSteepness = 0.001f;
+                var retreatStats = new WarshipStats(research);
+                map.Knowledge.Update(map, 3, 8);        // player 0's new ship at D makes D known to it
+                GameAI.AppendFightProjections(map, retreatStats, constants, new List<GameAI.GameAIOrder>(), results);
+            }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
             // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it
             // ran after player 0, which is exactly what this check must catch.
@@ -183,6 +198,24 @@ public static class SimultaneitySelfCheck
             ok &= Check(forward[p].Stances == reverse[p].Stances, $"with losses, player {p}: the same stances ({forward[p].Stances} against {reverse[p].Stances})");
             ok &= Check(forward[p].StrategyAfterRound == reverse[p].StrategyAfterRound && forward[p].StrategyNextTurn == reverse[p].StrategyNextTurn,
                 $"with losses, player {p}: the same strategy after the round and at the next turn's start");
+        }
+        return ok;
+    }
+
+    // The retreat roll draws from the shared random stream and reads one projection per player: it must give each player the same
+    // orders whatever the player order.
+    public static bool RunRetreatOrderIndependenceCheck()
+    {
+        var ok = true;
+        var forward = RunRound(reversed: false, withRetreat: true);
+        var reverse = RunRound(reversed: true, withRetreat: true);
+        ok &= Check(forward[0].Orders.Any(s => s.StartsWith("OrderTypeShipTransport|0|D|")) && reverse[0].Orders.Any(s => s.StartsWith("OrderTypeShipTransport|0|D|")),
+            "precondition: player 0 retreats its lone ship from D in both player orders");
+        for (var p = 0; p < 3; ++p)
+        {
+            ok &= Check(forward[p].Orders.SequenceEqual(reverse[p].Orders),
+                $"with a retreat, player {p}: the same orders whatever the player order\n  forward: {string.Join("; ", forward[p].Orders)}\n  reverse: {string.Join("; ", reverse[p].Orders)}");
+            ok &= Check(forward[p].Stances == reverse[p].Stances, $"with a retreat, player {p}: the same stances");
         }
         return ok;
     }
