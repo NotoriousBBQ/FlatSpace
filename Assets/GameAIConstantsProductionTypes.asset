@@ -68,3 +68,8 @@ MonoBehaviour:
   surrenderTruceTurns: 30
   surrenderMidpoint: 0.15
   surrenderSteepness: 0.015
+  retreatCheckFraction: 0.3
+  retreatLossFraction: 0.5
+  retreatSteepness: 0.1
+  retreatProjectionTurns: 20
+  retreatCooldownTurns: 10

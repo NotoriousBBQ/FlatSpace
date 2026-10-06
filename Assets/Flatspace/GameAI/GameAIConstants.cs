@@ -162,6 +162,17 @@ public class GameAIConstants : ScriptableObject
     public float surrenderMidpoint = 0.15f;   // 0.6 was above any share the runs reached; 0.3 was still above the per-rival maximum 0.14
     public float surrenderSteepness = 0.015f;   // 0.1 gave 0.0025 at share 0: surrenders with no losses; 0.015 gives 0.00005
 
+    [Header("Retreat")]
+    // A fight planet is considered for retreat only when the projected fight (FightProjector) leaves a war rival alive and
+    // my group would lose at least retreatCheckFraction of its strength (at a planet I populate: only a wipe-out). Past that
+    // gate Stay or Retreat is a weighted roulette: the Retreat weight is 1 / (1 + e^(-(loss - retreatLossFraction) /
+    // retreatSteepness)). A retreated-from planet is off the assault target list for retreatCooldownTurns.
+    public float retreatCheckFraction = 0.3f;
+    public float retreatLossFraction = 0.5f;
+    public float retreatSteepness = 0.1f;
+    public int retreatProjectionTurns = 20;
+    public int retreatCooldownTurns = 10;
+
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
     // AI may designate one Distribution Center per resource (Food and/or Grotsits).
