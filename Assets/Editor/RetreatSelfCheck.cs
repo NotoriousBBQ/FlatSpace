@@ -16,6 +16,7 @@ public static class RetreatSelfCheck
         var ok = RunTunableDefaultsCheck();
         ok &= RunProjectionCheck();
         ok &= RunBlockadeViewCheck();
+        ok &= RunRetreatMatrixCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -145,6 +146,45 @@ public static class RetreatSelfCheck
         var minus = view.Without("B");
         ok &= Check(!minus.IsBlockaded("B") && minus.IsBlockaded("C") && view.IsBlockaded("B"), "Without removes one planet from a copy only");
         ok &= Check(!new BlockadeView().IsBlockaded("B"), "an empty view blockades nothing");
+        return ok;
+    }
+
+    public static bool RunRetreatMatrixCheck()
+    {
+        var ok = true;
+        var c = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            // The curve: even odds at the midpoint, rising and falling either side (1 / (1 + e^(-(loss - 0.5) / 0.1))).
+            ok &= Check(Near(RetreatMatrix.RetreatProbability(c.retreatLossFraction, c), 0.5f), "at retreatLossFraction the retreat weight is 0.5");
+            ok &= Check(Near(RetreatMatrix.RetreatProbability(0.3f, c), 0.119f) && Near(RetreatMatrix.RetreatProbability(0.7f, c), 0.881f),
+                "0.3 gives about 12% and 0.7 about 88% with the default steepness 0.1");
+            ok &= Check(RetreatMatrix.RetreatProbability(1f, c) > 0.99f && RetreatMatrix.RetreatProbability(0f, c) < 0.01f, "a wipe-out is near certain, no loss near never");
+
+            // A deterministic roll: a very steep curve gives exactly 0 or 1.
+            c.retreatSteepness = 0.001f;
+            RetreatMatrix.Row Row(string planet, float loss, string destination, int tier = 1, float cost = 100f)
+                => new RetreatMatrix.Row { Planet = planet, Ships = 3, LossFraction = loss, Destination = destination, Tier = tier, PathCost = cost };
+            GameAI.Rand = new System.Random(7);
+
+            var decisions = RetreatMatrix.Decide(new List<RetreatMatrix.Row> { Row("X", 0.95f, "H") }, c);
+            ok &= Check(decisions.Count == 1 && decisions[0].Retreat && decisions[0].Action.Origin == "X" && decisions[0].Action.Target == "H"
+                        && decisions[0].Action.Count == 3 && Near(decisions[0].Action.Cost, 100f) && decisions[0].PRetreat > 0.99f,
+                "a loss far above the midpoint retreats: the whole group of 3 from X to H, with its weight");
+
+            decisions = RetreatMatrix.Decide(new List<RetreatMatrix.Row> { Row("X", 0.1f, "H") }, c);
+            ok &= Check(decisions.Count == 1 && !decisions[0].Retreat && decisions[0].PRetreat < 0.01f, "a loss far below the midpoint stays");
+
+            decisions = RetreatMatrix.Decide(new List<RetreatMatrix.Row> { Row("X", 0.95f, "") }, c);
+            ok &= Check(decisions.Count == 1 && !decisions[0].Retreat, "a row with no destination offers Stay only, so it stays");
+
+            // Two fight planets, one destination: IndependentRows, both go there.
+            decisions = RetreatMatrix.Decide(new List<RetreatMatrix.Row> { Row("X", 0.95f, "H"), Row("Y", 0.9f, "H") }, c);
+            ok &= Check(decisions.Count == 2 && decisions.All(d => d.Retreat && d.Action.Target == "H"),
+                "two groups retreat to the same destination: neither row removes it from the other");
+            ok &= Check(decisions[0].Planet == "X" && decisions[1].Planet == "Y", "decisions come back ordered by planet name");
+        }
+        finally { Object.DestroyImmediate(c); }
         return ok;
     }
 
