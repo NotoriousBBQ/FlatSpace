@@ -24,7 +24,10 @@ namespace FlatSpace
                 public int LastChangeTurn;
                 // Log-only: the last turn's terms and strengths. Not saved.
                 public float CutsTerm, NearTerm, StrengthTerm, PWar, MyStrength, RivalStrength;
+                public float LossShare, PSurrender;   // log-only: the numbers behind a Surrender order
                 public int NearShips;
+                // A surrender locks the pair until this turn (0 = no truce): no Declare War, and IsAtWar is false.
+                public int TruceUntil;
             }
 
             /// <summary>What a save keeps of a pair.</summary>
@@ -34,6 +37,7 @@ namespace FlatSpace
                 public Stance Stance;
                 public float Hostility;
                 public int LastChangeTurn;
+                public int TruceUntil;
             }
 
             /// <summary>False = legacy: every rival with contact is an enemy and no stance is ever decided.</summary>
@@ -66,9 +70,16 @@ namespace FlatSpace
                 return true;
             }
 
+            /// <summary>The current turn, set by GameAI each turn (and by self-checks): the truce is tested against it.</summary>
+            public int Turn { get; set; }
+
+            /// <summary>True while either side of the pair carries a truce that has not ended at `turn`.</summary>
+            public bool InTruce(int a, int b, int turn) => turn < Get(a, b).TruceUntil || turn < Get(b, a).TruceUntil;
+
             public bool IsAtWar(int me, int rival, bool meHasContactWithRival)
-                => StanceToward(me, rival) == Stance.War
-                   || (meHasContactWithRival && StanceToward(rival, me) == Stance.War);
+                => !InTruce(me, rival, Turn)
+                   && (StanceToward(me, rival) == Stance.War
+                       || (meHasContactWithRival && StanceToward(rival, me) == Stance.War));
 
             /// <summary>
             /// The players `me` is at war with: its contact players, plus anyone it declared on (a stance can only exist after
@@ -130,6 +141,7 @@ namespace FlatSpace
                         Stance = kv.Value.Stance,
                         Hostility = kv.Value.Hostility,
                         LastChangeTurn = kv.Value.LastChangeTurn,
+                        TruceUntil = kv.Value.TruceUntil,
                     }).ToList();
 
             /// <summary>Replaces `me`'s pairs with the entries; null or empty (an older save) leaves it all Peace at 0.</summary>
@@ -144,6 +156,7 @@ namespace FlatSpace
                         Stance = entry.Stance,
                         Hostility = entry.Hostility,
                         LastChangeTurn = entry.LastChangeTurn,
+                        TruceUntil = entry.TruceUntil,
                     };
             }
         }

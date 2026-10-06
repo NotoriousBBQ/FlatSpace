@@ -42,7 +42,10 @@ namespace FlatSpace
                     // Appended last: OrderType serializes as an int. Immediate; Data is the rival's player id (an int),
                     // PlayerId the player that decided; Origin and Target are empty. Executed by ApplyStanceOrder.
                     OrderTypeDeclareWar,
-                    OrderTypeMakePeace
+                    OrderTypeMakePeace,
+                    // Appended last. Immediate; Data is the rival's player id; executed by ApplySurrender: both stances go
+                    // to Peace and the pair is locked against declarations for surrenderTruceTurns.
+                    OrderTypeSurrender
                 }
 
                 public enum OrderTimingType
@@ -78,14 +81,18 @@ namespace FlatSpace
                 {
                     public Ship.ShipKind Kind = Ship.ShipKind.WarShip;
                     public List<List<string>> Snapshots = new List<List<string>>();
+                    public List<float> Damage = new List<float>();   // one per snapshot; a short or empty list means full health
+
+                    public float DamageAt(int index) => index >= 0 && index < Damage.Count ? Damage[index] : 0f;
 
                     public List<SaveLoadSystem.GameSave.ShipSave> ToSave(int owner)
                     {
-                        return Snapshots.Select(snapshot => new SaveLoadSystem.GameSave.ShipSave
+                        return Snapshots.Select((snapshot, i) => new SaveLoadSystem.GameSave.ShipSave
                         {
                             kind = Kind,
                             owner = owner,
                             researchSnapshot = new List<string>(snapshot),
+                            damage = DamageAt(i),
                         }).ToList();
                     }
 
@@ -99,6 +106,7 @@ namespace FlatSpace
                             Snapshots = ships
                                 .Select(s => new List<string>(s.researchSnapshot ?? new List<string>()))
                                 .ToList(),
+                            Damage = ships.Select(s => s.damage).ToList(),
                         };
                     }
                 }
@@ -131,10 +139,12 @@ namespace FlatSpace
 
             public void GameAIUpdate()
             {
+                GameAIMap.Diplomacy.Turn = Gameboard.Instance.TurnNumber;   // the truce is tested against it
                 var gameAIOrders = new List<GameAIOrder>();
                 var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
+                RunCombat(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
@@ -148,6 +158,16 @@ namespace FlatSpace
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
+            }
+
+            // Docked warships of players at war fight before the planets update, so this turn's losses reach ProcessResults.
+            private void RunCombat(List<Planet.PlanetUpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                var turn = Gameboard.Instance.TurnNumber;
+                foreach (var report in CombatSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results))
+                    AITuningLogger.LogCombat(turn, report.Attacker, report.Planet, report.Victim, report.DamageDealt,
+                        report.ShipsDestroyed);
             }
 
             // One GrotsitsShort line when a populated planet becomes short of grotsits (Start) or recovers or empties (End), with
@@ -172,6 +192,7 @@ namespace FlatSpace
             private void LogEconomySummary(int turnNumber, int playerCount)
             {
                 if (turnNumber % 25 != 0) return;
+                var healthStats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
                 for (var player = 0; player < playerCount; player++)
                 {
                     var owned = GameAIMap.PlanetList.FindAll(p => p.Owner == player && p.Population.Count > 0);
@@ -189,6 +210,16 @@ namespace FlatSpace
                             AITuningLogger.LogHostility(turnNumber, player, rival, pair.Hostility, pair.MyStrength,
                                 pair.RivalStrength, pair.NearShips);
                         }
+                    // How hurt the player's warships are, so a log shows whether repair keeps pace with combat.
+                    var fleet = GameAIMap.PlanetList.SelectMany(p => p.DockedShips)
+                        .Where(s => s.Owner == player && s.Kind == Ship.ShipKind.WarShip).ToList();
+                    if (fleet.Count > 0)
+                        AITuningLogger.LogFleetHealth(turnNumber, player, fleet.Count, fleet.Count(s => s.Damage > 0f),
+                            100f * fleet.Average(s =>
+                            {
+                                var max = healthStats.Health(s.Template, s.ResearchSnapshot);
+                                return max <= 0f ? 0f : healthStats.CurrentHealth(s) / max;
+                            }));
                 }
             }
 
@@ -369,6 +400,17 @@ namespace FlatSpace
                         }
                         break;
                     }
+                    case GameAIOrder.OrderType.OrderTypeSurrender:
+                    {
+                        var surrenderTurn = Gameboard.Instance.TurnNumber;
+                        var surrenderRival = Convert.ToInt32(executableOrder.Data);
+                        ApplySurrender(GameAIMap.Diplomacy, executableOrder, surrenderTurn,
+                            GameAIMap.GameAIConstants.surrenderTruceTurns);
+                        var surrenderPair = GameAIMap.Diplomacy.Get(executableOrder.PlayerId, surrenderRival);
+                        AITuningLogger.LogSurrender(surrenderTurn, executableOrder.PlayerId, surrenderRival, surrenderPair.LossShare,
+                            surrenderPair.PSurrender, surrenderPair.TruceUntil);
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -382,8 +424,27 @@ namespace FlatSpace
             // when the stance changed (the caller logs on that). Pure: no Gameboard.Instance.
             public static bool ApplyStanceOrder(DiplomacyState diplomacy, GameAIOrder order, int turn)
             {
+                var rival = Convert.ToInt32(order.Data);
                 var stance = order.Type == GameAIOrder.OrderType.OrderTypeDeclareWar ? Stance.War : Stance.Peace;
-                return diplomacy.SetStance(order.PlayerId, Convert.ToInt32(order.Data), stance, turn);
+                if (stance == Stance.War && diplomacy.InTruce(order.PlayerId, rival, turn)) return false;   // locked by a surrender
+                return diplomacy.SetStance(order.PlayerId, rival, stance, turn);
+            }
+
+            // Immediate: the player surrenders to the rival in order.Data. Both stances go to Peace and both pair rows are locked
+            // against new declarations (and forced wars) until turn + truceTurns. Pure: no Gameboard.Instance.
+            public static bool ApplySurrender(DiplomacyState diplomacy, GameAIOrder order, int turn, int truceTurns)
+            {
+                var me = order.PlayerId;
+                var rival = Convert.ToInt32(order.Data);
+                diplomacy.SetStance(me, rival, Stance.Peace, turn);
+                diplomacy.SetStance(rival, me, Stance.Peace, turn);
+                foreach (var key in new[] { (me, rival), (rival, me) })
+                {
+                    var pair = diplomacy.Get(key.Item1, key.Item2);
+                    pair.TruceUntil = turn + truceTurns;
+                    diplomacy.Set(key.Item1, key.Item2, pair);
+                }
+                return true;
             }
 
             // Delayed: the food a colony ship carried lands with the colonist. Deliberately its own order, separate
@@ -436,7 +497,7 @@ namespace FlatSpace
                 for (var i = 0; i < count; i++)
                 {
                     if (order.Fleet != null && i < order.Fleet.Snapshots.Count)
-                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i]);
+                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i], order.Fleet.DamageAt(i));
                     else
                         target.DockShipRebuiltSnapshot(kind, order.PlayerId);
                 }

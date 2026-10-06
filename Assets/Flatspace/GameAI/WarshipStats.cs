@@ -50,6 +50,25 @@ namespace FlatSpace.AI
         public float Defense(ShipData template, ICollection<string> snapshot)
             => template == null ? 0f : Stat(template.shipDefense, template.shipDefenseMax, DefenseKey, snapshot);
 
+        /// <summary>Health left: the Health stat minus the damage taken, never below 0.</summary>
+        public float CurrentHealth(ShipData template, ICollection<string> snapshot, float damage)
+            => System.Math.Max(0f, Health(template, snapshot) - damage);
+
+        /// <summary>
+        /// Offense scaled by how much health is left (Offense x current health / Health stat). No floor, by the owner's
+        /// choice; 0 when the Health stat is 0 (colony ships, a ship with no template).
+        /// </summary>
+        public float EffectiveOffense(ShipData template, ICollection<string> snapshot, float damage)
+        {
+            var max = Health(template, snapshot);
+            if (max <= 0f) return 0f;
+            return Offense(template, snapshot) * CurrentHealth(template, snapshot, damage) / max;
+        }
+
+        public float CurrentHealth(Ship ship) => CurrentHealth(ship.Template, ship.ResearchSnapshot, ship.Damage);
+
+        public float EffectiveOffense(Ship ship) => EffectiveOffense(ship.Template, ship.ResearchSnapshot, ship.Damage);
+
         /// <summary>Speed has no research line: it stays the template's fixed value.</summary>
         public float Speed(ShipData template) => template == null ? 0f : template.shipSpeed;
 

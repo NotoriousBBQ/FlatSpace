@@ -127,6 +127,12 @@ public static class AITuningLogger
                 case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeDead:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "PlanetDead", result.Name));
                     break;
+                // Colony ships destroyed in combat: planet, owner, how many, and the lowest-numbered rival that did it.
+                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost:
+                    if (result.Data is FlatSpace.AI.ColonyLoss colonyLoss)
+                        lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonyShipsLost", result.Name,
+                            result.PlayerID.ToString(), colonyLoss.Count.ToString(), colonyLoss.ByPlayer.ToString()));
+                    break;
             }
         }
         AppendLines(lines);
@@ -142,6 +148,42 @@ public static class AITuningLogger
     {
         if (_currentLogPath == null || string.IsNullOrEmpty(itemName)) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ResearchComplete", itemName) });
+    }
+
+    /// <summary>Combat at a planet: T&lt;turn&gt;|P&lt;attacker&gt;|Combat|planet|attacker-&gt;victim|damageDealt|shipsDestroyed (ships may be fractional: the attacker's share).</summary>
+    public static void LogCombat(int turnNumber, int attacker, string planet, int victim, float damage, float ships)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, attacker, "Combat", planet, $"{attacker}->{victim}",
+            damage.ToString("0.#", ci), ships.ToString("0.##", ci)) });
+    }
+
+    /// <summary>A surrender: T&lt;turn&gt;|P&lt;surrenderer&gt;|Surrender|rival|lossShare|pSurrender|truceUntil.</summary>
+    public static void LogSurrender(int turnNumber, int me, int rival, float lossShare, float pSurrender, int truceUntil)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, me, "Surrender", rival.ToString(ci), lossShare.ToString("0.##", ci),
+            pSurrender.ToString("0.###", ci), truceUntil.ToString(ci)) });
+    }
+
+    /// <summary>The significant-loss hostility drop started or ended: T&lt;turn&gt;|P&lt;id&gt;|LossDrop|rival|Start or End|lossShare.</summary>
+    public static void LogLossDrop(int turnNumber, int me, int rival, bool started, float lossShare)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, me, "LossDrop", rival.ToString(ci), started ? "Start" : "End",
+            lossShare.ToString("0.##", ci)) });
+    }
+
+    /// <summary>Every 25 turns per player: T&lt;turn&gt;|P&lt;id&gt;|FleetHealth|warships|damaged|meanHealthPct.</summary>
+    public static void LogFleetHealth(int turnNumber, int me, int warships, int damaged, float meanHealthPct)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, me, "FleetHealth", warships.ToString(ci), damaged.ToString(ci),
+            meanHealthPct.ToString("0.#", ci)) });
     }
 
     public static void LogStrategyChange(int turnNumber, int playerId, string from, string to)

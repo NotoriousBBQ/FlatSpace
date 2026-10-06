@@ -82,9 +82,14 @@ public class FleetUIController : MonoBehaviour
         if (ship.Kind != Ship.ShipKind.WarShip || template == null) return label;
 
         var stats = new WarshipStats(research);
+        // A damaged ship shows current/maximum health and effective/base offense; an undamaged one shows the plain numbers.
+        var maxHp = stats.Health(template, ship.ResearchSnapshot);
+        var baseOff = stats.Offense(template, ship.ResearchSnapshot);
+        var hpText = ship.Damage > 0f ? $"{stats.CurrentHealth(ship):0.#}/{maxHp:0.#}" : $"{maxHp:0.#}";
+        var offText = ship.Damage > 0f ? $"{stats.EffectiveOffense(ship):0.#}/{baseOff:0.#}" : $"{baseOff:0.#}";
         return $"{label} (Spd {stats.Speed(template):0.#}, " +
-               $"HP {stats.Health(template, ship.ResearchSnapshot):0.#}, " +
-               $"Off {stats.Offense(template, ship.ResearchSnapshot):0.#}, " +
+               $"HP {hpText}, " +
+               $"Off {offText}, " +
                $"Def {stats.Defense(template, ship.ResearchSnapshot):0.#})";
     }
 

@@ -22,6 +22,8 @@ namespace FlatSpace
                 public int NearShips;
                 public float MyStrength;
                 public float RivalStrength;
+                public float ShipsLost;   // my warships this rival destroyed this turn (the attributed share, so fractional)
+                public float LossShare;   // lost / (current + lost) strength over the loss window
             }
 
             public struct Result
@@ -30,6 +32,7 @@ namespace FlatSpace
                 public float CutsTerm;
                 public float NearTerm;
                 public float StrengthTerm;
+                public float LossTerm;   // ships lost x hostilityPerShipLost, minus the significant-loss drop when it applies
             }
 
             /// <summary>weight x log2(mine / rival) clamped to +-2; no rival fleet is +2, no fleet of mine against one is -2, two empty fleets 0.</summary>
@@ -48,13 +51,16 @@ namespace FlatSpace
                 var cuts = input.Cuts * constants.hostilityPerCut;
                 var near = input.NearShips * constants.hostilityPerNearShip;
                 var strength = StrengthTerm(input.MyStrength, input.RivalStrength, constants.hostilityStrengthWeight);
-                var hostility = input.Previous * (1f - constants.hostilityDecay) + cuts + near + strength;
+                var loss = input.ShipsLost * constants.hostilityPerShipLost;
+                var drop = input.LossShare >= constants.significantLossFraction ? -constants.significantLossHostilityDrop : 0f;
+                var hostility = input.Previous * (1f - constants.hostilityDecay) + cuts + near + strength + loss + drop;
                 return new Result
                 {
                     Hostility = Mathf.Clamp(hostility, 0f, constants.hostilityMax),
                     CutsTerm = cuts,
                     NearTerm = near,
                     StrengthTerm = strength,
+                    LossTerm = loss + drop,
                 };
             }
 

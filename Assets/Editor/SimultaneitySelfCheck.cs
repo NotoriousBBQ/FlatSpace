@@ -16,6 +16,7 @@ public static class SimultaneitySelfCheck
     public static bool RunChecks()
     {
         var ok = RunPlayerOrderIndependenceCheck();
+        ok &= RunLossOrderIndependenceCheck();
         Debug.Log(ok
             ? "[SimultaneitySelfCheck] ALL PASSED"
             : "[SimultaneitySelfCheck] FAILURES (see errors above)");
@@ -38,7 +39,7 @@ public static class SimultaneitySelfCheck
 
     // A(0,0) B C D E F(500,0) in a line. Players 0, 1 and 2 hold A+B, C+D and E+F; each has a food shortage on its first planet
     // and a surplus on its second. Players 0 and 1 are at hostility 100 toward each other (both will declare); player 2 is calm.
-    private static Dictionary<int, Outcome> RunRound(bool reversed)
+    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false)
     {
         var template = WarshipSelfCheck.MakeTemplate();
         var constants = WarshipSelfCheck.MakeConstants(template);
@@ -48,6 +49,11 @@ public static class SimultaneitySelfCheck
         constants.defaultTravelSpeed = 1f;
         constants.stanceSteepness = 0.01f;     // exactly 0 or 1 war probability: no roulette luck in the stance
         constants.stanceMidpoint = 30f;
+        if (withLosses)
+        {
+            constants.surrenderMidpoint = 0.1f;    // a loss share of about 0.59 then gives a surrender weight of exactly 1
+            constants.surrenderSteepness = 0.01f;
+        }
         var research = WarshipSelfCheck.MakeResearch();
         var mapGo = new GameObject("SimultaneityMap");
         var gos = new List<GameObject> { mapGo };
@@ -94,6 +100,19 @@ public static class SimultaneitySelfCheck
                     Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 20f, playerID: p));
             }
             map.Knowledge.Update(map, 3, 8);
+            if (withLosses)
+            {
+                // Combat losses reach every player through the shared results list: player 1 lost 5 ships to player 0 (a loss
+                // share above the significant threshold) while player 0 is the stronger side, so the loss terms and the Surrender
+                // choice are exercised in both player orders.
+                // Player 0 is already at war with player 1 (the stance was committed earlier), so player 1 is at war, weaker (2 ships
+                // against 5) and has lost most of its fleet: it must be offered, and with these constants take, a Surrender.
+                map.Diplomacy.SetStance(0, 1, Stance.War, 0);
+                WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 0, 3);
+                results.Add(new Planet.PlanetUpdateResult("C",
+                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost,
+                    new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f }, 1));
+            }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
             // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it
             // ran after player 0, which is exactly what this check must catch.
@@ -117,6 +136,9 @@ public static class SimultaneitySelfCheck
             foreach (var o in all.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
                                              || o.Type == GameAI.GameAIOrder.OrderType.OrderTypeMakePeace))
                 GameAI.ApplyStanceOrder(map.Diplomacy, o, 10);
+            foreach (var o in all.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeSurrender))
+                GameAI.ApplySurrender(map.Diplomacy, o, 10, constants.surrenderTruceTurns);
+            map.Diplomacy.Turn = 11;
             foreach (var p in order) ais[p].ApplyWarState(11);
 
             var outcome = new Dictionary<int, Outcome>();
@@ -140,6 +162,29 @@ public static class SimultaneitySelfCheck
             Object.DestroyImmediate(constants);
             Object.DestroyImmediate(template);
         }
+    }
+
+    // The same claim with a combat loss in the results: the loss terms and the Surrender choice must not depend on player order.
+    // (No preconditions: a surrender may legitimately end player 1's war, so only the equality is asserted.)
+    public static bool RunLossOrderIndependenceCheck()
+    {
+        var ok = true;
+        var forward = RunRound(reversed: false, withLosses: true);
+        var reverse = RunRound(reversed: true, withLosses: true);
+        // Precondition (review): the fight must really exercise Surrender, or the equality below compares nothing.
+        ok &= Check(forward[1].Orders.Any(s => s.StartsWith("OrderTypeSurrender|1|")) && reverse[1].Orders.Any(s => s.StartsWith("OrderTypeSurrender|1|")),
+            "precondition: the beaten, weaker player 1 emits a Surrender order in both player orders");
+        ok &= Check(forward[1].Stances.Contains("0:Peace") && forward[0].Stances.Contains("1:Peace"),
+            "precondition: the executed surrender leaves both players at Peace");
+        for (var p = 0; p < 3; ++p)
+        {
+            ok &= Check(forward[p].Orders.SequenceEqual(reverse[p].Orders),
+                $"with losses, player {p}: the same orders whatever the player order\n  forward: {string.Join("; ", forward[p].Orders)}\n  reverse: {string.Join("; ", reverse[p].Orders)}");
+            ok &= Check(forward[p].Stances == reverse[p].Stances, $"with losses, player {p}: the same stances ({forward[p].Stances} against {reverse[p].Stances})");
+            ok &= Check(forward[p].StrategyAfterRound == reverse[p].StrategyAfterRound && forward[p].StrategyNextTurn == reverse[p].StrategyNextTurn,
+                $"with losses, player {p}: the same strategy after the round and at the next turn's start");
+        }
+        return ok;
     }
 
     public static bool RunPlayerOrderIndependenceCheck()

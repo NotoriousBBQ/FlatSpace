@@ -51,6 +51,7 @@ public class SaveLoadSystem : MonoBehaviour
             public Ship.ShipKind kind;
             public int owner;
             public List<string> researchSnapshot;
+            public float damage;   // damage taken, 0 = full health (older saves have no key and load at full health)
         }
 
         [Serializable]
@@ -121,9 +122,14 @@ public class SaveLoadSystem : MonoBehaviour
             public int stance;          // a Stance, as an int
             public float hostility;
             public int lastChangeTurn;
+            public int truceUntil;      // 0 = no truce (older saves have no key)
 
             public static StanceSave From(DiplomacyState.Entry e)
-                => new StanceSave { rival = e.Rival, stance = (int)e.Stance, hostility = e.Hostility, lastChangeTurn = e.LastChangeTurn };
+                => new StanceSave
+                {
+                    rival = e.Rival, stance = (int)e.Stance, hostility = e.Hostility, lastChangeTurn = e.LastChangeTurn,
+                    truceUntil = e.TruceUntil,
+                };
 
             public DiplomacyState.Entry ToEntry()
                 => new DiplomacyState.Entry
@@ -132,6 +138,7 @@ public class SaveLoadSystem : MonoBehaviour
                     Stance = (Stance)stance,
                     Hostility = hostility,
                     LastChangeTurn = lastChangeTurn,
+                    TruceUntil = truceUntil,
                 };
         }
 
@@ -243,7 +250,8 @@ public class SaveLoadSystem : MonoBehaviour
                     {
                         kind = ship.Kind,
                         owner = ship.Owner,
-                        researchSnapshot = new List<string>(ship.ResearchSnapshot)
+                        researchSnapshot = new List<string>(ship.ResearchSnapshot),
+                        damage = ship.Damage
                     });
                 }
 

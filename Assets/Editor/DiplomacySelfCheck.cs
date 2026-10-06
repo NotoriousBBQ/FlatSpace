@@ -34,6 +34,9 @@ public static class DiplomacySelfCheck
         ok &= RunNearShipsIgnoreRivalGarrisonCheck();
         ok &= RunStanceOrderCheck();
         ok &= RunStanceOrdersEmittedCheck();
+        ok &= RunTruceAndSurrenderOrderCheck();
+        ok &= RunLossTermsCheck();
+        ok &= RunSurrenderChoiceCheck();
         Debug.Log(ok
             ? "[DiplomacySelfCheck] ALL PASSED"
             : "[DiplomacySelfCheck] FAILURES (see errors above)");
@@ -603,6 +606,7 @@ public static class DiplomacySelfCheck
     // the emitted stance orders executed (ProcessNewOrders). Returns the orders so a case can inspect them.
     private static List<GameAI.GameAIOrder> Turn(Fixture f, int turn)
     {
+        f.Map.Diplomacy.Turn = turn;   // the truce is tested against it (no truce in the older cases, so nothing else changes)
         f.AI.ApplyWarState(turn);
         var orders = new List<GameAI.GameAIOrder>();
         f.AI.UpdateDiplomacy(turn, orders);
@@ -960,6 +964,216 @@ public static class DiplomacySelfCheck
         using (var f = Fixture.Line())
             ok &= Check(f.Map.GetPlanet(string.Empty) == null,
                 "an order with an empty Target looks up no planet (GetPlanet(\"\") is null, not an exception)");
+        return ok;
+    }
+
+    // A surrender ends the war for both sides and locks the pair: no Declare War, no forced war, until the truce ends.
+    public static bool RunTruceAndSurrenderOrderCheck()
+    {
+        var ok = true;
+        GameAI.GameAIOrder Order(GameAI.GameAIOrder.OrderType type, int me, int rival) => new GameAI.GameAIOrder
+        {
+            Type = type,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+            Data = rival,
+            Origin = string.Empty,
+            Target = string.Empty,
+            PlayerId = me,
+        };
+
+        var d = new DiplomacyState { Enabled = true };
+        d.SetStance(0, 1, Stance.War, 5);
+        d.SetStance(1, 0, Stance.War, 5);                       // both declared
+        ok &= Check(GameAI.ApplySurrender(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeSurrender, 0, 1), 20, 30),
+            "a surrender reports a change");
+        ok &= Check(d.StanceToward(0, 1) == Stance.Peace && d.StanceToward(1, 0) == Stance.Peace,
+            "both stances go to Peace (a one-sided surrender ends the war for both)");
+        ok &= Check(d.Get(0, 1).TruceUntil == 50 && d.Get(1, 0).TruceUntil == 50, "both pair rows are locked until turn 20 + 30");
+        d.Turn = 30;
+        ok &= Check(d.InTruce(0, 1, 30) && d.InTruce(1, 0, 30), "turn 30 is inside the truce, from either side");
+        ok &= Check(!d.InTruce(0, 1, 50) && !d.InTruce(0, 2, 30), "the truce ends at turn 50 and covers only that pair");
+
+        ok &= Check(!GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 30),
+            "a Declare War inside the truce is refused");
+        ok &= Check(d.StanceToward(1, 0) == Stance.Peace, "and the stance stays Peace");
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeMakePeace, 1, 0), 30) == false,
+            "Make Peace still works (nothing to change: already Peace)");
+        ok &= Check(GameAI.ApplyStanceOrder(d, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 50),
+            "after the truce a Declare War is accepted again");
+
+        // A rival's earlier declaration must not force a war during the truce.
+        var forced = new DiplomacyState { Enabled = true };
+        forced.SetStance(1, 0, Stance.War, 5);
+        forced.Turn = 6;
+        ok &= Check(forced.IsAtWar(0, 1, true), "precondition: without a truce player 1's declaration forces player 0 into war");
+        GameAI.ApplySurrender(forced, Order(GameAI.GameAIOrder.OrderType.OrderTypeSurrender, 0, 1), 6, 30);
+        forced.SetStance(1, 0, Stance.War, 7);                  // a stale declaration set again inside the truce
+        forced.Turn = 7;
+        ok &= Check(!forced.IsAtWar(0, 1, true) && !forced.IsAtWar(1, 0, true), "inside a truce the pair is not at war, whatever the stances say");
+        ok &= Check(!forced.WarRivals(0, new[] { 1 }).Contains(1), "and WarRivals leaves the truce partner out");
+        forced.Turn = 36;
+        ok &= Check(forced.IsAtWar(0, 1, true), "once the truce ends the stale declaration counts again");
+
+        // Saves: the truce survives a snapshot and an older entry loads with none.
+        var snap = d.Snapshot(0);
+        var back = new DiplomacyState();
+        back.Restore(0, snap);
+        ok &= Check(back.Get(0, 1).TruceUntil == 50, "TruceUntil survives Snapshot and Restore");
+        var entry = SaveLoadSystem.GameSave.StanceSave.From(new DiplomacyState.Entry { Rival = 1, Stance = Stance.Peace, TruceUntil = 77 }).ToEntry();
+        ok &= Check(entry.TruceUntil == 77, "StanceSave carries truceUntil");
+        var old = JsonUtility.FromJson<SaveLoadSystem.GameSave.StanceSave>("{\"rival\":1,\"stance\":1,\"hostility\":10,\"lastChangeTurn\":3}");
+        ok &= Check(old.truceUntil == 0, "an older stance save loads with no truce");
+        return ok;
+    }
+
+    private static Planet.PlanetUpdateResult Loss(int victim, int attacker, float ships, float strength)
+        => new Planet.PlanetUpdateResult("A",
+            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost,
+            new CombatLoss { Attacker = attacker, Ships = ships, StrengthLost = strength }, victim);
+
+    // Each ship lost adds hostilityPerShipLost; a significant share of my strength lost over the window pulls hostility down;
+    // the share is lost / (current + lost) over the last lossWindowTurns, 0 when both are 0.
+    public static bool RunLossTermsCheck()
+    {
+        var ok = true;
+        var c = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            var plain = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f, ShipsLost = 3f, LossShare = 0.1f }, c);
+            ok &= Check(Near(plain.Hostility, 10f * 0.95f + 3f) && Near(plain.LossTerm, 3f),
+                "3 ships lost add 3 (hostilityPerShipLost 1); a 10% loss share is below the 30% threshold");
+            var big = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 20f, ShipsLost = 2f, LossShare = 0.5f }, c);
+            ok &= Check(Near(big.Hostility, 20f * 0.95f + 2f - 4f) && Near(big.LossTerm, -2f),
+                "a 50% loss share (>= 30%) subtracts 4 a turn: 19 + 2 - 4");
+            var floor = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 1f, LossShare = 0.9f }, c);
+            ok &= Check(Near(floor.Hostility, 0f), "hostility is clamped at 0");
+            var none = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f }, c);
+            ok &= Check(Near(none.Hostility, 9.5f) && Near(none.LossTerm, 0f), "no losses: the old formula (decay only)");
+        }
+        finally { Object.DestroyImmediate(c); }
+
+        using (var f = WithRival())
+        {
+            f.AI.RecordLosses(new List<Planet.PlanetUpdateResult> { Loss(0, 1, 2f, 100f), Loss(5, 1, 9f, 999f), Loss(0, 1, 1f, 50f) }, 10);
+            ok &= Check(Near(f.AI.LossShareToward(1, 10, 350f), 150f / 500f),
+                "share = lost 150 / (current 350 + lost 150) = 0.3; another player's loss result is ignored");
+            ok &= Check(Near(f.AI.LossShareToward(1, 19, 350f), 0.3f), "turn 19 is still inside a 10-turn window opened at turn 10");
+            ok &= Check(Near(f.AI.LossShareToward(1, 20, 350f), 0f), "turn 20 is outside it: the entries are pruned");
+            ok &= Check(Near(f.AI.LossShareToward(2, 10, 350f), 0f), "no losses to a rival: 0");
+            f.AI.RecordLosses(new List<Planet.PlanetUpdateResult> { Loss(0, 1, 1f, 80f) }, 30);
+            ok &= Check(Near(f.AI.LossShareToward(1, 30, 0f), 1f), "my strength 0 with something lost: 1");
+            ok &= Check(Near(f.AI.LossShareToward(3, 30, 0f), 0f), "both 0: 0, no division by zero");
+        }
+        return ok;
+    }
+
+    // Surrender is a third choice: offered only while I am at war with the rival, weaker, and not in a truce; weight is a
+    // logistic of the loss share; it needs no hold; War is not offered in a truce.
+    public static bool RunSurrenderChoiceCheck()
+    {
+        var ok = true;
+        var c = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            // Deterministic roulette: a very steep stance curve and surrender curve, and no stickiness, so at hostility 100 with the
+            // War stance held the War weight (1 x 0) and the Peace weight (1 - 1) are both 0 and only Surrender has weight.
+            c.stanceSteepness = 0.01f; c.stanceMidpoint = 30f; c.stanceStickiness = 0f; c.surrenderSteepness = 0.01f;
+            ok &= Check(Near(StanceMatrix.SurrenderWeight(0.6f, c), 0.5f), "at the midpoint (0.6) the surrender weight is 0.5");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.9f, c) > 0.9f && StanceMatrix.SurrenderWeight(0.1f, c) < 0.01f,
+                "a heavy loss share is near 1, a light one near 0");
+
+            StanceMatrix.Row Row(float hostility, Stance current, int sinceChange, float lossShare, bool atWar, float mine, float rival, bool truce = false)
+                => new StanceMatrix.Row
+                {
+                    Rival = 1, Hostility = hostility, Current = current, TurnsSinceChange = sinceChange,
+                    LossShare = lossShare, AtWar = atWar, MyStrength = mine, RivalStrength = rival, Truce = truce,
+                };
+
+            // Offered: at war, weaker, a huge loss share. Hostility 100 with the War stance held: War weight 1 x 0, Peace weight 0,
+            // Surrender weight 1.0, so Surrender is the only choice with weight.
+            var surrender = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.War, 100, 0.99f, true, 10f, 100f) }, c);
+            ok &= Check(surrender.Count == 1 && surrender[0].Surrender, "at war, weaker, nearly wiped out: Surrender");
+
+            // Not offered: winning, not at war, or in a truce (the decision is then Peace or War, never Surrender).
+            var winning = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.War, 100, 0.99f, true, 100f, 10f) }, c);
+            ok &= Check(winning.Count == 1 && !winning[0].Surrender, "never when my strength is not below the rival's");
+            var peace = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.Peace, 100, 0.99f, false, 10f, 100f) }, c);
+            ok &= Check(peace.Count == 1 && !peace[0].Surrender, "never when I am not at war with the rival");
+            var truce = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.War, 100, 0.99f, true, 10f, 100f, truce: true) }, c);
+            ok &= Check(truce.Count == 1 && !truce[0].Surrender, "never inside a truce (the pair is not at war)");
+
+            // A truce removes War: even at hostility 100 the matrix does not pick War.
+            var noWar = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.Peace, 100, 0f, false, 100f, 100f, truce: true) }, c);
+            ok &= Check(noWar.Count == 1 && noWar[0].Stance == Stance.Peace, "inside a truce War is never offered, whatever the hostility");
+
+            // No hold: a row inside the stance hold can still surrender, and otherwise stays held (no decision).
+            var heldSurrender = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(0f, Stance.War, 1, 0.99f, true, 10f, 100f) }, c);
+            ok &= Check(heldSurrender.Count == 1 && heldSurrender[0].Surrender, "a surrender needs no hold: a stance changed one turn ago can still be surrendered");
+            var held = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.Peace, 1, 0f, false, 10f, 100f) }, c);
+            ok &= Check(held.Count == 0, "a held row with nothing to surrender is left alone, as before");
+        }
+        finally { Object.DestroyImmediate(c); }
+
+        // The chance of surrendering is the surrender weight itself, held or not (review: with stickiness it used to shrink once the
+        // stance hold ended, so the logged pSurrender overstated it). Surrender / (Peace + War + Surrender) == SurrenderWeight.
+        var d = ScriptableObject.CreateInstance<GameAIConstants>();   // the real defaults: stickiness 3, surrender 0.6 / 0.1
+        try
+        {
+            var sw = StanceMatrix.SurrenderWeight(0.6f, d);           // 0.5
+            StanceMatrix.Row Hot(int sinceChange, Stance current, bool atWar = true, bool truce = false)
+                => new StanceMatrix.Row
+                {
+                    Rival = 1, Hostility = 40f, Current = current, TurnsSinceChange = sinceChange, LossShare = 0.6f,
+                    AtWar = atWar, MyStrength = 10f, RivalStrength = 100f, Truce = truce,
+                };
+            foreach (var current in new[] { Stance.War, Stance.Peace })
+                foreach (var since in new[] { 1, 100 })       // inside the hold, and after it
+                {
+                    var w = StanceMatrix.Weights(Hot(since, current), d);
+                    var total = w.Peace + w.War + w.Surrender;
+                    ok &= Check(Near(w.Surrender / total, sw),
+                        $"P(surrender) is the surrender weight {sw} (current {current}, {since} turns since a change), got {w.Surrender / total}");
+                }
+            var calm = StanceMatrix.Weights(Hot(100, Stance.War, atWar: false), d);
+            ok &= Check(calm.Surrender == 0f && Near(calm.Peace, StanceMatrix.PeaceWeight(Hot(100, Stance.War, atWar: false), d))
+                        && Near(calm.War, StanceMatrix.WarWeight(Hot(100, Stance.War, atWar: false), d)),
+                "no surrender on offer: Peace and War keep their plain weights, unchanged");
+            var locked = StanceMatrix.Weights(Hot(100, Stance.Peace, truce: true), d);
+            ok &= Check(locked.War == 0f && locked.Surrender == 0f, "inside a truce there is no War and no Surrender weight");
+        }
+        finally { Object.DestroyImmediate(d); }
+
+        // End to end: PlayerAI emits OrderTypeSurrender, stores the numbers for the log line, and the order executes.
+        using (var f = WithRival())
+        {
+            f.Constants.surrenderSteepness = 0.01f;
+            f.Constants.surrenderMidpoint = 0.6f;
+            f.Constants.stanceStickiness = 0f;                   // deterministic roulette: War weight 0 (see the cases above)
+            var hot = f.Map.Diplomacy.Get(0, 1); hot.Hostility = 100f; f.Map.Diplomacy.Set(0, 1, hot);   // pWar 1, so Peace weight 0
+            f.Ships("A", 0, 1);                                  // my strength 1050
+            f.Ships("B", 1, 3);                                  // theirs 3150 (player 1 holds B, visible to me)
+            f.Map.Diplomacy.SetStance(0, 1, Stance.War, 0);
+            f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
+            f.AI.RecordLosses(new List<Planet.PlanetUpdateResult> { Loss(0, 1, 5f, 9000f) }, 20);   // share 9000 / (1050 + 9000) = 0.9
+            var orders = new List<GameAI.GameAIOrder>();
+            f.Map.Diplomacy.Turn = 20;
+            f.AI.UpdateDiplomacy(20, orders);
+            var surrenderOrder = orders.FirstOrDefault(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeSurrender);
+            ok &= Check(surrenderOrder != null && System.Convert.ToInt32(surrenderOrder.Data) == 1 && surrenderOrder.PlayerId == 0,
+                "a beaten, weaker player at war emits a Surrender order against the rival");
+            var pair = f.Map.Diplomacy.Get(0, 1);
+            ok &= Check(Near(pair.LossShare, 0.9f) && pair.PSurrender > 0.9f, "the loss share and surrender probability are stored for the Surrender log line");
+            ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.War, "UpdateDiplomacy itself still writes no stance");
+            if (surrenderOrder != null)
+            {
+                GameAI.ApplySurrender(f.Map.Diplomacy, surrenderOrder, 20, f.Constants.surrenderTruceTurns);
+                f.Map.Diplomacy.Turn = 21;
+                f.AI.ApplyWarState(21);
+                ok &= Check(f.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace && !f.AI.WarRivals().Contains(1)
+                            && f.AI.Strategy == PlayerAI.AIStrategy.AIStrategyConsolidate,
+                    "after the order the war is over and Amass returns to Consolidate");
+            }
+        }
         return ok;
     }
 

@@ -35,7 +35,10 @@ public class Planet : MonoBehaviour
             PlanetUpdateResultTypeIndustryProductionComplete,
             PlanetUpdateResultTypeIndustryProductionQueueEmpty,
             PlanetUpdateResultTypeResearchProduced,
-            PlanetUpdateResultTypeColonizerReady
+            PlanetUpdateResultTypeColonizerReady,
+            // Appended last: serialized as an int. Data is a CombatLoss / ColonyLoss (CombatSystem); PlayerID is the victim.
+            PlanetUpdateResultTypeWarshipsLost,
+            PlanetUpdateResultTypeColonyShipsLost
         }
 
         public enum PlanetUpdateResultPriority
@@ -76,6 +79,8 @@ public class Planet : MonoBehaviour
                 case ResultType.PlanetUpdateResultTypeFoodShortage:
                 case ResultType.PlanetUpdateResultTypeGrotsitsShortage:
                 case ResultType.PlanetUpdateResultTypeIndustryProductionComplete:
+                case ResultType.PlanetUpdateResultTypeWarshipsLost:
+                case ResultType.PlanetUpdateResultTypeColonyShipsLost:
                     Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
                     break;
                 default:
@@ -983,10 +988,11 @@ public class Planet : MonoBehaviour
         DockedShips.Add(ship);
     }
 
-    public void DockShipFromSave(Ship.ShipKind kind, int owner, List<string> researchSnapshot)
+    public void DockShipFromSave(Ship.ShipKind kind, int owner, List<string> researchSnapshot, float damage = 0f)
     {
         var ship = CreateShip(kind, owner);
         ship.ResearchSnapshot = new List<string>(researchSnapshot);
+        ship.Damage = damage;
         DockedShips.Add(ship);
     }
 
@@ -1011,6 +1017,25 @@ public class Planet : MonoBehaviour
             .Take(count)
             .Select(s => new List<string>(s.ResearchSnapshot))
             .ToList();
+    }
+
+    // The damage of the same ships PeekShipSnapshots returns, in the same order, so a fleet's payload keeps each ship's wounds.
+    public List<float> PeekShipDamage(Ship.ShipKind kind, int owner, int count, int skip = 0)
+    {
+        return DockedShips
+            .Where(s => s.Kind == kind && s.Owner == owner)
+            .Skip(skip)
+            .Take(count)
+            .Select(s => s.Damage)
+            .ToList();
+    }
+
+    // Removes one specific docked ship (a ship destroyed in combat).
+    public bool DestroyDockedShip(Ship ship)
+    {
+        if (!DockedShips.Remove(ship)) return false;
+        DestroyShipComponent(ship);
+        return true;
     }
 
     public int UndockShips(Ship.ShipKind kind, int owner, int count)
