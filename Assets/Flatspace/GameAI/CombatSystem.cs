@@ -6,12 +6,16 @@ namespace FlatSpace
 {
     namespace AI
     {
-        /// <summary>The loss one attacker caused a victim at a planet this turn (carried in a WarshipsLost result's Data).</summary>
+        /// <summary>
+        /// The loss one attacker caused a victim at a planet this turn (carried in a WarshipsLost result's Data). Appended on
+        /// EVERY fight turn, with Ships and StrengthLost 0 when nothing died, so Engaged is a complete denominator.
+        /// </summary>
         public class CombatLoss
         {
             public int Attacker;
             public float Ships;           // the attacker's share of the ships destroyed
             public float StrengthLost;    // the same share of the destroyed ships' strength at the start of the turn
+            public float Engaged;         // the same share of the victim's strength at that planet at the start of the turn
         }
 
         /// <summary>Colony ships destroyed at a planet (carried in a ColonyShipsLost result's Data).</summary>
@@ -194,11 +198,10 @@ namespace FlatSpace
                         Planet = planet.PlanetName, Attacker = loss.Attacker, Victim = loss.Victim,
                         DamageDealt = loss.DamageDealt, ShipsDestroyed = loss.Ships,
                     });
-                    if (loss.Ships > 0f)
-                        results.Add(new Planet.UpdateResult(planet.PlanetName,
-                            Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
-                            new CombatLoss { Attacker = loss.Attacker, Ships = loss.Ships, StrengthLost = loss.StrengthLost },
-                            loss.Victim));
+                    results.Add(new Planet.UpdateResult(planet.PlanetName,
+                        Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
+                        new CombatLoss { Attacker = loss.Attacker, Ships = loss.Ships, StrengthLost = loss.StrengthLost, Engaged = loss.Engaged },
+                        loss.Victim));
                 }
                 foreach (var pair in outcome.Damage) planet.DockedShips[pair.Key].Damage += pair.Value;   // applied after every side was computed
                 var doomed = outcome.Destroyed.Select(id => planet.DockedShips[id]).ToList();

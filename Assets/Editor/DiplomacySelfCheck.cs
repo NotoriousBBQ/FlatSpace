@@ -1026,10 +1026,10 @@ public static class DiplomacySelfCheck
         return ok;
     }
 
-    private static Planet.UpdateResult Loss(int victim, int attacker, float ships, float strength)
+    private static Planet.UpdateResult Loss(int victim, int attacker, float ships, float strength, float engaged)
         => new Planet.UpdateResult("A",
             Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
-            new CombatLoss { Attacker = attacker, Ships = ships, StrengthLost = strength }, victim);
+            new CombatLoss { Attacker = attacker, Ships = ships, StrengthLost = strength, Engaged = engaged }, victim);
 
     // Each ship lost adds hostilityPerShipLost; a significant share of my strength lost over the window pulls hostility down;
     // the share is lost / (current + lost) over the last lossWindowTurns, 0 when both are 0.
@@ -1054,27 +1054,30 @@ public static class DiplomacySelfCheck
 
         using (var f = WithRival())
         {
-            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 2f, 100f), Loss(5, 1, 9f, 999f), Loss(0, 1, 1f, 50f) }, 10);
-            ok &= Check(Near(f.AI.LossShareToward(1, 10, 350f), 150f / 500f),
-                "share = lost 150 / (current 350 + lost 150) = 0.3; another player's loss result is ignored");
-            ok &= Check(Near(f.AI.LossShareToward(1, 19, 350f), 0.3f), "turn 19 is still inside a 10-turn window opened at turn 10");
-            ok &= Check(Near(f.AI.LossShareToward(1, 20, 350f), 0f), "turn 20 is outside it: the entries are pruned");
-            ok &= Check(Near(f.AI.LossShareToward(2, 10, 350f), 0f), "no losses to a rival: 0");
-            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 1f, 80f) }, 30);
-            ok &= Check(Near(f.AI.LossShareToward(1, 30, 0f), 1f), "my strength 0 with something lost: 1");
-            ok &= Check(Near(f.AI.LossShareToward(3, 30, 0f), 0f), "both 0: 0, no division by zero");
+            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 2f, 100f, 500f), Loss(5, 1, 9f, 999f, 999f), Loss(0, 1, 1f, 50f, 500f) }, 10);
+            ok &= Check(Near(f.AI.LossShareToward(1, 10), 150f / 1000f),
+                "share = lost 150 / engaged 1000 = 0.15; another player's loss result is ignored");
+            ok &= Check(Near(f.AI.EngagedToward(1, 10), 1000f), "the window's engaged total is 1000");
+            ok &= Check(Near(f.AI.LossShareToward(1, 19), 0.15f), "turn 19 is still inside a 10-turn window opened at turn 10");
+            ok &= Check(Near(f.AI.LossShareToward(1, 20), 0f), "turn 20 is outside it: the entries are pruned");
+            ok &= Check(Near(f.AI.LossShareToward(2, 10), 0f), "no losses to a rival: 0");
+            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 1f, 80f, 80f) }, 30);
+            ok &= Check(Near(f.AI.LossShareToward(1, 30), 1f), "everything engaged was lost: 1");
+            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 3, 0f, 0f, 400f) }, 30);
+            ok &= Check(Near(f.AI.LossShareToward(3, 30), 0f), "a fight with nothing lost: 0, and no division by zero");
+            ok &= Check(Near(f.AI.LossShareToward(4, 30), 0f), "nothing engaged at all: 0");
         }
 
         // The loss accumulator (log-only, for the tuning log): the part of the hostility that ship losses account for, decayed like the
         // hostility itself and fed only by the anger per ship lost (not by the significant-loss drop).
         using (var f = WithRival())
         {
-            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 3f, 100f) }, 10);
+            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 3f, 100f, 1000f) }, 10);
             f.AI.UpdateDiplomacy(10, new List<GameAI.GameAIOrder>());
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).LossAccum, 3f), "3 ships lost this turn: the loss accumulator is 3 (hostilityPerShipLost 1)");
             f.AI.UpdateDiplomacy(11, new List<GameAI.GameAIOrder>());
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).LossAccum, 3f * 0.95f), "a turn without losses: it decays by hostilityDecay (5%), 2.85");
-            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 2f, 100f) }, 12);
+            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 2f, 100f, 1000f) }, 12);
             f.AI.UpdateDiplomacy(12, new List<GameAI.GameAIOrder>());
             ok &= Check(Near(f.Map.Diplomacy.Get(0, 1).LossAccum, 3f * 0.95f * 0.95f + 2f), "2 more ships lost: decayed total plus 2");
         }
@@ -1168,7 +1171,7 @@ public static class DiplomacySelfCheck
             f.Ships("B", 1, 3);                                  // theirs 3150 (player 1 holds B, visible to me)
             f.Map.Diplomacy.SetStance(0, 1, Stance.War, 0);
             f.AI.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
-            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 5f, 9000f) }, 20);   // share 9000 / (1050 + 9000) = 0.9
+            f.AI.RecordLosses(new List<Planet.UpdateResult> { Loss(0, 1, 5f, 9000f, 10000f) }, 20);   // share 9000 / 10000 = 0.9
             var orders = new List<GameAI.GameAIOrder>();
             f.Map.Diplomacy.Turn = 20;
             f.AI.UpdateDiplomacy(20, orders);

@@ -321,7 +321,11 @@ public static class CombatSelfCheck
                 "player 0's pool of 30 lands on player 1's first ship: 30 x 0.8 = 24");
             ok &= Check(Near(DamageOf(f, "A", 0, 0), 16f) && Near(DamageOf(f, "A", 0, 1), 0f),
                 "simultaneous: player 1's pool of 20 lands on player 0's first ship: 16");
-            ok &= Check(results.Count == 0, "no ship died, so no loss result");
+            ok &= Check(results.Count == 2 && results.All(r => r.Result == WarshipsLost && ((CombatLoss)r.Data).Ships == 0f),
+                "no ship died, but a fight turn still appends a zero-loss WarshipsLost result per victim");
+            ok &= Check(Near(((CombatLoss)results.First(r => r.PlayerID == 0).Data).Engaged, 3150f)
+                        && Near(((CombatLoss)results.First(r => r.PlayerID == 1).Data).Engaged, 2100f),
+                "each result carries its victim's engaged strength: player 0's 3 ships 3150, player 1's 2 ships 2100");
             ok &= Check(reports.Count == 2 && Near(reports.First(r => r.Attacker == 0).DamageDealt, 24f)
                         && Near(reports.First(r => r.Attacker == 1).DamageDealt, 16f),
                 "one report per directed pair with the damage dealt");
@@ -340,7 +344,7 @@ public static class CombatSelfCheck
                 "pool 100: the weakest ship (needs 10 / 0.8 = 12.5) dies, the rest 87.5 x 0.8 = 70 lands on the next");
             ok &= Check(Near(DamageOf(f, "A", 0, 0), 8.8f),
                 "the dying ship still fired this turn: 1 + 10 = 11 offense, x 0.8 = 8.8 on player 0's first ship");
-            var loss = results.Where(r => r.Result == WarshipsLost).ToList();
+            var loss = results.Where(r => r.Result == WarshipsLost && r.PlayerID == 1).ToList();
             ok &= Check(loss.Count == 1 && loss[0].PlayerID == 1 && loss[0].Name == "A", "one WarshipsLost result, victim player 1, at A");
             var data = loss.Count == 1 ? (CombatLoss)loss[0].Data : null;
             ok &= Check(data != null && data.Attacker == 0 && Near(data.Ships, 1f) && Near(data.StrengthLost, 15f),
@@ -379,7 +383,7 @@ public static class CombatSelfCheck
             f.War(0, 1); f.War(2, 1);
             var results = Results();
             Resolve(f, results);
-            var losses = results.Where(r => r.Result == WarshipsLost).OrderBy(r => ((CombatLoss)r.Data).Attacker).ToList();
+            var losses = results.Where(r => r.Result == WarshipsLost && r.PlayerID == 1).OrderBy(r => ((CombatLoss)r.Data).Attacker).ToList();
             ok &= Check(losses.Count == 2 && ((CombatLoss)losses[0].Data).Attacker == 0 && ((CombatLoss)losses[1].Data).Attacker == 2,
                 "one loss result per attacker");
             ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).Ships, 0.75f) && Near(((CombatLoss)losses[1].Data).Ships, 0.25f),
@@ -387,6 +391,8 @@ public static class CombatSelfCheck
             ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).StrengthLost, 3.75f)
                         && Near(((CombatLoss)losses[1].Data).StrengthLost, 1.25f),
                 "its strength 0.5 x (5 + 5) = 5 is shared the same way");
+            ok &= Check(losses.Count == 2 && Near(((CombatLoss)losses[0].Data).Engaged, 3.75f) && Near(((CombatLoss)losses[1].Data).Engaged, 1.25f),
+                "the victim's engaged strength 5 is shared 30:10 like its loss, so two attackers count it once in total");
         }
 
         using (var f = Fixture.Line())    // legacy mode: no stances, no combat

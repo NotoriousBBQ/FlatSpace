@@ -26,6 +26,7 @@ namespace FlatSpace
                 public float CutsTerm, NearTerm, StrengthTerm, PWar, MyStrength, RivalStrength;
                 public float LossShare, PSurrender;   // log-only: the numbers behind a Surrender order
                 public float LossAccum;               // log-only: the part of the hostility that ship losses account for (decayed like it)
+                public float Engaged;                 // log-only: my strength engaged against this rival over the loss window (the loss share's denominator)
                 public int NearShips;
                 // A surrender locks the pair until this turn (0 = no truce): no Declare War, and IsAtWar is false.
                 public int TruceUntil;

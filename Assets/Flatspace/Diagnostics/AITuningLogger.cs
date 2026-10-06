@@ -471,15 +471,15 @@ public static class AITuningLogger
             rival.ToString(System.Globalization.CultureInfo.InvariantCulture), started ? "Start" : "End") });
     }
 
-    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips.</summary>
+    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips|lossShare|lossAccum|engagedStrength (older logs lack the last fields).</summary>
     public static void LogHostility(int turnNumber, int playerId, int rival, float hostility, float myStrength,
-        float rivalStrength, int nearShips, float lossShare = 0f, float lossAccum = 0f)
+        float rivalStrength, int nearShips, float lossShare = 0f, float lossAccum = 0f, float engaged = 0f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Hostility", rival.ToString(ci),
             hostility.ToString("0.#", ci), myStrength.ToString("0", ci), rivalStrength.ToString("0", ci),
-            nearShips.ToString(ci), lossShare.ToString("0.###", ci), lossAccum.ToString("0.#", ci)) });
+            nearShips.ToString(ci), lossShare.ToString("0.###", ci), lossAccum.ToString("0.#", ci), engaged.ToString("0", ci)) });
     }
 
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>

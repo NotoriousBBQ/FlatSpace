@@ -228,10 +228,11 @@ namespace FlatSpace
             /// <summary>The rivals whose declaration currently forces me into war (I have not declared on them). Public for the self-check.</summary>
             public IReadOnlyCollection<int> WarForcedRivals => _warForcedLogged;
 
-            // Per rival, the warships it destroyed (turn, ships, strength) over the last lossWindowTurns. Player-private and not
-            // saved: a load starts the window empty (like the pending blockade cuts).
-            private readonly Dictionary<int, List<(int turn, float ships, float strength)>> _losses
-                = new Dictionary<int, List<(int turn, float ships, float strength)>>();
+            // Per rival, what it did to my warships over the last lossWindowTurns: (turn, ships destroyed, their strength, my
+            // strength engaged that turn). Player-private and not saved: a load starts the window empty (like the pending
+            // blockade cuts).
+            private readonly Dictionary<int, List<(int turn, float ships, float strength, float engaged)>> _losses
+                = new Dictionary<int, List<(int turn, float ships, float strength, float engaged)>>();
             // Rivals whose significant-loss drop was logged as Start (log-only, so a load logs each current one once more).
             private readonly HashSet<int> _lossDropLogged = new HashSet<int>();
 
@@ -243,20 +244,25 @@ namespace FlatSpace
                     if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost) continue;
                     if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
                     if (!_losses.TryGetValue(loss.Attacker, out var list))
-                        _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength)>();
-                    list.Add((turn, loss.Ships, loss.StrengthLost));
+                        _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength, float engaged)>();
+                    list.Add((turn, loss.Ships, loss.StrengthLost, loss.Engaged));
                 }
             }
 
-            /// <summary>lost / (current + lost) over the window, 0 when both are 0; prunes entries older than the window.</summary>
-            public float LossShareToward(int rival, int turn, float myStrength)
+            /// <summary>Strength lost to this rival / my strength engaged against it, both totalled over the window; 0 when nothing was engaged. Prunes entries older than the window.</summary>
+            public float LossShareToward(int rival, int turn)
+            {
+                var engaged = EngagedToward(rival, turn);
+                return engaged <= 0f ? 0f : _losses[rival].Sum(e => e.strength) / engaged;
+            }
+
+            /// <summary>My strength engaged against this rival over the window (the loss share's denominator). Prunes entries older than the window.</summary>
+            public float EngagedToward(int rival, int turn)
             {
                 if (!_losses.TryGetValue(rival, out var list)) return 0f;
                 var window = AIMap.GameAIConstants.lossWindowTurns;
                 list.RemoveAll(e => turn - e.turn >= window);
-                var lost = list.Sum(e => e.strength);
-                var total = myStrength + lost;
-                return total <= 0f ? 0f : lost / total;
+                return list.Sum(e => e.engaged);
             }
 
             private float ShipsLostThisTurn(int rival, int turn)
@@ -288,7 +294,7 @@ namespace FlatSpace
                     var pair = diplomacy.Get(me, rival);
                     var rivalStrength = FleetStrength.VisibleOf(AIMap, me, rival, stats);
                     var nearShips = HostilityCalculator.CountNearShips(AIMap, me, rival);
-                    var lossShare = LossShareToward(rival, turn, myStrength);
+                    var lossShare = LossShareToward(rival, turn);
                     LogLossDropChange(turn, rival, lossShare, constants);
                     var result = HostilityCalculator.Compute(new HostilityCalculator.Inputs
                     {
@@ -308,6 +314,7 @@ namespace FlatSpace
                     pair.RivalStrength = rivalStrength;
                     pair.NearShips = nearShips;
                     pair.LossShare = lossShare;   // log-only: the per-rival share the Hostility line reports (and the Surrender line on a surrender)
+                    pair.Engaged = EngagedToward(rival, turn);   // log-only: the share's denominator
                     // Log-only: how much of the hostility ship losses account for, decayed like the hostility itself and fed only by the
                     // anger per ship lost (not the significant-loss drop), so a Stance line shows whether a war came from losses.
                     pair.LossAccum = pair.LossAccum * (1f - constants.hostilityDecay) + ShipsLostThisTurn(rival, turn) * constants.hostilityPerShipLost;
@@ -345,7 +352,7 @@ namespace FlatSpace
                         Hostility = pair.Hostility,
                         Current = Stance.War,
                         TurnsSinceChange = diplomacy.TurnsSinceChange(me, rival, turn),
-                        LossShare = LossShareToward(rival, turn, myStrength),
+                        LossShare = LossShareToward(rival, turn),
                         AtWar = true,
                         MyStrength = myStrength,
                         RivalStrength = 0f,   // out of contact the rival's fleet is not visible, so I am never "weaker": no surrender to it

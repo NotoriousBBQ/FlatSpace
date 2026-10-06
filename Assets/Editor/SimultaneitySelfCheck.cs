@@ -111,7 +111,7 @@ public static class SimultaneitySelfCheck
                 WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 0, 3);
                 results.Add(new Planet.UpdateResult("C",
                     Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
-                    new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f }, 1));
+                    new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f, Engaged = 5100f }, 1));
             }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
             // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it
