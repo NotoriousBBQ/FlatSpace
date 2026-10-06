@@ -18,6 +18,8 @@ public static class RetreatSelfCheck
         ok &= RunBlockadeViewCheck();
         ok &= RunRetreatMatrixCheck();
         ok &= RunRetreatPlannerCheck();
+        ok &= RunPlannerExclusionCheck();
+        ok &= RunPlayerAIRetreatCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -289,6 +291,87 @@ public static class RetreatSelfCheck
             var wiped = Plan(f, null, Doomed("C", 1f));
             ok &= Check(wiped.Actions.Count == 1 && wiped.Actions[0].Target == "B", "my own colony, wiped out: the group retreats to B");
         }
+        return ok;
+    }
+
+    // The other planners keep off a retreating group: no garrison state for it, never an assault target.
+    public static bool RunPlannerExclusionCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Colonize("A", 0);
+            f.Ships("C", 0, 2);                                        // not colonized: a stranded, source-only state
+            var planner = new ShipTransportPlanner(f.Map, 0);
+            ok &= Check(planner.BuildStates().Any(s => s.Planet.PlanetName == "C"), "without a retreat C (my ships on an uncolonized planet) has a state");
+            planner = new ShipTransportPlanner(f.Map, 0) { Retreating = new List<string> { "C" } };
+            ok &= Check(!planner.BuildStates().Any(s => s.Planet.PlanetName == "C"), "a retreating planet has no state: neither a source nor a sink");
+        }
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Ships("A", 0, 1);
+            var view = BlockadeView.Of("C");
+            var assault = new AssaultPlanner(f.Map, 0, view, f.Stats);
+            ok &= Check(assault.ChooseBlockadeTarget(out _)?.PlanetName == "C", "without an exclusion the blockaded planet C is the target");
+            assault = new AssaultPlanner(f.Map, 0, view, f.Stats) { ExcludedTargets = new HashSet<string> { "C" } };
+            ok &= Check(assault.ChooseBlockadeTarget(out _) == null, "an excluded planet is not a blockade target");
+        }
+        return ok;
+    }
+
+    private static PlayerAI MakeAI(CombatSelfCheck.Fixture f, int id, List<GameObject> gos)
+    {
+        var go = new GameObject("RetreatPlayer" + id);
+        gos.Add(go);
+        var player = go.AddComponent<Player>();
+        var ai = go.AddComponent<PlayerAI>();
+        ai.Player = player;
+        ai.AIMap = f.Map;
+        player.playerID = id;
+        ai.ResearchCatalog = go.AddComponent<Catalog>();
+        ai.ResearchCatalog.catalogItems = f.Research;
+        ai.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+        return ai;
+    }
+
+    // End to end through PlayerAI: the projection result in, a retreat ship action out first, a cooldown set; legacy mode untouched.
+    public static bool RunPlayerAIRetreatCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                f.Constants.retreatSteepness = 0.001f;
+                f.Constants.maxPathNodesForKnowledge = 8;
+                f.Constants.maxPathNodesForShipTransport = 10;
+                f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("D", 1);
+                f.Ships("C", 0, 1); f.Ships("C", 1, 3); f.War(0, 1);
+                f.Map.Knowledge.Update(f.Map, 2, 8);
+                var ai = MakeAI(f, 0, gos);
+                var results = new List<Planet.UpdateResult>();
+                GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), results);
+                GameAI.Rand = new System.Random(11);
+                var actions = ai.PlanShipActions(5, results);
+                ok &= Check(actions.Count > 0 && actions[0].Origin == "C" && actions[0].Target == "B" && actions[0].Count == 1,
+                    "the retreat action comes first: C to B, the one ship");
+                ok &= Check(ai.RetreatCooldownUntil("C") == 5 + f.Constants.retreatCooldownTurns, "C is off the assault list for retreatCooldownTurns");
+                ok &= Check(actions.Count(a => a.Origin == "C") == 1, "no other planner sends the retreating ship anywhere else");
+
+                var orders = new List<GameAI.GameAIOrder>();
+                GameAI.Rand = new System.Random(11);
+                ai.ProcessShipActions(orders, results);
+                ok &= Check(orders.Any(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport && o.Origin == "C" && o.Target == "B"),
+                    "ProcessShipActions turns it into the ordinary ship-transport order trio (no new order type)");
+
+                f.Map.Diplomacy.Enabled = false;
+                var legacy = new List<Planet.UpdateResult>();
+                GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), legacy);
+                ok &= Check(legacy.Count == 0, "legacy mode: no projections, so there is nothing to retreat from");
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
         return ok;
     }
 

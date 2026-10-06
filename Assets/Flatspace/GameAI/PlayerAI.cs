@@ -451,7 +451,7 @@ namespace FlatSpace
                 ProcessGrotsitsShortage(results, orders);
                 ProcessResearch(results, orders);
                 ProcessIndustry(results, orders);
-                ProcessShipActions(orders);
+                ProcessShipActions(orders, results);
             }
 
             // ── Colonization ─────────────────────────────────────────────────
@@ -1754,7 +1754,7 @@ namespace FlatSpace
             /// Moves warships. The decisions live in ShipTransportPlanner (home garrisons) and, under
             /// Consolidate, AssaultPlanner; this turns each resulting ShipAction into orders.
             /// </summary>
-            public void ProcessShipActions(List<GameAI.GameAIOrder> orders)
+            public void ProcessShipActions(List<GameAI.GameAIOrder> orders, List<Planet.UpdateResult> results = null)
             {
                 // Self-checks call this with no Gameboard in the scene.
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
@@ -1762,7 +1762,7 @@ namespace FlatSpace
                 // Nothing is undocked until the orders execute, so a second fleet leaving the same
                 // origin this turn (home defence + assault) must skip the ships the first one takes.
                 var claimedByOrigin = new Dictionary<string, int>();
-                foreach (var action in PlanShipActions(turn))
+                foreach (var action in PlanShipActions(turn, results))
                 {
                     claimedByOrigin.TryGetValue(action.Origin, out var claimed);
                     EmitShipOrders(action, orders, claimed);
@@ -1771,6 +1771,31 @@ namespace FlatSpace
             }
 
             private string _lastLoggedAssaultTarget;
+
+            // A planet I retreated from -> the first turn it may be an assault target again (player-private, not saved: a load forgets it).
+            private readonly Dictionary<string, int> _retreatCooldown = new Dictionary<string, int>();
+
+            /// <summary>The first turn a planet I retreated from may be an assault target again; 0 when there is no cooldown. Public for the self-check.</summary>
+            public int RetreatCooldownUntil(string planet) => _retreatCooldown.TryGetValue(planet, out var until) ? until : 0;
+
+            /// <summary>
+            /// Reads this player's FightProjection results and lets RetreatPlanner decide which groups leave and where; sets the
+            /// assault cooldown of each planet left. Empty when no results are given (a self-check calling the planners
+            /// directly) or diplomacy is off (no combat, no projections).
+            /// </summary>
+            private RetreatPlanner.Plan PlanRetreats(int turnNumber, List<Planet.UpdateResult> results)
+            {
+                if (results == null || !AIMap.Diplomacy.Enabled) return new RetreatPlanner.Plan();
+                var mine = results
+                    .Where(r => r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection
+                                && r.PlayerID == Player.playerID && r.Data is FightProjection)
+                    .Select(r => (FightProjection)r.Data).ToList();
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var plan = new RetreatPlanner(AIMap, Player.playerID, WarRivals(), _blockadeView, stats).Decide(mine);
+                foreach (var retreat in plan.Retreats)
+                    _retreatCooldown[retreat.Planet] = turnNumber + AIMap.GameAIConstants.retreatCooldownTurns;
+                return plan;
+            }
 
             // Log-only: which blockade-breaking target the assault has, so start and end are logged on change only.
             private readonly BlockadeTargetTracker _blockadeTargets = new BlockadeTargetTracker();
@@ -1782,14 +1807,23 @@ namespace FlatSpace
             /// me first, else the enemy-occupied rule), plan home defence with those ships held out, then send whatever is
             /// still spare to the target. Public (and free of Gameboard.Instance) so the self-check can drive it directly.
             /// </summary>
-            public List<ShipAction> PlanShipActions(int turnNumber)
+            public List<ShipAction> PlanShipActions(int turnNumber, List<Planet.UpdateResult> results = null)
             {
+                // Retreats first: a group leaving a lost fight is claimed before any other planner can count on it.
+                var retreat = PlanRetreats(turnNumber, results);
+                var actions = new List<ShipAction>(retreat.Actions);
+
                 if (!IsConsolidateLike(Strategy))
-                    return new ShipTransportPlanner(AIMap, Player.playerID).Plan();
+                {
+                    actions.AddRange(new ShipTransportPlanner(AIMap, Player.playerID) { Retreating = retreat.Retreating }.Plan());
+                    return actions;
+                }
 
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var excluded = new HashSet<string>(_retreatCooldown.Where(kv => kv.Value > turnNumber).Select(kv => kv.Key));
+                excluded.UnionWith(retreat.Retreating);
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
-                    AssaultWarFilter());
+                    AssaultWarFilter()) { ExcludedTargets = excluded };
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
@@ -1805,10 +1839,12 @@ namespace FlatSpace
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
                     HeldPlanet  = targetName,
-                    HeldPlanets = assault.ContestedHolds(),
+                    HeldPlanets = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList(),
+                    Retreating  = retreat.Retreating,
                 };
-                var actions = transport.Plan();
-                actions.AddRange(assault.Plan(target, transport.LastStates, actions));
+                var homeActions = transport.Plan();
+                actions.AddRange(homeActions);
+                actions.AddRange(assault.Plan(target, transport.LastStates, homeActions));
 
                 var force = assault.LastBlockadeForce;
                 if (blockadeTarget != null && force.Ships > 0)

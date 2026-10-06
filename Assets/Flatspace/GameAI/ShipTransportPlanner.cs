@@ -34,6 +34,14 @@ namespace FlatSpace
             /// </summary>
             public ICollection<string> HeldPlanets { get; set; } = new List<string>();
 
+            /// <summary>
+            /// Planets whose docked warships are retreating this turn (RetreatPlanner): no state at all, so those ships are neither
+            /// a source of this plan nor a sink for it (the retreat has already claimed them).
+            /// </summary>
+            public ICollection<string> Retreating { get; set; } = new List<string>();
+
+            private bool IsRetreating(string planetName) => Retreating != null && Retreating.Contains(planetName);
+
             private bool IsHeld(string planetName)
                 => planetName == HeldPlanet || (HeldPlanets != null && HeldPlanets.Contains(planetName));
 
@@ -175,7 +183,7 @@ namespace FlatSpace
                 // while a fleet is in flight): they are source-only so those ships are not stranded.
                 // The held (assault target) planet is excluded: those ships are the assault force.
                 var stranded = _map.PlanetList
-                    .Where(p => !IsColonized(p) && !IsHeld(p.PlanetName) && CountWarships(p) > 0)
+                    .Where(p => !IsColonized(p) && !IsHeld(p.PlanetName) && !IsRetreating(p.PlanetName) && CountWarships(p) > 0)
                     .ToList();
                 // Ships in flight still belong to the player, so they count toward the unlock total.
                 var totalWarships = colonized.Concat(stranded)
@@ -198,6 +206,7 @@ namespace FlatSpace
                 }
                 foreach (var planet in colonized)
                 {
+                    if (IsRetreating(planet.PlanetName)) continue;
                     if (!MaintainsGarrison(planet))
                     {
                         // Spare-only: no garrison, no category, every ship here is available.
