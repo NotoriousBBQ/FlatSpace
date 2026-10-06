@@ -1829,13 +1829,18 @@ namespace FlatSpace
                 return plan;
             }
 
-            // A tier 3 retreat that has landed: log the blockade value it was planned on against the one found there now (the
-            // view is rebuilt each turn, and my ships docked there make the planet visible).
+            // A tier 3 retreat that has landed: log the blockade value it was planned on against the rival's docked offense found
+            // there now. The view's value would not do: it is the rival's offense MINUS mine, and mine have just docked, so it read 0
+            // in 34 of 36 arrivals (2026-10-06 logs) whatever the remembered value had been.
             private void LogRetreatArrivals(int turnNumber)
             {
-                foreach (var pending in _retreatPending.Where(p => p.landTurn <= turnNumber).ToList())
+                var due = _retreatPending.Where(p => p.landTurn <= turnNumber).ToList();
+                if (due.Count == 0) return;
+                var blockade = new BlockadeSystem(AIMap, ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                foreach (var pending in due)
                 {
-                    var actual = _blockadeView != null ? _blockadeView.Value(pending.planet) : 0f;
+                    var planet = AIMap.GetPlanet(pending.planet);
+                    var actual = planet != null ? blockade.LargestOtherDockedOffense(planet, Player.playerID) : 0f;
                     AITuningLogger.LogRetreatArrive(turnNumber, Player.playerID, pending.planet, pending.remembered, actual);
                     _retreatPending.Remove(pending);
                 }

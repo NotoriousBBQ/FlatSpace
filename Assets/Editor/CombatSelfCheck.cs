@@ -161,17 +161,18 @@ public static class CombatSelfCheck
         {
             ok &= Check(Near(c.combatDamageK, 20f) && Near(c.repairFractionPerTurn, 0.1f), "combatDamageK 20, repairFractionPerTurn 0.1");
             ok &= Check(Near(c.hostilityPerShipLost, 1f) && c.lossWindowTurns == 10, "hostilityPerShipLost 1, lossWindowTurns 10");
-            ok &= Check(Near(c.significantLossFraction, 0.08f) && Near(c.significantLossHostilityDrop, 4f),
-                "significantLossFraction 0.08, significantLossHostilityDrop 4");
-            ok &= Check(c.surrenderTruceTurns == 30 && Near(c.surrenderMidpoint, 0.15f) && Near(c.surrenderSteepness, 0.015f),
-                "surrenderTruceTurns 30, surrenderMidpoint 0.15, surrenderSteepness 0.015");
-            // The default curve sits in the range real fights reach (a per-rival 10-turn loss share of 0.02-0.14 in the 2026-10-05 logs on both boards):
-            // no surrender without losses, a real chance at a heavy loss, near certain beyond it.
+            ok &= Check(Near(c.significantLossFraction, 0.15f) && Near(c.significantLossHostilityDrop, 4f),
+                "significantLossFraction 0.15, significantLossHostilityDrop 4");
+            ok &= Check(c.surrenderTruceTurns == 30 && Near(c.surrenderMidpoint, 0.3f) && Near(c.surrenderSteepness, 0.03f),
+                "surrenderTruceTurns 30, surrenderMidpoint 0.3, surrenderSteepness 0.03");
+            // The default curve sits in the range the engaged-force loss share reaches (2026-10-06 logs: median 0.11-0.13, p90 0.25-0.34 on the
+            // 25-turn lines, surrenders at a median of 0.17-0.18): no surrender without losses, rare at a routine share, even odds at
+            // a heavy one, near certain beyond it.
             ok &= Check(StanceMatrix.SurrenderWeight(0f, c) < 0.0001f, "no losses: the surrender weight is below 0.0001 (it was 0.002, which fired at share 0)");
-            ok &= Check(StanceMatrix.SurrenderWeight(0.05f, c) < 0.005f, "a 5% loss share: under 0.5% a turn");
-            ok &= Check(StanceMatrix.SurrenderWeight(0.1f, c) > 0.01f && StanceMatrix.SurrenderWeight(0.1f, c) < 0.1f, "a 10% loss share: a few percent");
-            ok &= Check(Near(StanceMatrix.SurrenderWeight(0.15f, c), 0.5f), "a 15% loss share: even odds");
-            ok &= Check(StanceMatrix.SurrenderWeight(0.2f, c) > 0.95f, "a 20% loss share: near certain");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.1f, c) < 0.005f, "a 10% loss share: under 0.5% a turn");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.2f, c) > 0.01f && StanceMatrix.SurrenderWeight(0.2f, c) < 0.1f, "a 20% loss share: a few percent");
+            ok &= Check(Near(StanceMatrix.SurrenderWeight(0.3f, c), 0.5f), "a 30% loss share: even odds");
+            ok &= Check(StanceMatrix.SurrenderWeight(0.4f, c) > 0.95f, "a 40% loss share: near certain");
         }
         finally { Object.DestroyImmediate(c); }
         return ok;

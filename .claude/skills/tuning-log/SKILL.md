@@ -300,8 +300,9 @@ user asked about one specific thing.
   - **Retreat:** `Retreat|<planet>|<destination>|<tier>|<ships>|<projectedLossPct>|<rivalSurvivorsPct>|<routeCost>|<cooldownUntil>|<pRetreat>`
     (tier 3 appends `|<rememberedBlockade>|<myOffense>`) is one line per retreat order; `RetreatStay|<planet>|<projectedLossPct>|<pRetreat>`
     and `RetreatHeld|<planet>|<NoDestination or OwnPlanetNotWiped>|<projectedLossPct>` are on-change lines for a gated fight whose
-    ships stayed (the roll kept them, or no destination existed); `RetreatArrive|<planet>|<rememberedBlockade>|<actualBlockade>`
-    follows a tier 3 retreat when it lands. Report per run: retreats per player and per tier (tier 3 should be rare), the
+    ships stayed (the roll kept them, or no destination existed); `RetreatArrive|<planet>|<rememberedBlockade>|<rivalOffense>`
+    follows a tier 3 retreat when it lands (the second value is the largest single rival's docked offense on landing; logs from
+    made before the RetreatArrive fix on 2026-10-06 logged the blockade value instead, which reads 0 once my ships dock, so they cannot show staleness). Report per run: retreats per player and per tier (tier 3 should be rare), the
     projected loss at which retreats happened against the `RetreatStay` losses (is the curve too timid or too eager: a
     `RetreatStay` at a high loss followed by `Combat` destroying that player's ships on the planet within 3 turns is a retreat the
     roll declined), `RetreatHeld NoDestination` counts, the stale-blockade gap in `RetreatArrive`, ships preserved (warships at T300

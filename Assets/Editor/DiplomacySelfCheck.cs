@@ -1041,10 +1041,10 @@ public static class DiplomacySelfCheck
         {
             var plain = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f, ShipsLost = 3f, LossShare = 0.05f }, c);
             ok &= Check(Near(plain.Hostility, 10f * 0.95f + 3f) && Near(plain.LossTerm, 3f),
-                "3 ships lost add 3 (hostilityPerShipLost 1); a 5% loss share is below the 8% threshold");
+                "3 ships lost add 3 (hostilityPerShipLost 1); a 5% loss share is below the 15% threshold");
             var big = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 20f, ShipsLost = 2f, LossShare = 0.5f }, c);
             ok &= Check(Near(big.Hostility, 20f * 0.95f + 2f - 4f) && Near(big.LossTerm, -2f),
-                "a 50% loss share (>= 8%) subtracts 4 a turn: 19 + 2 - 4");
+                "a 50% loss share (>= 15%) subtracts 4 a turn: 19 + 2 - 4");
             var floor = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 1f, LossShare = 0.9f }, c);
             ok &= Check(Near(floor.Hostility, 0f), "hostility is clamped at 0");
             var none = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f }, c);

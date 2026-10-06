@@ -21,6 +21,7 @@ public static class RetreatSelfCheck
         ok &= RunPlannerExclusionCheck();
         ok &= RunPlayerAIRetreatCheck();
         ok &= RunRetreatTrackerCheck();
+        ok &= RunLargestOtherOffenseCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -395,6 +396,24 @@ public static class RetreatSelfCheck
         ok &= Check(tracker.Update(new[] { Stay("X") }).Count == 1, "a planet that left the gate is forgotten, so a later one is reported afresh");
         tracker.Clear();
         ok &= Check(tracker.Update(new[] { Stay("X") }).Count == 1, "Clear forgets everything");
+        return ok;
+    }
+
+    // What RetreatArrive logs as the blockade found on landing: the largest single rival's docked offense, so it stays
+    // comparable with the remembered value whatever ships of mine have docked since (the value against me falls as mine land).
+    public static bool RunLargestOtherOffenseCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Ships("C", 0, 3);                       // my ships landed
+            f.Ships("C", 1, 2); f.Ships("C", 2, 1);   // rivals: 20 and 10 offense
+            var blockade = new BlockadeSystem(f.Map, f.Research);
+            ok &= Check(Near(blockade.LargestOtherDockedOffense(f.P("C"), 0), 20f), "the largest single other player's offense is 20 (player 1's two ships), not their sum");
+            ok &= Check(Near(blockade.Value(f.P("C"), 0, out _), 0f), "the blockade value against me is 0 once my 30 offense has landed: that is why it cannot show staleness");
+            ok &= Check(Near(blockade.LargestOtherDockedOffense(f.P("D"), 0), 0f), "an empty planet: 0");
+            ok &= Check(Near(blockade.LargestOtherDockedOffense(f.P("C"), 1), 30f), "from player 1's side the largest other is player 0 with 30");
+        }
         return ok;
     }
 

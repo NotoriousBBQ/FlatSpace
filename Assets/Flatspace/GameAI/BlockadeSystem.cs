@@ -61,6 +61,22 @@ namespace FlatSpace.AI
             return sum;
         }
 
+        /// <summary>
+        /// The largest docked warship offense of any single player other than `owner` at `planet` (0 when none): the blockade
+        /// against `owner` as it would be with no ships of its own there. Unlike Value it does not fall as `owner`'s own ships land,
+        /// so it stays comparable with a blockade value measured before they arrived (RetreatArrive).
+        /// </summary>
+        public float LargestOtherDockedOffense(Planet planet, int owner)
+        {
+            var best = 0f;
+            var others = planet.DockedShips
+                .Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != owner && s.Owner != Planet.NoOwner)
+                .Select(s => s.Owner).Distinct();
+            foreach (var other in others)
+                best = System.Math.Max(best, DockedOffense(planet, other));
+            return best;
+        }
+
         /// <summary>The blockade against `orderOwner` at `planet`; `blocker` is the player imposing it (or NoOwner).</summary>
         public float Value(Planet planet, int orderOwner, out int blocker)
         {
