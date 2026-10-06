@@ -168,6 +168,54 @@ public static class AITuningLogger
             pSurrender.ToString("0.###", ci), truceUntil.ToString(ci)) });
     }
 
+    /// <summary>A group left a lost fight: T&lt;turn&gt;|P&lt;id&gt;|Retreat|planet|destination|tier|ships|projectedLossPct|rivalSurvivorsPct|routeCost|cooldownUntil|pRetreat (tier 3 appends |rememberedBlockade|myOffense).</summary>
+    public static void LogRetreat(int turnNumber, int playerId, string planet, string destination, int tier, int ships,
+        float lossFraction, float rivalSurvivorsFraction, float routeCost, int cooldownUntil, float pRetreat,
+        float rememberedBlockade, float myOffense)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var fields = new List<string>
+        {
+            planet, destination, tier.ToString(ci), ships.ToString(ci), (100f * lossFraction).ToString("0", ci),
+            (100f * rivalSurvivorsFraction).ToString("0", ci), routeCost.ToString("0", ci), cooldownUntil.ToString(ci),
+            pRetreat.ToString("0.###", ci),
+        };
+        if (tier == 3)
+        {
+            fields.Add(rememberedBlockade.ToString("0.#", ci));
+            fields.Add(myOffense.ToString("0.#", ci));
+        }
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Retreat", fields.ToArray()) });
+    }
+
+    /// <summary>A gated fight that rolled Stay (on change only): T&lt;turn&gt;|P&lt;id&gt;|RetreatStay|planet|projectedLossPct|pRetreat.</summary>
+    public static void LogRetreatStay(int turnNumber, int playerId, string planet, float lossFraction, float pRetreat)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RetreatStay", planet,
+            (100f * lossFraction).ToString("0", ci), pRetreat.ToString("0.###", ci)) });
+    }
+
+    /// <summary>A fight the projection says to leave where the ships stay anyway (on change only): T&lt;turn&gt;|P&lt;id&gt;|RetreatHeld|planet|NoDestination or OwnPlanetNotWiped|projectedLossPct.</summary>
+    public static void LogRetreatHeld(int turnNumber, int playerId, string planet, string reason, float lossFraction)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RetreatHeld", planet, reason,
+            (100f * lossFraction).ToString("0", ci)) });
+    }
+
+    /// <summary>A tier 3 retreat landed: the blockade value it was planned on against the one found there: T&lt;turn&gt;|P&lt;id&gt;|RetreatArrive|planet|rememberedBlockade|actualBlockade.</summary>
+    public static void LogRetreatArrive(int turnNumber, int playerId, string planet, float remembered, float actual)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "RetreatArrive", planet,
+            remembered.ToString("0.#", ci), actual.ToString("0.#", ci)) });
+    }
+
     /// <summary>The significant-loss hostility drop started or ended: T&lt;turn&gt;|P&lt;id&gt;|LossDrop|rival|Start or End|lossShare.</summary>
     public static void LogLossDrop(int turnNumber, int me, int rival, bool started, float lossShare)
     {

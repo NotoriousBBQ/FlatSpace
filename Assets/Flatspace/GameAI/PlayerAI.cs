@@ -1774,6 +1774,10 @@ namespace FlatSpace
 
             // A planet I retreated from -> the first turn it may be an assault target again (player-private, not saved: a load forgets it).
             private readonly Dictionary<string, int> _retreatCooldown = new Dictionary<string, int>();
+            // Log-only: gated fights that stayed, reported on change only (see RetreatTracker).
+            private readonly RetreatTracker _retreatTracker = new RetreatTracker();
+            // Tier 3 retreats still travelling: (planet, the turn they land, the blockade value they were planned on). Log-only, not saved.
+            private readonly List<(string planet, int landTurn, float remembered)> _retreatPending = new List<(string planet, int landTurn, float remembered)>();
 
             /// <summary>The first turn a planet I retreated from may be an assault target again; 0 when there is no cooldown. Public for the self-check.</summary>
             public int RetreatCooldownUntil(string planet) => _retreatCooldown.TryGetValue(planet, out var until) ? until : 0;
@@ -1786,15 +1790,55 @@ namespace FlatSpace
             private RetreatPlanner.Plan PlanRetreats(int turnNumber, List<Planet.UpdateResult> results)
             {
                 if (results == null || !AIMap.Diplomacy.Enabled) return new RetreatPlanner.Plan();
+                LogRetreatArrivals(turnNumber);
                 var mine = results
                     .Where(r => r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection
                                 && r.PlayerID == Player.playerID && r.Data is FightProjection)
                     .Select(r => (FightProjection)r.Data).ToList();
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
                 var plan = new RetreatPlanner(AIMap, Player.playerID, WarRivals(), _blockadeView, stats).Decide(mine);
+                var constants = AIMap.GameAIConstants;
                 foreach (var retreat in plan.Retreats)
-                    _retreatCooldown[retreat.Planet] = turnNumber + AIMap.GameAIConstants.retreatCooldownTurns;
+                {
+                    var cooldownUntil = turnNumber + constants.retreatCooldownTurns;
+                    _retreatCooldown[retreat.Planet] = cooldownUntil;
+                    AITuningLogger.LogRetreat(turnNumber, Player.playerID, retreat.Planet, retreat.Destination, retreat.Tier, retreat.Ships,
+                        retreat.LossFraction, retreat.RivalSurvivorsFraction, retreat.RouteCost, cooldownUntil, retreat.PRetreat,
+                        retreat.RememberedBlockade, retreat.MyOffense);
+                    if (retreat.Tier == 3)
+                    {
+                        var delay = Math.Max(1, Convert.ToInt32(retreat.RouteCost / constants.defaultTravelSpeed));
+                        _retreatPending.Add((retreat.Destination, turnNumber + delay, retreat.RememberedBlockade));
+                    }
+                }
+                var standing = plan.Stays.Select(s => new RetreatTracker.Entry
+                    {
+                        Planet = s.Planet, Kind = RetreatTracker.KindStay, Reason = string.Empty, LossFraction = s.LossFraction, PRetreat = s.PRetreat,
+                    })
+                    .Concat(plan.Holds.Select(h => new RetreatTracker.Entry
+                    {
+                        Planet = h.Planet, Kind = RetreatTracker.KindHeld, Reason = h.Reason, LossFraction = h.LossFraction, PRetreat = 0f,
+                    }));
+                foreach (var entry in _retreatTracker.Update(standing))
+                {
+                    if (entry.Kind == RetreatTracker.KindStay)
+                        AITuningLogger.LogRetreatStay(turnNumber, Player.playerID, entry.Planet, entry.LossFraction, entry.PRetreat);
+                    else
+                        AITuningLogger.LogRetreatHeld(turnNumber, Player.playerID, entry.Planet, entry.Reason, entry.LossFraction);
+                }
                 return plan;
+            }
+
+            // A tier 3 retreat that has landed: log the blockade value it was planned on against the one found there now (the
+            // view is rebuilt each turn, and my ships docked there make the planet visible).
+            private void LogRetreatArrivals(int turnNumber)
+            {
+                foreach (var pending in _retreatPending.Where(p => p.landTurn <= turnNumber).ToList())
+                {
+                    var actual = _blockadeView != null ? _blockadeView.Value(pending.planet) : 0f;
+                    AITuningLogger.LogRetreatArrive(turnNumber, Player.playerID, pending.planet, pending.remembered, actual);
+                    _retreatPending.Remove(pending);
+                }
             }
 
             // Log-only: which blockade-breaking target the assault has, so start and end are logged on change only.

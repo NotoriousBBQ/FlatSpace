@@ -20,6 +20,7 @@ public static class RetreatSelfCheck
         ok &= RunRetreatPlannerCheck();
         ok &= RunPlannerExclusionCheck();
         ok &= RunPlayerAIRetreatCheck();
+        ok &= RunRetreatTrackerCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -372,6 +373,28 @@ public static class RetreatSelfCheck
             }
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunRetreatTrackerCheck()
+    {
+        var ok = true;
+        var tracker = new RetreatTracker();
+        RetreatTracker.Entry Stay(string planet, float loss = 0.4f)
+            => new RetreatTracker.Entry { Planet = planet, Kind = RetreatTracker.KindStay, Reason = "", LossFraction = loss, PRetreat = 0.2f };
+        RetreatTracker.Entry Held(string planet, string reason)
+            => new RetreatTracker.Entry { Planet = planet, Kind = RetreatTracker.KindHeld, Reason = reason, LossFraction = 0.9f, PRetreat = 0f };
+
+        var first = tracker.Update(new[] { Stay("X"), Held("Y", RetreatPlanner.HoldNoDestination) });
+        ok &= Check(first.Select(e => e.Planet).SequenceEqual(new[] { "X", "Y" }), "the first sighting of each planet is reported, ordered by name");
+        ok &= Check(tracker.Update(new[] { Stay("X", 0.6f), Held("Y", RetreatPlanner.HoldNoDestination) }).Count == 0,
+            "the same kind and reason again (even with a different loss) is not reported: a standoff does not log every turn");
+        var changed = tracker.Update(new[] { Stay("X"), Held("Y", RetreatPlanner.HoldOwnPlanetNotWiped) });
+        ok &= Check(changed.Count == 1 && changed[0].Planet == "Y", "a changed reason is reported");
+        tracker.Update(new RetreatTracker.Entry[0]);
+        ok &= Check(tracker.Update(new[] { Stay("X") }).Count == 1, "a planet that left the gate is forgotten, so a later one is reported afresh");
+        tracker.Clear();
+        ok &= Check(tracker.Update(new[] { Stay("X") }).Count == 1, "Clear forgets everything");
         return ok;
     }
 
