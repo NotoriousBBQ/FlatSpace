@@ -245,11 +245,11 @@ namespace FlatSpace
                     if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
                     if (!_losses.TryGetValue(loss.Attacker, out var list))
                         _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength, float engaged)>();
-                    list.Add((turn, loss.Ships, loss.StrengthLost, loss.Engaged));
+                    list.Add((turn, loss.Ships, loss.StrengthDrop, loss.Engaged));   // the share's numerator is the strength drop (damage included), not only ships destroyed
                 }
             }
 
-            /// <summary>Strength lost to this rival / my strength engaged against it, both totalled over the window; 0 when nothing was engaged. Prunes entries older than the window.</summary>
+            /// <summary>How much of my engaged strength this rival took off me (the strength drop of every fight round, damage included) / my strength engaged against it, both totalled over the window; 0 when nothing was engaged. Prunes entries older than the window.</summary>
             public float LossShareToward(int rival, int turn)
             {
                 var engaged = EngagedToward(rival, turn);

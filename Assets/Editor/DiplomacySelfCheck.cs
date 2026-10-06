@@ -1029,7 +1029,7 @@ public static class DiplomacySelfCheck
     private static Planet.UpdateResult Loss(int victim, int attacker, float ships, float strength, float engaged)
         => new Planet.UpdateResult("A",
             Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
-            new CombatLoss { Attacker = attacker, Ships = ships, StrengthLost = strength, Engaged = engaged }, victim);
+            new CombatLoss { Attacker = attacker, Ships = ships, StrengthLost = strength, StrengthDrop = strength, Engaged = engaged }, victim);
 
     // Each ship lost adds hostilityPerShipLost; a significant share of my strength lost over the window pulls hostility down;
     // the share is lost / (current + lost) over the last lossWindowTurns, 0 when both are 0.

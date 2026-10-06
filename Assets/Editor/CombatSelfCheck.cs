@@ -19,6 +19,7 @@ public static class CombatSelfCheck
         ok &= RunCombatResolutionCheck();
         ok &= RunRepairAndColonyShipCheck();
         ok &= RunRoundCheck();
+        ok &= RunAttritionShareCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -93,6 +94,33 @@ public static class CombatSelfCheck
         }
     }
 
+    // A fight lost by attrition over several rounds must still read as a heavy loss share: the numerator counts the strength
+    // every round takes (damage included), not only the strength of a ship at the round it dies.
+    public static bool RunAttritionShareCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1); f.Ships("A", 1, 3); f.War(0, 1);
+            float drop = 0f, engaged = 0f, destroyedOnly = 0f;
+            for (var round = 0; round < 8 && f.P("A").DockedShips.Any(s => s.Owner == 0); round++)
+            {
+                var results = Results();
+                Resolve(f, results);
+                foreach (var r in results.Where(r => r.Result == WarshipsLost && r.PlayerID == 0))
+                {
+                    var loss = (CombatLoss)r.Data;
+                    drop += loss.StrengthDrop; engaged += loss.Engaged; destroyedOnly += loss.StrengthLost;
+                }
+            }
+            ok &= Check(!f.P("A").DockedShips.Any(s => s.Owner == 0), "precondition: the lone ship was worn down and destroyed");
+            ok &= Check(engaged > 0f && drop / engaged > 0.35f && drop / engaged < 0.65f,
+                $"the window share is lost / engaged about 0.5 for a wipe-out by attrition (got {(engaged > 0f ? drop / engaged : 0f):0.###})");
+            ok &= Check(engaged > 0f && destroyedOnly / engaged < 0.03f, "the old numerator (only the ship's strength when it died) would read under 0.03");
+        }
+        return ok;
+    }
+
     // The pure core: units in, damage / destroyed / per-attacker losses out, nothing mutated.
     public static bool RunRoundCheck()
     {
@@ -106,6 +134,8 @@ public static class CombatSelfCheck
             "1 against 1, offense 10 vs Defense 5, K 20: each takes 10 x 0.8 = 8, nobody dies");
         ok &= Check(outcome.Losses.Count == 2 && outcome.Losses.All(l => Near(l.Engaged, 1050f) && l.Ships == 0f && l.StrengthLost == 0f),
             "one loss entry per directed pair; the victim's engaged strength is 10 x (100 + 5) = 1050; nothing died");
+        ok &= Check(outcome.Losses.All(l => Near(l.StrengthDrop, 1050f - 9.2f * (92f + 5f))),
+            "the strength drop counts damage too: health 92 leaves offense 9.2 and strength 9.2 x 97 = 892.4, a drop of 157.6, though nothing died");
 
         var weak = CombatUnit.Make(1, 1, 1, 10f, 100f, 5f, 90f);   // health 10, offense 1, strength 15
         var lethal = CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), weak }, war, hostility, 20f);
@@ -114,6 +144,8 @@ public static class CombatSelfCheck
         var kill = CombatSystem.Round(bigPool, war, hostility, 20f);
         ok &= Check(kill.Destroyed.SequenceEqual(new[] { 1 }) && kill.Losses.Any(l => l.Victim == 1 && Near(l.Ships, 1f) && Near(l.StrengthLost, weak.Strength)),
             "a 30 pool kills the 10-health ship (12.5 needed): destroyed, one ship and its strength attributed to the attacker");
+        ok &= Check(kill.Losses.Any(l => l.Victim == 1 && Near(l.StrengthDrop, weak.Strength)),
+            "a destroyed ship's whole strength is the drop (15), as before");
 
         ok &= Check(CombatSystem.Round(new List<CombatUnit> { Unit(0, 0), Unit(1, 0) }, war, hostility, 20f).Losses.Count == 0,
             "one player alone: no fight, an empty outcome");
@@ -326,6 +358,9 @@ public static class CombatSelfCheck
             ok &= Check(Near(((CombatLoss)results.First(r => r.PlayerID == 0).Data).Engaged, 3150f)
                         && Near(((CombatLoss)results.First(r => r.PlayerID == 1).Data).Engaged, 2100f),
                 "each result carries its victim's engaged strength: player 0's 3 ships 3150, player 1's 2 ships 2100");
+            ok &= Check(Near(((CombatLoss)results.First(r => r.PlayerID == 0).Data).StrengthDrop, 1050f - 8.4f * (84f + 5f))
+                        && Near(((CombatLoss)results.First(r => r.PlayerID == 1).Data).StrengthDrop, 1050f - 7.6f * (76f + 5f)),
+                "and the strength drop of the damage with no kill: player 0's first ship at health 84 (302.4), player 1's at 76 (434.4)");
             ok &= Check(reports.Count == 2 && Near(reports.First(r => r.Attacker == 0).DamageDealt, 24f)
                         && Near(reports.First(r => r.Attacker == 1).DamageDealt, 16f),
                 "one report per directed pair with the damage dealt");

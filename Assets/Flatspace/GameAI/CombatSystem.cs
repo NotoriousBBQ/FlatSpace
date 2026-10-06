@@ -15,6 +15,7 @@ namespace FlatSpace
             public int Attacker;
             public float Ships;           // the attacker's share of the ships destroyed
             public float StrengthLost;    // the same share of the destroyed ships' strength at the start of the turn
+            public float StrengthDrop;    // the same share of how much the victim's strength fell this turn (damage included): the loss share's numerator
             public float Engaged;         // the same share of the victim's strength at that planet at the start of the turn
         }
 
@@ -72,6 +73,7 @@ namespace FlatSpace
             public float DamageDealt;
             public float Ships;
             public float StrengthLost;
+            public float StrengthDrop;
             public float Engaged;
         }
 
@@ -161,6 +163,13 @@ namespace FlatSpace
                         }
                     }
 
+                    // How much the victim's strength fell this round: destroyed ships go to 0, damaged ones fall with their health.
+                    // A fight lost by attrition counts every round's damage, not only the strength a ship has left when it dies.
+                    var after = units.Where(u => u.Owner == victim).Sum(u =>
+                        outcome.Destroyed.Contains(u.Id) ? 0f
+                        : outcome.Damage.TryGetValue(u.Id, out var taken) ? u.WithDamage(taken).Strength : u.Strength);
+                    var drop = Math.Max(0f, engaged - after);
+
                     var totalContribution = contributions.Values.Sum();
                     foreach (var attacker in contributions.Keys.OrderBy(a => a))
                     {
@@ -168,7 +177,7 @@ namespace FlatSpace
                         outcome.Losses.Add(new RoundLoss
                         {
                             Victim = victim, Attacker = attacker, DamageDealt = dealt * share, Ships = lostShips * share,
-                            StrengthLost = lostStrength * share, Engaged = engaged * share,
+                            StrengthLost = lostStrength * share, StrengthDrop = drop * share, Engaged = engaged * share,
                         });
                     }
                 }
@@ -200,7 +209,11 @@ namespace FlatSpace
                     });
                     results.Add(new Planet.UpdateResult(planet.PlanetName,
                         Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
-                        new CombatLoss { Attacker = loss.Attacker, Ships = loss.Ships, StrengthLost = loss.StrengthLost, Engaged = loss.Engaged },
+                        new CombatLoss
+                        {
+                            Attacker = loss.Attacker, Ships = loss.Ships, StrengthLost = loss.StrengthLost,
+                            StrengthDrop = loss.StrengthDrop, Engaged = loss.Engaged,
+                        },
                         loss.Victim));
                 }
                 foreach (var pair in outcome.Damage) planet.DockedShips[pair.Key].Damage += pair.Value;   // applied after every side was computed

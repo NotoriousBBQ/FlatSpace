@@ -112,7 +112,7 @@ public static class SimultaneitySelfCheck
                 WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 0, 3);
                 results.Add(new Planet.UpdateResult("C",
                     Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
-                    new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f, Engaged = 5100f }, 1));
+                    new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f, StrengthDrop = 3000f, Engaged = 5100f }, 1));
             }
             if (withRetreat)
             {

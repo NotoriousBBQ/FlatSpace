@@ -294,7 +294,7 @@ user asked about one specific thing.
     turns: it must not), and `FleetHealth` (does the damaged share and the mean health recover between fights, i.e. does repair
     keep pace). Also re-read hostility saturation (the 25-turn `Hostility` lines against the earlier baselines): ship losses
     now feed it. The surrender terms are tuning levers to revisit with the diplomacy tuning, not yet tuned.
-    **Since 2026-10-06 `lossShare` is lost strength / strength ENGAGED against the rival over the window** (the `Hostility` line's
+    **Since 2026-10-06 `lossShare` is the strength drop I took from the rival (damage included) / strength ENGAGED against the rival over the window** (the `Hostility` line's
     last field `engagedStrength` is its denominator; guard `NF >= 10`; older logs divide by the whole fleet and read 0.02-0.14,
     so the two are not comparable, and the surrender terms need recalibrating to the new range).
   - **Retreat:** `Retreat|<planet>|<destination>|<tier>|<ships>|<projectedLossPct>|<rivalSurvivorsPct>|<routeCost>|<cooldownUntil>|<pRetreat>`
