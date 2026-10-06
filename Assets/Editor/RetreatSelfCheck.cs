@@ -15,6 +15,7 @@ public static class RetreatSelfCheck
     {
         var ok = RunTunableDefaultsCheck();
         ok &= RunProjectionCheck();
+        ok &= RunBlockadeViewCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -129,6 +130,21 @@ public static class RetreatSelfCheck
             GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), legacy);
             ok &= Check(legacy.Count == 0, "legacy mode: no projection results");
         }
+        return ok;
+    }
+
+    public static bool RunBlockadeViewCheck()
+    {
+        var ok = true;
+        var view = BlockadeView.WithBlockers(("B", 5f, 1), ("C", 7f, 2), ("D", 3f, Planet.NoOwner));
+        var war = view.OnlyFrom(new SortedSet<int> { 1 });
+        ok &= Check(war.IsBlockaded("B") && Near(war.Value("B"), 5f) && war.Blocker("B") == 1, "a blockade by a war rival (1) is kept with its value and blocker");
+        ok &= Check(!war.IsBlockaded("C"), "a blockade by a player I am not at war with (2) is dropped");
+        ok &= Check(!war.IsBlockaded("D"), "a remembered blockade with an unknown blocker is dropped");
+        ok &= Check(view.IsBlockaded("C") && view.IsBlockaded("D"), "the original view is untouched");
+        var minus = view.Without("B");
+        ok &= Check(!minus.IsBlockaded("B") && minus.IsBlockaded("C") && view.IsBlockaded("B"), "Without removes one planet from a copy only");
+        ok &= Check(!new BlockadeView().IsBlockaded("B"), "an empty view blockades nothing");
         return ok;
     }
 

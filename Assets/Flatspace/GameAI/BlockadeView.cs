@@ -73,5 +73,35 @@ namespace FlatSpace.AI
             foreach (var (name, value) in entries) view._blockaded[name] = (value, Planet.NoOwner);
             return view;
         }
+
+        /// <summary>A view with these blockades and blockers. For planning tests.</summary>
+        public static BlockadeView WithBlockers(params (string name, float value, int blocker)[] entries)
+        {
+            var view = new BlockadeView();
+            foreach (var (name, value, blocker) in entries) view._blockaded[name] = (value, blocker);
+            return view;
+        }
+
+        /// <summary>
+        /// A copy that keeps only the blockades whose blocker is in `blockers` (my war rivals). A remembered blockade whose
+        /// blocker is unknown (Planet.NoOwner) cannot be matched to a war rival and is dropped.
+        /// </summary>
+        public BlockadeView OnlyFrom(ISet<int> blockers)
+        {
+            var view = new BlockadeView();
+            foreach (var pair in _blockaded)
+                if (pair.Value.blocker != Planet.NoOwner && blockers.Contains(pair.Value.blocker))
+                    view._blockaded[pair.Key] = pair.Value;
+            return view;
+        }
+
+        /// <summary>A copy without one planet (a retreat destination that is itself blockaded is still a valid destination).</summary>
+        public BlockadeView Without(string planetName)
+        {
+            var view = new BlockadeView();
+            foreach (var pair in _blockaded)
+                if (pair.Key != planetName) view._blockaded[pair.Key] = pair.Value;
+            return view;
+        }
     }
 }
