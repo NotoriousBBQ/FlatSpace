@@ -602,12 +602,12 @@ public static class BlockadeAvoidanceSelfCheck
         // A populated A (surplus `surplus` food) ships to D (shortage `shortage` food): the food shipment orders.
         public List<GameAI.GameAIOrder> ShipFood(float shortage, float surplus = 100f)
         {
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("D",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage, -shortage, 0),
-                new Planet.PlanetUpdateResult("A",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, surplus, 0),
+                new Planet.UpdateResult("D",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage, -shortage, 0),
+                new Planet.UpdateResult("A",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus, surplus, 0),
             };
             var orders = new List<GameAI.GameAIOrder>();
             AI.ProcessFoodShortage(results, orders);
@@ -616,10 +616,10 @@ public static class BlockadeAvoidanceSelfCheck
 
         public List<GameAI.GameAIOrder> Colonize()
         {
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("A",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+                new Planet.UpdateResult("A",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0),
             };
             var orders = new List<GameAI.GameAIOrder>();
             AI.ProcessColonizers(results, orders);
@@ -773,14 +773,14 @@ public static class BlockadeAvoidanceSelfCheck
             // The record is forgotten once the shortage is gone, so a later episode for the same planet logs again.
             ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade",
                 "D is held back again by the blockade");
-            s.AI.ProcessFoodShortage(new List<Planet.PlanetUpdateResult>
+            s.AI.ProcessFoodShortage(new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("A",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 100f, 0),
+                new Planet.UpdateResult("A",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus, 100f, 0),
             }, new List<GameAI.GameAIOrder>());
             ok &= Check(s.AI.ShipmentHeldBackReason(food, "D") == null,
                 "when D stops reporting a shortage its held-back record is forgotten");
-            s.AI.ProcessFoodShortage(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            s.AI.ProcessFoodShortage(new List<Planet.UpdateResult>(), new List<GameAI.GameAIOrder>());
             ok &= Check(s.ShipFood(8f).Count == 0 && s.AI.ShipmentHeldBackReason(food, "D") == "Blockade"
                         && s.AI.NoteShipmentHeldBack(food, "D", "Other"),
                 "a later episode is news again (the record was forgotten, then re-set to Blockade)");
@@ -833,8 +833,8 @@ public static class BlockadeAvoidanceSelfCheck
         }
 
         // Clean routes sort before lossy ones; otherwise by cost minus surplus as before.
-        var surplusPlanet = new Planet.PlanetUpdateResult("X",
-            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 10f, 0);
+        var surplusPlanet = new Planet.UpdateResult("X",
+            Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus, 10f, 0);
         var cleanFar = new ResourceChoiceElement { SurplusResult = surplusPlanet, Cost = 500f, Loss = 0f };
         var lossyNear = new ResourceChoiceElement { SurplusResult = surplusPlanet, Cost = 100f, Loss = 5f };
         var cleanNear = new ResourceChoiceElement { SurplusResult = surplusPlanet, Cost = 100f, Loss = 0f };
@@ -918,7 +918,7 @@ public static class BlockadeAvoidanceSelfCheck
             ok &= Check(!s.AI.NoteColonizeHeldBack("A", "BlockadedOrigin"), "and then it is quiet again");
 
             // Nobody ready: the state is forgotten.
-            s.AI.ProcessColonizers(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            s.AI.ProcessColonizers(new List<Planet.UpdateResult>(), new List<GameAI.GameAIOrder>());
             ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "with no ready colonizer the held-back state is forgotten");
 
             // Every way blocked: held back as NoRoute. Later turns find it already recorded, so nothing new is logged.
@@ -943,7 +943,7 @@ public static class BlockadeAvoidanceSelfCheck
             s.AI.RefreshBlockadeView();
             s.Colonize();
             ok &= Check(s.AI.ColonizeHeldBackReason("A") == "BlockadedOrigin", "a blockaded origin is held back as BlockadedOrigin");
-            s.AI.ProcessColonizers(new List<Planet.PlanetUpdateResult>(), new List<GameAI.GameAIOrder>());
+            s.AI.ProcessColonizers(new List<Planet.UpdateResult>(), new List<GameAI.GameAIOrder>());
             ok &= Check(s.AI.ColonizeHeldBackReason("A") == null, "and forgotten again when nothing is ready");
         }
         return ok;

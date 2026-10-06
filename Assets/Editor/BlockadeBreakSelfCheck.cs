@@ -427,10 +427,10 @@ public static class BlockadeBreakSelfCheck
 
     private static GameAI.GameAIOrder LaunchColonist(Scenario s)
     {
-        var results = new List<Planet.PlanetUpdateResult>
+        var results = new List<Planet.UpdateResult>
         {
-            new Planet.PlanetUpdateResult("A",
-                Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+            new Planet.UpdateResult("A",
+                Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0),
         };
         var orders = new List<GameAI.GameAIOrder>();
         s.AI.ProcessColonizers(results, orders);

@@ -260,16 +260,16 @@ public static class CombatSelfCheck
         return ok;
     }
 
-    private static List<Planet.PlanetUpdateResult> Results() => new List<Planet.PlanetUpdateResult>();
+    private static List<Planet.UpdateResult> Results() => new List<Planet.UpdateResult>();
 
-    private static List<CombatReport> Resolve(Fixture f, List<Planet.PlanetUpdateResult> results)
+    private static List<CombatReport> Resolve(Fixture f, List<Planet.UpdateResult> results)
         => CombatSystem.Resolve(f.Map, f.Stats, f.Constants, 1, results);
 
     private static float DamageOf(Fixture f, string planet, int owner, int index)
         => f.P(planet).DockedShips.Where(s => s.Owner == owner).ElementAt(index).Damage;
 
-    private const Planet.PlanetUpdateResult.PlanetUpdateResultType WarshipsLost =
-        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost;
+    private const Planet.UpdateResult.UpdateResultType WarshipsLost =
+        Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost;
 
     // Who fights, how much damage lands, which ship it lands on, simultaneity, the hostility-weighted split, one pool per victim.
     public static bool RunCombatResolutionCheck()
@@ -396,8 +396,8 @@ public static class CombatSelfCheck
     public static bool RunRepairAndColonyShipCheck()
     {
         var ok = true;
-        const Planet.PlanetUpdateResult.PlanetUpdateResultType colonyLost =
-            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost;
+        const Planet.UpdateResult.UpdateResultType colonyLost =
+            Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonyShipsLost;
 
         using (var f = Fixture.Line())    // repair at home: 50 - 0.1 x 100 = 40
         {

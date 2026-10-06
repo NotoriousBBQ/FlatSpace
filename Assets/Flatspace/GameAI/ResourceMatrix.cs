@@ -14,8 +14,8 @@ namespace Flatspace.Objects.Resource
     /// </summary>
     public struct ResourceChoiceElement : IScoreMatrixChoiceElement
     {
-        public Planet.PlanetUpdateResult SurplusResult { get; set; }
-        public Planet.PlanetUpdateResult ShortageResult { get; set; }
+        public Planet.UpdateResult SurplusResult { get; set; }
+        public Planet.UpdateResult ShortageResult { get; set; }
 
         // IScoreMatrixChoiceElement
         public string Target => ShortageResult.Name;

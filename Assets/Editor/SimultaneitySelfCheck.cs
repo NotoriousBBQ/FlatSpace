@@ -73,7 +73,7 @@ public static class SimultaneitySelfCheck
 
             var homes = new[] { ("A", "B"), ("C", "D"), ("E", "F") };
             var ais = new List<PlayerAI>();
-            var results = new List<Planet.PlanetUpdateResult>();
+            var results = new List<Planet.UpdateResult>();
             for (var p = 0; p < 3; ++p)
             {
                 foreach (var name in new[] { homes[p].Item1, homes[p].Item2 })
@@ -94,10 +94,10 @@ public static class SimultaneitySelfCheck
                 ai.ResearchCatalog.catalogItems = research;
                 ai.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
                 ais.Add(ai);
-                results.Add(new Planet.PlanetUpdateResult(homes[p].Item1,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage, 10f, playerID: p));
-                results.Add(new Planet.PlanetUpdateResult(homes[p].Item2,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, 20f, playerID: p));
+                results.Add(new Planet.UpdateResult(homes[p].Item1,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage, 10f, playerID: p));
+                results.Add(new Planet.UpdateResult(homes[p].Item2,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus, 20f, playerID: p));
             }
             map.Knowledge.Update(map, 3, 8);
             if (withLosses)
@@ -109,8 +109,8 @@ public static class SimultaneitySelfCheck
                 // against 5) and has lost most of its fleet: it must be offered, and with these constants take, a Surrender.
                 map.Diplomacy.SetStance(0, 1, Stance.War, 0);
                 WarshipSelfCheck.DockWarships(map.GetPlanet("A"), 0, 3);
-                results.Add(new Planet.PlanetUpdateResult("C",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost,
+                results.Add(new Planet.UpdateResult("C",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
                     new CombatLoss { Attacker = 0, Ships = 5f, StrengthLost = 3000f }, 1));
             }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed

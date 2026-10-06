@@ -141,7 +141,7 @@ namespace FlatSpace
             {
                 GameAIMap.Diplomacy.Turn = Gameboard.Instance.TurnNumber;   // the truce is tested against it
                 var gameAIOrders = new List<GameAIOrder>();
-                var planetUpdateResults = new List<Planet.PlanetUpdateResult>();
+                var planetUpdateResults = new List<Planet.UpdateResult>();
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
@@ -161,7 +161,7 @@ namespace FlatSpace
             }
 
             // Docked warships of players at war fight before the planets update, so this turn's losses reach ProcessResults.
-            private void RunCombat(List<Planet.PlanetUpdateResult> results)
+            private void RunCombat(List<Planet.UpdateResult> results)
             {
                 var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
                 var turn = Gameboard.Instance.TurnNumber;
@@ -513,13 +513,13 @@ namespace FlatSpace
                     ExecuteOrder(executableOrder);
             }
 
-            private void UpdateAllPlanets(List<Planet.PlanetUpdateResult> planetUpdateResults)
+            private void UpdateAllPlanets(List<Planet.UpdateResult> planetUpdateResults)
             {
                 GameAIMap.UpdateAllPlanets(planetUpdateResults);
             }
 
 
-            private void ProcessResults(List<Planet.PlanetUpdateResult> results, List<GameAIOrder> orders)
+            private void ProcessResults(List<Planet.UpdateResult> results, List<GameAIOrder> orders)
             {
                 for (var playerID = 0; playerID < Gameboard.Instance.players.Count(); ++playerID)
                 {

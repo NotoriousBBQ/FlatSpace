@@ -104,7 +104,7 @@ public static class AITuningLogger
         AppendLines(lines);
     }
 
-    public static void LogPlanetEvents(int turnNumber, List<Planet.PlanetUpdateResult> results)
+    public static void LogPlanetEvents(int turnNumber, List<Planet.UpdateResult> results)
     {
         if (_currentLogPath == null) return;
         var lines = new List<string>();
@@ -112,23 +112,23 @@ public static class AITuningLogger
         {
             switch (result.Result)
             {
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "ProductionComplete",
                         result.Name, result.Data?.ToString() ?? string.Empty));
                     break;
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonizerReady", result.Name));
                     break;
                 // Colony failures: a lost inhabitant (with its player) and, when the last one goes, a dead planet
                 // (the dead result carries no player, so it logs as P-1; pair it with the PopulationLoss before it).
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypePopulationLoss:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypePopulationLoss:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "PopulationLoss", result.Name));
                     break;
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeDead:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeDead:
                     lines.Add(FormatLine(turnNumber, result.PlayerID, "PlanetDead", result.Name));
                     break;
                 // Colony ships destroyed in combat: planet, owner, how many, and the lowest-numbered rival that did it.
-                case Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost:
+                case Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonyShipsLost:
                     if (result.Data is FlatSpace.AI.ColonyLoss colonyLoss)
                         lines.Add(FormatLine(turnNumber, result.PlayerID, "ColonyShipsLost", result.Name,
                             result.PlayerID.ToString(), colonyLoss.Count.ToString(), colonyLoss.ByPlayer.ToString()));

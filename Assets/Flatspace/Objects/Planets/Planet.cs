@@ -8,8 +8,8 @@ using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
-using ResultType = Planet.PlanetUpdateResult.PlanetUpdateResultType ;
-using ResultPriority = Planet.PlanetUpdateResult.PlanetUpdateResultPriority ;
+using ResultType = Planet.UpdateResult.UpdateResultType ;
+using ResultPriority = Planet.UpdateResult.UpdateResultPriority ;
 public class Planet : MonoBehaviour
 {
     public struct Inhabitant
@@ -17,40 +17,40 @@ public class Planet : MonoBehaviour
         public int Player;
     }
 
-    public struct PlanetUpdateResult
+    public struct UpdateResult
     {
-        public enum PlanetUpdateResultType
+        public enum UpdateResultType
         {
-            PlanetUpdateResultTypeNone,
-            PlanetUpdateResultTypeDead,
-            PlanetUpdateResultTypePopulationGain,
-            PlanetUpdateResultTypePopulationLoss,
-            PlanetUpdateResultTypePopulationMax,
-            PlanetUpdateResultTypePopulationSurplus,
-            PlanetUpdateResultTypeFoodShortage,
-            PlanetUpdateResultTypeFoodSurplus,
-            PlanetUpdateResultTypeGrotsitsShortage,
-            PlanetUpdateResultTypeGrotsitsSurplus,
-            PlanetUpdateResultTypeIndustrySurplus,
-            PlanetUpdateResultTypeIndustryProductionComplete,
-            PlanetUpdateResultTypeIndustryProductionQueueEmpty,
-            PlanetUpdateResultTypeResearchProduced,
-            PlanetUpdateResultTypeColonizerReady,
+            UpdateResultTypeNone,
+            UpdateResultTypeDead,
+            UpdateResultTypePopulationGain,
+            UpdateResultTypePopulationLoss,
+            UpdateResultTypePopulationMax,
+            UpdateResultTypePopulationSurplus,
+            UpdateResultTypeFoodShortage,
+            UpdateResultTypeFoodSurplus,
+            UpdateResultTypeGrotsitsShortage,
+            UpdateResultTypeGrotsitsSurplus,
+            UpdateResultTypeIndustrySurplus,
+            UpdateResultTypeIndustryProductionComplete,
+            UpdateResultTypeIndustryProductionQueueEmpty,
+            UpdateResultTypeResearchProduced,
+            UpdateResultTypeColonizerReady,
             // Appended last: serialized as an int. Data is a CombatLoss / ColonyLoss (CombatSystem); PlayerID is the victim.
-            PlanetUpdateResultTypeWarshipsLost,
-            PlanetUpdateResultTypeColonyShipsLost
+            UpdateResultTypeWarshipsLost,
+            UpdateResultTypeColonyShipsLost
         }
 
-        public enum PlanetUpdateResultPriority
+        public enum UpdateResultPriority
         {
-            PlanetUpdateResultPriorityNone,
-            PlanetUpdateResultPriorityLow,
-            PlanetUpdateResultPriorityMedium,
-            PlanetUpdateResultPriorityHigh,
-            PlanetUpdateResultPriorityUrgent
+            UpdateResultPriorityNone,
+            UpdateResultPriorityLow,
+            UpdateResultPriorityMedium,
+            UpdateResultPriorityHigh,
+            UpdateResultPriorityUrgent
         }
 
-        public PlanetUpdateResult(string planetName, ResultType type, object data, int playerID = -1)
+        public UpdateResult(string planetName, ResultType type, object data, int playerID = -1)
         {
             Name = planetName;
             Result = type;
@@ -58,33 +58,33 @@ public class Planet : MonoBehaviour
             PlayerID = playerID;
             switch (Result)
             {
-                case ResultType.PlanetUpdateResultTypeNone:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityNone;
+                case ResultType.UpdateResultTypeNone:
+                    Priority = ResultPriority.UpdateResultPriorityNone;
                     break;
-                case ResultType.PlanetUpdateResultTypeDead:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
+                case ResultType.UpdateResultTypeDead:
+                    Priority = ResultPriority.UpdateResultPriorityHigh;
                     break;
-                case ResultType.PlanetUpdateResultTypePopulationGain:
-                case ResultType.PlanetUpdateResultTypeFoodSurplus:
-                case ResultType.PlanetUpdateResultTypeIndustrySurplus:
-                case ResultType.PlanetUpdateResultTypeResearchProduced:
-                case ResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityMedium;
+                case ResultType.UpdateResultTypePopulationGain:
+                case ResultType.UpdateResultTypeFoodSurplus:
+                case ResultType.UpdateResultTypeIndustrySurplus:
+                case ResultType.UpdateResultTypeResearchProduced:
+                case ResultType.UpdateResultTypeIndustryProductionQueueEmpty:
+                    Priority = ResultPriority.UpdateResultPriorityMedium;
                     break;
-                case ResultType.PlanetUpdateResultTypePopulationLoss:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityUrgent;
+                case ResultType.UpdateResultTypePopulationLoss:
+                    Priority = ResultPriority.UpdateResultPriorityUrgent;
                     break;
-                case ResultType.PlanetUpdateResultTypePopulationMax:
-                case ResultType.PlanetUpdateResultTypePopulationSurplus:
-                case ResultType.PlanetUpdateResultTypeFoodShortage:
-                case ResultType.PlanetUpdateResultTypeGrotsitsShortage:
-                case ResultType.PlanetUpdateResultTypeIndustryProductionComplete:
-                case ResultType.PlanetUpdateResultTypeWarshipsLost:
-                case ResultType.PlanetUpdateResultTypeColonyShipsLost:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityHigh;
+                case ResultType.UpdateResultTypePopulationMax:
+                case ResultType.UpdateResultTypePopulationSurplus:
+                case ResultType.UpdateResultTypeFoodShortage:
+                case ResultType.UpdateResultTypeGrotsitsShortage:
+                case ResultType.UpdateResultTypeIndustryProductionComplete:
+                case ResultType.UpdateResultTypeWarshipsLost:
+                case ResultType.UpdateResultTypeColonyShipsLost:
+                    Priority = ResultPriority.UpdateResultPriorityHigh;
                     break;
                 default:
-                    Priority = ResultPriority.PlanetUpdateResultPriorityNone;
+                    Priority = ResultPriority.UpdateResultPriorityNone;
                     break;
             }
         }
@@ -521,7 +521,7 @@ public class Planet : MonoBehaviour
         }
     }
 
-    public void UpdatePlanet(List<PlanetUpdateResult> resultList)
+    public void UpdatePlanet(List<UpdateResult> resultList)
     {
         if (Population.Count == 0)
             return;
@@ -547,21 +547,21 @@ public class Planet : MonoBehaviour
         CheckColonizationReady(resultList);
     }
     
-    private void CheckColonizationReady(List<PlanetUpdateResult> resultList,bool populationDecrease = false)
+    private void CheckColonizationReady(List<UpdateResult> resultList,bool populationDecrease = false)
     {
         
         if (resultList.Any(x =>
-                x.Name == PlanetName && x.Result == ResultType.PlanetUpdateResultTypeColonizerReady))
+                x.Name == PlanetName && x.Result == ResultType.UpdateResultTypeColonizerReady))
             return;
         
         if (HasDockedShip(Ship.ShipKind.ColonyShip) && (Population.Count >= MaxPopulation * GameAIConstants.expandPopulationTrigger))
         {
-            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeColonizerReady,
+            resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeColonizerReady,
                 1, Owner));
         }
     }
 
-    private void ConsumeFood(List<PlanetUpdateResult> resultList)
+    private void ConsumeFood(List<UpdateResult> resultList)
     {
         if (Population.Count <= 0 && Food <= _resourceData._baseFoodProduction)
             return;
@@ -579,12 +579,12 @@ public class Planet : MonoBehaviour
                  var playerID = ChangePopulation(-1);
                  // start the food countdown again
                  Food = Population.Count;
-                 resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationLoss,
+                 resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypePopulationLoss,
                      1, playerID));
                  if (Population.Count <= 0)
                  {
                      // planet is dead
-                     resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeDead, null));
+                     resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeDead, null));
                  }
              }
         }
@@ -597,16 +597,16 @@ public class Planet : MonoBehaviour
             {
                 Food -= FoodNeededForNewPop;
                 var playerID = ChangePopulation(1);
-                resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypePopulationGain, 1, playerID));
+                resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypePopulationGain, 1, playerID));
                 if (Population.Count >= MaxPopulation)
-                    resultList.Add(new PlanetUpdateResult(PlanetName,
-                        ResultType.PlanetUpdateResultTypePopulationSurplus,
+                    resultList.Add(new UpdateResult(PlanetName,
+                        ResultType.UpdateResultTypePopulationSurplus,
                         Population.Count - _resourceData._maxPopulation, playerID));
             }
             else if (Population.Count >= MaxPopulation)
             {
-                resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypePopulationMax, 1, Owner));
+                resultList.Add(new UpdateResult(PlanetName,
+                    ResultType.UpdateResultTypePopulationMax, 1, Owner));
             }
         }
 
@@ -619,8 +619,8 @@ public class Planet : MonoBehaviour
         {
             if (Food > projectedPopulation)
             {
-                resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypeFoodSurplus, Food - projectedPopulation, Owner));
+                resultList.Add(new UpdateResult(PlanetName,
+                    ResultType.UpdateResultTypeFoodSurplus, Food - projectedPopulation, Owner));
             }
         }
         else if (ProjectedFood < projectedPopulation)
@@ -631,7 +631,7 @@ public class Planet : MonoBehaviour
 
         if (foodShortage < 0.0f)
         {
-            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeFoodShortage,
+            resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeFoodShortage,
                 foodShortage, Owner));
         }
     }
@@ -655,7 +655,7 @@ public class Planet : MonoBehaviour
         }
     }
 
-    private void ConsumeGrotsits(List<PlanetUpdateResult> resultList)
+    private void ConsumeGrotsits(List<UpdateResult> resultList)
     {
         if (Population.Count <= 0 && Grotsits <= _resourceData._baseGrotsitsProduction)
             return;
@@ -687,8 +687,8 @@ public class Planet : MonoBehaviour
             grotsitsShort += ProjectedGrotsits - projectedGrotsitsRequirement;
             if (Grotsits > projectedGrotsitsRequirement)
             {
-                resultList.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypeGrotsitsSurplus,
+                resultList.Add(new UpdateResult(PlanetName,
+                    ResultType.UpdateResultTypeGrotsitsSurplus,
                     Math.Clamp(Grotsits - projectedGrotsitsRequirement, 0, Grotsits), Owner));
             }
 
@@ -700,26 +700,26 @@ public class Planet : MonoBehaviour
 
         if (grotsitsShort < 0.0f)
         {
-            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeGrotsitsShortage,
+            resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeGrotsitsShortage,
                 grotsitsShort, Owner));
         }
     }
 
-    private void ConsumeIndustry(List<PlanetUpdateResult> resultList)
+    private void ConsumeIndustry(List<UpdateResult> resultList)
     {
         UpdateProduction(resultList);
 
         if (Industry >= 0.0f)
         {
-            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeIndustrySurplus,
+            resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeIndustrySurplus,
                 Industry, Owner));
         }
     }
 
-    private void ConsumeResearch(List<PlanetUpdateResult> resultList)
+    private void ConsumeResearch(List<UpdateResult> resultList)
     {
         if (Research > 0)
-            resultList.Add(new PlanetUpdateResult(PlanetName, ResultType.PlanetUpdateResultTypeResearchProduced,
+            resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeResearchProduced,
                 Research, Owner));
     }
 
@@ -844,7 +844,7 @@ public class Planet : MonoBehaviour
             UpdateProduction();
         }
     }
-    private bool UpdateProductionQueue(List<PlanetUpdateResult> resultList = null)
+    private bool UpdateProductionQueue(List<UpdateResult> resultList = null)
     {
         if (CurrentProduction == null)
         {
@@ -859,14 +859,14 @@ public class Planet : MonoBehaviour
 
             if(ProductionQueue.Count == 0)
             {
-                resultList?.Add(new PlanetUpdateResult(PlanetName,
-                    ResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty, CurrentProduction?.Item.itemName, Owner));
+                resultList?.Add(new UpdateResult(PlanetName,
+                    ResultType.UpdateResultTypeIndustryProductionQueueEmpty, CurrentProduction?.Item.itemName, Owner));
                 return false;
             }
         }
         return true; 
     }
-    private void UpdateProduction(List<PlanetUpdateResult> resultList = null)
+    private void UpdateProduction(List<UpdateResult> resultList = null)
     {
         if (UpdateProductionQueue(resultList))
         {
@@ -874,7 +874,7 @@ public class Planet : MonoBehaviour
         }
     }
 
-    private void ContinueProduction(List<PlanetUpdateResult> resultList = null)
+    private void ContinueProduction(List<UpdateResult> resultList = null)
     {
         if(!CurrentProduction.HasValue)
             return;
@@ -888,11 +888,11 @@ public class Planet : MonoBehaviour
         }
     }
 
-    private void CompleteProduction(List<PlanetUpdateResult> resultList = null)
+    private void CompleteProduction(List<UpdateResult> resultList = null)
     {
         StageCompletedProductionItem(resultList);
-        resultList?.Add(new PlanetUpdateResult(PlanetName,
-            ResultType.PlanetUpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
+        resultList?.Add(new UpdateResult(PlanetName,
+            ResultType.UpdateResultTypeIndustryProductionComplete, CurrentProduction?.Item.itemName, Owner));
         var excessIndustry = CurrentProduction?.Progress - CurrentProduction?.Cost;
         Industry = excessIndustry ?? 0.0f;
         CurrentProduction = null;
@@ -900,7 +900,7 @@ public class Planet : MonoBehaviour
             ContinueProduction(resultList);
     }
 
-    private void StageCompletedProductionItem(List<PlanetUpdateResult> resultList)
+    private void StageCompletedProductionItem(List<UpdateResult> resultList)
     {
         if (CurrentProduction == null) return;
         if (CurrentProduction?.Item.type == "Improvement")

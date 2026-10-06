@@ -72,9 +72,9 @@ public static class DistributionCenterSelfCheck
         return (map, playerAI, mapGo, playerGo);
     }
 
-    private static Planet.PlanetUpdateResult FoodSurplus(string name, int playerId, float amount = 10f)
-        => new Planet.PlanetUpdateResult(name,
-            Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus, amount, playerId);
+    private static Planet.UpdateResult FoodSurplus(string name, int playerId, float amount = 10f)
+        => new Planet.UpdateResult(name,
+            Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus, amount, playerId);
 
     // A -- Home(producer). B -- Far(candidate, reaches ConsumerA/ConsumerB) that no producer reaches
     // directly. maxPathNodesForResourceDistribution = 2 (direct neighbours only). Far must score higher
@@ -101,7 +101,7 @@ public static class DistributionCenterSelfCheck
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap1", "DCSelfCheckPlayer1");
 
-            var results = new List<Planet.PlanetUpdateResult> { FoodSurplus("Home", 0) };
+            var results = new List<Planet.UpdateResult> { FoodSurplus("Home", 0) };
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
 
             ok &= Check(built.playerAI.FoodDistributionCenters.Count == 1
@@ -143,7 +143,7 @@ public static class DistributionCenterSelfCheck
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap2", "DCSelfCheckPlayer2");
 
-            var results = new List<Planet.PlanetUpdateResult> { FoodSurplus("Home", 0) };
+            var results = new List<Planet.UpdateResult> { FoodSurplus("Home", 0) };
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
 
             ok &= Check(built.playerAI.FoodDistributionCenters.Count == 1
@@ -185,7 +185,7 @@ public static class DistributionCenterSelfCheck
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap3", "DCSelfCheckPlayer3");
 
-            var results = new List<Planet.PlanetUpdateResult> { FoodSurplus("Home", 0) };
+            var results = new List<Planet.UpdateResult> { FoodSurplus("Home", 0) };
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
 
             ok &= Check(built.playerAI.FoodDistributionCenters.Count == 0,
@@ -231,7 +231,7 @@ public static class DistributionCenterSelfCheck
             built.map.GetPlanet("Consumer1").Owner = 1;
             built.map.GetPlanet("Consumer2").Owner = 1;
 
-            var results = new List<Planet.PlanetUpdateResult> { FoodSurplus("Home", 0) };
+            var results = new List<Planet.UpdateResult> { FoodSurplus("Home", 0) };
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
 
             // Otherwise-identical board, gate raised one above the board-wide total (6 > 5), to prove it
@@ -255,7 +255,7 @@ public static class DistributionCenterSelfCheck
             blocked.map.GetPlanet("BConsumer1").Owner = 1;
             blocked.map.GetPlanet("BConsumer2").Owner = 1;
 
-            var blockedResults = new List<Planet.PlanetUpdateResult> { FoodSurplus("BHome", 0) };
+            var blockedResults = new List<Planet.UpdateResult> { FoodSurplus("BHome", 0) };
             blocked.playerAI.UpdateDistributionCenters(blockedResults, turnNumber: 1);
 
             ok &= Check(built.playerAI.FoodDistributionCenters.Count == 1,
@@ -306,7 +306,7 @@ public static class DistributionCenterSelfCheck
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap5", "DCSelfCheckPlayer5");
 
-            var results = new List<Planet.PlanetUpdateResult> { FoodSurplus("Home", 0) };
+            var results = new List<Planet.UpdateResult> { FoodSurplus("Home", 0) };
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
             var firstChoice = built.playerAI.FoodDistributionCenters.Count == 1
                 ? built.playerAI.FoodDistributionCenters[0] : null;
@@ -354,7 +354,7 @@ public static class DistributionCenterSelfCheck
             };
             built = BuildPlayer(spawns, constants, 0, "DCSelfCheckMap6", "DCSelfCheckPlayer6");
 
-            var results = new List<Planet.PlanetUpdateResult> { FoodSurplus("Home", 0) };
+            var results = new List<Planet.UpdateResult> { FoodSurplus("Home", 0) };
             built.playerAI.UpdateDistributionCenters(results, turnNumber: 1);
             ok &= Check(built.playerAI.FoodDistributionCenters.Count == 1 && built.playerAI.FoodDistributionCenters[0] == "FarB",
                 "FarB is selected initially");

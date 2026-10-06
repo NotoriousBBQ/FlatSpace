@@ -159,7 +159,7 @@ namespace FlatSpace
             // ── Entry point ──────────────────────────────────────────────────
 
             public void ProcessResults(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
@@ -236,11 +236,11 @@ namespace FlatSpace
             private readonly HashSet<int> _lossDropLogged = new HashSet<int>();
 
             /// <summary>Reads this turn's WarshipsLost results for my own player (the list is shared by every player).</summary>
-            public void RecordLosses(List<Planet.PlanetUpdateResult> results, int turn)
+            public void RecordLosses(List<Planet.UpdateResult> results, int turn)
             {
                 foreach (var result in results)
                 {
-                    if (result.Result != Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost) continue;
+                    if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost) continue;
                     if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
                     if (!_losses.TryGetValue(loss.Attacker, out var list))
                         _losses[loss.Attacker] = list = new List<(int turn, float ships, float strength)>();
@@ -434,7 +434,7 @@ namespace FlatSpace
             // ── Strategy: Expand ─────────────────────────────────────────────
 
             private void ProcessResultsStrategyExpand(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 Player                          player,
                 ref List<GameAI.GameAIOrder>    orders)
             {
@@ -493,7 +493,7 @@ namespace FlatSpace
 
             /// <summary>The player's own surplus-reporting planets as of the last UpdateDistributionCenters
             /// call — one turn stale by the time an order executes, since order execution runs before this
-            /// turn's PlanetUpdateResults exist. Used by IsCoverageGap (Task 7).</summary>
+            /// turn's UpdateResults exist. Used by IsCoverageGap (Task 7).</summary>
             public List<string> LastFoodSurplusPlanets { get; private set; } = new List<string>();
             public List<string> LastGrotsitsSurplusPlanets { get; private set; } = new List<string>();
 
@@ -509,15 +509,15 @@ namespace FlatSpace
             /// Sticky, per-resource DC selection and pruning, once per turn. Public and free of
             /// Gameboard.Instance so the self-check can drive it directly.
             /// </summary>
-            public void UpdateDistributionCenters(List<Planet.PlanetUpdateResult> results, int turnNumber)
+            public void UpdateDistributionCenters(List<Planet.UpdateResult> results, int turnNumber)
             {
                 LastFoodSurplusPlanets = results
                     .Where(x => x.PlayerID == Player.playerID
-                             && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus)
+                             && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus)
                     .Select(x => x.Name).ToList();
                 LastGrotsitsSurplusPlanets = results
                     .Where(x => x.PlayerID == Player.playerID
-                             && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus)
+                             && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeGrotsitsSurplus)
                     .Select(x => x.Name).ToList();
 
                 UpdateDistributionCentersForResource(turnNumber, "Food", LastFoodSurplusPlanets, FoodDistributionCenters);
@@ -656,7 +656,7 @@ namespace FlatSpace
             /// lastKnownSurplusPlanets AND every planet in distributionCenters — i.e. sticky DC selection
             /// isn't giving this planet any path to get resupplied. Uses the CACHED last-known surplus set
             /// (LastFoodSurplusPlanets/LastGrotsitsSurplusPlanets), not this turn's live results, because
-            /// order execution (where this is called from) runs before this turn's PlanetUpdateResults
+            /// order execution (where this is called from) runs before this turn's UpdateResults
             /// exist — one turn stale, acceptable for a diagnostic. Public and free of Gameboard.Instance
             /// so the self-check can drive it directly.
             /// </summary>
@@ -715,12 +715,12 @@ namespace FlatSpace
 
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void ProcessColonizers(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 var colonizers = results.FindAll(
                     x => x.PlayerID == Player.playerID 
-                         && x.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady);
+                         && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady);
                 if (colonizers.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nobody is ready, so nobody is being held back
@@ -872,12 +872,12 @@ namespace FlatSpace
 
             // public for the self-check
             public void ProcessFoodShortage(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 ProcessResourceShipments(results,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodShortage,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeFoodSurplus,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).FoodShipmentIncoming,
                     FoodDistributionCenters,
                     AIMap.GameAIConstants.distributionCenterFoodTargetStock,
@@ -892,12 +892,12 @@ namespace FlatSpace
 
             // public for the self-check
             public void ProcessGrotsitsShortage(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 ProcessResourceShipments(results,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsShortage,
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeGrotsitsSurplus,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeGrotsitsShortage,
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeGrotsitsSurplus,
                     incomingCheck: name => AIMap.GetPlanet(name).GrotsitsShipmentIncoming,
                     GrotsitsDistributionCenters,
                     AIMap.GameAIConstants.distributionCenterGrotsitsTargetStock,
@@ -948,9 +948,9 @@ namespace FlatSpace
             /// shortages always claim surplus first.
             /// </summary>
             private void ProcessResourceShipments(
-                List<Planet.PlanetUpdateResult>                  results,
-                Planet.PlanetUpdateResult.PlanetUpdateResultType shortageType,
-                Planet.PlanetUpdateResult.PlanetUpdateResultType surplusType,
+                List<Planet.UpdateResult>                  results,
+                Planet.UpdateResult.UpdateResultType shortageType,
+                Planet.UpdateResult.UpdateResultType surplusType,
                 Func<string, bool>                               incomingCheck,
                 List<string>                                     distributionCenters,
                 float                                             distributionCenterTargetStock,
@@ -983,7 +983,7 @@ namespace FlatSpace
                     if (dcPlanet == null) continue;
                     var gap = distributionCenterTargetStock - currentStockSelector(dcPlanet);
                     if (gap <= 0f) continue;
-                    shortages.Add(new Planet.PlanetUpdateResult(dcName, shortageType, -gap, Player.playerID));
+                    shortages.Add(new Planet.UpdateResult(dcName, shortageType, -gap, Player.playerID));
                     syntheticShortageNames.Add(dcName);
                 }
 
@@ -1065,8 +1065,8 @@ namespace FlatSpace
             /// match.
             /// </summary>
             private ScoreMatrix<ScoreMatrixDecisionElement, ResourceChoiceElement, ResourceAction> BuildResourceMatrix(
-                List<Planet.PlanetUpdateResult> shortages,
-                List<Planet.PlanetUpdateResult> surplusResults,
+                List<Planet.UpdateResult> shortages,
+                List<Planet.UpdateResult> surplusResults,
                 Dictionary<string, float>       remainingShortage,
                 Dictionary<string, float>       remainingSurplus,
                 List<string>                    syntheticShortageNames,
@@ -1241,13 +1241,13 @@ namespace FlatSpace
                 };
 
             private void ProcessResearch(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 var researchResults = results
                     .Where(p => p.PlayerID == Player.playerID 
-                                && p.Result == Planet.PlanetUpdateResult.PlanetUpdateResultType
-                        .PlanetUpdateResultTypeResearchProduced)
+                                && p.Result == Planet.UpdateResult.UpdateResultType
+                        .UpdateResultTypeResearchProduced)
                     .ToList();
 
                 if (researchResults.Count == 0) return;
@@ -1602,12 +1602,12 @@ namespace FlatSpace
             }
 
             private void ProcessIndustry(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 UpdatePlanetaryProduction(results, orders);
                 
-                // TODO: PlanetUpdateResultTypeIndustrySurplus — ship industry
+                // TODO: UpdateResultTypeIndustrySurplus — ship industry
             }
 
             /// <summary>
@@ -1615,7 +1615,7 @@ namespace FlatSpace
             /// or if the production queue is empty
             /// </summary>
             private void UpdatePlanetaryProduction(
-                List<Planet.PlanetUpdateResult> results,
+                List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
                 var matrix = BuildIndustryMatrix(results, Strategy);
@@ -1656,16 +1656,16 @@ namespace FlatSpace
             /// Returns null if there is nothing to do.
             /// </summary>
             private ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction> BuildIndustryMatrix(
-                List<Planet.PlanetUpdateResult>                  results,
+                List<Planet.UpdateResult>                  results,
                 AIStrategy        strategy)
             {
 
                 var productionCompleteResults = results.FindAll(x => x.PlayerID == Player.playerID
-                    && (x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionComplete 
-                        or Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustryProductionQueueEmpty))
+                    && (x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete 
+                        or Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty))
                     .OrderBy(x => x.Name).ThenBy(x => x.GetType()).ToList();
                 var surplusResults = productionCompleteResults.FindAll(x => x.PlayerID == Player.playerID
-                    && x.Result is Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeIndustrySurplus);
+                    && x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustrySurplus);
                 
                 if (productionCompleteResults.Count == 0)
                     return null;

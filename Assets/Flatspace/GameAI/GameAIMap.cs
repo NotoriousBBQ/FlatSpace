@@ -194,7 +194,7 @@ namespace FlatSpace
                     };
             }
 
-            public void UpdateAllPlanets(List<Planet.PlanetUpdateResult> resultList)
+            public void UpdateAllPlanets(List<Planet.UpdateResult> resultList)
             {
                 foreach (var planet in PlanetList)
                 {
@@ -426,7 +426,7 @@ namespace FlatSpace
                 }
             }
 
-            private void DEBUG_LogResults(List<Planet.PlanetUpdateResult> resultList)
+            private void DEBUG_LogResults(List<Planet.UpdateResult> resultList)
             {
                 Debug.Log($"Turn: {Gameboard.Instance.TurnNumber} Results count: {resultList.Count}");
                 foreach (var result in resultList)

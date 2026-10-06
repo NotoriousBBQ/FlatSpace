@@ -293,10 +293,10 @@ public static class PlayerKnowledgeSelfCheck
             playerAI.AIMap = map;
             player.playerID = 0;
 
-            var results = new List<Planet.PlanetUpdateResult>
+            var results = new List<Planet.UpdateResult>
             {
-                new Planet.PlanetUpdateResult("Home",
-                    Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady,
+                new Planet.UpdateResult("Home",
+                    Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady,
                     1, playerID: 0),
             };
             var orders = new List<GameAI.GameAIOrder>();
@@ -762,10 +762,10 @@ public static class PlayerKnowledgeSelfCheck
                     "a target that can feed itself needs no rider, whatever the origin holds");
 
                 // Orders: the usual four, plus a delayed rider that lands with the colonist and an immediate payment.
-                var results = new List<Planet.PlanetUpdateResult>
+                var results = new List<Planet.UpdateResult>
                 {
-                    new Planet.PlanetUpdateResult("Home",
-                        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+                    new Planet.UpdateResult("Home",
+                        Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0),
                 };
                 var orders = new List<GameAI.GameAIOrder>();
                 ai.ProcessColonizers(results, orders);
@@ -807,10 +807,10 @@ public static class PlayerKnowledgeSelfCheck
                 for (var i = 0; i < 4; i++) home.Population.Add(new Planet.Inhabitant { Player = 0 });
                 home.Food = 50f;
                 var orders = new List<GameAI.GameAIOrder>();
-                ai.ProcessColonizers(new List<Planet.PlanetUpdateResult>
+                ai.ProcessColonizers(new List<Planet.UpdateResult>
                 {
-                    new Planet.PlanetUpdateResult("Home",
-                        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonizerReady, 1, 0),
+                    new Planet.UpdateResult("Home",
+                        Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0),
                 }, orders);
                 ok &= Check(orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport),
                     "a normal target is colonized as before");

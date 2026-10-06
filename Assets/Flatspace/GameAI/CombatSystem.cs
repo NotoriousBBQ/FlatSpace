@@ -51,7 +51,7 @@ namespace FlatSpace
             }
 
             public static List<CombatReport> Resolve(GameAIMap map, WarshipStats stats, GameAIConstants constants, int turn,
-                List<Planet.PlanetUpdateResult> results)
+                List<Planet.UpdateResult> results)
             {
                 var reports = new List<CombatReport>();
                 if (map == null || stats == null || !map.Diplomacy.Enabled) return reports;
@@ -65,7 +65,7 @@ namespace FlatSpace
             }
 
             private static void FightAt(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants,
-                List<Planet.PlanetUpdateResult> results, List<CombatReport> reports)
+                List<Planet.UpdateResult> results, List<CombatReport> reports)
             {
                 // Start-of-turn snapshot of every warship that can fight (a ship with no health left, or no Health stat, cannot).
                 var units = new List<Unit>();
@@ -145,8 +145,8 @@ namespace FlatSpace
                             DamageDealt = dealt * share, ShipsDestroyed = lostShips * share,
                         });
                         if (lostShips > 0)
-                            results.Add(new Planet.PlanetUpdateResult(planet.PlanetName,
-                                Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeWarshipsLost,
+                            results.Add(new Planet.UpdateResult(planet.PlanetName,
+                                Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost,
                                 new CombatLoss { Attacker = attacker, Ships = lostShips * share, StrengthLost = lostStrength * share },
                                 victim));
                     }
@@ -175,7 +175,7 @@ namespace FlatSpace
 
             // After combat and repair: a player with colony ships here but no warship, where a player at war with it has a
             // warship, loses its colony ships. Everywhere, a planet the owner populates included.
-            private static void DestroyStrandedColonyShips(Planet planet, GameAIMap map, List<Planet.PlanetUpdateResult> results)
+            private static void DestroyStrandedColonyShips(Planet planet, GameAIMap map, List<Planet.UpdateResult> results)
             {
                 var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner != Planet.NoOwner)
                     .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
@@ -188,8 +188,8 @@ namespace FlatSpace
                         .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
                     if (raiders.Count == 0) continue;
                     var count = planet.UndockShips(Ship.ShipKind.ColonyShip, owner, int.MaxValue);
-                    results.Add(new Planet.PlanetUpdateResult(planet.PlanetName,
-                        Planet.PlanetUpdateResult.PlanetUpdateResultType.PlanetUpdateResultTypeColonyShipsLost,
+                    results.Add(new Planet.UpdateResult(planet.PlanetName,
+                        Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonyShipsLost,
                         new ColonyLoss { Count = count, ByPlayer = raiders[0] }, owner));
                 }
             }
