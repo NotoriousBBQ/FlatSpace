@@ -17,6 +17,7 @@ public static class ConversionSelfCheck
         var ok = RunTunableDefaultsCheck();
         ok &= RunConvertInhabitantCheck();
         ok &= RunSessionStateCheck();
+        ok &= RunConversionHostilityCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -39,6 +40,68 @@ public static class ConversionSelfCheck
             for (var i = 0; i < count; i++)
                 planet.Population.Add(new Planet.Inhabitant { Player = player });
         planet.Owner = planet.PlayerWithMostPopulation();
+    }
+
+    private static PlayerAI MakeAI(CombatSelfCheck.Fixture f, int id, List<GameObject> gos)
+    {
+        var go = new GameObject("ConversionPlayer" + id);
+        gos.Add(go);
+        var player = go.AddComponent<Player>();
+        var ai = go.AddComponent<PlayerAI>();
+        ai.Player = player;
+        ai.AIMap = f.Map;
+        player.playerID = id;
+        ai.ResearchCatalog = go.AddComponent<Catalog>();
+        ai.ResearchCatalog.catalogItems = f.Research;
+        ai.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+        return ai;
+    }
+
+    // The charge waiting on DiplomacyState, the calculator term, and the victim's UpdateDiplomacy adding exactly the charge.
+    public static bool RunConversionHostilityCheck()
+    {
+        var ok = true;
+        var d = new DiplomacyState();
+        d.RecordConversion(2, 0); d.RecordConversion(2, 0); d.RecordConversion(1, 0);
+        ok &= Check(d.PeekConversions(2, 0) == 2 && d.PeekConversions(1, 0) == 1, "charges are counted per (victim, converter)");
+        d.RecordConversion(2, 2); d.RecordConversion(2, -1);
+        ok &= Check(d.PeekConversions(2, 2) == 0 && d.PeekConversions(2, -1) == 0, "a self or ownerless converter is ignored");
+        ok &= Check(d.TakeConversions(2, 0) == 2 && d.TakeConversions(2, 0) == 0, "taking consumes the charges");
+        d.DiscardConversions(1);
+        ok &= Check(d.PeekConversions(1, 0) == 0, "DiscardConversions drops what nobody consumed");
+
+        var c = ScriptableObject.CreateInstance<GameAIConstants>();
+        try
+        {
+            var r = HostilityCalculator.Compute(new HostilityCalculator.Inputs { Previous = 10f, Conversions = 2 }, c);
+            ok &= Check(Near(r.ConversionTerm, 6f), "two conversions at hostilityPerConversion 3 give a term of 6");
+            ok &= Check(Near(r.Hostility, 10f * (1f - c.hostilityDecay) + 6f), "the term is added after the decay");
+        }
+        finally { Object.DestroyImmediate(c); }
+
+        // The victim reads exactly the charge in its UpdateDiplomacy: the same fixture with and without two charges.
+        float HostilityAfter(int conversions)
+        {
+            var gos = new List<GameObject>();
+            try
+            {
+                using (var f = CombatSelfCheck.Fixture.Line())
+                {
+                    f.Colonize("A", 2);
+                    f.Ships("A", 0, 1);                                   // player 0's ship at player 2's planet: contact
+                    f.Map.Knowledge.Update(f.Map, 3, 8);
+                    var pair = f.Map.Diplomacy.Get(2, 0);
+                    pair.Hostility = 50f;
+                    f.Map.Diplomacy.Set(2, 0, pair);
+                    for (var i = 0; i < conversions; i++) f.Map.Diplomacy.RecordConversion(2, 0);
+                    MakeAI(f, 2, gos).UpdateDiplomacy(10, new List<GameAI.GameAIOrder>());
+                    return f.Map.Diplomacy.Get(2, 0).Hostility;
+                }
+            }
+            finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        }
+        ok &= Check(Near(HostilityAfter(2) - HostilityAfter(0), 6f), "UpdateDiplomacy adds exactly 2 x hostilityPerConversion for two charges");
+        return ok;
     }
 
     public static bool RunTunableDefaultsCheck()

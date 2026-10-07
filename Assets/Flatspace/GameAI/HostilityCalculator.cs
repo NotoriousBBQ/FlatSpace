@@ -24,6 +24,7 @@ namespace FlatSpace
                 public float RivalStrength;
                 public float ShipsLost;   // my warships this rival destroyed this turn (the attributed share, so fractional)
                 public float LossShare;   // lost / (current + lost) strength over the loss window
+                public int Conversions;   // my inhabitants this rival converted this turn (it was not at war with me)
             }
 
             public struct Result
@@ -33,6 +34,7 @@ namespace FlatSpace
                 public float NearTerm;
                 public float StrengthTerm;
                 public float LossTerm;   // ships lost x hostilityPerShipLost, minus the significant-loss drop when it applies
+                public float ConversionTerm;   // inhabitants converted x hostilityPerConversion
             }
 
             /// <summary>weight x log2(mine / rival) clamped to +-2; no rival fleet is +2, no fleet of mine against one is -2, two empty fleets 0.</summary>
@@ -53,7 +55,8 @@ namespace FlatSpace
                 var strength = StrengthTerm(input.MyStrength, input.RivalStrength, constants.hostilityStrengthWeight);
                 var loss = input.ShipsLost * constants.hostilityPerShipLost;
                 var drop = input.LossShare >= constants.significantLossFraction ? -constants.significantLossHostilityDrop : 0f;
-                var hostility = input.Previous * (1f - constants.hostilityDecay) + cuts + near + strength + loss + drop;
+                var conversions = input.Conversions * constants.hostilityPerConversion;
+                var hostility = input.Previous * (1f - constants.hostilityDecay) + cuts + near + strength + loss + drop + conversions;
                 return new Result
                 {
                     Hostility = Mathf.Clamp(hostility, 0f, constants.hostilityMax),
@@ -61,6 +64,7 @@ namespace FlatSpace
                     NearTerm = near,
                     StrengthTerm = strength,
                     LossTerm = loss + drop,
+                    ConversionTerm = conversions,
                 };
             }
 

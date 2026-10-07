@@ -300,6 +300,7 @@ namespace FlatSpace
                     {
                         Previous = pair.Hostility,
                         Cuts = diplomacy.TakeCuts(me, rival),
+                        Conversions = diplomacy.TakeConversions(me, rival),
                         NearShips = nearShips,
                         MyStrength = myStrength,
                         RivalStrength = rivalStrength,
@@ -310,6 +311,7 @@ namespace FlatSpace
                     pair.CutsTerm = result.CutsTerm;
                     pair.NearTerm = result.NearTerm;
                     pair.StrengthTerm = result.StrengthTerm;
+                    pair.ConversionTerm = result.ConversionTerm;
                     pair.MyStrength = myStrength;
                     pair.RivalStrength = rivalStrength;
                     pair.NearShips = nearShips;
@@ -344,6 +346,7 @@ namespace FlatSpace
                     pair.CutsTerm = 0f;
                     pair.NearTerm = 0f;
                     pair.StrengthTerm = 0f;
+                    pair.ConversionTerm = 0f;
                     pair.LossAccum *= 1f - constants.hostilityDecay;   // no contact: it only decays, like the hostility
                     diplomacy.Set(me, rival, pair);
                     rows.Add(new StanceMatrix.Row
@@ -360,6 +363,7 @@ namespace FlatSpace
                     });
                 }
                 diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later
+                diplomacy.DiscardConversions(me);
 
                 foreach (var decision in StanceMatrix.Decide(me, rows, constants))
                 {
