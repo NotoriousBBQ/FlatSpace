@@ -681,9 +681,12 @@ starts dominance the same turn), in the engine step, so no player's decision ord
 - **Hold:** `AssaultPlanner.ConversionHolds()` (dominated planet with an at-war holder, or my running session with others left) joins
   `ContestedHolds()` in `ShipTransportPlanner.HeldPlanets`; retreat still wins. The `ConversionHoldSpare` audit reruns the planners without
   the conversion hold (`PlayerAI.AuditConversionHolds`) to log whether a call (garrison, assault, blockade) wanted the held ships.
-- **Colonization:** `IsValidColonizationTarget` also accepts a dominated planet below max where I hold an inhabitant and a foreign one remains
-  (`IsConversionColonizeTarget`); its choice cost is divided by `ConversionColonizeDivisor` = `1 + conversionColonizeWeight x (1 - my share)`
-  (a colonist is worth most early), multiplied into `ColonizationCostDivisor` with the chokepoint tilt. The ColonyShip production weight is
+- **Colonization:** a conversion target (`IsConversionTarget`) is a planet I dominate, below max, with a foreign inhabitant left, where my
+  session runs or a player I am at war with holds an inhabitant (otherwise nothing could ever convert and a colonist would only fill my
+  own planet; narrowed from the spec's plain "dominated" in the final review). `IsValidColonizationTarget` also accepts it when I hold
+  an inhabitant there (`IsConversionColonizeTarget`); its choice cost is divided by `ConversionColonizeDivisor` = `1 + conversionColonizeWeight
+  x (1 - my share)` (a colonist is worth most early; no inhabitant of mine needed, so p = 0 gets the full tilt), multiplied into
+  `ColonizationCostDivisor` with the chokepoint tilt. The ColonyShip production weight is
   unchanged. Tunables on `GameAIConstants`: `conversionTurnsBase` 6, `hostilityPerConversion` 3, `conversionColonizeWeight` 0.5.
 - **Reevaluate after the first tuning pass (owner's list):** offense-scaled conversion speed (use the audit and the `Convert` pace);
   continue-until-clean versus stop at ownership; a minimum force for dominance (today any one ship with offense); elimination of a player
