@@ -704,7 +704,7 @@ public static class ConversionSelfCheck
         var c = ScriptableObject.CreateInstance<GameAIConstants>();
         try
         {
-            var ok = Check(Near(c.conversionTurnsBase, 6f), "conversionTurnsBase defaults to 6");
+            var ok = Check(Near(c.conversionTurnsBase, 3f), "conversionTurnsBase defaults to 3");
             ok &= Check(Near(c.conversionHoldKeepFraction, 0.5f), "conversionHoldKeepFraction defaults to 0.5");
             ok &= Check(Near(c.hostilityPerConversion, 3f), "hostilityPerConversion defaults to 3");
             ok &= Check(Near(c.conversionColonizeWeight, 0.5f), "conversionColonizeWeight defaults to 0.5");

@@ -332,7 +332,7 @@ user asked about one specific thing.
     those with none, and against the baseline at 0.5 (2026-10-06: Clean 23% on `test2.json`, 28% on `4p.json`, with about 34 ships released per run and no measurable gain; 0.25 was then tried and reverted: `4p.json` blockade events 41 to 85 a run, shipment cuts doubled, colony failures +40%, Clean only +4 points; so watch `Blockade` events, food and grotsits `OrderBlocked` and `PopulationLoss` against those numbers) (a sharp fall means raise `conversionHoldKeepFraction`; many
     `DominanceLost` within 5 turns of a release means the rival came back). Also: no `Convert` line may name a planet whose session was not Started or
     re-Started after a load, `PlayerOutOfPlanets` counts, and that warship starts and the fleet cap still hold (a conquered planet's
-    production was cleared, so no free ships appear).
+    production was cleared, so no free ships appear). **Baselines at `conversionTurnsBase` 3 and keep 0.5 (2026-10-07, 6 runs per board):** real conquests (under half the planet mine at the start) finish 20% on `test2.json` and 16% on `4p.json` with 2.6 to 2.9 flips per session, clean-ups finish 82 to 87%, about 12 conquests a run (planets ending owned by a player), colonization and planets at T375 unchanged, colony failures 170 on `test2.json` and 258 on `4p.json`; at base 6 the same figures were 5%, about 1 flip and about 3 conquests a run.
 
 ## 4. Compare against a previous run when one exists
 
