@@ -21,9 +21,12 @@ namespace FlatSpace.AI
             public string CallTarget;   // the planet the call was for, or -
             public float RivalNearby;   // the largest at-war rival's offense on or beside the planet
             public float Progress;
+            public int Keep;            // ships the hold keeps there (every ship for the assault target)
+            public int Released;        // warships the real plan sent away from the planet this turn
         }
 
-        private readonly Dictionary<string, (int wanted, string call, string target)> _state = new Dictionary<string, (int wanted, string call, string target)>();
+        private readonly Dictionary<string, (int wanted, string call, string target, int keep, int released)> _state
+            = new Dictionary<string, (int wanted, string call, string target, int keep, int released)>();
 
         public void Clear() => _state.Clear();
 
@@ -31,11 +34,12 @@ namespace FlatSpace.AI
         {
             var now = current.ToList();
             var changed = now
-                .Where(e => !_state.TryGetValue(e.Planet, out var last) || last.wanted != e.Wanted || last.call != e.Call || last.target != e.CallTarget)
+                .Where(e => !_state.TryGetValue(e.Planet, out var last) || last.wanted != e.Wanted || last.call != e.Call
+                                                                       || last.target != e.CallTarget || last.keep != e.Keep || last.released != e.Released)
                 .OrderBy(e => e.Planet, System.StringComparer.Ordinal)
                 .ToList();
             _state.Clear();
-            foreach (var e in now) _state[e.Planet] = (e.Wanted, e.Call, e.CallTarget);
+            foreach (var e in now) _state[e.Planet] = (e.Wanted, e.Call, e.CallTarget, e.Keep, e.Released);
             return changed;
         }
     }

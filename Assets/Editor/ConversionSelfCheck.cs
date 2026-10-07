@@ -31,6 +31,8 @@ public static class ConversionSelfCheck
         ok &= RunConversionHoldTrackerCheck();
         ok &= RunConversionHoldAuditCheck();
         ok &= RunCapitolLostCheck();
+        ok &= RunConversionKeepCheck();
+        ok &= RunConversionPlannerKeepCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -462,10 +464,11 @@ public static class ConversionSelfCheck
         var gos = new List<GameObject>();
         try
         {
-            int ShipsSentFromA(bool session)
+            int ShipsSentFromA(bool session, float keepFraction = -1f)
             {
                 using (var f = CombatSelfCheck.Fixture.Line())
                 {
+                    f.Constants.conversionHoldKeepFraction = keepFraction;   // negative: keep every ship, the original hold
                     f.Constants.maxPathNodesForKnowledge = 8;
                     f.Constants.maxPathNodesForShipTransport = 10;
                     f.Colonize("B", 0);
@@ -478,7 +481,8 @@ public static class ConversionSelfCheck
                     return ai.PlanShipActions(1).Where(a => a.Origin == "A").Sum(a => a.Count);
                 }
             }
-            ok &= Check(ShipsSentFromA(true) == 0, "with my session running on A, the planner sends nothing away from it");
+            ok &= Check(ShipsSentFromA(true) == 0, "with my session running on A and a negative keep fraction, the planner sends nothing away from it");
+            ok &= Check(ShipsSentFromA(true, 0.5f) == 1, "with the default 0.5 and no rival nearby it keeps 1 of A's 2 ships and releases the other to garrison B");
             ok &= Check(ShipsSentFromA(false) > 0, "control: with no session the two ships on A are spare and go to garrison B");
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }
@@ -545,12 +549,14 @@ public static class ConversionSelfCheck
     {
         var ok = true;
         var t = new ConversionHoldTracker();
-        ConversionHoldTracker.Entry E(string planet, int wanted, string call = "Garrison", string target = "B")
-            => new ConversionHoldTracker.Entry { Planet = planet, HeldShips = 2, HeldOffense = 20f, Wanted = wanted, Call = call, CallTarget = target, RivalNearby = 0f, Progress = 0.5f };
+        ConversionHoldTracker.Entry E(string planet, int wanted, string call = "Garrison", string target = "B", int keep = 1, int released = 0)
+            => new ConversionHoldTracker.Entry { Planet = planet, HeldShips = 2, HeldOffense = 20f, Wanted = wanted, Call = call, CallTarget = target, RivalNearby = 0f, Progress = 0.5f, Keep = keep, Released = released };
         ok &= Check(t.Update(new[] { E("A", 1), E("C", 0, "-", "-") }).Select(e => e.Planet).SequenceEqual(new[] { "A", "C" }), "the first sighting of each held planet is reported, ordered by name");
         ok &= Check(t.Update(new[] { E("A", 1), E("C", 0, "-", "-") }).Count == 0, "the same wanted count, call and target again: not reported");
         ok &= Check(t.Update(new[] { E("A", 2), E("C", 0, "-", "-") }).Select(e => e.Planet).SequenceEqual(new[] { "A" }), "a changed wanted count is reported");
         ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D"), E("C", 0, "-", "-") }).Count == 1, "a changed call is reported");
+        ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D", 1, 1), E("C", 0, "-", "-") }).Select(e => e.Planet).SequenceEqual(new[] { "A" }), "a changed released count is reported");
+        ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D", 2, 1), E("C", 0, "-", "-") }).Count == 1, "a changed keep is reported");
         t.Update(new ConversionHoldTracker.Entry[0]);
         ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D") }).Count == 1, "a planet that left the holds is forgotten, so a later hold is reported afresh");
         t.Clear();
@@ -616,12 +622,90 @@ public static class ConversionSelfCheck
         return ok;
     }
 
+    // How many ships a conversion hold keeps: max(1, ceil(fraction x nearby rival offense / offense per ship)), capped at the ships there;
+    // a negative fraction keeps every ship (the original hold). Rival counts never sit on a ceil boundary (fractions chosen off it).
+    public static bool RunConversionKeepCheck()
+    {
+        var ok = true;
+        int KeepOn(float fraction, int rivalShips)
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                f.Constants.conversionHoldKeepFraction = fraction;
+                Populate(f.P("A"), (1, 3));
+                f.Ships("A", 0, 6); f.War(0, 1);
+                if (rivalShips > 0) f.Ships("B", 1, rivalShips);          // the rival beside A, known to me
+                f.Map.Knowledge.Update(f.Map, 2, 8);
+                var planner = new AssaultPlanner(f.Map, 0, null, f.Stats, null, 0, new HashSet<int> { 1 });
+                return planner.ConversionKeep().TryGetValue("A", out var keep) ? keep : -1;
+            }
+        }
+        ok &= Check(KeepOn(0.5f, 0) == 1, "no rival nearby: keep 1 ship");
+        ok &= Check(KeepOn(0.5f, 3) == 2, "a rival of 3 ships' offense at 0.5: ceil(1.5) = keep 2 of 6");
+        ok &= Check(KeepOn(0.9f, 3) == 3, "at 0.9: ceil(2.7) = keep 3");
+        ok &= Check(KeepOn(0.5f, 20) == 6, "a huge rival never keeps more than the 6 ships there");
+        ok &= Check(KeepOn(0f, 3) == 1, "a fraction of 0 keeps 1 ship whatever the rival");
+        ok &= Check(KeepOn(-1f, 3) == 6 && KeepOn(-1f, 0) == 6, "a negative fraction keeps every ship (the original hold)");
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Populate(f.P("A"), (1, 3));
+            f.Ships("A", 0, 6); f.War(0, 1);
+            var planner = new AssaultPlanner(f.Map, 0, null, f.Stats, null, 0, new HashSet<int> { 1 });
+            ok &= Check(planner.ConversionKeep(new[] { "A" }).Count == 0, "a retreating planet is left out of the keep map (retreat claims its ships)");
+            f.Map.Diplomacy.Enabled = false;
+            ok &= Check(planner.ConversionKeep().Count == 0, "legacy mode: no keep map");
+        }
+        return ok;
+    }
+
+    // The planner reads the keep map: Spare = docked - max(garrison, keep); a fully held planet (assault target, contested) ignores it.
+    public static bool RunConversionPlannerKeepCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())            // a stranded conversion planet: A holds 4 ships, keep 1, B wants a garrison
+        {
+            f.Constants.maxPathNodesForShipTransport = 10;
+            f.Colonize("B", 0);
+            Populate(f.P("A"), (1, 3));
+            f.P("A").Owner = Planet.NoOwner;
+            f.Ships("A", 0, 4);
+            var released = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate)
+                { ConversionKeep = new Dictionary<string, int> { { "A", 1 } } }.Plan();
+            ok &= Check(released.Where(a => a.Origin == "A").Sum(a => a.Count) == 3, "keep 1 of 4 on a stranded planet releases 3 to B's garrison");
+            var held = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate) { HeldPlanets = new[] { "A" } }.Plan();
+            ok &= Check(held.Count(a => a.Origin == "A") == 0, "control: a fully held A sends nothing");
+            var heldBeatsKeep = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate)
+                { HeldPlanet = "A", ConversionKeep = new Dictionary<string, int> { { "A", 1 } } }.Plan();
+            ok &= Check(heldBeatsKeep.Count(a => a.Origin == "A") == 0, "an assault target stays fully held even with a keep entry");
+        }
+        using (var f = CombatSelfCheck.Fixture.Line())            // a colonized conversion planet: the garrison is a floor under the keep
+        {
+            f.Constants.maxPathNodesForShipTransport = 10;
+            f.Colonize("B", 0);
+            Populate(f.P("B"), (0, 3), (1, 1));
+            f.P("B").Owner = 0;
+            var garrison = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate).Garrison(f.P("B"));
+            f.Ships("B", 0, garrison + 3);
+            int SpareOnB(int keep)
+            {
+                var planner = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate)
+                    { ConversionKeep = new Dictionary<string, int> { { "B", keep } } };
+                planner.BuildStates();
+                return planner.LastStates.First(s => s.Planet.PlanetName == "B").Spare;
+            }
+            ok &= Check(SpareOnB(1) == 3, "keep 1 under a garrison floor: the garrison binds, spare is docked - garrison = 3");
+            ok &= Check(SpareOnB(garrison + 2) == 1, "a keep above the garrison binds instead: spare = docked - keep = 1");
+        }
+        return ok;
+    }
+
     public static bool RunTunableDefaultsCheck()
     {
         var c = ScriptableObject.CreateInstance<GameAIConstants>();
         try
         {
             var ok = Check(Near(c.conversionTurnsBase, 6f), "conversionTurnsBase defaults to 6");
+            ok &= Check(Near(c.conversionHoldKeepFraction, 0.5f), "conversionHoldKeepFraction defaults to 0.5");
             ok &= Check(Near(c.hostilityPerConversion, 3f), "hostilityPerConversion defaults to 3");
             ok &= Check(Near(c.conversionColonizeWeight, 0.5f), "conversionColonizeWeight defaults to 0.5");
             return ok;

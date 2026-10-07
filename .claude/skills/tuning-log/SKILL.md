@@ -316,8 +316,9 @@ user asked about one specific thing.
     also logged once more per session found after a load), `Convert|<planet>|<fromPlayer>|<AtWar or NonWar>|<myPop>|<totalPop>|<progress>`
     is one converted inhabitant, `ConversionEnd|<planet>|<Clean, DominanceLost or WarEnded>|<turnsHeld>|<converted>` ends it,
     `OwnerChanged|<planet>|<oldOwner>|<newOwner>|<clearedItem or ->` (P = the new owner) is an ownership change, `PlayerOutOfPlanets|<player>`
-    is logged once per player, `ConversionHoldSpare|<planet>|<heldShips>|<heldOffense>|<shipsACallWanted>|<Garrison, Assault, Blockade or ->|<callTarget or ->|<rivalOffenseNearby>|<progress>`
-    is on change only, `ConversionColonize|<origin>-><target>|<myPop>|<totalPop>|<routeCost>|<nearestTarget>|<nearestCost>` is per colonist
+    is logged once per player, `ConversionHoldSpare|<planet>|<heldShips>|<heldOffense>|<shipsACallWanted>|<Garrison, Assault, Blockade or ->|<callTarget or ->|<rivalOffenseNearby>|<progress>|<keep>|<released>`
+    is on change only (since 2026-10-06 the hold releases ships down to `keep`, so `released` is what the real plan sent away and
+    `shipsACallWanted` is still the full demand; older logs have no last two fields, guard `NF`), `ConversionColonize|<origin>-><target>|<myPop>|<totalPop>|<routeCost>|<nearestTarget>|<nearestCost>` is per colonist
     launched at a dominated planet, and `Stance`/`Hostility` lines end with `conversionTerm`. Report per run: sessions started, ended by
     reason (Clean against DominanceLost against WarEnded: many DominanceLost means holds or retreats are letting go), turns held and
     flips per session, the pace (turns between `Convert` lines on a planet against `turnsPerFlip`: does the snowball show), planets
@@ -325,7 +326,11 @@ user asked about one specific thing.
     victims' later `Stance ... War` lines (are they declaring because of it), `ConversionColonize` launches per session and whether the
     session's pace sped up after one, and the **option 3 evidence**: for each `ConversionHoldSpare` with `shipsACallWanted` above 0, how
     long it lasted and how large `rivalOffenseNearby` was against `heldOffense` (a long call with no rival nearby means offense-scaled
-    conversion or a smaller hold would have served). Also: no `Convert` line may name a planet whose session was not Started or
+    conversion or a smaller hold would have served). **Partial release (2026-10-06):** per run, `released` against `shipsACallWanted`
+    (how much of the demand the release met), the `released` ships' arrival at the call target (a `ShipArrive` or a `BlockadeForce`
+    wave from that planet), and whether the sessions that released still finished: Clean share for sessions with `released > 0` against
+    those with none, and against the pooled 23% before the change (a sharp fall means raise `conversionHoldKeepFraction`; many
+    `DominanceLost` within 5 turns of a release means the rival came back). Also: no `Convert` line may name a planet whose session was not Started or
     re-Started after a load, `PlayerOutOfPlanets` counts, and that warship starts and the fleet cap still hold (a conquered planet's
     production was cleared, so no free ships appear).
 

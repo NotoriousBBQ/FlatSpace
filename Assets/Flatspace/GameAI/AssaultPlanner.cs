@@ -204,6 +204,30 @@ namespace FlatSpace
             }
 
             /// <summary>
+            /// For each conversion-held planet (retreating planets left out), the ships that must stay: max(1, ceil(conversionHoldKeepFraction
+            /// x nearby rival offense / my offense per ship)), at most the ships docked there; every ship when the fraction is negative.
+            /// The rest are free for garrison and blockade calls (see ShipTransportPlanner.ConversionKeep). Empty in legacy mode.
+            /// </summary>
+            public Dictionary<string, int> ConversionKeep(ICollection<string> retreating = null)
+            {
+                var keep = new Dictionary<string, int>();
+                var fraction = _constants.conversionHoldKeepFraction;
+                foreach (var name in ConversionHolds())
+                {
+                    if (retreating != null && retreating.Contains(name)) continue;
+                    var planet = _map.GetPlanet(name);
+                    var ships = CountWarships(planet);
+                    if (ships <= 0) continue;
+                    if (fraction < 0f) { keep[name] = ships; continue; }
+                    var rival = NearbyRivalOffense(planet);
+                    var perShip = DockedOffense(planet) / ships;
+                    var needed = rival <= 0f || perShip <= 0f ? 1 : (int)Math.Ceiling(fraction * rival / perShip);
+                    keep[name] = Math.Max(1, Math.Min(ships, needed));
+                }
+                return keep;
+            }
+
+            /// <summary>
             /// The largest single at-war rival's docked offense on the planet and its known neighbours: what could come back to
             /// break a hold. Reporting only (the ConversionHoldSpare audit).
             /// </summary>

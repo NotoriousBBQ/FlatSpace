@@ -1925,11 +1925,15 @@ namespace FlatSpace
                     AssaultWarFilter()) { ExcludedTargets = new HashSet<string>(CooldownPlanets(turnNumber)) };
                 var blockadeTarget = assault.ChooseBlockadeTarget(out _);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
-                return AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, new RetreatPlanner.Plan());
+                var none = new RetreatPlanner.Plan();
+                return AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, none, new List<ShipAction>(),
+                    assault.ConversionKeep(none.Retreating));
             }
 
+            // `actions` are the ship actions the real plan emitted this turn (the ships it released from a held planet are counted from
+            // them); `keep` is the keep map it used. The audit's own planners run WITHOUT any keep, so Wanted is the full demand.
             private List<ConversionHoldTracker.Entry> AuditConversionHolds(int turnNumber, AssaultPlanner assault, Planet target,
-                bool isBlockadeTarget, RetreatPlanner.Plan retreat)
+                bool isBlockadeTarget, RetreatPlanner.Plan retreat, List<ShipAction> actions, Dictionary<string, int> keep)
             {
                 var entries = new List<ConversionHoldTracker.Entry>();
                 var holds = assault.ConversionHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
@@ -1958,14 +1962,20 @@ namespace FlatSpace
                     {
                         call = isBlockadeTarget ? "Blockade" : "Assault"; callTarget = offense[0].Target; wanted = offense.Sum(a => a.Count);
                     }
+                    var heldShips = planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID);
+                    // The assault target keeps every ship whatever the keep map says (the planner gives it no release).
+                    var keepShips = target != null && target.PlanetName == name ? heldShips
+                        : keep != null && keep.TryGetValue(name, out var kept) ? kept : heldShips;
                     entries.Add(new ConversionHoldTracker.Entry
                     {
                         Planet = name,
-                        HeldShips = planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID),
+                        HeldShips = heldShips,
                         HeldOffense = assault.HeldOffense(planet),
                         Wanted = wanted, Call = call, CallTarget = callTarget,
                         RivalNearby = assault.NearbyRivalOffense(planet),
                         Progress = planet.ConversionProgress,
+                        Keep = keepShips,
+                        Released = actions.Where(a => a.Origin == name && a.Kind == Ship.ShipKind.WarShip).Sum(a => a.Count),
                     });
                 }
                 return entries;
@@ -2006,12 +2016,15 @@ namespace FlatSpace
                     AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
                 _lastLoggedAssaultTarget = blockadeTarget == null ? targetName : null;
 
+                // A planet I am converting keeps only the ships its nearby rival makes necessary (conversionHoldKeepFraction) and releases
+                // the rest to the garrison and blockade calls; the assault target and contested holds still keep every ship.
                 var contested = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
-                var conversionHolds = assault.ConversionHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                var conversionKeep = assault.ConversionKeep(retreat.Retreating);
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
                     HeldPlanet  = targetName,
-                    HeldPlanets = contested.Union(conversionHolds).ToList(),
+                    HeldPlanets = contested,
+                    ConversionKeep = conversionKeep,
                     Retreating  = retreat.Retreating,
                     RefillBlocked = CooldownPlanets(turnNumber),
                 };
@@ -2023,9 +2036,10 @@ namespace FlatSpace
                 if (blockadeTarget != null && force.Ships > 0)
                     AITuningLogger.LogBlockadeForce(turnNumber, Player.playerID, blockadeTarget.PlanetName,
                         force.Ships, force.Offense, force.StillNeeded);
-                foreach (var entry in _conversionHolds.Update(AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, retreat)))
+                foreach (var entry in _conversionHolds.Update(AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null,
+                             retreat, actions, conversionKeep)))
                     AITuningLogger.LogConversionHoldSpare(turnNumber, Player.playerID, entry.Planet, entry.HeldShips, entry.HeldOffense,
-                        entry.Wanted, entry.Call, entry.CallTarget, entry.RivalNearby, entry.Progress);
+                        entry.Wanted, entry.Call, entry.CallTarget, entry.RivalNearby, entry.Progress, entry.Keep, entry.Released);
                 return actions;
             }
 

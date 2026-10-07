@@ -53,6 +53,15 @@ namespace FlatSpace
             private bool IsHeld(string planetName)
                 => planetName == HeldPlanet || (HeldPlanets != null && HeldPlanets.Contains(planetName));
 
+            /// <summary>
+            /// Conversion-held planets (AssaultPlanner.ConversionKeep): planet to the number of warships that must stay. The rest are spare
+            /// (Spare = docked - max(garrison, keep)). A planet that is also fully held (the assault target, a contested hold) keeps every ship.
+            /// </summary>
+            public IDictionary<string, int> ConversionKeep { get; set; } = new Dictionary<string, int>();
+
+            private int KeepOf(string planetName)
+                => !IsHeld(planetName) && ConversionKeep != null && ConversionKeep.TryGetValue(planetName, out var keep) ? keep : 0;
+
             public ShipTransportPlanner(GameAIMap map, int playerId,
                 PlayerAI.AIStrategy strategy = PlayerAI.AIStrategy.AIStrategyExpand)
             {
@@ -167,7 +176,8 @@ namespace FlatSpace
                 public int Incoming;
                 public int RoundGarrison;   // Garrison x current round
                 public bool Held;           // its ships must stay (assault force or a held standoff): never spare
-                public int Spare   => Held ? 0 : Math.Max(0, Docked - RoundGarrison);
+                public int Keep;            // ships a conversion hold keeps here (0 = none): a floor like the garrison
+                public int Spare   => Held ? 0 : Math.Max(0, Docked - Math.Max(RoundGarrison, Keep));
                 public int Deficit => Math.Max(0, RoundGarrison - (Docked + Incoming));
             }
 
@@ -209,6 +219,7 @@ namespace FlatSpace
                         Rank     = NoCategory,
                         Garrison = 0,
                         Docked   = CountWarships(planet),
+                        Keep     = KeepOf(planet.PlanetName),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });
                 }
@@ -225,6 +236,7 @@ namespace FlatSpace
                             Rank     = NoCategory,
                             Garrison = 0,
                             Docked   = CountWarships(planet),
+                            Keep     = KeepOf(planet.PlanetName),
                             Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                         });
                         continue;
@@ -239,6 +251,7 @@ namespace FlatSpace
                         Rank     = TargetRank(planet),
                         Garrison = IsRefillBlocked(planet.PlanetName) ? 0 : GarrisonOf(categories),
                         Docked   = CountWarships(planet),
+                        Keep     = KeepOf(planet.PlanetName),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });
                 }

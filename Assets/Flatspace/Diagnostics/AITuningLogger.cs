@@ -580,12 +580,13 @@ public static class AITuningLogger
 
     /// <summary>A planet held for conversion and what a call would have taken from it: ConversionHoldSpare|planet|heldShips|heldOffense|shipsACallWanted|Garrison, Assault, Blockade or -|callTarget or -|rivalOffenseNearby|progress (on change only).</summary>
     public static void LogConversionHoldSpare(int turnNumber, int playerId, string planet, int heldShips, float heldOffense, int wanted,
-        string call, string callTarget, float rivalNearby, float progress)
+        string call, string callTarget, float rivalNearby, float progress, int keep = -1, int released = 0)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionHoldSpare", planet, heldShips.ToString(ci),
-            heldOffense.ToString("0", ci), wanted.ToString(ci), call, callTarget, rivalNearby.ToString("0", ci), progress.ToString("0.##", ci)) });
+            heldOffense.ToString("0", ci), wanted.ToString(ci), call, callTarget, rivalNearby.ToString("0", ci), progress.ToString("0.##", ci),
+            keep.ToString(ci), released.ToString(ci)) });
     }
 
     /// <summary>A player has no inhabitants left on any planet (once per player): T&lt;turn&gt;|P&lt;player&gt;|PlayerOutOfPlanets.</summary>
