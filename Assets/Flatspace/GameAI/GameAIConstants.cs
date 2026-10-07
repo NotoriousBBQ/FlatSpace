@@ -182,6 +182,15 @@ public class GameAIConstants : ScriptableObject
     // normalised. 0 = all equal, large = strictly the nearest.
     public float retreatDestinationCostExponent = 2f;
 
+    [Header("Invasion (conversion)")]
+    // A planet I dominate (my warships docked, no warship of a player at war with me) converts one inhabitant each time its progress
+    // reaches 1; the progress grows each turn by 1 / max(1, conversionTurnsBase x (1 - my share of the inhabitants)).
+    public float conversionTurnsBase = 6f;
+    // Hostility a player I am NOT at war with gains toward me for each of its inhabitants I convert (an at-war player's add nothing).
+    public float hostilityPerConversion = 3f;
+    // Colonization: a dominated target's choice cost is divided by 1 + this x (1 - my share of the inhabitants). 0 or below = off.
+    public float conversionColonizeWeight = 0.5f;
+
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
     // AI may designate one Distribution Center per resource (Food and/or Grotsits).
