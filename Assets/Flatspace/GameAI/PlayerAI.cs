@@ -1894,10 +1894,12 @@ namespace FlatSpace
                     AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
                 _lastLoggedAssaultTarget = blockadeTarget == null ? targetName : null;
 
+                var contested = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                var conversionHolds = assault.ConversionHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
                     HeldPlanet  = targetName,
-                    HeldPlanets = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList(),
+                    HeldPlanets = contested.Union(conversionHolds).ToList(),
                     Retreating  = retreat.Retreating,
                     RefillBlocked = CooldownPlanets(turnNumber),
                 };

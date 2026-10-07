@@ -26,6 +26,7 @@ public static class ConversionSelfCheck
         ok &= RunOwnershipFlipCheck();
         ok &= RunConversionTrackerCheck();
         ok &= RunConversionSaveCheck();
+        ok &= RunConversionHoldCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -403,6 +404,80 @@ public static class ConversionSelfCheck
             c.RestoreConversion(old.conversionBy, old.conversionProgress, old.conversionWarMask);
             ok &= Check(old.conversionBy == 0 && c.ConversionBy == Planet.NoOwner && Near(c.ConversionProgress, 0f), "an older save with no keys loads with no session");
         }
+        return ok;
+    }
+
+    // A planet I dominate (and convert, or could) is held: the home plan never strips it. The non-war tail has no assault target,
+    // so only the hold keeps the fleet there.
+    public static bool RunConversionHoldCheck()
+    {
+        var ok = true;
+        AssaultPlanner Planner(CombatSelfCheck.Fixture f) => new AssaultPlanner(f.Map, 0, null, f.Stats, null, 0, new HashSet<int> { 1 });
+
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Populate(f.P("A"), (1, 3));
+            f.Ships("A", 0, 1); f.War(0, 1);
+            ok &= Check(Planner(f).ConversionHolds().SequenceEqual(new[] { "A" }), "dominated, with an at-war holder: held");
+            f.Ships("A", 1, 1);
+            ok &= Check(Planner(f).ConversionHolds().Count == 0, "an at-war rival warship there too: not dominated, not a conversion hold (it is a contested hold)");
+        }
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Populate(f.P("A"), (1, 3));
+            f.Ships("A", 0, 1);
+            ok &= Check(Planner(f).ConversionHolds().Count == 0, "no war: not held");
+            f.War(0, 1);
+            f.Map.Diplomacy.Enabled = false;
+            ok &= Check(Planner(f).ConversionHolds().Count == 0, "legacy mode: not held");
+        }
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Populate(f.P("A"), (2, 2), (0, 3));            // a non-war holder is left; my session is running
+            f.Ships("A", 0, 1); f.War(0, 1);
+            f.P("A").ConversionBy = 0;
+            ok &= Check(Planner(f).ConversionHolds().SequenceEqual(new[] { "A" }), "the non-war tail: my running session holds the planet");
+            f.P("A").EndConversionSession();
+            ok &= Check(Planner(f).ConversionHolds().Count == 0, "no session and no at-war holder: not held");
+            Populate(f.P("A"), (0, 3));
+            f.P("A").ConversionBy = 0;
+            ok &= Check(Planner(f).ConversionHolds().Count == 0, "a session on a planet with nothing foreign left: not held");
+        }
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            Populate(f.P("A"), (1, 3));
+            f.Ships("B", 1, 2);                               // a rival fleet beside A
+            f.Ships("A", 0, 1); f.War(0, 1);
+            f.Map.Knowledge.Update(f.Map, 2, 8);
+            var planner = Planner(f);
+            ok &= Check(planner.HeldOffense(f.P("A")) > 0f, "HeldOffense reads my docked offense");
+            ok &= Check(Near(planner.NearbyRivalOffense(f.P("A")), planner.HeldOffense(f.P("A")) * 2f), "the rival's offense on a neighbouring known planet is 2 ships' worth");
+        }
+
+        // End to end through PlayerAI: the tail has no assault target, so only the hold keeps the ships; without it they go to B.
+        var gos = new List<GameObject>();
+        try
+        {
+            int ShipsSentFromA(bool session)
+            {
+                using (var f = CombatSelfCheck.Fixture.Line())
+                {
+                    f.Constants.maxPathNodesForKnowledge = 8;
+                    f.Constants.maxPathNodesForShipTransport = 10;
+                    f.Colonize("B", 0);
+                    Populate(f.P("A"), (2, 2), (0, 1));
+                    f.P("A").Owner = Planet.NoOwner;
+                    f.Ships("A", 0, 2); f.War(0, 1);
+                    if (session) f.P("A").ConversionBy = 0;
+                    f.Map.Knowledge.Update(f.Map, 3, 8);
+                    var ai = MakeAI(f, 0, gos);
+                    return ai.PlanShipActions(1).Where(a => a.Origin == "A").Sum(a => a.Count);
+                }
+            }
+            ok &= Check(ShipsSentFromA(true) == 0, "with my session running on A, the planner sends nothing away from it");
+            ok &= Check(ShipsSentFromA(false) > 0, "control: with no session the two ships on A are spare and go to garrison B");
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
         return ok;
     }
 
