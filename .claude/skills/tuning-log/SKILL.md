@@ -329,7 +329,7 @@ user asked about one specific thing.
     conversion or a smaller hold would have served). **Partial release (2026-10-06):** per run, `released` against `shipsACallWanted`
     (how much of the demand the release met), the `released` ships' arrival at the call target (a `ShipArrive` or a `BlockadeForce`
     wave from that planet), and whether the sessions that released still finished: Clean share for sessions with `released > 0` against
-    those with none, and against the pooled 23% before the change (a sharp fall means raise `conversionHoldKeepFraction`; many
+    those with none, and against the baseline at 0.5 (2026-10-06: Clean 23% on `test2.json`, 28% on `4p.json`, with about 34 ships released per run and no measurable gain; the fraction was then lowered to 0.25) (a sharp fall means raise `conversionHoldKeepFraction`; many
     `DominanceLost` within 5 turns of a release means the rival came back). Also: no `Convert` line may name a planet whose session was not Started or
     re-Started after a load, `PlayerOutOfPlanets` counts, and that warship starts and the fleet cap still hold (a conquered planet's
     production was cleared, so no free ships appear).

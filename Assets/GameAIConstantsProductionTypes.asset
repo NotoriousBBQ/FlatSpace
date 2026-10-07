@@ -79,4 +79,4 @@ MonoBehaviour:
   conversionTurnsBase: 6
   hostilityPerConversion: 3
   conversionColonizeWeight: 0.5
-  conversionHoldKeepFraction: 0.5
+  conversionHoldKeepFraction: 0.25

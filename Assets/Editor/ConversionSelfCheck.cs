@@ -482,7 +482,7 @@ public static class ConversionSelfCheck
                 }
             }
             ok &= Check(ShipsSentFromA(true) == 0, "with my session running on A and a negative keep fraction, the planner sends nothing away from it");
-            ok &= Check(ShipsSentFromA(true, 0.5f) == 1, "with the default 0.5 and no rival nearby it keeps 1 of A's 2 ships and releases the other to garrison B");
+            ok &= Check(ShipsSentFromA(true, 0.5f) == 1, "at a fraction of 0.5 with no rival nearby it keeps 1 of A's 2 ships and releases the other to garrison B");
             ok &= Check(ShipsSentFromA(false) > 0, "control: with no session the two ships on A are spare and go to garrison B");
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }
@@ -705,7 +705,7 @@ public static class ConversionSelfCheck
         try
         {
             var ok = Check(Near(c.conversionTurnsBase, 6f), "conversionTurnsBase defaults to 6");
-            ok &= Check(Near(c.conversionHoldKeepFraction, 0.5f), "conversionHoldKeepFraction defaults to 0.5");
+            ok &= Check(Near(c.conversionHoldKeepFraction, 0.25f), "conversionHoldKeepFraction defaults to 0.25");
             ok &= Check(Near(c.hostilityPerConversion, 3f), "hostilityPerConversion defaults to 3");
             ok &= Check(Near(c.conversionColonizeWeight, 0.5f), "conversionColonizeWeight defaults to 0.5");
             return ok;

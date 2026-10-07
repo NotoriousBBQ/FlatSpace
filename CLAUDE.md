@@ -692,7 +692,7 @@ starts dominance the same turn), in the engine step, so no player's decision ord
   an inhabitant there (`IsConversionColonizeTarget`); its choice cost is divided by `ConversionColonizeDivisor` = `1 + conversionColonizeWeight
   x (1 - my share)` (a colonist is worth most early; no inhabitant of mine needed, so p = 0 gets the full tilt), multiplied into
   `ColonizationCostDivisor` with the chokepoint tilt. The ColonyShip production weight is
-  unchanged. Tunables on `GameAIConstants`: `conversionTurnsBase` 6, `hostilityPerConversion` 3, `conversionColonizeWeight` 0.5, `conversionHoldKeepFraction` 0.5.
+  unchanged. Tunables on `GameAIConstants`: `conversionTurnsBase` 6, `hostilityPerConversion` 3, `conversionColonizeWeight` 0.5, `conversionHoldKeepFraction` 0.25 (0.5 at first: it released about 34 ships a run and moved nothing measurable, so it was lowered on 2026-10-06; the baseline at 0.5 was Clean 23% on `test2.json` and 28% on `4p.json`).
 - **Reevaluate after the first tuning pass (owner's list):** offense-scaled conversion speed (use the audit and the `Convert` pace);
   continue-until-clean versus stop at ownership; a minimum force for dominance (today any one ship with offense); elimination of a player
   that loses its last planet (`PlayerOutOfPlanets` shows how often); the three tunables; a colony ship production boost for dominated planets.
