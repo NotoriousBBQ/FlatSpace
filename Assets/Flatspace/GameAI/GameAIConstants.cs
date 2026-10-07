@@ -190,6 +190,10 @@ public class GameAIConstants : ScriptableObject
     public float hostilityPerConversion = 3f;
     // Colonization: a dominated target's choice cost is divided by 1 + this x (1 - my share of the inhabitants). 0 or below = off.
     public float conversionColonizeWeight = 0.5f;
+    // A planet whose conversion I am holding keeps max(1, ceil(this x the largest nearby at-war rival's offense / my offense per ship))
+    // ships there (never more than it has) and releases the rest to garrison and blockade calls. 0 keeps just 1 ship; a negative
+    // value keeps every ship (the original hold). An assault target and a contested hold always keep every ship.
+    public float conversionHoldKeepFraction = 0.5f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
