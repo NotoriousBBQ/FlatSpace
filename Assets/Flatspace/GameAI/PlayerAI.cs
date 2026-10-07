@@ -700,7 +700,36 @@ namespace FlatSpace
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return false;
                 if (planet.Population.Count == 0)                                return true;
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
-                return planet.PlayerWithMostPopulation() != Player.playerID;
+                if (planet.PlayerWithMostPopulation() != Player.playerID)        return true;
+                return IsConversionColonizeTarget(planet);   // I hold the plurality but a conversion is still running
+            }
+
+            /// <summary>
+            /// A planet I dominate where I already have an inhabitant, below max population, with a foreign inhabitant left: a colonist
+            /// lands as my inhabitant (it needs no conversion and raises my share, so it shortens every later flip). Without dominance
+            /// the AI does not colonize its own healthy planets. Public for the self-check.
+            /// </summary>
+            public bool IsConversionColonizeTarget(Planet planet)
+            {
+                if (!AIMap.Diplomacy.Enabled || planet.Population.Count >= planet.MaxPopulation) return false;
+                if (!planet.Population.Exists(p => p.Player == Player.playerID) || !planet.Population.Exists(p => p.Player != Player.playerID)) return false;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                return ConversionSystem.Dominator(planet, AIMap, stats) == Player.playerID;
+            }
+
+            /// <summary>
+            /// The colonization choice cost of a dominated target is divided by 1 + conversionColonizeWeight x (1 - my share of its
+            /// inhabitants): a colonist is worth most early in a conversion and least on a planet that is nearly mine. 1 for any other
+            /// planet and when the weight is 0 or below. Public for ColonizationCostDivisor, ColonistRedirect and the self-check.
+            /// </summary>
+            public float ConversionColonizeDivisor(string targetName)
+            {
+                var weight = AIMap.GameAIConstants.conversionColonizeWeight;
+                if (weight <= 0f) return 1f;
+                var planet = AIMap.GetPlanet(targetName);
+                if (planet == null || !IsConversionColonizeTarget(planet)) return 1f;
+                var share = (float)planet.Population.Count(p => p.Player == Player.playerID) / planet.Population.Count;
+                return 1f + weight * (1f - share);
             }
             // The wider target set for a colonist already in flight (see ColonistRedirect): known, and empty, or my
             // colonist is already inbound, or colonized below max population (my own planets included). A full planet is
@@ -717,7 +746,10 @@ namespace FlatSpace
             // 1 + colonizationChokepointWeight x its chokepoint percentile, so a hub may be farther and still win. Expand,
             // a weight of 0 (or below) and unknown planets leave it at 1 (nearest first). The order delay never uses it.
             // Public for ColonistRedirect (diversion choice) and the self-check.
-            public float ColonizationCostDivisor(string targetName)
+            public float ColonizationCostDivisor(string targetName) => ChokepointDivisor(targetName) * ConversionColonizeDivisor(targetName);
+
+            // The Consolidate/Amass chokepoint tilt alone (the ChokepointColonize log asks only about this part).
+            private float ChokepointDivisor(string targetName)
             {
                 if (!IsConsolidateLike(Strategy)) return 1f;
                 var weight = AIMap.GameAIConstants.colonizationChokepointWeight;
@@ -837,9 +869,17 @@ namespace FlatSpace
                     var delay  = Convert.ToInt32(
                         route.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
                     if (nearest.TryGetValue(action.Origin, out var near) && near.target != action.Target
-                        && ColonizationCostDivisor(action.Target) > 1f)
+                        && ChokepointDivisor(action.Target) > 1f)
                         AITuningLogger.LogChokepointColonize(turn, Player.playerID, action.Origin, action.Target,
                             route.Cost, AIMap.Chokepoint(action.Target), near.target, near.cost);
+                    var launchTarget = AIMap.GetPlanet(action.Target);
+                    if (launchTarget != null && IsConversionColonizeTarget(launchTarget))
+                    {
+                        nearest.TryGetValue(action.Origin, out var nearTarget);
+                        AITuningLogger.LogConversionColonize(turn, Player.playerID, action.Origin, action.Target,
+                            launchTarget.Population.Count(p => p.Player == Player.playerID), launchTarget.Population.Count,
+                            route.Cost, nearTarget.target ?? action.Target, nearTarget.target == null ? route.Cost : nearTarget.cost);
+                    }
 
                     var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,

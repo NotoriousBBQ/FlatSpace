@@ -27,6 +27,7 @@ public static class ConversionSelfCheck
         ok &= RunConversionTrackerCheck();
         ok &= RunConversionSaveCheck();
         ok &= RunConversionHoldCheck();
+        ok &= RunConversionColonizeCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -476,6 +477,53 @@ public static class ConversionSelfCheck
             }
             ok &= Check(ShipsSentFromA(true) == 0, "with my session running on A, the planner sends nothing away from it");
             ok &= Check(ShipsSentFromA(false) > 0, "control: with no session the two ships on A are spare and go to garrison B");
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // A dominated planet where I hold at least one inhabitant and which is below max is a valid target even when I already hold
+    // the plurality; the choice cost is divided by 1 + weight x (1 - my share).
+    public static bool RunConversionColonizeCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                f.Constants.maxPathNodesForKnowledge = 8;
+                var ai = MakeAI(f, 0, gos);
+                var a = f.P("A");
+                Populate(a, (0, 3), (1, 1));               // 4 of 5: below max, I hold the plurality
+                f.War(0, 1);
+                f.Map.Knowledge.Update(f.Map, 2, 8);
+                ok &= Check(!ai.IsValidColonizationTarget(a), "precondition: a planet where I hold the plurality is not a target without dominance");
+                f.Ships("A", 0, 1);
+                ok &= Check(ai.IsConversionColonizeTarget(a) && ai.IsValidColonizationTarget(a), "dominated, 3 of 4 mine, below max: a valid target");
+                ok &= Check(Near(ai.ConversionColonizeDivisor("A"), 1f + 0.5f * (1f - 0.75f)), "the divisor is 1 + 0.5 x (1 - 0.75) = 1.125");
+                ok &= Check(Near(ai.ColonizationCostDivisor("A"), 1.125f), "ColonizationCostDivisor includes it (the chokepoint tilt is off here)");
+
+                Populate(a, (0, 1), (1, 3));
+                ok &= Check(Near(ai.ConversionColonizeDivisor("A"), 1f + 0.5f * (1f - 0.25f)), "1 of 4 mine: 1.375, a colonist is worth more early");
+
+                Populate(a, (0, 3), (1, 2));
+                ok &= Check(!ai.IsConversionColonizeTarget(a) && !ai.IsValidColonizationTarget(a), "at max population (5): not a target");
+                Populate(a, (1, 3));
+                ok &= Check(!ai.IsConversionColonizeTarget(a), "none of my inhabitants there: the rule does not apply");
+                Populate(a, (0, 4));
+                ok &= Check(!ai.IsConversionColonizeTarget(a) && Near(ai.ConversionColonizeDivisor("A"), 1f), "nothing foreign left: not a conversion target, divisor 1");
+
+                Populate(a, (0, 3), (1, 1));
+                a.DockedShips.Clear();
+                ok &= Check(!ai.IsConversionColonizeTarget(a) && Near(ai.ConversionColonizeDivisor("A"), 1f), "no fleet: not dominated, divisor 1");
+                f.Ships("A", 0, 1);
+                f.Constants.conversionColonizeWeight = 0f;
+                ok &= Check(Near(ai.ConversionColonizeDivisor("A"), 1f) && ai.IsValidColonizationTarget(a), "a weight of 0 switches the tilt off, the target stays valid");
+                f.Constants.conversionColonizeWeight = 0.5f;
+                f.Map.Diplomacy.Enabled = false;
+                ok &= Check(!ai.IsConversionColonizeTarget(a), "legacy mode: no conversion rule");
+            }
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }
         return ok;

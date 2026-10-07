@@ -568,6 +568,16 @@ public static class AITuningLogger
             newOwner.ToString(ci), string.IsNullOrEmpty(clearedItem) ? "-" : clearedItem) });
     }
 
+    /// <summary>A colonist launched at a planet I dominate: ConversionColonize|origin->target|myPop|totalPop|routeCost|nearestTarget|nearestCost.</summary>
+    public static void LogConversionColonize(int turnNumber, int playerId, string origin, string target, int myPop, int totalPop,
+        float routeCost, string nearestTarget, float nearestCost)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionColonize", $"{origin}->{target}",
+            myPop.ToString(ci), totalPop.ToString(ci), routeCost.ToString("0.#", ci), nearestTarget, nearestCost.ToString("0.#", ci)) });
+    }
+
     /// <summary>A player has no inhabitants left on any planet (once per player): T&lt;turn&gt;|P&lt;player&gt;|PlayerOutOfPlanets.</summary>
     public static void LogPlayerOutOfPlanets(int turnNumber, int playerId)
     {
