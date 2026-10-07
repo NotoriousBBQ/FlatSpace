@@ -312,6 +312,22 @@ user asked about one specific thing.
     roll declined), `RetreatHeld NoDestination` counts, the stale-blockade gap in `RetreatArrive`, ships preserved (warships at T300
     and `FleetHealth` against the earlier combat baselines; ships destroyed per run should fall), and that no planet named in a
     `Retreat` line becomes an `AssaultTarget` or `BlockadeTarget` of that player within `cooldownUntil`.
+  - **Invasion (conversion):** `ConversionStart|<planet>|<fromPlayers>|<myPop>|<totalPop>|<turnsPerFlip>` begins a session (P = the dominator;
+    also logged once more per session found after a load), `Convert|<planet>|<fromPlayer>|<AtWar or NonWar>|<myPop>|<totalPop>|<progress>`
+    is one converted inhabitant, `ConversionEnd|<planet>|<Clean, DominanceLost or WarEnded>|<turnsHeld>|<converted>` ends it,
+    `OwnerChanged|<planet>|<oldOwner>|<newOwner>|<clearedItem or ->` (P = the new owner) is an ownership change, `PlayerOutOfPlanets|<player>`
+    is logged once per player, `ConversionHoldSpare|<planet>|<heldShips>|<heldOffense>|<shipsACallWanted>|<Garrison, Assault, Blockade or ->|<callTarget or ->|<rivalOffenseNearby>|<progress>`
+    is on change only, `ConversionColonize|<origin>-><target>|<myPop>|<totalPop>|<routeCost>|<nearestTarget>|<nearestCost>` is per colonist
+    launched at a dominated planet, and `Stance`/`Hostility` lines end with `conversionTerm`. Report per run: sessions started, ended by
+    reason (Clean against DominanceLost against WarEnded: many DominanceLost means holds or retreats are letting go), turns held and
+    flips per session, the pace (turns between `Convert` lines on a planet against `turnsPerFlip`: does the snowball show), planets
+    changing hands per player and the clearedItem on `OwnerChanged`, non-war conversions (`NonWar`) against the `conversionTerm` on the
+    victims' later `Stance ... War` lines (are they declaring because of it), `ConversionColonize` launches per session and whether the
+    session's pace sped up after one, and the **option 3 evidence**: for each `ConversionHoldSpare` with `shipsACallWanted` above 0, how
+    long it lasted and how large `rivalOffenseNearby` was against `heldOffense` (a long call with no rival nearby means offense-scaled
+    conversion or a smaller hold would have served). Also: no `Convert` line may name a planet whose session was not Started or
+    re-Started after a load, `PlayerOutOfPlanets` counts, and that warship starts and the fleet cap still hold (a conquered planet's
+    production was cleared, so no free ships appear).
 
 ## 4. Compare against a previous run when one exists
 
