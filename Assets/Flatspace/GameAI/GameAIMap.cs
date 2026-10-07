@@ -321,6 +321,12 @@ namespace FlatSpace
             }
 
             /// <summary>
+            /// The capitol's name, or empty when the player has none: conversion can take a Prime planet away, so notifications must not
+            /// assume one exists (an empty view target simply does not move the camera).
+            /// </summary>
+            public string GetPlayerCapitolName(int playerID) => GetPlayerCapitol(playerID)?.PlanetName ?? string.Empty;
+
+            /// <summary>
             /// Rebuilds every planet's incoming-ship count from in-flight ShipTransport orders.
             /// The counter is derived state, so it is recomputed on load instead of being saved.
             /// </summary>

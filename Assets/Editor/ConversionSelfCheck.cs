@@ -30,6 +30,7 @@ public static class ConversionSelfCheck
         ok &= RunConversionColonizeCheck();
         ok &= RunConversionHoldTrackerCheck();
         ok &= RunConversionHoldAuditCheck();
+        ok &= RunCapitolLostCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -595,6 +596,23 @@ public static class ConversionSelfCheck
             }
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // A capitol is the Prime planet a player owns. Conversion can take it away (a 400-turn test2.json run crashed at T270 in
+    // Gameboard.CreateNotificationsForCompletedResearch when player 2's Prime was conquered), so the name a notification links to
+    // must be empty, not an exception, for a player without one.
+    public static bool RunCapitolLostCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())      // the fixture has no Prime planet: nobody has a capitol
+        {
+            ok &= Check(f.Map.GetPlayerCapitol(2) == null, "precondition: a player with no Prime planet has no capitol");
+            string name = null;
+            try { name = f.Map.GetPlayerCapitolName(2); }
+            catch (System.Exception e) { Debug.LogError($"[ConversionSelfCheck] GetPlayerCapitolName threw: {e.GetType().Name}"); }
+            ok &= Check(name == string.Empty, "the capitol name for a player without one is empty, and asking does not throw");
+        }
         return ok;
     }
 

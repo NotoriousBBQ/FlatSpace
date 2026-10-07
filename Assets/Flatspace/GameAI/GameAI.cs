@@ -652,6 +652,8 @@ namespace FlatSpace
                 return GameAIMap.GetPlayerCapitol(playerID);
             }
 
+            public string GetPlayerCapitolName(int playerID) => GameAIMap.GetPlayerCapitolName(playerID);
+
             // Start is called once before the first execution of UpdatePlanet after the MonoBehaviour is created
             void Start()
             {
