@@ -693,9 +693,12 @@ starts dominance the same turn), in the engine step, so no player's decision ord
   x (1 - my share)` (a colonist is worth most early; no inhabitant of mine needed, so p = 0 gets the full tilt), multiplied into
   `ColonizationCostDivisor` with the chokepoint tilt. The ColonyShip production weight is
   unchanged. Tunables on `GameAIConstants`: `conversionTurnsBase` 3 (6 at first, where a real conquest finished only 5% of the time and planets ending owned by a player averaged 3 a run; 12 nearly stopped conquest (0.8 to 1.8 a run); 3 gave 11 to 12 conquests a run and real conquests finishing 16 to 20%, with colonization, planets at T375, wars and combat unchanged and `test2.json` colony failures possibly +27%), `hostilityPerConversion` 3, `conversionColonizeWeight` 0.5, `conversionHoldKeepFraction` 0.5 (tried 0.25 on 2026-10-06 and reverted: it released about twice as often but spread fleets over more planets, so `4p.json` blockade events doubled (41 to 85 a run), food and grotsits shipment cuts doubled and colony failures rose about 40% for a Clean share gain of 4 points; at 0.5 the release freed about 34 ships a run with Clean 23% on `test2.json` and 28% on `4p.json`).
-- **Reevaluate after the first tuning pass (owner's list):** offense-scaled conversion speed (use the audit and the `Convert` pace);
-  continue-until-clean versus stop at ownership; a minimum force for dominance (today any one ship with offense); elimination of a player
-  that loses its last planet (`PlayerOutOfPlanets` shows how often); the three tunables; a colony ship production boost for dominated planets.
+- **Reevaluate next (owner's order, 2026-10-07; the first item starts the next session):** (1) a colony ship production boost for dominated planets
+  (the ColonyShip weight is unchanged; the speed-up is used 0 to 3 times a run); (2) offense-scaled conversion speed (use the audit and the `Convert`
+  pace); (3) a minimum force for dominance (largely answered: force size is not the constraint, real conquests fail on pace, not ships); (4)
+  elimination of a player that loses its last planet (`PlayerOutOfPlanets` has never fired); (5) the untested tunables `hostilityPerConversion`
+  and `conversionColonizeWeight`. Settled: `conversionTurnsBase` 3, `conversionHoldKeepFraction` 0.5. Closed 2026-10-07: continue-until-clean
+  versus stop at ownership (kept continue-until-clean: conquered planets rarely change owner again within 30 turns, 5 to 9%).
 
 Self-check: `Assets/Editor/ConversionSelfCheck.cs`.
 
