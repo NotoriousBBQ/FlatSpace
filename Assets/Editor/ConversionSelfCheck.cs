@@ -28,6 +28,8 @@ public static class ConversionSelfCheck
         ok &= RunConversionSaveCheck();
         ok &= RunConversionHoldCheck();
         ok &= RunConversionColonizeCheck();
+        ok &= RunConversionHoldTrackerCheck();
+        ok &= RunConversionHoldAuditCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -523,6 +525,64 @@ public static class ConversionSelfCheck
                 f.Constants.conversionColonizeWeight = 0.5f;
                 f.Map.Diplomacy.Enabled = false;
                 ok &= Check(!ai.IsConversionColonizeTarget(a), "legacy mode: no conversion rule");
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    public static bool RunConversionHoldTrackerCheck()
+    {
+        var ok = true;
+        var t = new ConversionHoldTracker();
+        ConversionHoldTracker.Entry E(string planet, int wanted, string call = "Garrison", string target = "B")
+            => new ConversionHoldTracker.Entry { Planet = planet, HeldShips = 2, HeldOffense = 20f, Wanted = wanted, Call = call, CallTarget = target, RivalNearby = 0f, Progress = 0.5f };
+        ok &= Check(t.Update(new[] { E("A", 1), E("C", 0, "-", "-") }).Select(e => e.Planet).SequenceEqual(new[] { "A", "C" }), "the first sighting of each held planet is reported, ordered by name");
+        ok &= Check(t.Update(new[] { E("A", 1), E("C", 0, "-", "-") }).Count == 0, "the same wanted count, call and target again: not reported");
+        ok &= Check(t.Update(new[] { E("A", 2), E("C", 0, "-", "-") }).Select(e => e.Planet).SequenceEqual(new[] { "A" }), "a changed wanted count is reported");
+        ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D"), E("C", 0, "-", "-") }).Count == 1, "a changed call is reported");
+        t.Update(new ConversionHoldTracker.Entry[0]);
+        ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D") }).Count == 1, "a planet that left the holds is forgotten, so a later hold is reported afresh");
+        t.Clear();
+        ok &= Check(t.Update(new[] { E("A", 2, "Assault", "D") }).Count == 1, "Clear forgets everything");
+        return ok;
+    }
+
+    // The audit runs the planners a second time without the conversion hold and counts what a call would have taken from the held planet.
+    public static bool RunConversionHoldAuditCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                f.Constants.maxPathNodesForKnowledge = 8;
+                f.Constants.maxPathNodesForShipTransport = 10;
+                f.Colonize("B", 0);
+                Populate(f.P("A"), (2, 2), (0, 1));
+                f.P("A").Owner = Planet.NoOwner;
+                f.Ships("A", 0, 2); f.War(0, 1);
+                f.P("A").ConversionBy = 0; f.P("A").ConversionProgress = 0.25f;
+                f.Map.Knowledge.Update(f.Map, 3, 8);
+                var ai = MakeAI(f, 0, gos);
+                var entries = ai.AuditConversionHolds(1);
+                ok &= Check(entries.Count == 1 && entries[0].Planet == "A" && entries[0].HeldShips == 2 && entries[0].Wanted > 0 && entries[0].Call == "Garrison" && entries[0].CallTarget == "B",
+                    "A is held and B's garrison would have taken ships from it");
+                ok &= Check(Near(entries[0].Progress, 0.25f) && entries[0].HeldOffense > 0f, "the entry carries the conversion progress and the held offense");
+                f.P("A").ConversionBy = Planet.NoOwner;
+                ok &= Check(ai.AuditConversionHolds(2).Count == 0, "no hold, no audit entry");
+            }
+            using (var f = CombatSelfCheck.Fixture.Line())     // nothing else wants the ships: wanted 0, call -
+            {
+                f.Constants.maxPathNodesForKnowledge = 8;
+                Populate(f.P("A"), (2, 2), (0, 1));
+                f.P("A").Owner = Planet.NoOwner;
+                f.Ships("A", 0, 1); f.War(0, 1);
+                f.P("A").ConversionBy = 0;
+                f.Map.Knowledge.Update(f.Map, 3, 8);
+                var entries = MakeAI(f, 0, gos).AuditConversionHolds(1);
+                ok &= Check(entries.Count == 1 && entries[0].Wanted == 0 && entries[0].Call == "-" && entries[0].CallTarget == "-", "with no other call the entry says so");
             }
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }

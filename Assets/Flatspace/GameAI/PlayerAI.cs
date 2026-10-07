@@ -1898,6 +1898,66 @@ namespace FlatSpace
             private readonly BlockadeTargetTracker _blockadeTargets = new BlockadeTargetTracker();
             // Log-only: which blockaded planets the assault passed over (reported on change only).
             private readonly BlockadeSkipTracker _blockadeSkips = new BlockadeSkipTracker();
+            // Log-only: the conversion holds and what a call would have taken from them (reported on change only).
+            private readonly ConversionHoldTracker _conversionHolds = new ConversionHoldTracker();
+
+            /// <summary>
+            /// Log-only audit of the conversion holds: the planners run a second time with only the contested holds (no orders are
+            /// emitted, nothing is mutated), and the held planet's ships they would have sent say whether a call (a garrison deficit, an
+            /// assault target or a blockade target) wanted them. Public for the self-check; this overload builds the planners itself.
+            /// </summary>
+            public List<ConversionHoldTracker.Entry> AuditConversionHolds(int turnNumber)
+            {
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
+                    AssaultWarFilter()) { ExcludedTargets = new HashSet<string>(CooldownPlanets(turnNumber)) };
+                var blockadeTarget = assault.ChooseBlockadeTarget(out _);
+                var target = blockadeTarget ?? assault.ChooseEnemyTarget();
+                return AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, new RetreatPlanner.Plan());
+            }
+
+            private List<ConversionHoldTracker.Entry> AuditConversionHolds(int turnNumber, AssaultPlanner assault, Planet target,
+                bool isBlockadeTarget, RetreatPlanner.Plan retreat)
+            {
+                var entries = new List<ConversionHoldTracker.Entry>();
+                var holds = assault.ConversionHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                if (holds.Count == 0) return entries;
+                var contested = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                var audit = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
+                {
+                    HeldPlanet    = target?.PlanetName,
+                    HeldPlanets   = contested,
+                    Retreating    = retreat.Retreating,
+                    RefillBlocked = CooldownPlanets(turnNumber),
+                };
+                var homeActions = audit.Plan();
+                var assaultActions = assault.Plan(target, audit.LastStates, homeActions);
+                foreach (var name in holds)
+                {
+                    var planet = AIMap.GetPlanet(name);
+                    var garrison = homeActions.Where(a => a.Origin == name && a.Kind == Ship.ShipKind.WarShip).ToList();
+                    var offense = assaultActions.Where(a => a.Origin == name && a.Kind == Ship.ShipKind.WarShip).ToList();
+                    var call = "-"; var callTarget = "-"; var wanted = 0;
+                    if (garrison.Count > 0)
+                    {
+                        call = "Garrison"; callTarget = garrison[0].Target; wanted = garrison.Sum(a => a.Count);
+                    }
+                    else if (offense.Count > 0)
+                    {
+                        call = isBlockadeTarget ? "Blockade" : "Assault"; callTarget = offense[0].Target; wanted = offense.Sum(a => a.Count);
+                    }
+                    entries.Add(new ConversionHoldTracker.Entry
+                    {
+                        Planet = name,
+                        HeldShips = planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID),
+                        HeldOffense = assault.HeldOffense(planet),
+                        Wanted = wanted, Call = call, CallTarget = callTarget,
+                        RivalNearby = assault.NearbyRivalOffense(planet),
+                        Progress = planet.ConversionProgress,
+                    });
+                }
+                return entries;
+            }
 
             /// <summary>
             /// Expand: the home garrison plan, unchanged. Consolidate: choose the assault target (a planet blockaded against
@@ -1951,6 +2011,9 @@ namespace FlatSpace
                 if (blockadeTarget != null && force.Ships > 0)
                     AITuningLogger.LogBlockadeForce(turnNumber, Player.playerID, blockadeTarget.PlanetName,
                         force.Ships, force.Offense, force.StillNeeded);
+                foreach (var entry in _conversionHolds.Update(AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, retreat)))
+                    AITuningLogger.LogConversionHoldSpare(turnNumber, Player.playerID, entry.Planet, entry.HeldShips, entry.HeldOffense,
+                        entry.Wanted, entry.Call, entry.CallTarget, entry.RivalNearby, entry.Progress);
                 return actions;
             }
 
