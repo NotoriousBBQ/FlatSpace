@@ -300,6 +300,7 @@ namespace FlatSpace
                     {
                         Previous = pair.Hostility,
                         Cuts = diplomacy.TakeCuts(me, rival),
+                        Conversions = diplomacy.TakeConversions(me, rival),
                         NearShips = nearShips,
                         MyStrength = myStrength,
                         RivalStrength = rivalStrength,
@@ -310,6 +311,7 @@ namespace FlatSpace
                     pair.CutsTerm = result.CutsTerm;
                     pair.NearTerm = result.NearTerm;
                     pair.StrengthTerm = result.StrengthTerm;
+                    pair.ConversionTerm = result.ConversionTerm;
                     pair.MyStrength = myStrength;
                     pair.RivalStrength = rivalStrength;
                     pair.NearShips = nearShips;
@@ -344,6 +346,7 @@ namespace FlatSpace
                     pair.CutsTerm = 0f;
                     pair.NearTerm = 0f;
                     pair.StrengthTerm = 0f;
+                    pair.ConversionTerm = 0f;
                     pair.LossAccum *= 1f - constants.hostilityDecay;   // no contact: it only decays, like the hostility
                     diplomacy.Set(me, rival, pair);
                     rows.Add(new StanceMatrix.Row
@@ -360,6 +363,7 @@ namespace FlatSpace
                     });
                 }
                 diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later
+                diplomacy.DiscardConversions(me);
 
                 foreach (var decision in StanceMatrix.Decide(me, rows, constants))
                 {
@@ -696,7 +700,48 @@ namespace FlatSpace
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return false;
                 if (planet.Population.Count == 0)                                return true;
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
-                return planet.PlayerWithMostPopulation() != Player.playerID;
+                if (planet.PlayerWithMostPopulation() != Player.playerID)        return true;
+                return IsConversionColonizeTarget(planet);   // I hold the plurality but a conversion is still running
+            }
+
+            /// <summary>
+            /// A planet I dominate where I already have an inhabitant, below max population, with a foreign inhabitant left: a colonist
+            /// lands as my inhabitant (it needs no conversion and raises my share, so it shortens every later flip). Without dominance
+            /// the AI does not colonize its own healthy planets. Public for the self-check.
+            /// </summary>
+            public bool IsConversionColonizeTarget(Planet planet)
+                => planet.Population.Exists(p => p.Player == Player.playerID) && IsConversionTarget(planet);
+
+            /// <summary>
+            /// A planet I dominate where a conversion runs or could start: below max population, a foreign inhabitant left, and either
+            /// my own session is running or a player I am at war with holds an inhabitant (without one nothing can ever convert there,
+            /// so a colonist would only fill my own planet). Needs no inhabitant of mine: the earliest stage of a conversion gets the
+            /// biggest tilt. Public for the self-check.
+            /// </summary>
+            public bool IsConversionTarget(Planet planet)
+            {
+                if (!AIMap.Diplomacy.Enabled || planet.Population.Count >= planet.MaxPopulation) return false;
+                if (!planet.Population.Exists(p => p.Player != Player.playerID)) return false;
+                if (planet.ConversionBy != Player.playerID
+                    && !planet.Population.Exists(p => p.Player != Player.playerID && AIMap.Diplomacy.IsAtWar(Player.playerID, p.Player, true)))
+                    return false;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                return ConversionSystem.Dominator(planet, AIMap, stats) == Player.playerID;
+            }
+
+            /// <summary>
+            /// The colonization choice cost of a dominated target is divided by 1 + conversionColonizeWeight x (1 - my share of its
+            /// inhabitants): a colonist is worth most early in a conversion and least on a planet that is nearly mine. 1 for any other
+            /// planet and when the weight is 0 or below. Public for ColonizationCostDivisor, ColonistRedirect and the self-check.
+            /// </summary>
+            public float ConversionColonizeDivisor(string targetName)
+            {
+                var weight = AIMap.GameAIConstants.conversionColonizeWeight;
+                if (weight <= 0f) return 1f;
+                var planet = AIMap.GetPlanet(targetName);
+                if (planet == null || !IsConversionTarget(planet)) return 1f;
+                var share = (float)planet.Population.Count(p => p.Player == Player.playerID) / planet.Population.Count;
+                return 1f + weight * (1f - share);
             }
             // The wider target set for a colonist already in flight (see ColonistRedirect): known, and empty, or my
             // colonist is already inbound, or colonized below max population (my own planets included). A full planet is
@@ -713,7 +758,10 @@ namespace FlatSpace
             // 1 + colonizationChokepointWeight x its chokepoint percentile, so a hub may be farther and still win. Expand,
             // a weight of 0 (or below) and unknown planets leave it at 1 (nearest first). The order delay never uses it.
             // Public for ColonistRedirect (diversion choice) and the self-check.
-            public float ColonizationCostDivisor(string targetName)
+            public float ColonizationCostDivisor(string targetName) => ChokepointDivisor(targetName) * ConversionColonizeDivisor(targetName);
+
+            // The Consolidate/Amass chokepoint tilt alone (the ChokepointColonize log asks only about this part).
+            private float ChokepointDivisor(string targetName)
             {
                 if (!IsConsolidateLike(Strategy)) return 1f;
                 var weight = AIMap.GameAIConstants.colonizationChokepointWeight;
@@ -833,9 +881,17 @@ namespace FlatSpace
                     var delay  = Convert.ToInt32(
                         route.Cost / AIMap.GameAIConstants.defaultTravelSpeed);
                     if (nearest.TryGetValue(action.Origin, out var near) && near.target != action.Target
-                        && ColonizationCostDivisor(action.Target) > 1f)
+                        && ChokepointDivisor(action.Target) > 1f)
                         AITuningLogger.LogChokepointColonize(turn, Player.playerID, action.Origin, action.Target,
                             route.Cost, AIMap.Chokepoint(action.Target), near.target, near.cost);
+                    var launchTarget = AIMap.GetPlanet(action.Target);
+                    if (launchTarget != null && IsConversionTarget(launchTarget))
+                    {
+                        nearest.TryGetValue(action.Origin, out var nearTarget);
+                        AITuningLogger.LogConversionColonize(turn, Player.playerID, action.Origin, action.Target,
+                            launchTarget.Population.Count(p => p.Player == Player.playerID), launchTarget.Population.Count,
+                            route.Cost, nearTarget.target ?? action.Target, nearTarget.target == null ? route.Cost : nearTarget.cost);
+                    }
 
                     var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
@@ -1854,6 +1910,66 @@ namespace FlatSpace
             private readonly BlockadeTargetTracker _blockadeTargets = new BlockadeTargetTracker();
             // Log-only: which blockaded planets the assault passed over (reported on change only).
             private readonly BlockadeSkipTracker _blockadeSkips = new BlockadeSkipTracker();
+            // Log-only: the conversion holds and what a call would have taken from them (reported on change only).
+            private readonly ConversionHoldTracker _conversionHolds = new ConversionHoldTracker();
+
+            /// <summary>
+            /// Log-only audit of the conversion holds: the planners run a second time with only the contested holds (no orders are
+            /// emitted, nothing is mutated), and the held planet's ships they would have sent say whether a call (a garrison deficit, an
+            /// assault target or a blockade target) wanted them. Public for the self-check; this overload builds the planners itself.
+            /// </summary>
+            public List<ConversionHoldTracker.Entry> AuditConversionHolds(int turnNumber)
+            {
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
+                    AssaultWarFilter()) { ExcludedTargets = new HashSet<string>(CooldownPlanets(turnNumber)) };
+                var blockadeTarget = assault.ChooseBlockadeTarget(out _);
+                var target = blockadeTarget ?? assault.ChooseEnemyTarget();
+                return AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, new RetreatPlanner.Plan());
+            }
+
+            private List<ConversionHoldTracker.Entry> AuditConversionHolds(int turnNumber, AssaultPlanner assault, Planet target,
+                bool isBlockadeTarget, RetreatPlanner.Plan retreat)
+            {
+                var entries = new List<ConversionHoldTracker.Entry>();
+                var holds = assault.ConversionHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                if (holds.Count == 0) return entries;
+                var contested = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                var audit = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
+                {
+                    HeldPlanet    = target?.PlanetName,
+                    HeldPlanets   = contested,
+                    Retreating    = retreat.Retreating,
+                    RefillBlocked = CooldownPlanets(turnNumber),
+                };
+                var homeActions = audit.Plan();
+                var assaultActions = assault.Plan(target, audit.LastStates, homeActions);
+                foreach (var name in holds)
+                {
+                    var planet = AIMap.GetPlanet(name);
+                    var garrison = homeActions.Where(a => a.Origin == name && a.Kind == Ship.ShipKind.WarShip).ToList();
+                    var offense = assaultActions.Where(a => a.Origin == name && a.Kind == Ship.ShipKind.WarShip).ToList();
+                    var call = "-"; var callTarget = "-"; var wanted = 0;
+                    if (garrison.Count > 0)
+                    {
+                        call = "Garrison"; callTarget = garrison[0].Target; wanted = garrison.Sum(a => a.Count);
+                    }
+                    else if (offense.Count > 0)
+                    {
+                        call = isBlockadeTarget ? "Blockade" : "Assault"; callTarget = offense[0].Target; wanted = offense.Sum(a => a.Count);
+                    }
+                    entries.Add(new ConversionHoldTracker.Entry
+                    {
+                        Planet = name,
+                        HeldShips = planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Player.playerID),
+                        HeldOffense = assault.HeldOffense(planet),
+                        Wanted = wanted, Call = call, CallTarget = callTarget,
+                        RivalNearby = assault.NearbyRivalOffense(planet),
+                        Progress = planet.ConversionProgress,
+                    });
+                }
+                return entries;
+            }
 
             /// <summary>
             /// Expand: the home garrison plan, unchanged. Consolidate: choose the assault target (a planet blockaded against
@@ -1890,10 +2006,12 @@ namespace FlatSpace
                     AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
                 _lastLoggedAssaultTarget = blockadeTarget == null ? targetName : null;
 
+                var contested = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
+                var conversionHolds = assault.ConversionHolds().Where(p => !retreat.Retreating.Contains(p)).ToList();
                 var transport = new ShipTransportPlanner(AIMap, Player.playerID, Strategy)
                 {
                     HeldPlanet  = targetName,
-                    HeldPlanets = assault.ContestedHolds().Where(p => !retreat.Retreating.Contains(p)).ToList(),
+                    HeldPlanets = contested.Union(conversionHolds).ToList(),
                     Retreating  = retreat.Retreating,
                     RefillBlocked = CooldownPlanets(turnNumber),
                 };
@@ -1905,6 +2023,9 @@ namespace FlatSpace
                 if (blockadeTarget != null && force.Ships > 0)
                     AITuningLogger.LogBlockadeForce(turnNumber, Player.playerID, blockadeTarget.PlanetName,
                         force.Ships, force.Offense, force.StillNeeded);
+                foreach (var entry in _conversionHolds.Update(AuditConversionHolds(turnNumber, assault, target, blockadeTarget != null, retreat)))
+                    AITuningLogger.LogConversionHoldSpare(turnNumber, Player.playerID, entry.Planet, entry.HeldShips, entry.HeldOffense,
+                        entry.Wanted, entry.Call, entry.CallTarget, entry.RivalNearby, entry.Progress);
                 return actions;
             }
 

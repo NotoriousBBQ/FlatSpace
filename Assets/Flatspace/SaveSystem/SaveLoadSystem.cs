@@ -79,6 +79,11 @@ public class SaveLoadSystem : MonoBehaviour
             // Names of the improvements the planet has completed (restored through the production catalog, which
             // rebuilds yields and upkeep). Older saves have none and load with no improvements, as before.
             public List<string> completedImprovements;
+            // Invasion (ConversionSystem): the converting player saved as id + 1 (0 = no session, which is also what an older save reads
+            // back), its progress toward the next flip and the bitmask of the players it was at war with when the session started.
+            public int conversionBy;
+            public float conversionProgress;
+            public int conversionWarMask;
         }
 
         [Serializable]
@@ -241,7 +246,10 @@ public class SaveLoadSystem : MonoBehaviour
                     grotsitsTransferInProgress = planet.GrotsitsShipmentIncoming,
                     population = new int[Gameboard.Instance.players.Count],
                     dockedShips = new List<GameSave.ShipSave>(),
-                    completedImprovements = planet.CompletedImprovements.ConvertAll(c => c.Item1)
+                    completedImprovements = planet.CompletedImprovements.ConvertAll(c => c.Item1),
+                    conversionBy = planet.SavedConversionBy,
+                    conversionProgress = planet.ConversionProgress,
+                    conversionWarMask = planet.ConversionWarMask
                 };
 
                 foreach (var ship in planet.DockedShips)

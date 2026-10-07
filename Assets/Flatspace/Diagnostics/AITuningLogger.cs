@@ -500,15 +500,16 @@ public static class AITuningLogger
             boardTotal.ToString(), shipsOnThem.ToString(), allShips.ToString()) });
     }
 
-    /// <summary>A stance changed: Stance|rival|Peace or War|hostility|cutsTerm|nearTerm|strengthTerm|pWar (on a change only).</summary>
+    /// <summary>A stance changed: Stance|rival|Peace or War|hostility|cutsTerm|nearTerm|strengthTerm|pWar|lossAccum|conversionTerm (on a change only; older logs lack the last fields).</summary>
     public static void LogStance(int turnNumber, int playerId, int rival, string stance, float hostility, float cutsTerm,
-        float nearTerm, float strengthTerm, float pWar, float lossAccum = 0f)
+        float nearTerm, float strengthTerm, float pWar, float lossAccum = 0f, float conversionTerm = 0f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Stance", rival.ToString(ci), stance,
             hostility.ToString("0.#", ci), cutsTerm.ToString("0.#", ci), nearTerm.ToString("0.#", ci),
-            strengthTerm.ToString("0.##", ci), pWar.ToString("0.##", ci), lossAccum.ToString("0.#", ci)) });
+            strengthTerm.ToString("0.##", ci), pWar.ToString("0.##", ci), lossAccum.ToString("0.#", ci),
+            conversionTerm.ToString("0.#", ci)) });
     }
 
     /// <summary>A war arrived or ended through the rival's stance: WarForced|rival|Start or End (on a change only).</summary>
@@ -519,15 +520,79 @@ public static class AITuningLogger
             rival.ToString(System.Globalization.CultureInfo.InvariantCulture), started ? "Start" : "End") });
     }
 
-    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips|lossShare|lossAccum|engagedStrength (older logs lack the last fields).</summary>
+    /// <summary>Every 25 turns per player and rival with contact: Hostility|rival|hostility|myStrength|rivalStrength|nearShips|lossShare|lossAccum|engagedStrength|conversionTerm (older logs lack the last fields).</summary>
     public static void LogHostility(int turnNumber, int playerId, int rival, float hostility, float myStrength,
-        float rivalStrength, int nearShips, float lossShare = 0f, float lossAccum = 0f, float engaged = 0f)
+        float rivalStrength, int nearShips, float lossShare = 0f, float lossAccum = 0f, float engaged = 0f, float conversionTerm = 0f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Hostility", rival.ToString(ci),
             hostility.ToString("0.#", ci), myStrength.ToString("0", ci), rivalStrength.ToString("0", ci),
-            nearShips.ToString(ci), lossShare.ToString("0.###", ci), lossAccum.ToString("0.#", ci), engaged.ToString("0", ci)) });
+            nearShips.ToString(ci), lossShare.ToString("0.###", ci), lossAccum.ToString("0.#", ci), engaged.ToString("0", ci),
+            conversionTerm.ToString("0.#", ci)) });
+    }
+
+    /// <summary>A conversion session began: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionStart|planet|fromPlayers|myPop|totalPop|turnsPerFlip.</summary>
+    public static void LogConversionStart(int turnNumber, int playerId, string planet, string fromPlayers, int myPop, int totalPop, float turnsPerFlip)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionStart", planet, fromPlayers,
+            myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci)) });
+    }
+
+    /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress.</summary>
+    public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Convert", planet, fromPlayer.ToString(ci),
+            atWar ? "AtWar" : "NonWar", myPop.ToString(ci), totalPop.ToString(ci), progress.ToString("0.##", ci)) });
+    }
+
+    /// <summary>A conversion session ended: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionEnd|planet|Clean, DominanceLost or WarEnded|turnsHeld|converted.</summary>
+    public static void LogConversionEnd(int turnNumber, int playerId, string planet, string reason, int turnsHeld, int converted)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionEnd", planet, reason,
+            turnsHeld.ToString(ci), converted.ToString(ci)) });
+    }
+
+    /// <summary>A planet changed owner through conversion (P = the new owner, -1 for a tie): OwnerChanged|planet|oldOwner|newOwner|clearedItem or -.</summary>
+    public static void LogOwnerChanged(int turnNumber, int newOwner, string planet, int oldOwner, string clearedItem)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, newOwner, "OwnerChanged", planet, oldOwner.ToString(ci),
+            newOwner.ToString(ci), string.IsNullOrEmpty(clearedItem) ? "-" : clearedItem) });
+    }
+
+    /// <summary>A colonist launched at a planet I dominate: ConversionColonize|origin->target|myPop|totalPop|routeCost|nearestTarget|nearestCost.</summary>
+    public static void LogConversionColonize(int turnNumber, int playerId, string origin, string target, int myPop, int totalPop,
+        float routeCost, string nearestTarget, float nearestCost)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionColonize", $"{origin}->{target}",
+            myPop.ToString(ci), totalPop.ToString(ci), routeCost.ToString("0.#", ci), nearestTarget, nearestCost.ToString("0.#", ci)) });
+    }
+
+    /// <summary>A planet held for conversion and what a call would have taken from it: ConversionHoldSpare|planet|heldShips|heldOffense|shipsACallWanted|Garrison, Assault, Blockade or -|callTarget or -|rivalOffenseNearby|progress (on change only).</summary>
+    public static void LogConversionHoldSpare(int turnNumber, int playerId, string planet, int heldShips, float heldOffense, int wanted,
+        string call, string callTarget, float rivalNearby, float progress)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionHoldSpare", planet, heldShips.ToString(ci),
+            heldOffense.ToString("0", ci), wanted.ToString(ci), call, callTarget, rivalNearby.ToString("0", ci), progress.ToString("0.##", ci)) });
+    }
+
+    /// <summary>A player has no inhabitants left on any planet (once per player): T&lt;turn&gt;|P&lt;player&gt;|PlayerOutOfPlanets.</summary>
+    public static void LogPlayerOutOfPlanets(int turnNumber, int playerId)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "PlayerOutOfPlanets") });
     }
 
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>

@@ -76,3 +76,6 @@ MonoBehaviour:
   retreatRivalUncertainty: 0.25
   retreatUncertaintySamples: 8
   retreatDestinationCostExponent: 2
+  conversionTurnsBase: 6
+  hostilityPerConversion: 3
+  conversionColonizeWeight: 0.5

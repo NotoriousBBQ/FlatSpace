@@ -24,6 +24,7 @@ namespace FlatSpace
                 public int LastChangeTurn;
                 // Log-only: the last turn's terms and strengths. Not saved.
                 public float CutsTerm, NearTerm, StrengthTerm, PWar, MyStrength, RivalStrength;
+                public float ConversionTerm;          // log-only: the last turn's conversion term
                 public float LossShare, PSurrender;   // log-only: the numbers behind a Surrender order
                 public float LossAccum;               // log-only: the part of the hostility that ship losses account for (decayed like it)
                 public float Engaged;                 // log-only: my strength engaged against this rival over the loss window (the loss share's denominator)
@@ -130,6 +131,36 @@ namespace FlatSpace
             {
                 foreach (var key in _cuts.Keys.Where(k => k.Item1 == victim).ToList())
                     _cuts.Remove(key);
+            }
+
+            // ── Conversions waiting to be charged ────────────────────────────
+
+            private readonly Dictionary<(int, int), int> _conversions = new Dictionary<(int, int), int>();
+
+            /// <summary>`converter` converted one of `victim`'s inhabitants while not at war with it. Self and ownerless converters are ignored.</summary>
+            public void RecordConversion(int victim, int converter)
+            {
+                if (converter < 0 || converter == victim) return;
+                _conversions.TryGetValue((victim, converter), out var count);
+                _conversions[(victim, converter)] = count + 1;
+            }
+
+            public int PeekConversions(int victim, int converter)
+                => _conversions.TryGetValue((victim, converter), out var count) ? count : 0;
+
+            /// <summary>The conversions by `converter` of `victim`'s inhabitants since the last take; consumed.</summary>
+            public int TakeConversions(int victim, int converter)
+            {
+                if (!_conversions.TryGetValue((victim, converter), out var count)) return 0;
+                _conversions.Remove((victim, converter));
+                return count;
+            }
+
+            /// <summary>Drops every conversion charge still waiting for `victim` (converters it has no contact with must not pile up).</summary>
+            public void DiscardConversions(int victim)
+            {
+                foreach (var key in _conversions.Keys.Where(k => k.Item1 == victim).ToList())
+                    _conversions.Remove(key);
             }
 
             // ── Saves ────────────────────────────────────────────────────────

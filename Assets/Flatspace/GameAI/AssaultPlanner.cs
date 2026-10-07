@@ -178,6 +178,56 @@ namespace FlatSpace
                 return holds;
             }
 
+            /// <summary>My real docked warship offense at the planet. Public for the conversion-hold audit.</summary>
+            public float HeldOffense(Planet planet) => DockedOffense(planet);
+
+            /// <summary>
+            /// Planets I dominate (my warships docked with offense, no warship of a player at war with me) and convert, or could: an
+            /// at-war holder still has inhabitants there, or my own conversion session is running with inhabitants of others left (the
+            /// non-war tail has no assault target, so only this hold keeps the fleet). Stateless; empty without warship stats and in
+            /// legacy mode (nothing converts there). The home plan never strips these planets, so the dominance, and with it the
+            /// session's progress, is not lost the turn after a fight is won. Retreat still runs first and wins.
+            /// </summary>
+            public List<string> ConversionHolds()
+            {
+                var holds = new List<string>();
+                if (_stats == null || !_map.Diplomacy.Enabled) return holds;
+                foreach (var planet in _map.PlanetList)
+                {
+                    if (DockedOffense(planet) <= 0f) continue;
+                    if (ConversionSystem.Dominator(planet, _map, _stats) != _playerId) continue;
+                    var session = planet.ConversionBy == _playerId && planet.Population.Exists(p => p.Player != _playerId);
+                    var atWarHolder = planet.Population.Exists(p => p.Player != _playerId && _map.Diplomacy.IsAtWar(_playerId, p.Player, true));
+                    if (session || atWarHolder) holds.Add(planet.PlanetName);
+                }
+                return holds;
+            }
+
+            /// <summary>
+            /// The largest single at-war rival's docked offense on the planet and its known neighbours: what could come back to
+            /// break a hold. Reporting only (the ConversionHoldSpare audit).
+            /// </summary>
+            public float NearbyRivalOffense(Planet planet)
+            {
+                if (_stats == null) return 0f;
+                var names = new List<string> { planet.PlanetName };
+                names.AddRange(_map.GetNeighbours(planet.PlanetName));
+                var perPlayer = new Dictionary<int, float>();
+                foreach (var name in names.Distinct())
+                {
+                    if (!_map.Knowledge.IsKnown(_playerId, name)) continue;
+                    var near = _map.GetPlanet(name);
+                    if (near == null) continue;
+                    foreach (var ship in near.DockedShips)
+                    {
+                        if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner == Planet.NoOwner || ship.Owner == _playerId) continue;
+                        if (!_map.Diplomacy.IsAtWar(_playerId, ship.Owner, true)) continue;
+                        perPlayer[ship.Owner] = (perPlayer.TryGetValue(ship.Owner, out var sum) ? sum : 0f) + _stats.EffectiveOffense(ship);
+                    }
+                }
+                return perPlayer.Count == 0 ? 0f : perPlayer.Values.Max();
+            }
+
             /// <summary>My offense committed at the planet: docked plus in flight.</summary>
             public float CommittedOffense(Planet planet)
                 => DockedOffense(planet) + planet.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);

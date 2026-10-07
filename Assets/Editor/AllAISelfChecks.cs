@@ -24,6 +24,7 @@ public static class AllAISelfChecks
             ("Simultaneity", SimultaneitySelfCheck.RunChecks),
             ("Combat", CombatSelfCheck.RunChecks),
             ("Retreat", RetreatSelfCheck.RunChecks),
+            ("Conversion", ConversionSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

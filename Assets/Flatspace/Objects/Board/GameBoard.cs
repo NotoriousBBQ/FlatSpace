@@ -769,7 +769,7 @@ namespace FlatSpace
             }
 
             private bool _timedUpdateRunning = false;
-            private const int RepeatRunCount = 3;
+            private const int RepeatRunCount = 6;
             private int _repeatRunsStarted;
 
             public void StartTimedUpdate()
@@ -817,7 +817,7 @@ namespace FlatSpace
                     _playerNotifications.Add(new PlayerNotification{
                         PlayerName = playerId.ToString(),
                         Message = "Player: " + playerId + " Completed research:  " + completedResearch,
-                        ViewTarget = GetPlayerCapitol(playerId).PlanetName,
+                        ViewTarget = GameAI.GetPlayerCapitolName(playerId),
                     });
                 }
             }
@@ -828,7 +828,7 @@ namespace FlatSpace
                     _playerNotifications.Add(new PlayerNotification{
                         PlayerName = playerId.ToString(),
                         Message = "Player: " + playerId + " Starting research:  " + newResearch,
-                        ViewTarget = GetPlayerCapitol(playerId).PlanetName,
+                        ViewTarget = GameAI.GetPlayerCapitolName(playerId),
                     });
                 }
             }

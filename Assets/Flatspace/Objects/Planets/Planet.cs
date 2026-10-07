@@ -40,7 +40,9 @@ public class Planet : MonoBehaviour
             UpdateResultTypeWarshipsLost,
             UpdateResultTypeColonyShipsLost,
             // Appended last: serialized as an int. Data is a FightProjection (FightProjector); PlayerID is the player it is about.
-            UpdateResultTypeFightProjection
+            UpdateResultTypeFightProjection,
+            // Appended last: serialized as an int. Data is a ConversionEvent (ConversionSystem); PlayerID is the victim.
+            UpdateResultTypeConversion
         }
 
         public enum UpdateResultPriority
@@ -62,6 +64,7 @@ public class Planet : MonoBehaviour
             {
                 case ResultType.UpdateResultTypeNone:
                 case ResultType.UpdateResultTypeFightProjection:
+                case ResultType.UpdateResultTypeConversion:
                     Priority = ResultPriority.UpdateResultPriorityNone;
                     break;
                 case ResultType.UpdateResultTypeDead:
@@ -114,6 +117,47 @@ public class Planet : MonoBehaviour
     public static float MaxFoodStorage = 600f;
     public static float MaxGrotsitsStorage = 600f;
     public int Owner = NoOwner;
+
+    // Invasion (see ConversionSystem): the player converting this planet's inhabitants (NoOwner = no session), the progress toward
+    // its next flip, and the bitmask of the players it was at war with that held inhabitants here when the session started.
+    public int ConversionBy = NoOwner;
+    public float ConversionProgress = 0f;
+    public int ConversionWarMask = 0;
+
+    public void EndConversionSession()
+    {
+        ConversionBy = NoOwner;
+        ConversionProgress = 0f;
+        ConversionWarMask = 0;
+    }
+
+    /// <summary>Saved as player id + 1, so 0 (what a save without the field reads back) means "no session".</summary>
+    public int SavedConversionBy => ConversionBy + 1;
+
+    public void RestoreConversion(int savedBy, float progress, int warMask)
+    {
+        ConversionBy = savedBy - 1;
+        ConversionProgress = savedBy > 0 ? progress : 0f;
+        ConversionWarMask = savedBy > 0 ? warMask : 0;
+    }
+
+    /// <summary>
+    /// Flips one inhabitant of `from` to `to` and recomputes the owner. Returns true when the owner changed; then the production item
+    /// and queue are cleared, no refund, so a conquest never hands over a ship the old owner paid for. Unlike ChangePopulation it never
+    /// touches Gameboard.Instance, so a self-check can drive it. False (and nothing changes) when `from` has no inhabitant here.
+    /// </summary>
+    public bool ConvertInhabitant(int from, int to)
+    {
+        var index = Population.FindIndex(x => x.Player == from);
+        if (index < 0) return false;
+        var before = Owner;
+        Population[index] = new Inhabitant { Player = to };
+        SetPlanetOwnership();
+        if (Owner == before) return false;
+        CurrentProduction = null;
+        ProductionQueue.Clear();
+        return true;
+    }
     public int MaxPopulation => _resourceData._maxPopulation;
 
     /// <summary>

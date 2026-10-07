@@ -129,11 +129,15 @@ namespace FlatSpace
             // stays ahead of it (log-only state, pruned as orders leave; a load logs each still-failing order once more).
             private readonly HashSet<GameAIOrder> _redirectFailedLogged = new HashSet<GameAIOrder>();
 
+            // Log-only: conversion sessions in progress (start turn, flips) and the players already reported out of planets.
+            private readonly ConversionTracker _conversions = new ConversionTracker();
+
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
                 _grotsitsShort.Clear();
                 _redirectFailedLogged.Clear();
+                _conversions.Clear();
 
             }
 
@@ -145,6 +149,7 @@ namespace FlatSpace
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
+                RunConversion(planetUpdateResults);
                 RunFightProjections(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
@@ -169,6 +174,60 @@ namespace FlatSpace
                 foreach (var report in CombatSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results))
                     AITuningLogger.LogCombat(turn, report.Attacker, report.Planet, report.Victim, report.DamageDealt,
                         report.ShipsDestroyed);
+            }
+
+            // After combat: a planet one player dominates converts one inhabitant at a time (see ConversionSystem). The reports are
+            // only for the tuning log.
+            private void RunConversion(List<Planet.UpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                var turn = Gameboard.Instance.TurnNumber;
+                LogConversion(turn, ConversionSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results));
+            }
+
+            private void LogConversion(int turn, List<ConversionReport> reports)
+            {
+                foreach (var report in reports)
+                {
+                    switch (report.What)
+                    {
+                        case ConversionReport.Kind.Start:
+                            _conversions.Begin(report.Planet, turn);
+                            AITuningLogger.LogConversionStart(turn, report.Dominator, report.Planet,
+                                ConversionSystem.PlayersIn(report.WarMask), report.MyPopulation, report.TotalPopulation, report.TurnsPerFlip);
+                            break;
+                        case ConversionReport.Kind.Flip:
+                        {
+                            var flip = report.Flip;
+                            _conversions.CountFlip(report.Planet);
+                            AITuningLogger.LogConvert(turn, flip.Dominator, report.Planet, flip.From, flip.AtWar,
+                                flip.MyPopulation, flip.TotalPopulation, flip.Progress);
+                            if (flip.OwnerChanged)
+                                AITuningLogger.LogOwnerChanged(turn, flip.NewOwner, report.Planet, flip.OldOwner, flip.ClearedItem);
+                            if (!GameAIMap.PlanetList.Any(p => p.Population.Exists(i => i.Player == flip.From))
+                                && _conversions.NoteOutOfPlanets(flip.From))
+                                AITuningLogger.LogPlayerOutOfPlanets(turn, flip.From);
+                            break;
+                        }
+                        case ConversionReport.Kind.End:
+                        {
+                            var held = _conversions.Finish(report.Planet, turn);
+                            AITuningLogger.LogConversionEnd(turn, report.Dominator, report.Planet, report.EndReason.ToString(),
+                                held.turnsHeld, held.converted);
+                            break;
+                        }
+                    }
+                }
+                // A session found on a planet after a load has no tracker entry yet: begin it and log its Start once more.
+                foreach (var planet in GameAIMap.PlanetList)
+                {
+                    if (planet.ConversionBy == Planet.NoOwner || _conversions.Tracking(planet.PlanetName)) continue;
+                    _conversions.Begin(planet.PlanetName, turn);
+                    var mine = planet.Population.Count(p => p.Player == planet.ConversionBy);
+                    AITuningLogger.LogConversionStart(turn, planet.ConversionBy, planet.PlanetName,
+                        ConversionSystem.PlayersIn(planet.ConversionWarMask), mine, planet.Population.Count,
+                        ConversionSystem.TurnsPerFlip(mine, planet.Population.Count, GameAIMap.GameAIConstants));
+                }
             }
 
             // After combat: one FightProjection result per (planet, player) where that player's warships share a planet with a
@@ -240,7 +299,7 @@ namespace FlatSpace
                         {
                             var pair = GameAIMap.Diplomacy.Get(player, rival);
                             AITuningLogger.LogHostility(turnNumber, player, rival, pair.Hostility, pair.MyStrength,
-                                pair.RivalStrength, pair.NearShips, pair.LossShare, pair.LossAccum, pair.Engaged);
+                                pair.RivalStrength, pair.NearShips, pair.LossShare, pair.LossAccum, pair.Engaged, pair.ConversionTerm);
                         }
                     // How hurt the player's warships are, so a log shows whether repair keeps pace with combat.
                     var fleet = GameAIMap.PlanetList.SelectMany(p => p.DockedShips)
@@ -428,7 +487,8 @@ namespace FlatSpace
                             var stancePair = GameAIMap.Diplomacy.Get(executableOrder.PlayerId, stanceRival);
                             AITuningLogger.LogStance(stanceTurn, executableOrder.PlayerId, stanceRival,
                                 stancePair.Stance.ToString(), stancePair.Hostility, stancePair.CutsTerm,
-                                stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar, stancePair.LossAccum);
+                                stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar, stancePair.LossAccum,
+                                stancePair.ConversionTerm);
                         }
                         break;
                     }
@@ -591,6 +651,8 @@ namespace FlatSpace
             {
                 return GameAIMap.GetPlayerCapitol(playerID);
             }
+
+            public string GetPlayerCapitolName(int playerID) => GameAIMap.GetPlayerCapitolName(playerID);
 
             // Start is called once before the first execution of UpdatePlanet after the MonoBehaviour is created
             void Start()

@@ -18,6 +18,7 @@ public static class SimultaneitySelfCheck
         var ok = RunPlayerOrderIndependenceCheck();
         ok &= RunLossOrderIndependenceCheck();
         ok &= RunRetreatOrderIndependenceCheck();
+        ok &= RunConversionOrderIndependenceCheck();
         Debug.Log(ok
             ? "[SimultaneitySelfCheck] ALL PASSED"
             : "[SimultaneitySelfCheck] FAILURES (see errors above)");
@@ -36,11 +37,12 @@ public static class SimultaneitySelfCheck
         public string Stances;                              // this player's stance toward every other player after the orders ran
         public string StrategyAfterRound;                   // before the next turn's ApplyWarState
         public string StrategyNextTurn;                     // after it
+        public string Hostility;                            // every pair's hostility after the round (the conversion charge is read through it)
     }
 
     // A(0,0) B C D E F(500,0) in a line. Players 0, 1 and 2 hold A+B, C+D and E+F; each has a food shortage on its first planet
     // and a surplus on its second. Players 0 and 1 are at hostility 100 toward each other (both will declare); player 2 is calm.
-    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false, bool withRetreat = false)
+    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false, bool withRetreat = false, bool withConversion = false)
     {
         var template = WarshipSelfCheck.MakeTemplate();
         var constants = WarshipSelfCheck.MakeConstants(template);
@@ -130,6 +132,27 @@ public static class SimultaneitySelfCheck
                 // The imperfect-intel samples are drawn here, once, before any player decides: the same seed for both player orders.
                 GameAI.AppendFightProjections(map, retreatStats, constants, new List<GameAI.GameAIOrder>(), results, new System.Random(900));
             }
+            if (withConversion)
+            {
+                // Player 0 dominates D, player 1's planet, where player 2 also holds two inhabitants: two conversions (one at-war, one
+                // of the non-war player 2) run in the engine step BEFORE any player decides, so player 2's hostility charge is the same
+                // world for every player whatever the order they run in.
+                map.Diplomacy.SetStance(0, 1, Stance.War, 0);
+                map.Diplomacy.SetStance(1, 0, Stance.War, 0);
+                constants.conversionTurnsBase = 1f;
+                var conversionStats = new WarshipStats(research);
+                var d = map.GetPlanet("D");
+                d.Population.Add(new Planet.Inhabitant { Player = 2 });
+                d.Population.Add(new Planet.Inhabitant { Player = 2 });
+                d.Owner = d.PlayerWithMostPopulation();
+                WarshipSelfCheck.DockWarships(d, 0, 2);
+                map.Knowledge.Update(map, 3, 8);
+                for (var t = 1; t <= 2; t++)
+                {
+                    map.Diplomacy.Turn = t;
+                    ConversionSystem.Resolve(map, conversionStats, constants, t, new List<Planet.UpdateResult>());
+                }
+            }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
             // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it
             // ran after player 0, which is exactly what this check must catch.
@@ -168,6 +191,8 @@ public static class SimultaneitySelfCheck
                         .Select(r => $"{r}:{map.Diplomacy.StanceToward(p, r)}")),
                     StrategyAfterRound = strategyAfter[p],
                     StrategyNextTurn = ais[p].Strategy.ToString(),
+                    Hostility = string.Join(",", Enumerable.Range(0, 3).SelectMany(a => Enumerable.Range(0, 3).Where(r => r != a)
+                        .Select(r => $"{a}{r}:{map.Diplomacy.Get(a, r).Hostility:0.###}"))),
                 };
             }
             return outcome;
@@ -218,6 +243,24 @@ public static class SimultaneitySelfCheck
             ok &= Check(forward[p].Orders.SequenceEqual(reverse[p].Orders),
                 $"with a retreat, player {p}: the same orders whatever the player order\n  forward: {string.Join("; ", forward[p].Orders)}\n  reverse: {string.Join("; ", reverse[p].Orders)}");
             ok &= Check(forward[p].Stances == reverse[p].Stances, $"with a retreat, player {p}: the same stances");
+        }
+        return ok;
+    }
+
+    // The conversion runs in the engine step before the players decide; the charge it leaves for the non-war player must give every
+    // player the same orders, stances and hostility whatever the order the players run in.
+    public static bool RunConversionOrderIndependenceCheck()
+    {
+        var ok = true;
+        var forward = RunRound(reversed: false, withConversion: true);
+        var reverse = RunRound(reversed: true, withConversion: true);
+        ok &= Check(forward[2].Hostility != RunRound(reversed: false)[2].Hostility,
+            "precondition: the conversion changed some hostility (the charge on player 2 toward player 0 was read)");
+        for (var p = 0; p < 3; ++p)
+        {
+            ok &= Check(forward[p].Orders.SequenceEqual(reverse[p].Orders), $"with a conversion, player {p}: the same orders whatever the player order");
+            ok &= Check(forward[p].Stances == reverse[p].Stances, $"with a conversion, player {p}: the same stances");
+            ok &= Check(forward[p].Hostility == reverse[p].Hostility, $"with a conversion, player {p}: the same hostility");
         }
         return ok;
     }
