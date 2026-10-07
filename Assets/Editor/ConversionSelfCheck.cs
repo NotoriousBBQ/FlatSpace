@@ -25,6 +25,7 @@ public static class ConversionSelfCheck
         ok &= RunSessionEndsCheck();
         ok &= RunOwnershipFlipCheck();
         ok &= RunConversionTrackerCheck();
+        ok &= RunConversionSaveCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -377,6 +378,31 @@ public static class ConversionSelfCheck
         t.Begin("D", 1); t.NoteOutOfPlanets(5);
         t.Clear();
         ok &= Check(!t.Tracking("D") && t.NoteOutOfPlanets(2), "Clear forgets sessions and reported players");
+        return ok;
+    }
+
+    // The save fields survive JsonUtility, and an older save (no keys) loads as "no session", never as player 0 converting.
+    public static bool RunConversionSaveCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            var a = f.P("A");
+            a.ConversionBy = 2; a.ConversionProgress = 0.5f; a.ConversionWarMask = 3;
+            var save = new SaveLoadSystem.GameSave.PlanetSave
+            {
+                name = "A", conversionBy = a.SavedConversionBy, conversionProgress = a.ConversionProgress, conversionWarMask = a.ConversionWarMask,
+            };
+            var back = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>(JsonUtility.ToJson(save));
+            var b = f.P("B");
+            b.RestoreConversion(back.conversionBy, back.conversionProgress, back.conversionWarMask);
+            ok &= Check(b.ConversionBy == 2 && Near(b.ConversionProgress, 0.5f) && b.ConversionWarMask == 3, "a session survives the JSON round trip");
+
+            var old = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>("{\"name\":\"A\"}");
+            var c = f.P("C");
+            c.RestoreConversion(old.conversionBy, old.conversionProgress, old.conversionWarMask);
+            ok &= Check(old.conversionBy == 0 && c.ConversionBy == Planet.NoOwner && Near(c.ConversionProgress, 0f), "an older save with no keys loads with no session");
+        }
         return ok;
     }
 

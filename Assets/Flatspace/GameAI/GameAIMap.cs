@@ -404,6 +404,7 @@ namespace FlatSpace
                             if (improvement != null) planet.RecordImprovement(improvement);
                         }
                     planet.Owner = planetStatus.owner;
+                    planet.RestoreConversion(planetStatus.conversionBy, planetStatus.conversionProgress, planetStatus.conversionWarMask);
                     planet.FoodShipmentIncoming = planetStatus.foodTransferInProgress;
                     planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;
                     foreach(var playerID in planetStatus.populationTransferInProgress)
