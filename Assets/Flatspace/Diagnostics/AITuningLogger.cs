@@ -532,6 +532,49 @@ public static class AITuningLogger
             conversionTerm.ToString("0.#", ci)) });
     }
 
+    /// <summary>A conversion session began: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionStart|planet|fromPlayers|myPop|totalPop|turnsPerFlip.</summary>
+    public static void LogConversionStart(int turnNumber, int playerId, string planet, string fromPlayers, int myPop, int totalPop, float turnsPerFlip)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionStart", planet, fromPlayers,
+            myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci)) });
+    }
+
+    /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress.</summary>
+    public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Convert", planet, fromPlayer.ToString(ci),
+            atWar ? "AtWar" : "NonWar", myPop.ToString(ci), totalPop.ToString(ci), progress.ToString("0.##", ci)) });
+    }
+
+    /// <summary>A conversion session ended: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionEnd|planet|Clean, DominanceLost or WarEnded|turnsHeld|converted.</summary>
+    public static void LogConversionEnd(int turnNumber, int playerId, string planet, string reason, int turnsHeld, int converted)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionEnd", planet, reason,
+            turnsHeld.ToString(ci), converted.ToString(ci)) });
+    }
+
+    /// <summary>A planet changed owner through conversion (P = the new owner, -1 for a tie): OwnerChanged|planet|oldOwner|newOwner|clearedItem or -.</summary>
+    public static void LogOwnerChanged(int turnNumber, int newOwner, string planet, int oldOwner, string clearedItem)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, newOwner, "OwnerChanged", planet, oldOwner.ToString(ci),
+            newOwner.ToString(ci), string.IsNullOrEmpty(clearedItem) ? "-" : clearedItem) });
+    }
+
+    /// <summary>A player has no inhabitants left on any planet (once per player): T&lt;turn&gt;|P&lt;player&gt;|PlayerOutOfPlanets.</summary>
+    public static void LogPlayerOutOfPlanets(int turnNumber, int playerId)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "PlayerOutOfPlanets") });
+    }
+
     /// <summary>Records which board the match started on, right after BeginMatch, as T0|P-1|BoardConfig|name.</summary>
     public static void LogBoardConfig(string boardName)
     {

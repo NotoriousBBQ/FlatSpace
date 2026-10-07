@@ -24,6 +24,7 @@ public static class ConversionSelfCheck
         ok &= RunVictimOrderCheck();
         ok &= RunSessionEndsCheck();
         ok &= RunOwnershipFlipCheck();
+        ok &= RunConversionTrackerCheck();
         Debug.Log(ok
             ? "[ConversionSelfCheck] ALL PASSED"
             : "[ConversionSelfCheck] FAILURES (see errors above)");
@@ -354,6 +355,28 @@ public static class ConversionSelfCheck
             }
         }
         finally { Object.DestroyImmediate(item); }
+        return ok;
+    }
+
+    // Log-only state: sessions in progress and players already reported out of planets. The logger itself is verified by a Play run.
+    public static bool RunConversionTrackerCheck()
+    {
+        var ok = true;
+        var t = new ConversionTracker();
+        ok &= Check(!t.Tracking("A"), "nothing is tracked at first");
+        t.Begin("A", 10);
+        t.CountFlip("A"); t.CountFlip("A");
+        ok &= Check(t.Tracking("A"), "a begun session is tracked");
+        var done = t.Finish("A", 17);
+        ok &= Check(done.turnsHeld == 7 && done.converted == 2 && !t.Tracking("A"), "finishing reports the turns held and the flips, and forgets it");
+        var unknown = t.Finish("B", 20);
+        ok &= Check(unknown.turnsHeld == 0 && unknown.converted == 0, "a session never seen (a load) finishes as 0 and 0");
+        t.CountFlip("C");
+        ok &= Check(!t.Tracking("C"), "a flip for an untracked planet is ignored");
+        ok &= Check(t.NoteOutOfPlanets(2) && !t.NoteOutOfPlanets(2) && t.NoteOutOfPlanets(3), "a player is reported out of planets once");
+        t.Begin("D", 1); t.NoteOutOfPlanets(5);
+        t.Clear();
+        ok &= Check(!t.Tracking("D") && t.NoteOutOfPlanets(2), "Clear forgets sessions and reported players");
         return ok;
     }
 
