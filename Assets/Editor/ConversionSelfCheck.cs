@@ -512,7 +512,16 @@ public static class ConversionSelfCheck
                 Populate(a, (0, 3), (1, 2));
                 ok &= Check(!ai.IsConversionColonizeTarget(a) && !ai.IsValidColonizationTarget(a), "at max population (5): not a target");
                 Populate(a, (1, 3));
-                ok &= Check(!ai.IsConversionColonizeTarget(a), "none of my inhabitants there: the rule does not apply");
+                ok &= Check(!ai.IsConversionColonizeTarget(a), "none of my inhabitants there: the acceptance extension does not apply");
+                ok &= Check(ai.IsValidColonizationTarget(a), "...but a foreign-held planet is already a valid target by the old rule");
+                ok &= Check(Near(ai.ConversionColonizeDivisor("A"), 1.5f), "dominated with 0 of 3 mine: the earliest stage gets the biggest tilt, 1 + 0.5 x 1");
+                Populate(a, (2, 2), (0, 1));
+                f.P("A").ConversionBy = Planet.NoOwner;
+                ok &= Check(!ai.IsConversionColonizeTarget(a) && Near(ai.ConversionColonizeDivisor("A"), 1f),
+                    "a planet where only a player I am NOT at war with is foreign and no session runs: no conversion can happen, so no target and no tilt");
+                f.P("A").ConversionBy = 0;
+                ok &= Check(ai.IsConversionColonizeTarget(a) && ai.IsValidColonizationTarget(a), "the non-war tail with my session running: a target");
+                f.P("A").EndConversionSession();
                 Populate(a, (0, 4));
                 ok &= Check(!ai.IsConversionColonizeTarget(a) && Near(ai.ConversionColonizeDivisor("A"), 1f), "nothing foreign left: not a conversion target, divisor 1");
 

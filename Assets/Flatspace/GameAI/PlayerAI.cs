@@ -710,9 +710,21 @@ namespace FlatSpace
             /// the AI does not colonize its own healthy planets. Public for the self-check.
             /// </summary>
             public bool IsConversionColonizeTarget(Planet planet)
+                => planet.Population.Exists(p => p.Player == Player.playerID) && IsConversionTarget(planet);
+
+            /// <summary>
+            /// A planet I dominate where a conversion runs or could start: below max population, a foreign inhabitant left, and either
+            /// my own session is running or a player I am at war with holds an inhabitant (without one nothing can ever convert there,
+            /// so a colonist would only fill my own planet). Needs no inhabitant of mine: the earliest stage of a conversion gets the
+            /// biggest tilt. Public for the self-check.
+            /// </summary>
+            public bool IsConversionTarget(Planet planet)
             {
                 if (!AIMap.Diplomacy.Enabled || planet.Population.Count >= planet.MaxPopulation) return false;
-                if (!planet.Population.Exists(p => p.Player == Player.playerID) || !planet.Population.Exists(p => p.Player != Player.playerID)) return false;
+                if (!planet.Population.Exists(p => p.Player != Player.playerID)) return false;
+                if (planet.ConversionBy != Player.playerID
+                    && !planet.Population.Exists(p => p.Player != Player.playerID && AIMap.Diplomacy.IsAtWar(Player.playerID, p.Player, true)))
+                    return false;
                 var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
                 return ConversionSystem.Dominator(planet, AIMap, stats) == Player.playerID;
             }
@@ -727,7 +739,7 @@ namespace FlatSpace
                 var weight = AIMap.GameAIConstants.conversionColonizeWeight;
                 if (weight <= 0f) return 1f;
                 var planet = AIMap.GetPlanet(targetName);
-                if (planet == null || !IsConversionColonizeTarget(planet)) return 1f;
+                if (planet == null || !IsConversionTarget(planet)) return 1f;
                 var share = (float)planet.Population.Count(p => p.Player == Player.playerID) / planet.Population.Count;
                 return 1f + weight * (1f - share);
             }
@@ -873,7 +885,7 @@ namespace FlatSpace
                         AITuningLogger.LogChokepointColonize(turn, Player.playerID, action.Origin, action.Target,
                             route.Cost, AIMap.Chokepoint(action.Target), near.target, near.cost);
                     var launchTarget = AIMap.GetPlanet(action.Target);
-                    if (launchTarget != null && IsConversionColonizeTarget(launchTarget))
+                    if (launchTarget != null && IsConversionTarget(launchTarget))
                     {
                         nearest.TryGetValue(action.Origin, out var nearTarget);
                         AITuningLogger.LogConversionColonize(turn, Player.playerID, action.Origin, action.Target,
