@@ -193,7 +193,7 @@ public class GameAIConstants : ScriptableObject
     // A planet whose conversion I am holding keeps max(1, ceil(this x the largest nearby at-war rival's offense / my offense per ship))
     // ships there (never more than it has) and releases the rest to garrison and blockade calls. 0 keeps just 1 ship; a negative
     // value keeps every ship (the original hold). An assault target and a contested hold always keep every ship.
-    public float conversionHoldKeepFraction = 0.25f;
+    public float conversionHoldKeepFraction = 0.5f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's
