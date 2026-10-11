@@ -719,6 +719,7 @@ MonoBehaviour:
   _loadButton: {fileID: 1205404232}
   _designerButton: {fileID: 1568998821}
   _logAIEvents: 1
+  _randomBoardSettings: {fileID: 11400000, guid: 81cc8d57b9b12864d9c487343e648e64, type: 2}
 --- !u!1001 &2406881718368027201
 PrefabInstance:
   m_ObjectHideFlags: 0
