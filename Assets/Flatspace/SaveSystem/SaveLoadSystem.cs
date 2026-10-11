@@ -361,6 +361,8 @@ public class SaveLoadSystem : MonoBehaviour
 
         public List<BoardDesignerEntry> planetEntries = new List<BoardDesignerEntry>();
 
+        public BoardDesignerSave() { }
+
         public BoardDesignerSave(List<PlanetDesigner> planetList)
         {
             planetEntries.Clear();
@@ -392,6 +394,14 @@ public class SaveLoadSystem : MonoBehaviour
         var saveConfig = JsonUtility.FromJson<BoardDesignerSave>(readText);
         if (saveConfig == null) return false;
 
+        StartGameFromBoard(filePath, saveConfig);
+        return true;
+    }
+
+    // Starts a game on a designer-format board. filePath is what a save records to reload it and what
+    // the tuning log names the board after, so it must be a real file (a random board is written first).
+    public static void StartGameFromBoard(string filePath, BoardDesignerSave saveConfig)
+    {
         var gameScene = SceneManager.GetSceneByName("Flatspace");
         if (!gameScene.isLoaded)
         {
@@ -406,8 +416,6 @@ public class SaveLoadSystem : MonoBehaviour
             Gameboard.Instance.InitGameFromDesignerConfig(filePath, saveConfig);
             SceneManager.SetActiveScene(gameScene);
         }
-
-        return true;
     }
     
     public void LoadAIConstantsAddressable(string address, Action<AsyncOperationHandle<GameAIConstants>> loadCompleteDelegate)
@@ -572,7 +580,12 @@ public class SaveLoadSystem : MonoBehaviour
         var configPath = Path.Combine(Application.persistentDataPath, "BoardConfigs");
 #endif
         SetFileBrowserFilters();
-        FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]), 
+        // Random boards live outside the config folder (RandomBoardBuilder.BoardDirectory); a sidebar
+        // link saves navigating there. The browser skips a link that already exists.
+        var randomBoardDirectory = RandomBoardBuilder.BoardDirectory();
+        Directory.CreateDirectory(randomBoardDirectory);
+        FileBrowser.AddQuickLink("Random Boards", randomBoardDirectory);
+        FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]),
             ()=> LoadGameScene("Flatspace",(scene, sceneMode) =>
             {
                 SceneManager.SetActiveScene(scene);
