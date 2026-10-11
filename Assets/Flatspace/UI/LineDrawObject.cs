@@ -14,6 +14,9 @@ public class LineDrawObject : MonoBehaviour
     private Color _fogBaseSpriteColor = Color.white;
     private bool _fogBaseCaptured;
 
+    // A pooled object serves a new order: the next SetFogState re-reads the colors it was just given.
+    public void ResetFogCapture() => _fogBaseCaptured = false;
+
     public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
     {
         if (!_fogBaseCaptured)

@@ -35,6 +35,10 @@ namespace FlatSpace
             [SerializeField] private GameAIConstants gameAIConstants;
             [SerializeField] private LineDrawObject _lineDrawObjectPrefab;
             [SerializeField] private LineDrawObject _orderLineDrawObjectPrefab;
+            // Order graphics: a line per order in flight, plus disabled lines waiting for reuse
+            // (see DisplayOrderGraphics).
+            private readonly Dictionary<GameAI.GameAIOrder, LineDrawObject> _orderLines = new();
+            private readonly Stack<LineDrawObject> _orderLinePool = new();
             [SerializeField] private ScrollRect _scrollRect;
 
             [SerializeField] private FlatSpace.Fog.FogOfWarSettings _fogOfWarSettings;
@@ -286,6 +290,13 @@ namespace FlatSpace
                 var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
                 foreach (var linedrawObject in lineDrawObjects)
                     Destroy(linedrawObject.gameObject);
+                // Pooled lines are disabled, so the search above skipped them; in-flight ones were
+                // destroyed above. Drop every reference so nothing reuses a destroyed line.
+                foreach (var pooled in _orderLinePool)
+                    if (pooled)
+                        Destroy(pooled.gameObject);
+                _orderLinePool.Clear();
+                _orderLines.Clear();
                 if (_fogOfWarSystem != null)
                     _fogOfWarSystem.DestroyOverlay();
                 if (_camera)
@@ -501,65 +512,88 @@ namespace FlatSpace
                 var prefab = _orderLineDrawObjectPrefab;
                 if (!prefab)
                     return;
-                
-                var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();
-                var taggedChildren = new List<LineDrawObject>();
-                foreach (var linedrawObject in lineDrawObjects)
-                {
-                    if(linedrawObject.CompareTag("OrderLineDraw"))
-                        taggedChildren.Add(linedrawObject);
-                }
-                foreach (var child in taggedChildren)
-                    Destroy(child.gameObject);
-                
+
+                // Orders still in flight keep their line (_orderLines, keyed by the order object);
+                // lines of finished orders are disabled and parked in _orderLinePool for reuse.
+                var drawn = new HashSet<GameAI.GameAIOrder>();
                 foreach (var order in orders)
                 {
                     if(!OrderHasGraphic(order))
                         continue;
-                    var lineDrawObject = Instantiate<LineDrawObject>(prefab,transform) as LineDrawObject;
 
-                    if (lineDrawObject)
+                    float offset = 10.0f;
+                    if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport)
+                        offset = -10.0f;
+                    else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport)
+                        offset = 20.0f;
+                    else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport)
+                        offset = 30.0f;
+
+                    var pathPoints = new List<Vector3>();
+                    foreach (var point in GameAI.GameAIMap.OrderPathPoints(order))
+                        pathPoints.Add(new Vector3(point.x + offset, point.y + offset, 0.0f));
+                    if (pathPoints.Count < 2)
+                        continue;   // nothing to draw (no route and no pathed Origin to Target)
+
+                    if (!_orderLines.TryGetValue(order, out var lineDrawObject) || !lineDrawObject)
                     {
-                        float offset = 10.0f;
-                        if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport)
-                            offset = -10.0f;
-                        else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport)
-                            offset = 20.0f;
-                        else if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport)
-                            offset = 30.0f;
-
-                        var pathPoints = new List<Vector3>();
-                        foreach (var point in GameAI.GameAIMap.OrderPathPoints(order))
-                            pathPoints.Add(new Vector3(point.x + offset, point.y + offset, 0.0f));
-                        if (pathPoints.Count < 2)
-                        {
-                            Destroy(lineDrawObject.gameObject);   // nothing to draw (no route and no pathed Origin to Target)
+                        lineDrawObject = null;
+                        while (_orderLinePool.Count > 0 && !lineDrawObject)
+                            lineDrawObject = _orderLinePool.Pop();   // skips any destroyed entry
+                        if (!lineDrawObject)
+                            lineDrawObject = Instantiate<LineDrawObject>(prefab, transform) as LineDrawObject;
+                        if (!lineDrawObject)
                             continue;
-                        }
-
-                        var progressAmount =
-                            Math.Clamp(
-                                Convert.ToSingle(order.TotalDelay - (order.TimingDelay)) /
-                                Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
-                        lineDrawObject.SetPath(pathPoints, progressAmount);
-                        lineDrawObject.SetColor(ColorForOrderType(order));
-                        lineDrawObject.SetSpriteColor(BrightOpaque(FleetSummary.ColorFor(order.PlayerId)));
-                        if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
-                        {
-                            var originPlanet = GetPlanet(order.Origin);
-                            var targetPlanet = GetPlanet(order.Target);
-                            var visible = FlatSpace.Fog.FogVisibility.Hidden;
-                            if (originPlanet != null)
-                                visible = Max(visible, _fogOfWarSystem.Classify(originPlanet.Position));
-                            if (targetPlanet != null)
-                                visible = Max(visible, _fogOfWarSystem.Classify(targetPlanet.Position));
-                            var dim = _fogOfWarSettings != null ? _fogOfWarSettings.exploredObjectDim : 0.45f;
-                            lineDrawObject.SetFogState(
-                                visible == FlatSpace.Fog.FogVisibility.Hidden
-                                    ? FlatSpace.Fog.FogVisibility.Hidden
-                                    : FlatSpace.Fog.FogVisibility.Visible, dim);
-                        }
+                        _orderLines[order] = lineDrawObject;
                     }
+                    drawn.Add(order);
+
+                    lineDrawObject.gameObject.SetActive(true);
+                    // Fog can leave the renderers off, and its captured base colors are stale
+                    // once this object serves another order; both were fresh on a new object.
+                    if (lineDrawObject.lineRenderer) lineDrawObject.lineRenderer.enabled = true;
+                    if (lineDrawObject.spriteRenderer) lineDrawObject.spriteRenderer.enabled = true;
+                    lineDrawObject.ResetFogCapture();
+
+                    var progressAmount =
+                        Math.Clamp(
+                            Convert.ToSingle(order.TotalDelay - (order.TimingDelay)) /
+                            Convert.ToSingle(order.TotalDelay), 0.15f, 0.85f);
+                    lineDrawObject.SetPath(pathPoints, progressAmount);
+                    lineDrawObject.SetColor(ColorForOrderType(order));
+                    lineDrawObject.SetSpriteColor(BrightOpaque(FleetSummary.ColorFor(order.PlayerId)));
+                    if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
+                    {
+                        var originPlanet = GetPlanet(order.Origin);
+                        var targetPlanet = GetPlanet(order.Target);
+                        var visible = FlatSpace.Fog.FogVisibility.Hidden;
+                        if (originPlanet != null)
+                            visible = Max(visible, _fogOfWarSystem.Classify(originPlanet.Position));
+                        if (targetPlanet != null)
+                            visible = Max(visible, _fogOfWarSystem.Classify(targetPlanet.Position));
+                        var dim = _fogOfWarSettings != null ? _fogOfWarSettings.exploredObjectDim : 0.45f;
+                        lineDrawObject.SetFogState(
+                            visible == FlatSpace.Fog.FogVisibility.Hidden
+                                ? FlatSpace.Fog.FogVisibility.Hidden
+                                : FlatSpace.Fog.FogVisibility.Visible, dim);
+                    }
+                }
+
+                // Orders that finished since the last call: disable their line and pool it.
+                List<GameAI.GameAIOrder> finished = null;
+                foreach (var pair in _orderLines)
+                    if (!drawn.Contains(pair.Key))
+                        (finished ??= new List<GameAI.GameAIOrder>()).Add(pair.Key);
+                if (finished == null)
+                    return;
+                foreach (var order in finished)
+                {
+                    var line = _orderLines[order];
+                    _orderLines.Remove(order);
+                    if (!line)
+                        continue;
+                    line.gameObject.SetActive(false);
+                    _orderLinePool.Push(line);
                 }
             }
 
