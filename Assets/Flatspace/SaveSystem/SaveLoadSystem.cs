@@ -585,11 +585,10 @@ public class SaveLoadSystem : MonoBehaviour
         var randomBoardDirectory = RandomBoardBuilder.BoardDirectory();
         Directory.CreateDirectory(randomBoardDirectory);
         FileBrowser.AddQuickLink("Random Boards", randomBoardDirectory);
+        // Cancel leaves the player on the main menu (this runs from there); it no longer starts the
+        // scene's default board.
         FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]),
-            ()=> LoadGameScene("Flatspace",(scene, sceneMode) =>
-            {
-                SceneManager.SetActiveScene(scene);
-            }), FileBrowser.PickMode.Files, false, configPath);
+            () => Debug.Log("Board config load cancelled"), FileBrowser.PickMode.Files, false, configPath);
     }
     
     private static void ShowSaveGameConfigFileBrowser(BoardDesignerSave saveData)
