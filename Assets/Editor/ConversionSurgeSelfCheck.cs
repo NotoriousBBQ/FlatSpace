@@ -22,6 +22,7 @@ public static class ConversionSurgeSelfCheck
         ok &= RunReachCheck();
         ok &= RunSurgeWeightCheck();
         ok &= RunSurgeLaunchCheck();
+        ok &= RunSameTurnCapCheck();
         ok &= RunTargetRoomCheck();
         ok &= RunSurgeArrivalCheck();
         ok &= RunSurgeTrackerCheck();
@@ -372,6 +373,75 @@ public static class ConversionSurgeSelfCheck
             }
         }
         finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // Several servers of one target pick a colony ship in the same production pass: the plan's room is shared, so the picks beyond
+    // the effective wanted count are dropped; ordinary (unsurged) picks and other items never are.
+    public static bool RunSameTurnCapCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        var items = new List<CatalogItem>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                f.Constants.maxPathNodesForKnowledge = 8;
+                f.Constants.expandPopulationTrigger = 0.8f;
+                f.Constants.conversionSurgeReachNodes = 2;
+                f.Constants.conversionSurgeBoost = 3f;
+                var ai = ConversionSelfCheck.MakeAI(f, 0, gos);
+                var colony = ColonyShipItem();
+                var other = ColonyShipItem();
+                other.subType = "Food"; other.itemName = "Other"; other.name = "Other";
+                items.Add(colony); items.Add(other);
+                f.Colonize("A", 0);
+                f.Colonize("C", 0);
+                ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 2));      // 3 of 5: wanted 3, room 2, EW 2
+                f.Ships("B", 0, 1);
+                f.War(0, 1);
+                f.Map.Knowledge.Update(f.Map, 2, 8);
+                ai.RefreshSurgePlan();
+                ai.SnapshotSurgedServers();
+                var b = ai.CurrentSurgePlan.For("A");
+                ok &= Check(b != null && b.EffectiveWanted == 2 && b.Pipeline == 0, "precondition: EW 2, nothing in the pipeline");
+
+                ok &= Check(ai.TryReserveSurgeSlot("A", colony) && ai.TryReserveSurgeSlot("C", colony), "EW 2: both servers may start a colony ship");
+                ok &= Check(b.Pipeline == 2, "...and each took a slot (pipeline 2)");
+                ok &= Check(!ai.TryReserveSurgeSlot("A", colony) && !ai.TryReserveSurgeSlot("C", colony), "a third pick on either server is dropped");
+                ok &= Check(b.Pipeline == 2, "a dropped pick takes no slot");
+                ok &= Check(ai.TryReserveSurgeSlot("A", other), "a pick that is not a colony ship is never dropped");
+                ok &= Check(b.Pipeline == 2, "...and takes no slot");
+                ok &= Check(ai.TryReserveSurgeSlot("D", colony) && b.Pipeline == 2, "a planet that serves no target is never dropped");
+
+                // EW 1: the second pick is dropped.
+                ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 3));
+                ai.RefreshSurgePlan();
+                ai.SnapshotSurgedServers();
+                ok &= Check(ai.TryReserveSurgeSlot("A", colony) && !ai.TryReserveSurgeSlot("C", colony), "EW 1: exactly one start");
+
+                // A server whose weight was NOT surged when the snapshot was taken (the pipeline was already full) is ordinary
+                // expansion and is not dropped.
+                ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 2));
+                f.P("C").ProductionQueue.Add(new Planet.ProductionItem(colony));
+                f.P("C").ProductionQueue.Add(new Planet.ProductionItem(colony));
+                ai.RefreshSurgePlan();
+                ai.SnapshotSurgedServers();
+                ok &= Check(ai.TryReserveSurgeSlot("A", colony), "pipeline already at EW at snapshot time: the pick is ordinary, not dropped");
+                f.P("C").ProductionQueue.Clear();
+
+                // The snapshot is cleared by a new plan.
+                ai.RefreshSurgePlan();
+                ok &= Check(ai.TryReserveSurgeSlot("A", colony) && ai.TryReserveSurgeSlot("A", colony) && ai.TryReserveSurgeSlot("A", colony),
+                    "RefreshSurgePlan clears the snapshot: with no snapshot nothing is dropped");
+            }
+        }
+        finally
+        {
+            foreach (var go in gos) Object.DestroyImmediate(go);
+            foreach (var item in items) Object.DestroyImmediate(item);
+        }
         return ok;
     }
 

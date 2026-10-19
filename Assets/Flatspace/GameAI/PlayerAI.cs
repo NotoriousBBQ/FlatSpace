@@ -1689,9 +1689,13 @@ namespace FlatSpace
             private SurgePlan _surgePlan;
 
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            public SurgePlan CurrentSurgePlan => _surgePlan;
+
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void RefreshSurgePlan()
             {
                 _surgePlan = ConversionSurge.Build(AIMap, Player.playerID, IsConversionTarget);
+                _surgedServers.Clear();
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
                 foreach (var entry in _surgeLog.Update(_surgePlan.Targets.Select(t => new ConversionSurgeTracker.Entry
                          {
@@ -1703,6 +1707,34 @@ namespace FlatSpace
             }
 
             private readonly ConversionSurgeTracker _surgeLog = new ConversionSurgeTracker();
+
+            // Servers whose ColonyShip weight was surged when this turn's industry matrix was built (SurgeMultiplier > 1). Within one
+            // production pass every server sees the same plan, so several can each pick a colony ship off the same pipeline; a
+            // surged pick reserves its slot (TryReserveSurgeSlot) and a later one on a full target is dropped. A pick on a server
+            // that was not surged is ordinary expansion and is never dropped. Cleared by RefreshSurgePlan.
+            private readonly HashSet<string> _surgedServers = new HashSet<string>();
+
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            public void SnapshotSurgedServers()
+            {
+                _surgedServers.Clear();
+                if (_surgePlan == null) return;
+                foreach (var target in _surgePlan.Targets)
+                    foreach (var server in target.Servers)
+                        if (SurgeMultiplier(server) > 1f) _surgedServers.Add(server);
+            }
+
+            // True when the pick may go ahead. A surged ColonyShip pick takes one slot of its target's room (Pipeline + 1) and is
+            // refused once the pipeline has reached the effective wanted count. Anything else is always allowed and changes nothing.
+            public bool TryReserveSurgeSlot(string planetName, CatalogItem item)
+            {
+                if (item == null || item.subType != "ColonyShip" || !_surgedServers.Contains(planetName)) return true;
+                var target = _surgePlan?.For(planetName);
+                if (target == null) return true;
+                if (target.Pipeline >= target.EffectiveWanted) return false;
+                target.Pipeline++;
+                return true;
+            }
 
             // The ColonyShip weight multiplier for a planet next to a dominated planet that still needs ships: its pipeline is below
             // the planet's effective wanted count (which already respects the room, so population + en route + pipeline never
@@ -1792,7 +1824,12 @@ namespace FlatSpace
                                  new IndustryAction {ChosenItem = element.Item, PlanetName = origin.Target},
                              weightSelector:      element => element.Weight)
                         )
+                {
+                    // A surged colony ship pick that would push its target past the room it has is dropped: that planet starts
+                    // nothing this turn and re-checks next turn, like a planet with no choices.
+                    if (!TryReserveSurgeSlot(action.PlanetName, action.ChosenItem)) continue;
                     EmitProductionOrders(action, orders);
+                }
             }
             /// <summary>
             /// Emits the three standard orders (transport, deduct, in-progress)
@@ -1813,10 +1850,11 @@ namespace FlatSpace
                         Player.playerID, action.Origin, productionName, _blockadeView.Value(action.Origin));
 
                 // Mark a colony ship started under the surge, so a log shows how often the boost decided a build.
-                if (producedItem != null && producedItem.subType == "ColonyShip" && _surgePlan?.For(action.Origin) is SurgeTarget surged
-                    && SurgeMultiplier(action.Origin) > 1f)
+                // Read from the snapshot, not SurgeMultiplier: the reservation has raised the target's pipeline by now.
+                if (producedItem != null && producedItem.subType == "ColonyShip" && _surgedServers.Contains(action.Origin)
+                    && _surgePlan?.For(action.Origin) is SurgeTarget surged)
                     AITuningLogger.LogSurgeBuild(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
-                        Player.playerID, action.Origin, surged.Planet, SurgeMultiplier(action.Origin));
+                        Player.playerID, action.Origin, surged.Planet, AIMap.GameAIConstants.conversionSurgeBoost);
 
                 orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeIndustrySetProduction,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
@@ -1846,6 +1884,7 @@ namespace FlatSpace
                     (new ScoreMatrixMultipleDecisionComparer());
 
                 _warshipMultiplierThisTurn = null;   // recomputed lazily by GetIndustrySituationalWeightMultiplier
+                SnapshotSurgedServers();             // before any weight is read: which servers' ColonyShip weight is surged this pass
 
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
