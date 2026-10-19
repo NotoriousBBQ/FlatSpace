@@ -19,7 +19,7 @@ namespace FlatSpace.AI
         public int EnRoute;           // my colonists in flight toward it
         public int Room;              // MaxPopulation - population - EnRoute
         public int EffectiveWanted;
-        public int Pipeline;          // colony ships docked or in production on its serving neighbours
+        public int Pipeline;          // colony ships docked or in production on its servers
         public List<string> Servers = new List<string>();
     }
 
@@ -48,7 +48,8 @@ namespace FlatSpace.AI
 
         /// <summary>
         /// One target per dominated planet (isDominated) that can still take colonists. Planets are taken in order of descending
-        /// wanted, then name; each claims the neighbours I own that no earlier target claimed, so a ship is counted once. The
+        /// wanted, then name; each claims the planets I own within conversionSurgeReachNodes path nodes of it (cheapest path first) that no
+        /// earlier target claimed, so a ship is counted once. The
         /// plan is empty while the scale is 0 or below and in legacy mode (no diplomacy).
         /// </summary>
         public static SurgePlan Build(GameAIMap map, int playerId, Func<Planet, bool> isDominated)
@@ -56,6 +57,7 @@ namespace FlatSpace.AI
             var plan = new SurgePlan();
             var scale = map.GameAIConstants.conversionSurgeShipsPerRatio;
             if (scale <= 0f || !map.Diplomacy.Enabled) return plan;
+            var reach = map.GameAIConstants.conversionSurgeReachNodes;
 
             var candidates = new List<SurgeTarget>();
             foreach (var planet in map.PlanetList)
@@ -77,13 +79,21 @@ namespace FlatSpace.AI
             var claimed = new HashSet<string>();
             foreach (var target in candidates.OrderByDescending(t => t.Wanted).ThenBy(t => t.Planet, StringComparer.Ordinal))
             {
-                foreach (var name in map.GetNeighbours(target.Planet))
+                var dominated = map.GetPlanet(target.Planet);
+                var inRange = new List<(float cost, Planet server)>();
+                foreach (var server in map.PlanetList)
                 {
-                    var neighbour = map.GetPlanet(name);
-                    if (neighbour == null || neighbour.Owner != playerId || !claimed.Add(name)) continue;
-                    target.Servers.Add(name);
-                    target.Pipeline += neighbour.DockedShips.Count(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner == playerId)
-                                       + neighbour.CountColonyShipsInProduction();
+                    if (server == dominated || server.Owner != playerId) continue;
+                    if (dominated.DistanceMapToPathingList.TryGetValue(server.PlanetName, out var entry)
+                        && entry.NumNodes >= 2 && entry.NumNodes <= reach)
+                        inRange.Add((entry.Cost, server));
+                }
+                foreach (var (_, server) in inRange.OrderBy(x => x.cost).ThenBy(x => x.server.PlanetName, StringComparer.Ordinal))
+                {
+                    if (!claimed.Add(server.PlanetName)) continue;
+                    target.Servers.Add(server.PlanetName);
+                    target.Pipeline += server.DockedShips.Count(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner == playerId)
+                                       + server.CountColonyShipsInProduction();
                 }
                 plan.Targets.Add(target);
             }

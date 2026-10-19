@@ -19,6 +19,7 @@ public static class ConversionSurgeSelfCheck
         ok &= RunWantedCheck();
         ok &= RunEffectiveWantedCheck();
         ok &= RunBuildCheck();
+        ok &= RunReachCheck();
         ok &= RunSurgeWeightCheck();
         ok &= RunSurgeLaunchCheck();
         ok &= RunTargetRoomCheck();
@@ -151,6 +152,63 @@ public static class ConversionSurgeSelfCheck
         return ok;
     }
 
+    // Servers come from the stored path tables (path nodes, the planet itself counted), not from direct neighbours.
+    public static bool RunReachCheck()
+    {
+        var ok = true;
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            f.Colonize("A", 0);
+            f.Colonize("C", 0);
+            f.Colonize("D", 0);
+            ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 2));      // 3 of 5: wanted 3
+            System.Func<Planet, bool> onlyB = p => p.PlanetName == "B";
+            System.Func<Planet, bool> onlyD = p => p.PlanetName == "D";
+            ConversionSelfCheck.Populate(f.P("D"), (0, 1), (1, 2));      // D as a target: 3 of 5 as well
+            f.P("D").Owner = 0;
+
+            f.Constants.conversionSurgeReachNodes = 3;
+            var b = ConversionSurge.Build(f.Map, 0, onlyB).Targets[0];
+            ok &= Check(b.Servers.OrderBy(n => n).SequenceEqual(new[] { "A", "C", "D" }), "reach 3: D, three path nodes from B, serves it: " + string.Join(",", b.Servers));
+
+            f.Constants.conversionSurgeReachNodes = 2;
+            b = ConversionSurge.Build(f.Map, 0, onlyB).Targets[0];
+            ok &= Check(b.Servers.OrderBy(n => n).SequenceEqual(new[] { "A", "C" }), "reach 2: direct neighbours only, as before: " + string.Join(",", b.Servers));
+
+            f.Constants.conversionSurgeReachNodes = 1;
+            b = ConversionSurge.Build(f.Map, 0, onlyB).Targets[0];
+            ok &= Check(b.Servers.Count == 0, "reach 1 or below: nobody serves, no exception");
+
+            // The far end of the line: A is four nodes from D, so it never serves D at reach 3.
+            f.Constants.conversionSurgeReachNodes = 3;
+            var d = ConversionSurge.Build(f.Map, 0, onlyD).Targets[0];
+            ok &= Check(d.Servers.SequenceEqual(new[] { "C" }),
+                "D is served by C only: B is a rival's planet and A is four nodes away: " + string.Join(",", d.Servers));
+
+            // A planet that is empty or a rival's never serves, however close.
+            f.P("C").Owner = 1;
+            b = ConversionSurge.Build(f.Map, 0, onlyB).Targets[0];
+            ok &= Check(!b.Servers.Contains("C") && b.Servers.Contains("A") && b.Servers.Contains("D"), "a rival-owned planet in range does not serve");
+            f.P("C").Owner = -1;
+            b = ConversionSurge.Build(f.Map, 0, onlyB).Targets[0];
+            ok &= Check(!b.Servers.Contains("C"), "an unowned planet in range does not serve");
+            f.P("C").Owner = 0;
+
+            // A server in range of two dominated planets is claimed once, by the one that wants more ships.
+            ConversionSelfCheck.Populate(f.P("D"), (0, 1), (1, 3));      // 4 of 5: wanted 4 beats B's 3
+            f.P("D").Owner = 0;
+            var plan = ConversionSurge.Build(f.Map, 0, p => p.PlanetName == "B" || p.PlanetName == "D");
+            var tb = plan.Targets.Find(t => t.Planet == "B");
+            var td = plan.Targets.Find(t => t.Planet == "D");
+            ok &= Check(td != null && tb != null && td.Servers.Contains("C") && !tb.Servers.Contains("C"),
+                "C is in range of both B and D: only D (wanted 4) claims it");
+            ok &= Check(plan.Targets.SelectMany(t => t.Servers).GroupBy(n => n).All(g => g.Count() == 1), "no planet serves two targets");
+            ok &= Check(plan.For("C") == td && td.Servers.All(n => plan.For(n) == td) && tb.Servers.All(n => plan.For(n) == tb),
+                "For() agrees with Servers");
+        }
+        return ok;
+    }
+
     // The ColonyShip situational weight on the neighbours of a dominated planet: today's 2 becomes 2 x 3 while the planet needs ships.
     public static bool RunSurgeWeightCheck()
     {
@@ -178,7 +236,14 @@ public static class ConversionSurgeSelfCheck
 
                 ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 6f), "Consolidate: a neighbour of B wants colony ships at 2 x 3");
                 ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "C"), 6f), "the other neighbour too");
+                f.Constants.conversionSurgeReachNodes = 2;          // D is three path nodes from B: out of reach at 2
+                ai.RefreshSurgePlan();
                 ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "D"), 2f), "a planet that serves no target keeps the plain weight");
+                f.Constants.conversionSurgeReachNodes = 3;
+                ai.RefreshSurgePlan();
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "D"), 6f), "reach 3: D, two hops from B, wants colony ships at 2 x 3");
+                f.Constants.conversionSurgeReachNodes = 2;
+                ai.RefreshSurgePlan();
                 ai.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
                 ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 3f),
                     "Expand, planet not ready: its plain weight is 1, the surge makes it 3");
@@ -353,12 +418,13 @@ public static class ConversionSurgeSelfCheck
     {
         var ok = true;
         var t = new ConversionSurgeTracker();
-        ConversionSurgeTracker.Entry E(string planet, int pipeline = 0, int enRoute = 0)
-            => new ConversionSurgeTracker.Entry { Planet = planet, Wanted = 3, Room = 2, EnRoute = enRoute, Pipeline = pipeline, MyPop = 1, TotalPop = 3 };
+        ConversionSurgeTracker.Entry E(string planet, int pipeline = 0, int enRoute = 0, int servers = 2)
+            => new ConversionSurgeTracker.Entry { Planet = planet, Wanted = 3, Room = 2, EnRoute = enRoute, Pipeline = pipeline, MyPop = 1, TotalPop = 3, Servers = servers };
         ok &= Check(t.Update(new[] { E("C"), E("B") }).Select(e => e.Planet).SequenceEqual(new[] { "B", "C" }), "the first sighting is reported, ordered by name");
         ok &= Check(t.Update(new[] { E("C"), E("B") }).Count == 0, "the same numbers again: not reported");
         ok &= Check(t.Update(new[] { E("C"), E("B", 1) }).Select(e => e.Planet).SequenceEqual(new[] { "B" }), "a changed pipeline is reported");
         ok &= Check(t.Update(new[] { E("C"), E("B", 1, 1) }).Count == 1, "a changed en-route count is reported");
+        ok &= Check(t.Update(new[] { E("C"), E("B", 1, 1, 3) }).Select(e => e.Planet).SequenceEqual(new[] { "B" }), "a changed server count is reported");
         t.Update(new ConversionSurgeTracker.Entry[0]);
         ok &= Check(t.Update(new[] { E("B", 1, 1) }).Count == 1, "a planet that left the plan is forgotten, so it is reported afresh");
         t.Clear();
@@ -373,6 +439,7 @@ public static class ConversionSurgeSelfCheck
         {
             var ok = Check(Near(c.conversionSurgeBoost, 3f), "conversionSurgeBoost defaults to 3");
             ok &= Check(Near(c.conversionSurgeShipsPerRatio, 1f), "conversionSurgeShipsPerRatio defaults to 1");
+            ok &= Check(c.conversionSurgeReachNodes == 3, "conversionSurgeReachNodes defaults to 3");
             return ok;
         }
         finally { Object.DestroyImmediate(c); }

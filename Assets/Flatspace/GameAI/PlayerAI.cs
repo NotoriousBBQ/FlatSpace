@@ -1696,10 +1696,10 @@ namespace FlatSpace
                 foreach (var entry in _surgeLog.Update(_surgePlan.Targets.Select(t => new ConversionSurgeTracker.Entry
                          {
                              Planet = t.Planet, Wanted = t.Wanted, Room = t.Room, EnRoute = t.EnRoute, Pipeline = t.Pipeline,
-                             MyPop = t.MyPop, TotalPop = t.TotalPop,
+                             MyPop = t.MyPop, TotalPop = t.TotalPop, Servers = t.Servers.Count,
                          })))
                     AITuningLogger.LogConversionSurge(turn, Player.playerID, entry.Planet, entry.Wanted, entry.Room, entry.EnRoute,
-                        entry.Pipeline, entry.MyPop, entry.TotalPop);
+                        entry.Pipeline, entry.MyPop, entry.TotalPop, entry.Servers);
             }
 
             private readonly ConversionSurgeTracker _surgeLog = new ConversionSurgeTracker();

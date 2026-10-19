@@ -199,6 +199,9 @@ public class GameAIConstants : ScriptableObject
     public float conversionSurgeBoost = 3f;
     // Wanted colony ships for a dominated planet = ceil(total inhabitants / max(1, mine) x this). 0 or below = no surge at all.
     public float conversionSurgeShipsPerRatio = 1f;
+    // A dominated planet is served by my planets within this many path nodes of it (itself counted, so 2 = direct neighbours only,
+    // the original behaviour; 3 = one planet between). Read from the stored shortest paths.
+    public int conversionSurgeReachNodes = 3;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's

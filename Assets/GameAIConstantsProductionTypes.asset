@@ -82,3 +82,4 @@ MonoBehaviour:
   conversionHoldKeepFraction: 0.5
   conversionSurgeBoost: 3
   conversionSurgeShipsPerRatio: 1
+  conversionSurgeReachNodes: 3

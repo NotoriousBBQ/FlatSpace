@@ -20,10 +20,11 @@ namespace FlatSpace.AI
             public int Pipeline;
             public int MyPop;
             public int TotalPop;
+            public int Servers;
         }
 
-        private readonly Dictionary<string, (int wanted, int room, int enRoute, int pipeline)> _state
-            = new Dictionary<string, (int wanted, int room, int enRoute, int pipeline)>();
+        private readonly Dictionary<string, (int wanted, int room, int enRoute, int pipeline, int servers)> _state
+            = new Dictionary<string, (int wanted, int room, int enRoute, int pipeline, int servers)>();
 
         public void Clear() => _state.Clear();
 
@@ -32,11 +33,12 @@ namespace FlatSpace.AI
             var now = current.ToList();
             var changed = now
                 .Where(e => !_state.TryGetValue(e.Planet, out var last)
-                            || last.wanted != e.Wanted || last.room != e.Room || last.enRoute != e.EnRoute || last.pipeline != e.Pipeline)
+                            || last.wanted != e.Wanted || last.room != e.Room || last.enRoute != e.EnRoute || last.pipeline != e.Pipeline
+                            || last.servers != e.Servers)
                 .OrderBy(e => e.Planet, System.StringComparer.Ordinal)
                 .ToList();
             _state.Clear();
-            foreach (var e in now) _state[e.Planet] = (e.Wanted, e.Room, e.EnRoute, e.Pipeline);
+            foreach (var e in now) _state[e.Planet] = (e.Wanted, e.Room, e.EnRoute, e.Pipeline, e.Servers);
             return changed;
         }
     }
