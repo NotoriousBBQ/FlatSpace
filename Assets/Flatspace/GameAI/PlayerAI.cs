@@ -170,7 +170,6 @@ namespace FlatSpace
                 // This turn's combat losses (WarshipsLost results for my player) feed the hostility loss terms below.
                 RecordLosses(results, Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
                 RefreshBlockadeView();
-                RefreshSurgePlan();
 
                 switch (Strategy)
                 {
@@ -477,18 +476,13 @@ namespace FlatSpace
             /// A known, valid colonization target is within reach of this planet, whether or not the planet is
             /// ready to colonize yet. Drives whether a planet should be building colony ships at all.
             /// </summary>
-            // A dominated planet the surge still wants ships for counts as a target even while a colonist of mine is already
-            // flying there (that sets the one-at-a-time flag IsValidColonizationTarget refuses on), so the neighbours keep building.
-            private bool NeedsSurgeShips(string planetName)
-                => _surgePlan != null && _surgePlan.Targets.Exists(t => t.Planet == planetName && t.Pipeline < t.EffectiveWanted);
-
             private bool PlanetHasColonizationTarget(string planetName)
             {
                 var origin = AIMap.GetPlanet(planetName);
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
                 return origin.DistanceMapToPathingList.Any(t =>
                     t.Value.NumNodes <= maxNodes
-                    && (IsValidColonizationTarget(AIMap.GetPlanet(t.Key)) || NeedsSurgeShips(t.Key))
+                    && IsValidColonizationTarget(AIMap.GetPlanet(t.Key))
                     && CanSupportColony(origin, AIMap.GetPlanet(t.Key))
                     // a route must exist that avoids the planets I can see are blockaded (the planner also rejects the
                     // 1-node no-route stub)
@@ -704,10 +698,6 @@ namespace FlatSpace
             {
                 if (!AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return false;
-                // Colonists of mine still in flight (the colony ship surge sends several; the first landing clears the flag above)
-                // fill the planet's room: never target a planet that is already spoken for.
-                if (planet.GetIncomingColonists(Player.playerID) > 0
-                    && planet.Population.Count + planet.GetIncomingColonists(Player.playerID) >= planet.MaxPopulation) return false;
                 if (planet.Population.Count == 0)                                return true;
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
                 if (planet.PlayerWithMostPopulation() != Player.playerID)        return true;
@@ -778,22 +768,6 @@ namespace FlatSpace
                 return weight <= 0f ? 1f : 1f + weight * AIMap.Chokepoint(targetName);
             }
 
-            // The planned route from a colonizer to one target, null when the target is out of reach, cannot be supported from there
-            // or has no route round the blockades I can see. inRange tells the two apart (an in-range target with no route is
-            // what the NoRoute hold-back reports). Shared by the ordinary candidates and the surge launches.
-            private RoutePlanner.PlannedRoute CandidateRoute(Planet colonizerPlanet, Planet target, int maxNodes, out bool inRange)
-            {
-                var pathMap = colonizerPlanet.DistanceMapToPathingList;
-                inRange = false;
-                if (!pathMap.ContainsKey(target.PlanetName)
-                    || pathMap[target.PlanetName].NumNodes > maxNodes
-                    || pathMap[target.PlanetName].NumNodes < 2   // FindPath's 1-node no-route stub is not a candidate
-                    || !CanSupportColony(colonizerPlanet, target))
-                    return null;
-                inRange = true;
-                return RoutePlanner.PlanRoute(AIMap, colonizerPlanet.PlanetName, target.PlanetName, _blockadeView, maxNodes);
-            }
-
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void ProcessColonizers(
                 List<Planet.UpdateResult> results,
@@ -809,14 +783,7 @@ namespace FlatSpace
                 }
 
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
-                // Colony ship surge: a dominated planet whose serving neighbours hold a ready colony ship. Its budget is the number
-                // of ships it still wants (the plan already respects its room).
-                var surgeLeft = new Dictionary<string, int>();
-                if (_surgePlan != null)
-                    foreach (var surge in _surgePlan.Targets)
-                        if (surge.Servers.Exists(s => colonizers.Exists(c => c.Name == s)))
-                            surgeLeft[surge.Planet] = surge.EffectiveWanted;
-                if (targets.Count == 0 && surgeLeft.Count == 0)
+                if (targets.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nothing to colonize: not held back by a blockade
                     return;
@@ -834,37 +801,6 @@ namespace FlatSpace
                 // Per origin, the candidate with the lowest route cost, so the log shows when the chokepoint tilt moved the pick.
                 var nearest = new Dictionary<string, (string target, float cost)>();
 
-                // Surge launches first: a ready, unblockaded neighbour sends its docked ship to the dominated planet it serves, the
-                // cheapest route first (ties by name), until the planet's budget is used. These skip the matrix below, which would
-                // let only one colonist claim a target.
-                var surgeActions = new List<ScoreMatrixAction>();
-                var surgeColonizers = new HashSet<string>();
-                var surgeLaunched = new Dictionary<string, int>();
-                if (surgeLeft.Count > 0)
-                {
-                    var options = new List<(float cost, string origin, string target)>();
-                    foreach (var colonizer in colonizers)
-                    {
-                        if (IsBlockaded(colonizer.Name)) continue;
-                        var serves = _surgePlan.For(colonizer.Name);
-                        if (serves == null || !surgeLeft.ContainsKey(serves.Planet)) continue;
-                        var surgeRoute = CandidateRoute(AIMap.GetPlanet(colonizer.Name), AIMap.GetPlanet(serves.Planet), maxNodes, out _);
-                        if (surgeRoute == null) continue;
-                        plannedRoutes[(colonizer.Name, serves.Planet)] = surgeRoute;
-                        options.Add((surgeRoute.Cost, colonizer.Name, serves.Planet));
-                    }
-                    foreach (var option in options.OrderBy(o => o.cost).ThenBy(o => o.origin, StringComparer.Ordinal))
-                    {
-                        if (surgeLeft[option.target] <= 0 || !surgeColonizers.Add(option.origin)) continue;
-                        surgeLeft[option.target]--;
-                        surgeLaunched[option.target] = surgeLaunched.TryGetValue(option.target, out var n) ? n + 1 : 1;
-                        surgeActions.Add(new ScoreMatrixAction { Origin = option.origin, Target = option.target, Cost = option.cost });
-                    }
-                    // A planet whose room the surge used up is not also claimed by the ordinary rule this pass.
-                    targets.RemoveAll(t => surgeLaunched.TryGetValue(t.PlanetName, out var launched)
-                                           && _surgePlan.Targets.Find(s => s.Planet == t.PlanetName).Room - launched < 1);
-                }
-
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
                     (new ScoreMatrixDecisionComparer());
                 int colonizerIndex = 0;
@@ -879,13 +815,20 @@ namespace FlatSpace
                     }
 
                     var colonizerPlanet = AIMap.GetPlanet(colonizer.Name);
+                    var pathMap = colonizerPlanet.DistanceMapToPathingList;
                     var entries = new List<ScoreMatrixChoiceElement>();
                     var hadCandidate = false;
                     foreach (var t in targets)
                     {
+                        if (!pathMap.ContainsKey(t.PlanetName)
+                            || pathMap[t.PlanetName].NumNodes > maxNodes
+                            || pathMap[t.PlanetName].NumNodes < 2   // FindPath's 1-node no-route stub is not a candidate
+                            || !CanSupportColony(colonizerPlanet, t))
+                            continue;
+                        hadCandidate = true;
+
                         // Avoid planets I can see are blockaded; a target with no such route is dropped.
-                        var route = CandidateRoute(colonizerPlanet, t, maxNodes, out var inRange);
-                        if (inRange) hadCandidate = true;
+                        var route = RoutePlanner.PlanRoute(AIMap, colonizer.Name, t.PlanetName, _blockadeView, maxNodes);
                         if (route == null) continue;
                         plannedRoutes[(colonizer.Name, t.PlanetName)] = route;
                         if (!nearest.TryGetValue(colonizer.Name, out var best) || route.Cost < best.cost
@@ -898,13 +841,6 @@ namespace FlatSpace
                             Cost     = route.Cost / ColonizationCostDivisor(t.PlanetName),
                             Shortage = 1.0f,
                         });
-                    }
-
-                    // A surge launch is decided above; the ordinary entries (and `nearest`) only feed its log line.
-                    if (surgeColonizers.Contains(colonizer.Name))
-                    {
-                        _colonizeHeldBack.Remove(colonizer.Name);
-                        continue;
                     }
 
                     if (entries.Count == 0 && hadCandidate)
@@ -930,13 +866,13 @@ namespace FlatSpace
                     }
                 }
 
-                foreach (var action in surgeActions.Concat(matrix.GenerateActionList(
+                foreach (var action in matrix.GenerateActionList(
                              actionFactory: (origin, element) => new ScoreMatrixAction
                              {
                                  Origin = origin.Target,
                                  Target = element.Target,
                                  Cost = element.Cost
-                             }, null)))
+                             }, null))
                 {
                     var amount = Convert.ToInt32(
                         colonizers.Find(x => x.Name == action.Origin).Data);
@@ -949,12 +885,6 @@ namespace FlatSpace
                         AITuningLogger.LogChokepointColonize(turn, Player.playerID, action.Origin, action.Target,
                             route.Cost, AIMap.Chokepoint(action.Target), near.target, near.cost);
                     var launchTarget = AIMap.GetPlanet(action.Target);
-                    if (surgeColonizers.Contains(action.Origin) && _surgePlan.For(action.Origin) is SurgeTarget surgeTarget)
-                    {
-                        nearest.TryGetValue(action.Origin, out var surgeNear);
-                        AITuningLogger.LogSurgeLaunch(turn, Player.playerID, action.Origin, action.Target, surgeTarget.MyPop,
-                            surgeTarget.TotalPop, surgeTarget.EnRoute, route.Cost, surgeNear.target ?? "-");
-                    }
                     if (launchTarget != null && IsConversionTarget(launchTarget))
                     {
                         nearest.TryGetValue(action.Origin, out var nearTarget);
@@ -1683,38 +1613,6 @@ namespace FlatSpace
                     AIMap.GameAIConstants.warshipShortfallBoost, AIMap.GameAIConstants.warshipFleetCap);
             }
 
-            // The colony ship surge: who needs ships next to which dominated planet, rebuilt once per ProcessResults (after the
-            // blockade view) and read by the ColonyShip weight and the colonization pass. A launch inside the pass lowers the
-            // pipeline and the room together, so a plan that predates it only ever errs on the side of fewer ships.
-            private SurgePlan _surgePlan;
-
-            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
-            public void RefreshSurgePlan()
-            {
-                _surgePlan = ConversionSurge.Build(AIMap, Player.playerID, IsConversionTarget);
-                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
-                foreach (var entry in _surgeLog.Update(_surgePlan.Targets.Select(t => new ConversionSurgeTracker.Entry
-                         {
-                             Planet = t.Planet, Wanted = t.Wanted, Room = t.Room, EnRoute = t.EnRoute, Pipeline = t.Pipeline,
-                             MyPop = t.MyPop, TotalPop = t.TotalPop,
-                         })))
-                    AITuningLogger.LogConversionSurge(turn, Player.playerID, entry.Planet, entry.Wanted, entry.Room, entry.EnRoute,
-                        entry.Pipeline, entry.MyPop, entry.TotalPop);
-            }
-
-            private readonly ConversionSurgeTracker _surgeLog = new ConversionSurgeTracker();
-
-            // The ColonyShip weight multiplier for a planet next to a dominated planet that still needs ships: its pipeline is below
-            // the planet's effective wanted count (which already respects the room, so population + en route + pipeline never
-            // reaches max population). 1 for every other planet and when the boost is 1 or below.
-            private float SurgeMultiplier(string planetName)
-            {
-                var boost = AIMap.GameAIConstants.conversionSurgeBoost;
-                if (boost <= 1f || _surgePlan == null) return 1f;
-                var target = _surgePlan.For(planetName);
-                return target != null && target.Pipeline < target.EffectiveWanted ? boost : 1f;
-            }
-
             // The Warship multiplier reads every planet and is logged, so it is computed at most once per
             // production turn: the first Warship choice evaluated fills it, BuildIndustryMatrix resets it.
             private float? _warshipMultiplierThisTurn;
@@ -1731,10 +1629,9 @@ namespace FlatSpace
                     if (!PlanetHasColonizationTarget(planetName))
                         return 0f;                       // nothing left to colonize — exclude (no useless colony ships)
                     if (IsValidColonizer(planetName))
-                        return ColonyShipUrgentBoost * SurgeMultiplier(planetName);    // ready to colonize — strongly favour
+                        return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
                     if (IsConsolidateLike(Strategy))
-                        return ColonyShipUrgentBoost * SurgeMultiplier(planetName);    // targets remain: keep expanding even before the planet is ready
-                    return SurgeMultiplier(planetName);  // plain weight 1 (Expand, not ready yet); a dominated neighbour surges
+                        return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
@@ -1811,12 +1708,6 @@ namespace FlatSpace
                     && IsBlockaded(action.Origin))
                     AITuningLogger.LogBlockadedProduction(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
                         Player.playerID, action.Origin, productionName, _blockadeView.Value(action.Origin));
-
-                // Mark a colony ship started under the surge, so a log shows how often the boost decided a build.
-                if (producedItem != null && producedItem.subType == "ColonyShip" && _surgePlan?.For(action.Origin) is SurgeTarget surged
-                    && SurgeMultiplier(action.Origin) > 1f)
-                    AITuningLogger.LogSurgeBuild(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
-                        Player.playerID, action.Origin, surged.Planet, SurgeMultiplier(action.Origin));
 
                 orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeIndustrySetProduction,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,

@@ -883,11 +883,6 @@ public class Planet : MonoBehaviour
     public ProductionItem? CurrentProduction { get; set; } = null;
     public List<ProductionItem> ProductionQueue = new List<ProductionItem>();
 
-    /// <summary>Colony ships being built here: the current item plus the queued ones.</summary>
-    public int CountColonyShipsInProduction()
-        => (CurrentProduction?.Item?.subType == "ColonyShip" ? 1 : 0)
-           + ProductionQueue.Count(p => p.Item != null && p.Item.subType == "ColonyShip");
-
     public void ScheduleProductionItem(CatalogItem productionItem, float fixedCost = 0f)
     {
         ProductionQueue.Add(new ProductionItem(productionItem, fixedCost));
@@ -1131,15 +1126,6 @@ public class Planet : MonoBehaviour
     public void AddIncomingOffense(Ship.ShipKind kind, int owner, float delta)
         => _incomingOffense[(kind, owner)] = System.Math.Max(0f, GetIncomingOffense(kind, owner) + delta);
     public void ClearIncomingOffense() => _incomingOffense.Clear();
-
-    // Colonists of each owning player in flight toward this planet. Derived like the offense counter: recomputed once per turn
-    // from the in-flight colonist orders (GameAIMap.RecomputeIncomingColonists), never saved.
-    private readonly Dictionary<int, int> _incomingColonists = new Dictionary<int, int>();
-    public int GetIncomingColonists(int owner)
-        => _incomingColonists.TryGetValue(owner, out var n) ? n : 0;
-    public void AddIncomingColonists(int owner, int delta)
-        => _incomingColonists[owner] = System.Math.Max(0, GetIncomingColonists(owner) + delta);
-    public void ClearIncomingColonists() => _incomingColonists.Clear();
 
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
     {

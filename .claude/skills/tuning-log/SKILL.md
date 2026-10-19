@@ -333,16 +333,6 @@ user asked about one specific thing.
     `DominanceLost` within 5 turns of a release means the rival came back). Also: no `Convert` line may name a planet whose session was not Started or
     re-Started after a load, `PlayerOutOfPlanets` counts, and that warship starts and the fleet cap still hold (a conquered planet's
     production was cleared, so no free ships appear). **Baselines at `conversionTurnsBase` 3 and keep 0.5 (2026-10-07, 6 runs per board):** real conquests (under half the planet mine at the start) finish 20% on `test2.json` and 16% on `4p.json` with 2.6 to 2.9 flips per session, clean-ups finish 82 to 87%, about 12 conquests a run (planets ending owned by a player), colonization and planets at T375 unchanged, colony failures 170 on `test2.json` and 258 on `4p.json`; at base 6 the same figures were 5%, about 1 flip and about 3 conquests a run.
-  - **Colony ship surge (2026-10-18):** `ConversionSurge|<planet>|<wanted>|<room>|<enRoute>|<pipeline>|<myPop>|<totalPop>` (P = the dominator) is on change
-    only for each dominated planet that still needs colony ships (wanted is the TOTAL committed, room = max population - population - enRoute);
-    `SurgeBuild|<neighbour>|<planet>|<multiplier>` is one line per colony ship started on a neighbour whose weight was surged;
-    `SurgeLaunch|<origin>-><planet>|<myPop>|<totalPop>|<enRoute>|<routeCost>|<nearestOrdinaryTarget>` is one line per colonist the surge sent (a
-    `nearestOrdinaryTarget` other than the planet means the forced target overrode a nearer one; `-` when none). Report per run: surges
-    started, how long each lasted (first to last `ConversionSurge` line for a planet), `SurgeBuild` and `SurgeLaunch` counts per conversion (the old
-    speed-up fired 0 to 3 times a run), whether the pace sped up after launches (`Convert` lines per turn on the planet), the overshoot signal
-    (`ColonistDocked` at a dominated planet should stay near zero and `pipeline + enRoute + population` must never reach max population in a
-    `ConversionSurge` line), real conquests finishing against the 16 to 20% baseline, and colony failures and `Blockade` events against their
-    20 to 30% batch drift (a surge feeds a siege; the `test2.json` colony failures watch from 2026-10-07 applies).
 
 ## 4. Compare against a previous run when one exists
 

@@ -365,20 +365,6 @@ namespace FlatSpace
                 }
             }
 
-            /// <summary>
-            /// Rebuilds every planet's count of colonists in flight, per owning player, from the in-flight
-            /// PopulationTransport orders. Derived state, recomputed once per turn before the AI decides and on load.
-            /// </summary>
-            public void RecomputeIncomingColonists(List<GameAI.GameAIOrder> orders)
-            {
-                foreach (var planet in PlanetList) planet.ClearIncomingColonists();
-                foreach (var order in orders)
-                {
-                    if (order.Type != GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport) continue;
-                    GetPlanet(order.Target)?.AddIncomingColonists(order.PlayerId, System.Convert.ToInt32(order.Data));
-                }
-            }
-
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
                 var catalog = Gameboard.Instance.GetComponent<Catalog>();

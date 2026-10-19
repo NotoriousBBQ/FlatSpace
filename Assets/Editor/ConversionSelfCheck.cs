@@ -57,7 +57,7 @@ public static class ConversionSelfCheck
         planet.Owner = planet.PlayerWithMostPopulation();
     }
 
-    public static PlayerAI MakeAI(CombatSelfCheck.Fixture f, int id, List<GameObject> gos)
+    private static PlayerAI MakeAI(CombatSelfCheck.Fixture f, int id, List<GameObject> gos)
     {
         var go = new GameObject("ConversionPlayer" + id);
         gos.Add(go);
