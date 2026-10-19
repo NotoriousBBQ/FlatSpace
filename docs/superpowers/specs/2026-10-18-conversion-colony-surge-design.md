@@ -17,8 +17,10 @@ without ever sending more colonists than the planet can hold.
    `ratio = total population / max(1, my population)`; `wanted(D) = ceil(ratio x conversionSurgeShipsPerRatio)`.
 2. **Hard cap by room (the owner's "would wince" rule).** No colony ship is started for D when
    `population(D) + my colonists en route to D + my colony ships being built or docked for D >= MaxPopulation(D)`.
-   Equivalently `pipeline(D) < room(D)` where `room = MaxPopulation - population - colonists en route`. The effective wanted count is
-   `min(wanted, room)`. A planet at max population has room 0 and gets no surge.
+   Equivalently `pipeline(D) < room(D)` where `room = MaxPopulation - population - colonists en route`. `wanted` is the total number of ships
+   committed to D (en route plus pipeline), so the effective wanted count is `EW = max(0, min(wanted - enRoute, room))` (approved
+   2026-10-18; read as plain `min(wanted, room)` it would send `wanted` more ships every turn). Production starts a ship while
+   `pipeline < EW`; the launch budget in one colonization pass is `EW`. A planet at max population has room 0 and gets no surge.
 3. **Production surge.** Planets adjacent to D (`GameAIMap.GetNeighbours`) get their ColonyShip weight multiplied by
    `conversionSurgeBoost` (default 3, on top of today's x2) while D's pipeline is below its effective wanted count. It is a situational
    weight: it goes in `GetIndustrySituationalWeightMultiplier`, computed at most once per production turn.
