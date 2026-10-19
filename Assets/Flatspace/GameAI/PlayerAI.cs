@@ -1685,7 +1685,19 @@ namespace FlatSpace
 
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void RefreshSurgePlan()
-                => _surgePlan = ConversionSurge.Build(AIMap, Player.playerID, IsConversionTarget);
+            {
+                _surgePlan = ConversionSurge.Build(AIMap, Player.playerID, IsConversionTarget);
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                foreach (var entry in _surgeLog.Update(_surgePlan.Targets.Select(t => new ConversionSurgeTracker.Entry
+                         {
+                             Planet = t.Planet, Wanted = t.Wanted, Room = t.Room, EnRoute = t.EnRoute, Pipeline = t.Pipeline,
+                             MyPop = t.MyPop, TotalPop = t.TotalPop,
+                         })))
+                    AITuningLogger.LogConversionSurge(turn, Player.playerID, entry.Planet, entry.Wanted, entry.Room, entry.EnRoute,
+                        entry.Pipeline, entry.MyPop, entry.TotalPop);
+            }
+
+            private readonly ConversionSurgeTracker _surgeLog = new ConversionSurgeTracker();
 
             // The ColonyShip weight multiplier for a planet next to a dominated planet that still needs ships: its pipeline is below
             // the planet's effective wanted count (which already respects the room, so population + en route + pipeline never

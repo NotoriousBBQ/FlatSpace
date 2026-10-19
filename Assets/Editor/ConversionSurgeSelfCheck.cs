@@ -23,6 +23,7 @@ public static class ConversionSurgeSelfCheck
         ok &= RunSurgeLaunchCheck();
         ok &= RunTargetRoomCheck();
         ok &= RunSurgeArrivalCheck();
+        ok &= RunSurgeTrackerCheck();
         Debug.Log(ok
             ? "[ConversionSurgeSelfCheck] ALL PASSED"
             : "[ConversionSurgeSelfCheck] FAILURES (see errors above)");
@@ -335,6 +336,23 @@ public static class ConversionSurgeSelfCheck
             ok &= Check(!b.IsPopulationTransferInProgress(0), "the flag is clear after the arrivals");
             return ok;
         }
+    }
+
+    public static bool RunSurgeTrackerCheck()
+    {
+        var ok = true;
+        var t = new ConversionSurgeTracker();
+        ConversionSurgeTracker.Entry E(string planet, int pipeline = 0, int enRoute = 0)
+            => new ConversionSurgeTracker.Entry { Planet = planet, Wanted = 3, Room = 2, EnRoute = enRoute, Pipeline = pipeline, MyPop = 1, TotalPop = 3 };
+        ok &= Check(t.Update(new[] { E("C"), E("B") }).Select(e => e.Planet).SequenceEqual(new[] { "B", "C" }), "the first sighting is reported, ordered by name");
+        ok &= Check(t.Update(new[] { E("C"), E("B") }).Count == 0, "the same numbers again: not reported");
+        ok &= Check(t.Update(new[] { E("C"), E("B", 1) }).Select(e => e.Planet).SequenceEqual(new[] { "B" }), "a changed pipeline is reported");
+        ok &= Check(t.Update(new[] { E("C"), E("B", 1, 1) }).Count == 1, "a changed en-route count is reported");
+        t.Update(new ConversionSurgeTracker.Entry[0]);
+        ok &= Check(t.Update(new[] { E("B", 1, 1) }).Count == 1, "a planet that left the plan is forgotten, so it is reported afresh");
+        t.Clear();
+        ok &= Check(t.Update(new[] { E("B", 1, 1) }).Count == 1, "Clear forgets everything");
+        return ok;
     }
 
     public static bool RunTunableDefaultsCheck()
