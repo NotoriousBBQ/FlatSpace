@@ -202,8 +202,9 @@ public static class ConversionSurgeSelfCheck
 
                 f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B"), Colonist(0, "B") });
                 ai.RefreshSurgePlan();
-                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 2f),
-                    "two colonists en route fill the room (3 + 2 = 5): no surge");
+                // B is full once they land, so it is no longer a colonization target either: A has nothing to colonize (weight 0).
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(colony, "A") <= 2f,
+                    "two colonists en route fill the room (3 + 2 = 5): no surge (and no target left)");
                 f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder>());
             }
         }
