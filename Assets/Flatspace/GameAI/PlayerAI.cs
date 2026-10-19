@@ -170,6 +170,7 @@ namespace FlatSpace
                 // This turn's combat losses (WarshipsLost results for my player) feed the hostility loss terms below.
                 RecordLosses(results, Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
                 RefreshBlockadeView();
+                RefreshSurgePlan();
 
                 switch (Strategy)
                 {
@@ -1613,6 +1614,26 @@ namespace FlatSpace
                     AIMap.GameAIConstants.warshipShortfallBoost, AIMap.GameAIConstants.warshipFleetCap);
             }
 
+            // The colony ship surge: who needs ships next to which dominated planet, rebuilt once per ProcessResults (after the
+            // blockade view) and read by the ColonyShip weight and the colonization pass. A launch inside the pass lowers the
+            // pipeline and the room together, so a plan that predates it only ever errs on the side of fewer ships.
+            private SurgePlan _surgePlan;
+
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            public void RefreshSurgePlan()
+                => _surgePlan = ConversionSurge.Build(AIMap, Player.playerID, IsConversionTarget);
+
+            // The ColonyShip weight multiplier for a planet next to a dominated planet that still needs ships: its pipeline is below
+            // the planet's effective wanted count (which already respects the room, so population + en route + pipeline never
+            // reaches max population). 1 for every other planet and when the boost is 1 or below.
+            private float SurgeMultiplier(string planetName)
+            {
+                var boost = AIMap.GameAIConstants.conversionSurgeBoost;
+                if (boost <= 1f || _surgePlan == null) return 1f;
+                var target = _surgePlan.For(planetName);
+                return target != null && target.Pipeline < target.EffectiveWanted ? boost : 1f;
+            }
+
             // The Warship multiplier reads every planet and is logged, so it is computed at most once per
             // production turn: the first Warship choice evaluated fills it, BuildIndustryMatrix resets it.
             private float? _warshipMultiplierThisTurn;
@@ -1629,9 +1650,10 @@ namespace FlatSpace
                     if (!PlanetHasColonizationTarget(planetName))
                         return 0f;                       // nothing left to colonize — exclude (no useless colony ships)
                     if (IsValidColonizer(planetName))
-                        return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
+                        return ColonyShipUrgentBoost * SurgeMultiplier(planetName);    // ready to colonize — strongly favour
                     if (IsConsolidateLike(Strategy))
-                        return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
+                        return ColonyShipUrgentBoost * SurgeMultiplier(planetName);    // targets remain: keep expanding even before the planet is ready
+                    return SurgeMultiplier(planetName);  // plain weight 1 (Expand, not ready yet); a dominated neighbour surges
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
@@ -1708,6 +1730,12 @@ namespace FlatSpace
                     && IsBlockaded(action.Origin))
                     AITuningLogger.LogBlockadedProduction(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
                         Player.playerID, action.Origin, productionName, _blockadeView.Value(action.Origin));
+
+                // Mark a colony ship started under the surge, so a log shows how often the boost decided a build.
+                if (producedItem != null && producedItem.subType == "ColonyShip" && _surgePlan?.For(action.Origin) is SurgeTarget surged
+                    && SurgeMultiplier(action.Origin) > 1f)
+                    AITuningLogger.LogSurgeBuild(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0,
+                        Player.playerID, action.Origin, surged.Planet, SurgeMultiplier(action.Origin));
 
                 orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeIndustrySetProduction,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,

@@ -19,6 +19,7 @@ public static class ConversionSurgeSelfCheck
         ok &= RunWantedCheck();
         ok &= RunEffectiveWantedCheck();
         ok &= RunBuildCheck();
+        ok &= RunSurgeWeightCheck();
         Debug.Log(ok
             ? "[ConversionSurgeSelfCheck] ALL PASSED"
             : "[ConversionSurgeSelfCheck] FAILURES (see errors above)");
@@ -143,6 +144,70 @@ public static class ConversionSurgeSelfCheck
             }
         }
         finally { foreach (var item in items) Object.DestroyImmediate(item); }
+        return ok;
+    }
+
+    // The ColonyShip situational weight on the neighbours of a dominated planet: today's 2 becomes 2 x 3 while the planet needs ships.
+    public static bool RunSurgeWeightCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        var items = new List<CatalogItem>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                f.Constants.maxPathNodesForKnowledge = 8;
+                f.Constants.expandPopulationTrigger = 0.8f;
+                f.Constants.conversionSurgeBoost = 3f;
+                var ai = ConversionSelfCheck.MakeAI(f, 0, gos);
+                var colony = ColonyShipItem();
+                items.Add(colony);
+                f.Colonize("A", 0);
+                f.Colonize("C", 0);
+                f.Colonize("D", 0);
+                ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 2));      // 3 of 5: wanted 3, room 2, EW 2
+                f.Ships("B", 0, 1);
+                f.War(0, 1);
+                f.Map.Knowledge.Update(f.Map, 2, 8);
+                ai.RefreshSurgePlan();
+
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 6f), "Consolidate: a neighbour of B wants colony ships at 2 x 3");
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "C"), 6f), "the other neighbour too");
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "D"), 2f), "a planet that serves no target keeps the plain weight");
+                ai.Strategy = PlayerAI.AIStrategy.AIStrategyExpand;
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 3f),
+                    "Expand, planet not ready: its plain weight is 1, the surge makes it 3");
+                ai.Strategy = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+                f.Constants.conversionSurgeBoost = 1f;
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 2f), "a boost of 1 switches the production surge off");
+                f.Constants.conversionSurgeBoost = 3f;
+
+                DockColonyShip(f.P("A"), 0);
+                ai.RefreshSurgePlan();
+                ok &= Check(ai.GetIndustrySituationalWeightMultiplier(colony, "A") == 0f, "a neighbour holding a colony ship builds none (unchanged)");
+                f.P("A").DockedShips.Clear();
+
+                f.P("C").ProductionQueue.Add(new Planet.ProductionItem(colony));
+                f.P("C").ProductionQueue.Add(new Planet.ProductionItem(colony));
+                ai.RefreshSurgePlan();
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 2f),
+                    "two ships already building (pipeline 2 = EW 2): the surge ends");
+                f.P("C").ProductionQueue.Clear();
+
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B"), Colonist(0, "B") });
+                ai.RefreshSurgePlan();
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 2f),
+                    "two colonists en route fill the room (3 + 2 = 5): no surge");
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder>());
+            }
+        }
+        finally
+        {
+            foreach (var go in gos) Object.DestroyImmediate(go);
+            foreach (var item in items) Object.DestroyImmediate(item);
+        }
         return ok;
     }
 
