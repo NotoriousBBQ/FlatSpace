@@ -160,6 +160,7 @@ namespace FlatSpace
                 // The AI sizes blockade-breaking fleets against offense already in flight (see AssaultPlanner).
                 GameAIMap.RecomputeIncomingOffense(CurrentAIOrders,
                     new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players)));
+                GameAIMap.RecomputeIncomingColonists(CurrentAIOrders);
                 ProcessResults(planetUpdateResults, gameAIOrders);
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
@@ -640,6 +641,7 @@ namespace FlatSpace
 
                 GameAIMap.SetPlanetSimulationStats(gameSave);
                 GameAIMap.RecomputeIncomingShips(CurrentAIOrders);
+                GameAIMap.RecomputeIncomingColonists(CurrentAIOrders);
             }
 
             public Planet GetPlanet(string planetName)

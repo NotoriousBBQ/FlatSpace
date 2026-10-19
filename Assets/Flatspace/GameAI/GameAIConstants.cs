@@ -194,6 +194,11 @@ public class GameAIConstants : ScriptableObject
     // ships there (never more than it has) and releases the rest to garrison and blockade calls. 0 keeps just 1 ship; a negative
     // value keeps every ship (the original hold). An assault target and a contested hold always keep every ship.
     public float conversionHoldKeepFraction = 0.5f;
+    // Colony ship surge: a neighbour of a dominated planet that still needs colony ships multiplies its ColonyShip production weight
+    // by this (on top of the usual boost). 1 or below = no production surge.
+    public float conversionSurgeBoost = 3f;
+    // Wanted colony ships for a dominated planet = ceil(total inhabitants / max(1, mine) x this). 0 or below = no surge at all.
+    public float conversionSurgeShipsPerRatio = 1f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's

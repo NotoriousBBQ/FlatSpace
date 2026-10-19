@@ -578,6 +578,34 @@ public static class AITuningLogger
             myPop.ToString(ci), totalPop.ToString(ci), routeCost.ToString("0.#", ci), nearestTarget, nearestCost.ToString("0.#", ci)) });
     }
 
+    /// <summary>A dominated planet in the colony ship surge plan: ConversionSurge|planet|wanted|room|enRoute|pipeline|myPop|totalPop (on change only).</summary>
+    public static void LogConversionSurge(int turnNumber, int playerId, string planet, int wanted, int room, int enRoute, int pipeline,
+        int myPop, int totalPop)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionSurge", planet, wanted.ToString(ci), room.ToString(ci),
+            enRoute.ToString(ci), pipeline.ToString(ci), myPop.ToString(ci), totalPop.ToString(ci)) });
+    }
+
+    /// <summary>A colonist sent by the surge: SurgeLaunch|origin->planet|myPop|totalPop|enRoute|routeCost|nearestOrdinaryTarget (per launch).</summary>
+    public static void LogSurgeLaunch(int turnNumber, int playerId, string origin, string target, int myPop, int totalPop,
+        int enRoute, float routeCost, string nearestTarget)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SurgeLaunch", $"{origin}->{target}", myPop.ToString(ci),
+            totalPop.ToString(ci), enRoute.ToString(ci), routeCost.ToString("0.#", ci), nearestTarget) });
+    }
+
+    /// <summary>A colony ship started on a neighbour of a dominated planet under the surge: SurgeBuild|neighbour|dominatedPlanet|multiplier (per start).</summary>
+    public static void LogSurgeBuild(int turnNumber, int playerId, string neighbour, string planet, float multiplier)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SurgeBuild", neighbour, planet, multiplier.ToString("0.#", ci)) });
+    }
+
     /// <summary>A planet held for conversion and what a call would have taken from it: ConversionHoldSpare|planet|heldShips|heldOffense|shipsACallWanted|Garrison, Assault, Blockade or -|callTarget or -|rivalOffenseNearby|progress (on change only).</summary>
     public static void LogConversionHoldSpare(int turnNumber, int playerId, string planet, int heldShips, float heldOffense, int wanted,
         string call, string callTarget, float rivalNearby, float progress, int keep = -1, int released = 0)
