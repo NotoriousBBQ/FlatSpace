@@ -1127,6 +1127,15 @@ public class Planet : MonoBehaviour
         => _incomingOffense[(kind, owner)] = System.Math.Max(0f, GetIncomingOffense(kind, owner) + delta);
     public void ClearIncomingOffense() => _incomingOffense.Clear();
 
+    // Colonists of each owning player in flight toward this planet. Derived like the offense counter: recomputed once per turn
+    // from the in-flight colonist orders (GameAIMap.RecomputeIncomingColonists), never saved.
+    private readonly Dictionary<int, int> _incomingColonists = new Dictionary<int, int>();
+    public int GetIncomingColonists(int owner)
+        => _incomingColonists.TryGetValue(owner, out var n) ? n : 0;
+    public void AddIncomingColonists(int owner, int delta)
+        => _incomingColonists[owner] = System.Math.Max(0, GetIncomingColonists(owner) + delta);
+    public void ClearIncomingColonists() => _incomingColonists.Clear();
+
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
     {
         if (owner < 0 || owner >= Gameboard.Instance.players.Count) return new List<string>();

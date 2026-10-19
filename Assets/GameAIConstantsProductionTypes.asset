@@ -80,3 +80,5 @@ MonoBehaviour:
   hostilityPerConversion: 3
   conversionColonizeWeight: 0.5
   conversionHoldKeepFraction: 0.5
+  conversionSurgeBoost: 3
+  conversionSurgeShipsPerRatio: 1
