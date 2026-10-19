@@ -20,6 +20,9 @@ public static class ConversionSurgeSelfCheck
         ok &= RunEffectiveWantedCheck();
         ok &= RunBuildCheck();
         ok &= RunSurgeWeightCheck();
+        ok &= RunSurgeLaunchCheck();
+        ok &= RunTargetRoomCheck();
+        ok &= RunSurgeArrivalCheck();
         Debug.Log(ok
             ? "[ConversionSurgeSelfCheck] ALL PASSED"
             : "[ConversionSurgeSelfCheck] FAILURES (see errors above)");
@@ -209,6 +212,129 @@ public static class ConversionSurgeSelfCheck
             foreach (var item in items) Object.DestroyImmediate(item);
         }
         return ok;
+    }
+
+    // A-B-C-D line: B dominated by player 0 (3 of 5, wanted 3, room 2), A and C ready neighbours with a docked colony ship, D empty.
+    private static PlayerAI LaunchScene(CombatSelfCheck.Fixture f, List<GameObject> gos)
+    {
+        f.Constants.defaultTravelSpeed = 1f;
+        f.Constants.maxPathNodesForKnowledge = 8;
+        f.Constants.maxPathNodesForColonization = 6;
+        f.Constants.expandPopulationTrigger = 0.8f;
+        f.Constants.conversionColonizeWeight = 0f;          // no cost tilt: only the surge steers
+        f.Constants.colonizationChokepointWeight = 0f;
+        var ai = ConversionSelfCheck.MakeAI(f, 0, gos);
+        ConversionSelfCheck.Populate(f.P("A"), (0, 5));
+        ConversionSelfCheck.Populate(f.P("C"), (0, 5));
+        DockColonyShip(f.P("A"), 0);
+        DockColonyShip(f.P("C"), 0);
+        ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 2));
+        f.Ships("B", 0, 1);
+        f.War(0, 1);
+        f.Map.Knowledge.Update(f.Map, 2, 8);
+        ai.RefreshBlockadeView();
+        ai.RefreshSurgePlan();
+        return ai;
+    }
+
+    private static List<Planet.UpdateResult> Ready(params string[] planets)
+        => planets.Select(n => new Planet.UpdateResult(n, Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0)).ToList();
+
+    private static List<string> Launches(List<GameAI.GameAIOrder> orders)
+        => orders.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport)
+            .Select(o => o.Origin + ">" + o.Target).OrderBy(s => s).ToList();
+
+    // Docked ships at the neighbours of a dominated planet go there, up to the planet's effective wanted count and room.
+    public static bool RunSurgeLaunchCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                var ai = LaunchScene(f, gos);
+                var orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(Ready("A", "C"), orders);
+                ok &= Check(Launches(orders).SequenceEqual(new[] { "A>B", "C>B" }),
+                    "EW 2: both ready neighbours send their ship to B, though C also has the empty D in reach: " + string.Join(",", Launches(orders)));
+
+                // EW 1 (4 of 5): one ship goes to B, the cheapest route first (ties by name); B's room is then used up, so C goes elsewhere.
+                ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 3));
+                ai.RefreshSurgePlan();
+                orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(Ready("A", "C"), orders);
+                var toB = Launches(orders).Count(s => s.EndsWith(">B"));
+                ok &= Check(toB == 1 && Launches(orders).Contains("A>B"), "EW 1: exactly one colonist reaches for B (A, by name): " + string.Join(",", Launches(orders)));
+                ok &= Check(Launches(orders).Contains("C>D"), "...and the ordinary rule sends C to the empty D: " + string.Join(",", Launches(orders)));
+                ConversionSelfCheck.Populate(f.P("B"), (0, 1), (1, 2));
+
+                // A colonist already in flight (the one-at-a-time flag is set) does not stop the surge; the room does.
+                f.P("B").SetPopulationTransferInProgress(0);
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B") });
+                ai.RefreshSurgePlan();
+                orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(Ready("A", "C"), orders);
+                ok &= Check(Launches(orders).Count(s => s.EndsWith(">B")) == 1, "one en route, room 1: one more is sent: " + string.Join(",", Launches(orders)));
+                f.P("B").SetPopulationTransferInProgress(0, false);
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder>());
+                ai.RefreshSurgePlan();
+
+                // Only a ready neighbour launches (no ColonizerReady result for C).
+                orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(Ready("A"), orders);
+                ok &= Check(Launches(orders).SequenceEqual(new[] { "A>B" }), "an unready neighbour launches nothing: " + string.Join(",", Launches(orders)));
+
+                // A blockaded neighbour keeps its ship.
+                f.Ships("C", 1, 2);
+                ai.RefreshBlockadeView();
+                ai.RefreshSurgePlan();
+                orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(Ready("A", "C"), orders);
+                ok &= Check(Launches(orders).All(s => !s.StartsWith("C>")), "a blockaded neighbour launches nothing: " + string.Join(",", Launches(orders)));
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // The ordinary target rule refuses a conversion target whose room is already spoken for by colonists in flight.
+    public static bool RunTargetRoomCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                var ai = LaunchScene(f, gos);
+                ok &= Check(ai.IsValidColonizationTarget(f.P("B")), "precondition: B is an ordinary target");
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B"), Colonist(0, "B") });
+                ok &= Check(!ai.IsValidColonizationTarget(f.P("B")), "3 inhabitants + 2 in flight = max (5): no longer a target");
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B") });
+                ok &= Check(ai.IsValidColonizationTarget(f.P("B")), "3 + 1 in flight is below max: still a target");
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // Two colonists to one planet: the first landing clears the one-at-a-time flag, the second still lands.
+    public static bool RunSurgeArrivalCheck()
+    {
+        using (var f = CombatSelfCheck.Fixture.Line())
+        {
+            var b = f.P("B");
+            ConversionSelfCheck.Populate(b, (0, 1), (1, 2));
+            b.SetPopulationTransferInProgress(0);
+            var docked = 0;
+            var first = GameAI.ApplyColonistArrival(b, Colonist(0, "B"), (p, o) => docked++);
+            var second = GameAI.ApplyColonistArrival(b, Colonist(0, "B"), (p, o) => docked++);
+            var ok = Check(!first && !second && docked == 0, "both colonists land as inhabitants (room for two)");
+            ok &= Check(b.Population.Count == 5 && b.Population.Count(p => p.Player == 0) == 3, "B holds 5, 3 of them mine");
+            ok &= Check(!b.IsPopulationTransferInProgress(0), "the flag is clear after the arrivals");
+            return ok;
+        }
     }
 
     public static bool RunTunableDefaultsCheck()

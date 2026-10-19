@@ -699,6 +699,10 @@ namespace FlatSpace
             {
                 if (!AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return false;
+                // Colonists of mine still in flight (the colony ship surge sends several; the first landing clears the flag above)
+                // fill the planet's room: never target a planet that is already spoken for.
+                if (planet.GetIncomingColonists(Player.playerID) > 0
+                    && planet.Population.Count + planet.GetIncomingColonists(Player.playerID) >= planet.MaxPopulation) return false;
                 if (planet.Population.Count == 0)                                return true;
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;
                 if (planet.PlayerWithMostPopulation() != Player.playerID)        return true;
@@ -770,6 +774,22 @@ namespace FlatSpace
             }
 
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
+            // The planned route from a colonizer to one target, null when the target is out of reach, cannot be supported from there
+            // or has no route round the blockades I can see. inRange tells the two apart (an in-range target with no route is
+            // what the NoRoute hold-back reports). Shared by the ordinary candidates and the surge launches.
+            private RoutePlanner.PlannedRoute CandidateRoute(Planet colonizerPlanet, Planet target, int maxNodes, out bool inRange)
+            {
+                var pathMap = colonizerPlanet.DistanceMapToPathingList;
+                inRange = false;
+                if (!pathMap.ContainsKey(target.PlanetName)
+                    || pathMap[target.PlanetName].NumNodes > maxNodes
+                    || pathMap[target.PlanetName].NumNodes < 2   // FindPath's 1-node no-route stub is not a candidate
+                    || !CanSupportColony(colonizerPlanet, target))
+                    return null;
+                inRange = true;
+                return RoutePlanner.PlanRoute(AIMap, colonizerPlanet.PlanetName, target.PlanetName, _blockadeView, maxNodes);
+            }
+
             public void ProcessColonizers(
                 List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
@@ -784,7 +804,14 @@ namespace FlatSpace
                 }
 
                 var targets = AIMap.PlanetList.FindAll(IsValidColonizationTarget);
-                if (targets.Count == 0)
+                // Colony ship surge: a dominated planet whose serving neighbours hold a ready colony ship. Its budget is the number
+                // of ships it still wants (the plan already respects its room).
+                var surgeLeft = new Dictionary<string, int>();
+                if (_surgePlan != null)
+                    foreach (var surge in _surgePlan.Targets)
+                        if (surge.Servers.Exists(s => colonizers.Exists(c => c.Name == s)))
+                            surgeLeft[surge.Planet] = surge.EffectiveWanted;
+                if (targets.Count == 0 && surgeLeft.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nothing to colonize: not held back by a blockade
                     return;
@@ -802,6 +829,37 @@ namespace FlatSpace
                 // Per origin, the candidate with the lowest route cost, so the log shows when the chokepoint tilt moved the pick.
                 var nearest = new Dictionary<string, (string target, float cost)>();
 
+                // Surge launches first: a ready, unblockaded neighbour sends its docked ship to the dominated planet it serves, the
+                // cheapest route first (ties by name), until the planet's budget is used. These skip the matrix below, which would
+                // let only one colonist claim a target.
+                var surgeActions = new List<ScoreMatrixAction>();
+                var surgeColonizers = new HashSet<string>();
+                var surgeLaunched = new Dictionary<string, int>();
+                if (surgeLeft.Count > 0)
+                {
+                    var options = new List<(float cost, string origin, string target)>();
+                    foreach (var colonizer in colonizers)
+                    {
+                        if (IsBlockaded(colonizer.Name)) continue;
+                        var serves = _surgePlan.For(colonizer.Name);
+                        if (serves == null || !surgeLeft.ContainsKey(serves.Planet)) continue;
+                        var surgeRoute = CandidateRoute(AIMap.GetPlanet(colonizer.Name), AIMap.GetPlanet(serves.Planet), maxNodes, out _);
+                        if (surgeRoute == null) continue;
+                        plannedRoutes[(colonizer.Name, serves.Planet)] = surgeRoute;
+                        options.Add((surgeRoute.Cost, colonizer.Name, serves.Planet));
+                    }
+                    foreach (var option in options.OrderBy(o => o.cost).ThenBy(o => o.origin, StringComparer.Ordinal))
+                    {
+                        if (surgeLeft[option.target] <= 0 || !surgeColonizers.Add(option.origin)) continue;
+                        surgeLeft[option.target]--;
+                        surgeLaunched[option.target] = surgeLaunched.TryGetValue(option.target, out var n) ? n + 1 : 1;
+                        surgeActions.Add(new ScoreMatrixAction { Origin = option.origin, Target = option.target, Cost = option.cost });
+                    }
+                    // A planet whose room the surge used up is not also claimed by the ordinary rule this pass.
+                    targets.RemoveAll(t => surgeLaunched.TryGetValue(t.PlanetName, out var launched)
+                                           && _surgePlan.Targets.Find(s => s.Planet == t.PlanetName).Room - launched < 1);
+                }
+
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
                     (new ScoreMatrixDecisionComparer());
                 int colonizerIndex = 0;
@@ -816,20 +874,13 @@ namespace FlatSpace
                     }
 
                     var colonizerPlanet = AIMap.GetPlanet(colonizer.Name);
-                    var pathMap = colonizerPlanet.DistanceMapToPathingList;
                     var entries = new List<ScoreMatrixChoiceElement>();
                     var hadCandidate = false;
                     foreach (var t in targets)
                     {
-                        if (!pathMap.ContainsKey(t.PlanetName)
-                            || pathMap[t.PlanetName].NumNodes > maxNodes
-                            || pathMap[t.PlanetName].NumNodes < 2   // FindPath's 1-node no-route stub is not a candidate
-                            || !CanSupportColony(colonizerPlanet, t))
-                            continue;
-                        hadCandidate = true;
-
                         // Avoid planets I can see are blockaded; a target with no such route is dropped.
-                        var route = RoutePlanner.PlanRoute(AIMap, colonizer.Name, t.PlanetName, _blockadeView, maxNodes);
+                        var route = CandidateRoute(colonizerPlanet, t, maxNodes, out var inRange);
+                        if (inRange) hadCandidate = true;
                         if (route == null) continue;
                         plannedRoutes[(colonizer.Name, t.PlanetName)] = route;
                         if (!nearest.TryGetValue(colonizer.Name, out var best) || route.Cost < best.cost
@@ -842,6 +893,13 @@ namespace FlatSpace
                             Cost     = route.Cost / ColonizationCostDivisor(t.PlanetName),
                             Shortage = 1.0f,
                         });
+                    }
+
+                    // A surge launch is decided above; the ordinary entries (and `nearest`) only feed its log line.
+                    if (surgeColonizers.Contains(colonizer.Name))
+                    {
+                        _colonizeHeldBack.Remove(colonizer.Name);
+                        continue;
                     }
 
                     if (entries.Count == 0 && hadCandidate)
@@ -867,13 +925,13 @@ namespace FlatSpace
                     }
                 }
 
-                foreach (var action in matrix.GenerateActionList(
+                foreach (var action in surgeActions.Concat(matrix.GenerateActionList(
                              actionFactory: (origin, element) => new ScoreMatrixAction
                              {
                                  Origin = origin.Target,
                                  Target = element.Target,
                                  Cost = element.Cost
-                             }, null))
+                             }, null)))
                 {
                     var amount = Convert.ToInt32(
                         colonizers.Find(x => x.Name == action.Origin).Data);
@@ -886,6 +944,12 @@ namespace FlatSpace
                         AITuningLogger.LogChokepointColonize(turn, Player.playerID, action.Origin, action.Target,
                             route.Cost, AIMap.Chokepoint(action.Target), near.target, near.cost);
                     var launchTarget = AIMap.GetPlanet(action.Target);
+                    if (surgeColonizers.Contains(action.Origin) && _surgePlan.For(action.Origin) is SurgeTarget surgeTarget)
+                    {
+                        nearest.TryGetValue(action.Origin, out var surgeNear);
+                        AITuningLogger.LogSurgeLaunch(turn, Player.playerID, action.Origin, action.Target, surgeTarget.MyPop,
+                            surgeTarget.TotalPop, surgeTarget.EnRoute, route.Cost, surgeNear.target ?? "-");
+                    }
                     if (launchTarget != null && IsConversionTarget(launchTarget))
                     {
                         nearest.TryGetValue(action.Origin, out var nearTarget);

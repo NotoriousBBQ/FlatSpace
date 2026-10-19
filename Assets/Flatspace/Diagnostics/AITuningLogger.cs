@@ -578,6 +578,16 @@ public static class AITuningLogger
             myPop.ToString(ci), totalPop.ToString(ci), routeCost.ToString("0.#", ci), nearestTarget, nearestCost.ToString("0.#", ci)) });
     }
 
+    /// <summary>A colonist sent by the surge: SurgeLaunch|origin->planet|myPop|totalPop|enRoute|routeCost|nearestOrdinaryTarget (per launch).</summary>
+    public static void LogSurgeLaunch(int turnNumber, int playerId, string origin, string target, int myPop, int totalPop,
+        int enRoute, float routeCost, string nearestTarget)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SurgeLaunch", $"{origin}->{target}", myPop.ToString(ci),
+            totalPop.ToString(ci), enRoute.ToString(ci), routeCost.ToString("0.#", ci), nearestTarget) });
+    }
+
     /// <summary>A colony ship started on a neighbour of a dominated planet under the surge: SurgeBuild|neighbour|dominatedPlanet|multiplier (per start).</summary>
     public static void LogSurgeBuild(int turnNumber, int playerId, string neighbour, string planet, float multiplier)
     {
