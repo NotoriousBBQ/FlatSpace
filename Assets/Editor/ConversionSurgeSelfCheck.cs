@@ -200,6 +200,16 @@ public static class ConversionSurgeSelfCheck
                     "two ships already building (pipeline 2 = EW 2): the surge ends");
                 f.P("C").ProductionQueue.Clear();
 
+                // A colonist already flying to B sets the one-at-a-time flag, which stops B being an ordinary target; the neighbours
+                // must still count it as a target while it needs ships, or the production surge would switch off for the whole flight.
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B") });
+                f.P("B").SetPopulationTransferInProgress(0);
+                ai.RefreshSurgePlan();
+                ok &= Check(Near(ai.GetIndustrySituationalWeightMultiplier(colony, "A"), 6f),
+                    "one colonist in flight (flag set), room 1 and nothing building: the surge goes on (6)");
+                f.P("B").SetPopulationTransferInProgress(0, false);
+                f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder>());
+
                 f.Map.RecomputeIncomingColonists(new List<GameAI.GameAIOrder> { Colonist(0, "B"), Colonist(0, "B") });
                 ai.RefreshSurgePlan();
                 // B is full once they land, so it is no longer a colonization target either: A has nothing to colonize (weight 0).

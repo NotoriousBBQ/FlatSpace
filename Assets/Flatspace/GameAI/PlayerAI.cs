@@ -477,13 +477,18 @@ namespace FlatSpace
             /// A known, valid colonization target is within reach of this planet, whether or not the planet is
             /// ready to colonize yet. Drives whether a planet should be building colony ships at all.
             /// </summary>
+            // A dominated planet the surge still wants ships for counts as a target even while a colonist of mine is already
+            // flying there (that sets the one-at-a-time flag IsValidColonizationTarget refuses on), so the neighbours keep building.
+            private bool NeedsSurgeShips(string planetName)
+                => _surgePlan != null && _surgePlan.Targets.Exists(t => t.Planet == planetName && t.Pipeline < t.EffectiveWanted);
+
             private bool PlanetHasColonizationTarget(string planetName)
             {
                 var origin = AIMap.GetPlanet(planetName);
                 var maxNodes = AIMap.GameAIConstants.maxPathNodesForColonization;
                 return origin.DistanceMapToPathingList.Any(t =>
                     t.Value.NumNodes <= maxNodes
-                    && IsValidColonizationTarget(AIMap.GetPlanet(t.Key))
+                    && (IsValidColonizationTarget(AIMap.GetPlanet(t.Key)) || NeedsSurgeShips(t.Key))
                     && CanSupportColony(origin, AIMap.GetPlanet(t.Key))
                     // a route must exist that avoids the planets I can see are blockaded (the planner also rejects the
                     // 1-node no-route stub)
@@ -773,7 +778,6 @@ namespace FlatSpace
                 return weight <= 0f ? 1f : 1f + weight * AIMap.Chokepoint(targetName);
             }
 
-            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             // The planned route from a colonizer to one target, null when the target is out of reach, cannot be supported from there
             // or has no route round the blockades I can see. inRange tells the two apart (an in-range target with no route is
             // what the NoRoute hold-back reports). Shared by the ordinary candidates and the surge launches.
@@ -790,6 +794,7 @@ namespace FlatSpace
                 return RoutePlanner.PlanRoute(AIMap, colonizerPlanet.PlanetName, target.PlanetName, _blockadeView, maxNodes);
             }
 
+            // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void ProcessColonizers(
                 List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
