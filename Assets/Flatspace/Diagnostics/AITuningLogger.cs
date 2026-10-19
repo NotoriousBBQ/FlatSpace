@@ -588,6 +588,13 @@ public static class AITuningLogger
             enRoute.ToString(ci), pipeline.ToString(ci), myPop.ToString(ci), totalPop.ToString(ci), servers.ToString(ci)) });
     }
 
+    /// <summary>A ready surge server that could not launch: SurgeHeld|origin|planet|BlockadedOrigin, NoRoute or OutOfRange (on change only).</summary>
+    public static void LogSurgeHeld(int turnNumber, int playerId, string origin, string planet, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SurgeHeld", origin, planet, reason) });
+    }
+
     /// <summary>A colonist sent by the surge: SurgeLaunch|origin->planet|myPop|totalPop|enRoute|routeCost|nearestOrdinaryTarget (per launch).</summary>
     public static void LogSurgeLaunch(int turnNumber, int playerId, string origin, string target, int myPop, int totalPop,
         int enRoute, float routeCost, string nearestTarget)

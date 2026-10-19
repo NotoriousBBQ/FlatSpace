@@ -23,6 +23,7 @@ public static class ConversionSurgeSelfCheck
         ok &= RunSurgeWeightCheck();
         ok &= RunSurgeLaunchCheck();
         ok &= RunSameTurnCapCheck();
+        ok &= RunSurgeHeldCheck();
         ok &= RunTargetRoomCheck();
         ok &= RunSurgeArrivalCheck();
         ok &= RunSurgeTrackerCheck();
@@ -442,6 +443,64 @@ public static class ConversionSurgeSelfCheck
             foreach (var go in gos) Object.DestroyImmediate(go);
             foreach (var item in items) Object.DestroyImmediate(item);
         }
+        return ok;
+    }
+
+    // A ready server that cannot launch is logged once per reason: SurgeHeld is state-change only and clears when the server launches.
+    public static bool RunSurgeHeldCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            using (var f = CombatSelfCheck.Fixture.Line())
+            {
+                var ai = LaunchScene(f, gos);
+                // D is mine too, three path nodes from B (D-C-B): a server at reach 3, and its only way to B runs through C.
+                ConversionSelfCheck.Populate(f.P("D"), (0, 5));
+                DockColonyShip(f.P("D"), 0);
+                f.Map.Knowledge.Update(f.Map, 2, 8);
+                f.Ships("C", 1, 2);                                          // a rival fleet blockades C against me
+                ai.RefreshBlockadeView();
+                ai.RefreshSurgePlan();
+                ok &= Check(ai.CurrentSurgePlan.For("D") != null, "precondition: D serves B at reach 3");
+
+                var orders = new List<GameAI.GameAIOrder>();
+                ai.ProcessColonizers(Ready("A", "C", "D"), orders);
+                ok &= Check(ai.SurgeHeldReason("C") == "BlockadedOrigin", "the blockaded server is held: BlockadedOrigin (got " + ai.SurgeHeldReason("C") + ")");
+                ok &= Check(ai.SurgeHeldReason("D") == "NoRoute", "D's only way to B crosses the blockaded C: NoRoute (got " + ai.SurgeHeldReason("D") + ")");
+                ok &= Check(ai.SurgeHeldReason("A") == null && Launches(orders).Contains("A>B"), "A launches and is not noted as held");
+                ok &= Check(!ai.NoteSurgeHeld("D", "NoRoute") && !ai.NoteSurgeHeld("C", "BlockadedOrigin"),
+                    "the same reasons again are not news (nothing is logged twice)");
+                ai.ProcessColonizers(Ready("A", "C", "D"), new List<GameAI.GameAIOrder>());
+                ok &= Check(ai.SurgeHeldReason("D") == "NoRoute" && ai.SurgeHeldReason("C") == "BlockadedOrigin", "still held next turn, state unchanged");
+
+                // The blockade lifts: C launches (EW 2: A and C, the cheapest) and its state clears; D is not held, only out of budget.
+                f.P("C").DockedShips.RemoveAll(s => s.Owner == 1);
+                ai.RefreshBlockadeView();
+                ai.RefreshSurgePlan();
+                ai.ProcessColonizers(Ready("A", "C", "D"), new List<GameAI.GameAIOrder>());
+                ok &= Check(ai.SurgeHeldReason("C") == null && ai.SurgeHeldReason("D") == null, "launched or out of budget: no longer held");
+                ok &= Check(ai.NoteSurgeHeld("C", "BlockadedOrigin"), "a later hold is news again");
+                ai.ProcessColonizers(Ready("A"), new List<GameAI.GameAIOrder>());
+                ok &= Check(ai.SurgeHeldReason("C") == null, "a server that is no longer ready is no longer held");
+
+                // A target beyond maxPathNodesForColonization.
+                f.Constants.maxPathNodesForColonization = 1;
+                ai.RefreshSurgePlan();
+                ai.ProcessColonizers(Ready("A"), new List<GameAI.GameAIOrder>());
+                ok &= Check(ai.SurgeHeldReason("A") == "OutOfRange", "beyond the colonization range: OutOfRange (got " + ai.SurgeHeldReason("A") + ")");
+                f.Constants.maxPathNodesForColonization = 6;
+
+                // No surge target left: the state clears.
+                f.Constants.conversionSurgeShipsPerRatio = 0f;
+                ai.RefreshSurgePlan();
+                ai.ProcessColonizers(Ready("A"), new List<GameAI.GameAIOrder>());
+                ok &= Check(ai.SurgeHeldReason("A") == null, "no surge target: the held state clears");
+                f.Constants.conversionSurgeShipsPerRatio = 1f;
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
         return ok;
     }
 

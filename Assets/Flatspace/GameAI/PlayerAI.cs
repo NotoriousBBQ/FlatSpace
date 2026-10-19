@@ -100,6 +100,30 @@ namespace FlatSpace
                 return true;
             }
 
+            // Why each ready surge server last could not launch (server name -> reason), so SurgeHeld is logged on a change only.
+            // Separate from _colonizeHeldBack: the ordinary loop removes that dictionary's entries every turn and the two lines
+            // would alternate. Log-only state: not saved.
+            private readonly Dictionary<string, string> _surgeHeldBack = new Dictionary<string, string>();
+
+            /// <summary>The reason this server's surge launch was last held back, or null. Public for the self-check.</summary>
+            public string SurgeHeldReason(string origin)
+                => _surgeHeldBack.TryGetValue(origin, out var reason) ? reason : null;
+
+            /// <summary>True when the reason is new for this origin, i.e. the caller should log it. Public for the self-check.</summary>
+            public bool NoteSurgeHeld(string origin, string reason)
+            {
+                if (_surgeHeldBack.TryGetValue(origin, out var last) && last == reason) return false;
+                _surgeHeldBack[origin] = reason;
+                return true;
+            }
+
+            private void NoteSurgeHeldAndLog(int turn, string origin, string planet, string reason, HashSet<string> heldThisPass)
+            {
+                heldThisPass.Add(origin);
+                if (NoteSurgeHeld(origin, reason))
+                    AITuningLogger.LogSurgeHeld(turn, Player.playerID, origin, planet, reason);
+            }
+
             // Why each shortage last went unsupplied ("<transportType>:<target>" -> reason), so ShipmentCancelled is logged on
             // a change and not every turn the blockade holds. Log-only state: not saved.
             private readonly Dictionary<string, string> _shipmentHeldBack = new Dictionary<string, string>();
@@ -805,6 +829,7 @@ namespace FlatSpace
                 if (colonizers.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nobody is ready, so nobody is being held back
+                    _surgeHeldBack.Clear();
                     return;
                 }
 
@@ -816,6 +841,7 @@ namespace FlatSpace
                     foreach (var surge in _surgePlan.Targets)
                         if (surge.Servers.Exists(s => colonizers.Exists(c => c.Name == s)))
                             surgeLeft[surge.Planet] = surge.EffectiveWanted;
+                if (surgeLeft.Count == 0) _surgeHeldBack.Clear();
                 if (targets.Count == 0 && surgeLeft.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nothing to colonize: not held back by a blockade
@@ -843,16 +869,29 @@ namespace FlatSpace
                 if (surgeLeft.Count > 0)
                 {
                     var options = new List<(float cost, string origin, string target)>();
+                    var heldThisPass = new HashSet<string>();
                     foreach (var colonizer in colonizers)
                     {
-                        if (IsBlockaded(colonizer.Name)) continue;
                         var serves = _surgePlan.For(colonizer.Name);
                         if (serves == null || !surgeLeft.ContainsKey(serves.Planet)) continue;
-                        var surgeRoute = CandidateRoute(AIMap.GetPlanet(colonizer.Name), AIMap.GetPlanet(serves.Planet), maxNodes, out _);
-                        if (surgeRoute == null) continue;
+                        if (IsBlockaded(colonizer.Name))
+                        {
+                            NoteSurgeHeldAndLog(turn, colonizer.Name, serves.Planet, "BlockadedOrigin", heldThisPass);
+                            continue;
+                        }
+                        var surgeRoute = CandidateRoute(AIMap.GetPlanet(colonizer.Name), AIMap.GetPlanet(serves.Planet), maxNodes, out var surgeInRange);
+                        if (surgeRoute == null)
+                        {
+                            // OutOfRange also covers a target this origin cannot support (CanSupportColony): the shared route test
+                            // does not tell the two apart.
+                            NoteSurgeHeldAndLog(turn, colonizer.Name, serves.Planet, surgeInRange ? "NoRoute" : "OutOfRange", heldThisPass);
+                            continue;
+                        }
                         plannedRoutes[(colonizer.Name, serves.Planet)] = surgeRoute;
                         options.Add((surgeRoute.Cost, colonizer.Name, serves.Planet));
                     }
+                    foreach (var stale in _surgeHeldBack.Keys.Where(k => !heldThisPass.Contains(k)).ToList())
+                        _surgeHeldBack.Remove(stale);   // launched, or no longer held back
                     foreach (var option in options.OrderBy(o => o.cost).ThenBy(o => o.origin, StringComparer.Ordinal))
                     {
                         if (surgeLeft[option.target] <= 0 || !surgeColonizers.Add(option.origin)) continue;

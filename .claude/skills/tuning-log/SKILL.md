@@ -343,6 +343,14 @@ user asked about one specific thing.
     (`ColonistDocked` at a dominated planet should stay near zero and `pipeline + enRoute + population` must never reach max population in a
     `ConversionSurge` line), real conquests finishing against the 16 to 20% baseline, and colony failures and `Blockade` events against their
     20 to 30% batch drift (a surge feeds a siege; the `test2.json` colony failures watch from 2026-10-07 applies).
+    **Reach amendment (2026-10-18):** `ConversionSurge` has a last field `<servers>` (the claimed servers: my planets within
+    `conversionSurgeReachNodes` path nodes, default 3; older logs lack it, guard `NF`). Report servers per plan and the share of plans with 0
+    servers against the first-batch baselines (70% on `test2.json`, 40% on `4p.json`, direct neighbours only). `SurgeHeld|<origin>|<planet>|<reason>`
+    is on change only for a ready server that could not launch (`BlockadedOrigin`, `NoRoute` = no route round the blockades it sees, `OutOfRange` =
+    beyond `maxPathNodesForColonization`, also a target the origin cannot support): count by reason and say which ready servers did not send.
+    `SurgeBuild` now logs for the pick that took the last slot, and a surged pick on a full target is dropped within a production pass
+    (`pipeline + enRoute + population` must still never reach max). Compare `SurgeBuild` and `SurgeLaunch` per run against the first batch
+    (0.2 and 0.7 on `test2.json`, 0.5 and 0 on `4p.json`).
 
 ## 4. Compare against a previous run when one exists
 
