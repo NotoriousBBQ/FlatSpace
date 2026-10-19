@@ -883,6 +883,11 @@ public class Planet : MonoBehaviour
     public ProductionItem? CurrentProduction { get; set; } = null;
     public List<ProductionItem> ProductionQueue = new List<ProductionItem>();
 
+    /// <summary>Colony ships being built here: the current item plus the queued ones.</summary>
+    public int CountColonyShipsInProduction()
+        => (CurrentProduction?.Item?.subType == "ColonyShip" ? 1 : 0)
+           + ProductionQueue.Count(p => p.Item != null && p.Item.subType == "ColonyShip");
+
     public void ScheduleProductionItem(CatalogItem productionItem, float fixedCost = 0f)
     {
         ProductionQueue.Add(new ProductionItem(productionItem, fixedCost));
