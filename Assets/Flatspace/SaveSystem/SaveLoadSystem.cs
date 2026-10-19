@@ -509,9 +509,10 @@ public class SaveLoadSystem : MonoBehaviour
         SceneManagerOnDesignerSceneLoaded(scene, LoadSceneMode.Single);        
     }
 
-    public static void StartNewGame()
-    {        
-        ShowConfigFileBrowserAndStartNewGame();
+    // onCancel runs when the player cancels the board config dialog (null: stay on the main menu).
+    public static void StartNewGame(System.Action onCancel = null)
+    {
+        ShowConfigFileBrowserAndStartNewGame(onCancel);
     }
     private static void LoadGameScene(string sceneName, UnityAction<Scene, LoadSceneMode> loadedCallback)
     {
@@ -572,7 +573,7 @@ public class SaveLoadSystem : MonoBehaviour
 
     }
    
-    private static void ShowConfigFileBrowserAndStartNewGame()
+    private static void ShowConfigFileBrowserAndStartNewGame(System.Action onCancel)
     {
 #if UNITY_EDITOR
         var configPath = Path.Combine(Application.dataPath, "Flatspace/BoardConfigs");
@@ -585,10 +586,14 @@ public class SaveLoadSystem : MonoBehaviour
         var randomBoardDirectory = RandomBoardBuilder.BoardDirectory();
         Directory.CreateDirectory(randomBoardDirectory);
         FileBrowser.AddQuickLink("Random Boards", randomBoardDirectory);
-        // Cancel leaves the player on the main menu (this runs from there); it no longer starts the
+        // Cancel returns to whatever opened the dialog (the start popup); it never starts the
         // scene's default board.
         FileBrowser.ShowLoadDialog((paths) => LoadDesignerContent(paths[0]),
-            () => Debug.Log("Board config load cancelled"), FileBrowser.PickMode.Files, false, configPath);
+            () =>
+            {
+                Debug.Log("Board config load cancelled");
+                onCancel?.Invoke();
+            }, FileBrowser.PickMode.Files, false, configPath);
     }
     
     private static void ShowSaveGameConfigFileBrowser(BoardDesignerSave saveData)

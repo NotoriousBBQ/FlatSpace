@@ -5,7 +5,7 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 
 // The two start-game popups, built in code under the menu's Canvas (no scene or prefab edits):
-// "Use Saved Board" (Yes / No) and, after No, the random board settings (OK / Back).
+// "Use Saved Board" (Yes / No) and, after No, the random board settings (OK / Cancel).
 // OK generates a board from the seed and starts the game on it through the same path a picked
 // board config takes (SaveLoadSystem.StartGameFromBoard); the designer scene is never loaded.
 public class RandomBoardPopup : MonoBehaviour
@@ -61,7 +61,8 @@ public class RandomBoardPopup : MonoBehaviour
     private void OnYes()
     {
         Hide();
-        SaveLoadSystem.StartNewGame();
+        // Cancelling the file dialog comes back to this popup.
+        SaveLoadSystem.StartNewGame(Show);
     }
 
     private void OnOk()
@@ -107,6 +108,7 @@ public class RandomBoardPopup : MonoBehaviour
         var buttons = AddRow(savedBox, 56f);
         AddButton(buttons, "Yes", OnYes);
         AddButton(buttons, "No", ShowRandomPanel);
+        AddButton(buttons, "Cancel", Hide);
 
         _randomPanel = MakePanel("RandomBoardPanel", 520f, 380f, out var randomBox);
         AddLabel(randomBox, "Random Board", 32f, 28f);
@@ -117,7 +119,7 @@ public class RandomBoardPopup : MonoBehaviour
         _errorLabel.color = new Color(1f, 0.5f, 0.5f);
         var randomButtons = AddRow(randomBox, 56f);
         AddButton(randomButtons, "OK", OnOk);
-        AddButton(randomButtons, "Back", ShowSavedBoardPanel);
+        AddButton(randomButtons, "Cancel", ShowSavedBoardPanel);
 
         ShowSavedBoardPanel();
     }
