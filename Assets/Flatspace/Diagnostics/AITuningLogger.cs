@@ -354,6 +354,28 @@ public static class AITuningLogger
             bombardNeeded.ToString("0.#", ci), siegeships.ToString(ci), cap.ToString(ci)) });
     }
 
+    /// <summary>
+    /// A siegeship group passed the follower gate and left for the assault target (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeFollow|
+    /// origin-&gt;target|ships|projectedLossPct (the arrival projection's loss, in percent).
+    /// </summary>
+    public static void LogSiegeFollow(int turnNumber, int playerId, string origin, string target, int ships, float lossFraction)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeFollow", $"{origin}->{target}", ships.ToString(ci),
+            (100f * lossFraction).ToString("0", ci)) });
+    }
+
+    /// <summary>
+    /// A siegeship group stays where it is because its arrival projection is a loss (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeHeld|
+    /// origin|target|reason (Wiped: the group would be destroyed; Outmatched: it would lose followerMaxLossFraction or more).
+    /// </summary>
+    public static void LogSiegeHeld(int turnNumber, int playerId, string origin, string target, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeHeld", origin, target, reason) });
+    }
+
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
     public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
     {

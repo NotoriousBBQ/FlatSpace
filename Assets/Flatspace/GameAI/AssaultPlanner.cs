@@ -434,10 +434,26 @@ namespace FlatSpace
             // ── Siegeships (assault composition) ─────────────────────────────
 
             /// <summary>
-            /// Task 14 seam: may `count` siegeships leave `origin` for `target` now? Null (the default) allows every send. PlayerAI sets it
-            /// to PlayerAI.CanSendSiegeship (the arrival-safety gate). A refused source is skipped; the next source is tried.
+            /// The follower gate: may `count` siegeships leave `origin` for `target` now? The fourth argument is every ship action
+            /// already planned this turn before this one (home actions, the warship force, siegeship groups already let through), so
+            /// the gate can count the ships leaving with them. Null (the default) allows every send. PlayerAI sets it to
+            /// PlayerAI.CanSendSiegeship (the arrival projection, PlayerAI.ArrivalNotOutmatched). A refused source is skipped; the next
+            /// source is tried. It must be free of side effects: Plan runs twice a turn (PlayerAI.AuditConversionHolds).
             /// </summary>
-            public Func<string, string, int, bool> SiegeshipGate { get; set; }
+            public Func<string, string, int, IReadOnlyList<ShipAction>, bool> SiegeshipGate { get; set; }
+
+            /// <summary>One SiegeshipGate call of the last Plan: a siegeship group that was let through (Allowed) or kept where it is.</summary>
+            public struct SiegeGateCall
+            {
+                public string Origin;
+                public string Target;
+                public int Count;
+                public bool Allowed;
+                public List<ShipAction> Departing;   // the actions the gate was given (a copy)
+            }
+
+            /// <summary>The SiegeshipGate calls of the last Plan call, in order (empty without a gate). Log-only reading for PlayerAI.</summary>
+            public List<SiegeGateCall> LastSiegeGateCalls { get; private set; } = new List<SiegeGateCall>();
 
             /// <summary>A war rival's (any other player's without a war set) bunker is docked here.</summary>
             private bool HoldsRivalBunker(Planet planet)
@@ -514,9 +530,10 @@ namespace FlatSpace
             /// The siegeship part of the assault: siegeships docked on my other planets (none from a planet where a war rival's bunker
             /// stands: they are bombarding it; none from a conversion hold: their bombard sets its conversion pace), cheapest usable path first, each ship counted at its own effective bombard, until the
             /// bombard still needed is covered or the cap's room is used. Each source is one action of Kind SiegeShip; SiegeshipGate
-            /// may refuse a source. Never waits for anything: with no siegeship available it returns nothing.
+            /// may refuse a source (it is given `planned`, the actions planned before, plus the siegeship groups already let through).
+            /// Never waits for anything: with no siegeship available it returns nothing.
             /// </summary>
-            private List<ShipAction> PlanSiegeships(Planet target)
+            private List<ShipAction> PlanSiegeships(Planet target, List<ShipAction> planned)
             {
                 var actions = new List<ShipAction>();
                 if (_stats == null) return actions;
@@ -553,7 +570,17 @@ namespace FlatSpace
                         taken++;
                     }
                     if (taken == 0) continue;
-                    if (SiegeshipGate != null && !SiegeshipGate(source.Name, target.PlanetName, taken)) continue;
+                    if (SiegeshipGate != null)
+                    {
+                        var departing = new List<ShipAction>(planned);
+                        departing.AddRange(actions);
+                        var allowed = SiegeshipGate(source.Name, target.PlanetName, taken, departing);
+                        LastSiegeGateCalls.Add(new SiegeGateCall
+                        {
+                            Origin = source.Name, Target = target.PlanetName, Count = taken, Allowed = allowed, Departing = departing,
+                        });
+                        if (!allowed) continue;
+                    }
 
                     actions.Add(new ShipAction
                     {
@@ -580,9 +607,13 @@ namespace FlatSpace
                 List<ShipAction> homeActions)
             {
                 LastBlockadeForce = default;
+                LastSiegeGateCalls = new List<SiegeGateCall>();
                 if (target == null) return new List<ShipAction>();
                 var actions = PlanWarships(target, states, homeActions);
-                actions.AddRange(PlanSiegeships(target));
+                // The siegeship gate sees every ship planned to leave before it: home defence, then the warship force.
+                var planned = new List<ShipAction>(homeActions ?? new List<ShipAction>());
+                planned.AddRange(actions);
+                actions.AddRange(PlanSiegeships(target, planned));
                 return actions;
             }
 

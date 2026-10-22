@@ -29,6 +29,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunSiegeSizingCheck();
         ok &= RunSiegeshipWeightCheck();
         ok &= RunAssaultCompositionCheck();
+        ok &= RunFollowerGateCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -676,7 +677,7 @@ public static class PlanetDefenseSelfCheck
                 "siegeships: C's 2 (cheapest) then 1 of A's 2, stopping at the cap of 3");
 
             var gated = SiegePlanner(f);
-            gated.SiegeshipGate = (origin, target, count) => origin != "C";
+            gated.SiegeshipGate = (origin, target, count, departing) => origin != "C";
             var gatedActions = PlanAt(f, gated, "D");
             ok &= Check(!gatedActions.Exists(a => a.Origin == "C")
                         && gatedActions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "A" && a.Count == 2)
@@ -744,6 +745,8 @@ public static class PlanetDefenseSelfCheck
         }
 
         // The order trio: warships and siegeships leaving the same planet the same turn each carry their own kind's ships.
+        // (Task 14: the follower gate is live here. defaultTravelSpeed is 1, so B -> D (cost 200) lands beyond the 20-turn projection
+        // and both fleets are projected landing on round 20 together: one round, warship 1 takes 48 x 0.8 = 38.4, loss 0.17: they go.)
         using (var f = BunkeredLine(true))
         {
             f.Ships("B", 0, 5);
@@ -757,6 +760,213 @@ public static class PlanetDefenseSelfCheck
             ok &= Check(war != null && war.Fleet.Snapshots.Count == 3, "B's warship fleet of 3 is emitted");
             ok &= Check(siege != null && siege.Fleet.Snapshots.Count == 2 && siege.Fleet.Snapshots.All(s => s.Count == 1 && s[0] == "sg"),
                 "B's siegeship fleet of 2 is emitted with the siegeships' own snapshots (claims are per kind)");
+        }
+        return ok;
+    }
+
+    // Task 14 fixture: line A-B-C-D (path costs C-D 100, B-D 200), defaultTravelSpeed 100 so a fleet from C lands in round 1 and
+    // one from B in round 2; player 0 colonizes A, B and C, player 1 colonizes D and holds 2 bunkers there (12 / 150 / 8), at war,
+    // D known. Garrisons 0. Bombard needed at D: 2 x 8 x 1.3 = 20.8, so one siegeship (20) is not enough and two are.
+    private static Fixture FollowerLine()
+    {
+        var f = Fixture.Line();
+        f.Constants.defaultTravelSpeed = 100f;
+        f.Constants.garrisonOuter = 0;
+        f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0); f.Colonize("D", 1);
+        f.Bunkers("D", 1, 2);
+        f.War(0, 1);
+        f.Map.Knowledge.Update(f.Map, 2);
+        return f;
+    }
+
+    private static GameAI.GameAIOrder Fleet(Ship.ShipKind kind, string origin, string target, int player, int ships, int delay)
+        => new GameAI.GameAIOrder
+        {
+            Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = player, Origin = origin, Target = target,
+            TimingDelay = delay, TotalDelay = delay, Data = ships,
+            Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+            {
+                Kind = kind,
+                Snapshots = Enumerable.Range(0, ships).Select(_ => new List<string>()).ToList(),
+                Damage = Enumerable.Repeat(0f, ships).ToList(),
+            },
+        };
+
+    private static List<ShipAction> SiegeActions(List<ShipAction> actions) => actions.FindAll(a => a.Kind == Ship.ShipKind.SiegeShip);
+
+    // Task 14: a later siegeship leaves for the sticky assault target only when the fight projection of its arrival (my ships
+    // docked there, in flight there, leaving this turn, and the group itself, against bunker fire) shows it not wiped and losing
+    // less than followerMaxLossFraction (0.5). Templates: warship 10 / 100 / 5 bombard 1, siegeship 3 / 100 / 3 bombard 20,
+    // bunker 12 / 150 / 8, K 20. Strengths: warship 10 x 105 = 1050, siegeship 3 x 103 = 309, bunker 12 x 158 = 1896. The
+    // projections were traced turn by turn (bunker fire 24 x K / (K + Defense) on the weakest-class ship, bombard x 20 / 28 on the
+    // most damaged bunker) with an independent re-implementation of FightProjector's loop; the losses below come from that trace.
+    public static bool RunFollowerGateCheck()
+    {
+        var ok = true;
+        var consolidate = PlayerAI.AIStrategy.AIStrategyConsolidate;
+        using (var f = Fixture.Line())
+            ok &= Check(Near(f.Constants.followerMaxLossFraction, 0.5f), "followerMaxLossFraction defaults to 0.5");
+
+        // The first force is gone and the bunkers stand: my only warships garrison C (outer, garrison 2, so none is spare) and
+        // nothing of mine is at D or on the way. One siegeship from C lands in round 1 alone: the bunkers' 24 a turn (x 20 / 23)
+        // destroy it by turn 6 while its bombard (20, falling with its health) only wounds the first bunker. It stays.
+        using (var f = FollowerLine())
+        {
+            f.Constants.garrisonOuter = 2;
+            f.Ships("C", 0, 2); f.Siege("C", 0, 1);
+            using var t = new ThreatAi(f, consolidate);
+            var d = f.P("D");
+            var p = t.Ai.ProjectArrival("C", d, 1);
+            ok &= Check(p != null && p.MyShips == 0 && p.InboundShips == 1 && Near(p.MyStrength, 309f) && Near(p.RivalStrength, 3792f),
+                "first force gone: the arriving group is the lone siegeship (strength 309) against 2 bunkers (2 x 1896 = 3792)");
+            ok &= Check(p != null && p.MyGroupWiped && Near(p.ProjectedLossFraction, 1f) && p.RivalSurvives && p.Turns == 6,
+                "the bunkers destroy it on the sixth projected turn and stand: a loss of 1");
+            ok &= Check(!t.Ai.ArrivalNotOutmatched("C", d, 1), "the gate refuses: the follower stays");
+
+            var actions = t.Ai.PlanShipActions(0);
+            ok &= Check(SiegeActions(actions).Count == 0 && !actions.Exists(a => a.Target == "D"),
+                "PlanShipActions: no siegeship (and no warship: C keeps its garrison) leaves for D");
+            var held = t.Ai.LastSiegeFollowerChanges;
+            ok &= Check(held.Count == 1 && held[0].Kind == SiegeFollowerTracker.KindHeld && held[0].Origin == "C" && held[0].Target == "D"
+                        && held[0].Reason == SiegeFollowerTracker.ReasonWiped && held[0].Ships == 1,
+                "SiegeHeld|C|D|Wiped is reported");
+            t.Ai.PlanShipActions(1);
+            ok &= Check(t.Ai.LastSiegeFollowerChanges.Count == 0, "the same hold on the next turn is not reported again (on change only)");
+        }
+
+        // A friendly warship force holds D (4 warships docked, the bunkers fire at them, warships first). Two siegeships from C land
+        // in round 1 and break both bunkers by turn 10; the first warship ends at health 97.65 when they fall, the rest unhurt:
+        // strength 4 x 1050 + 2 x 309 = 4818, left 3720.44, loss 0.2278 < 0.5. They leave.
+        using (var f = FollowerLine())
+        {
+            f.Ships("D", 0, 4); f.Siege("C", 0, 2);
+            using var t = new ThreatAi(f, consolidate);
+            var d = f.P("D");
+            var p = t.Ai.ProjectArrival("C", d, 2);
+            ok &= Check(p != null && p.MyShips == 4 && p.InboundShips == 2 && Near(p.MyStrength, 4818f),
+                "warships hold D: the arriving group is 4 docked warships + 2 siegeships, strength 4818");
+            ok &= Check(p != null && !p.MyGroupWiped && !p.RivalSurvives && p.Turns == 10 && Mathf.Abs(p.ProjectedLossFraction - 0.2278f) < 0.001f,
+                "both bunkers fall on turn 10 at a loss of 0.2278");
+            ok &= Check(t.Ai.ArrivalNotOutmatched("C", d, 2), "the gate lets them go");
+
+            var actions = t.Ai.PlanShipActions(0);
+            ok &= Check(SiegeActions(actions).Count == 1 && actions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "C"
+                                                                                && a.Target == "D" && a.Count == 2)
+                        && !actions.Exists(a => a.Kind == Ship.ShipKind.WarShip && a.Target == "D"),
+                "PlanShipActions: C's 2 siegeships follow to D (no warship needed: 4 docked >= the force of 3)");
+            var follow = t.Ai.LastSiegeFollowerChanges;
+            ok &= Check(follow.Count == 1 && follow[0].Kind == SiegeFollowerTracker.KindFollow && follow[0].Origin == "C" && follow[0].Ships == 2
+                        && Mathf.Abs(follow[0].LossFraction - 0.2278f) < 0.001f,
+                "SiegeFollow|C->D|2|23 is reported");
+
+            // Side-effect free and deterministic: the same answer twice, nothing on the map or in the in-flight list changed.
+            var inFlight = new List<GameAI.GameAIOrder> { Fleet(Ship.ShipKind.WarShip, "B", "C", 0, 1, 1) };
+            t.Ai.InFlightOrders = inFlight;
+            string State() => string.Join(";", f.Map.PlanetList.Select(pl => pl.PlanetName + ":" + string.Join(",",
+                pl.DockedShips.Select(s => $"{s.Kind}/{s.Owner}/{s.Damage}")) + "/in" + pl.GetIncomingShips(Ship.ShipKind.SiegeShip, 0)
+                + "/" + pl.GetIncomingShips(Ship.ShipKind.WarShip, 0)));
+            var before = State();
+            var first = t.Ai.ProjectArrival("C", d, 2);
+            var second = t.Ai.ProjectArrival("C", d, 2);
+            ok &= Check(t.Ai.ArrivalNotOutmatched("C", d, 2) == t.Ai.ArrivalNotOutmatched("C", d, 2)
+                        && first.MyStrengthLeft == second.MyStrengthLeft && first.Turns == second.Turns,
+                "the gate is deterministic: the same projection and answer twice");
+            ok &= Check(State() == before && inFlight.Count == 1 && inFlight[0].Target == "C",
+                "the gate leaves no state: docked ships, damage, incoming counters and the in-flight list are unchanged");
+        }
+
+        // A friendly force too small: 3 warships and the 1 siegeship C has. The bunkers outlast it long enough to cost 0.604 of the
+        // group (3459 strength): not wiped, but outmatched. It stays, with the reason Outmatched.
+        using (var f = FollowerLine())
+        {
+            f.Ships("D", 0, 3); f.Siege("C", 0, 1);
+            using var t = new ThreatAi(f, consolidate);
+            var p = t.Ai.ProjectArrival("C", f.P("D"), 1);
+            ok &= Check(p != null && !p.MyGroupWiped && Near(p.MyStrength, 3459f) && Mathf.Abs(p.ProjectedLossFraction - 0.6041f) < 0.001f,
+                "3 warships + 1 siegeship: not wiped, but a loss of 0.604");
+            t.Ai.PlanShipActions(0);
+            var held = t.Ai.LastSiegeFollowerChanges;
+            ok &= Check(held.Count == 1 && held[0].Kind == SiegeFollowerTracker.KindHeld && held[0].Reason == SiegeFollowerTracker.ReasonOutmatched,
+                "SiegeHeld|C|D|Outmatched: a loss at or above followerMaxLossFraction holds the follower");
+            f.Constants.followerMaxLossFraction = 1f;
+            ok &= Check(t.Ai.ArrivalNotOutmatched("C", f.P("D"), 1), "followerMaxLossFraction 1: only a wipe-out holds a follower back");
+        }
+
+        // My ships in flight to D count: 4 warships landing in round 1 (InFlightOrders) and 2 siegeships from C give the same fight
+        // as the docked force above (same dock order): MyShips 0, 6 inbound, loss 0.2278. Without the in-flight order the 2
+        // siegeships alone are destroyed (turn 19). Another player's order and an order to another planet are ignored.
+        using (var f = FollowerLine())
+        {
+            f.Siege("C", 0, 2);
+            using var t = new ThreatAi(f, consolidate);
+            var d = f.P("D");
+            var alone = t.Ai.ProjectArrival("C", d, 2);
+            ok &= Check(alone != null && alone.MyGroupWiped && !t.Ai.ArrivalNotOutmatched("C", d, 2),
+                "nothing of mine at or bound for D: 2 siegeships alone would be destroyed");
+            t.Ai.InFlightOrders = new List<GameAI.GameAIOrder>
+            {
+                Fleet(Ship.ShipKind.WarShip, "B", "D", 0, 4, 1),
+                Fleet(Ship.ShipKind.WarShip, "B", "D", 1, 5, 1),   // not mine
+                Fleet(Ship.ShipKind.WarShip, "A", "C", 0, 5, 1),   // not bound for D
+            };
+            var p = t.Ai.ProjectArrival("C", d, 2);
+            ok &= Check(p != null && p.MyShips == 0 && p.InboundShips == 6 && Near(p.MyStrength, 4818f) && !p.MyGroupWiped
+                        && Mathf.Abs(p.ProjectedLossFraction - 0.2278f) < 0.001f && t.Ai.ArrivalNotOutmatched("C", d, 2),
+                "4 of my warships in flight to D join the projection: loss 0.2278, the siegeships may go");
+        }
+
+        // Siegeships from two origins both leave when safe: 5 warships hold D (cap 5), 1 siegeship at C and 1 at B. C's alone:
+        // 5 x 1050 + 309 = 5559, loss 0.3656. B's is projected with C's (leaving the same turn, round 1) and its own (round 2):
+        // 5868, loss 0.2076. Both pass.
+        using (var f = FollowerLine())
+        {
+            f.Ships("D", 0, 5); f.Siege("C", 0, 1); f.Siege("B", 0, 1);
+            using var t = new ThreatAi(f, consolidate);
+            var d = f.P("D");
+            var fromC = t.Ai.ProjectArrival("C", d, 1);
+            var cAction = new ShipAction { Origin = "C", Target = "D", Cost = 100f, Count = 1, Kind = Ship.ShipKind.SiegeShip };
+            var fromB = t.Ai.ProjectArrival("B", d, 1, new List<ShipAction> { cAction });
+            ok &= Check(fromC != null && Near(fromC.MyStrength, 5559f) && Mathf.Abs(fromC.ProjectedLossFraction - 0.3656f) < 0.001f,
+                "C's siegeship with the 5 warships: loss 0.3656");
+            ok &= Check(fromB != null && fromB.InboundShips == 2 && Near(fromB.MyStrength, 5868f) && Mathf.Abs(fromB.ProjectedLossFraction - 0.2076f) < 0.001f,
+                "B's siegeship projected with C's leaving the same turn: loss 0.2076");
+
+            var actions = t.Ai.PlanShipActions(0);
+            var siege = SiegeActions(actions);
+            ok &= Check(siege.Count == 2 && siege.Exists(a => a.Origin == "C" && a.Count == 1) && siege.Exists(a => a.Origin == "B" && a.Count == 1),
+                "PlanShipActions: the siegeships at C and at B both leave for D");
+            var changes = t.Ai.LastSiegeFollowerChanges;
+            ok &= Check(changes.Count == 2 && changes.All(c => c.Kind == SiegeFollowerTracker.KindFollow)
+                        && changes[0].Origin == "B" && changes[1].Origin == "C",
+                "two SiegeFollow lines, one per origin");
+        }
+
+        // No sticky target: no warship of mine anywhere, so the assault has no target and no siegeship leaves, however safe.
+        using (var f = FollowerLine())
+        {
+            f.Siege("C", 0, 2); f.Siege("B", 0, 2);
+            using var t = new ThreatAi(f, consolidate);
+            ok &= Check(new AssaultPlanner(f.Map, 0, stats: f.Stats, warRivals: new HashSet<int> { 1 }).ChooseTarget() == null,
+                "precondition: no warship of mine, no assault target");
+            var actions = t.Ai.PlanShipActions(0);
+            ok &= Check(actions.Count == 0 && t.Ai.LastSiegeFollowerChanges.Count == 0,
+                "no follower leaves (and none is gated or logged) before a sticky target exists");
+        }
+
+        // The tracker: reported on first sight and on a change of kind or reason, cleared when the route leaves the list.
+        {
+            var tracker = new SiegeFollowerTracker();
+            SiegeFollowerTracker.Entry E(string kind, string reason) =>
+                new SiegeFollowerTracker.Entry { Origin = "C", Target = "D", Kind = kind, Reason = reason, Ships = 1 };
+            var held = E(SiegeFollowerTracker.KindHeld, SiegeFollowerTracker.ReasonWiped);
+            ok &= Check(tracker.Update(new[] { held }).Count == 1 && tracker.Update(new[] { held }).Count == 0,
+                "tracker: a hold is reported once");
+            ok &= Check(tracker.Update(new[] { E(SiegeFollowerTracker.KindHeld, SiegeFollowerTracker.ReasonOutmatched) }).Count == 1,
+                "tracker: a new reason is reported");
+            ok &= Check(tracker.Update(new[] { E(SiegeFollowerTracker.KindFollow, string.Empty) }).Count == 1,
+                "tracker: the follower leaving is reported");
+            ok &= Check(tracker.Update(new SiegeFollowerTracker.Entry[0]).Count == 0 && tracker.Update(new[] { held }).Count == 1,
+                "tracker: a route that left the list is reported again when it returns");
         }
         return ok;
     }

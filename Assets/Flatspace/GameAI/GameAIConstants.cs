@@ -54,6 +54,11 @@ public class GameAIConstants : ScriptableObject
     // floor(share x W / (1 - share)), W = max(the required warship force, my warships docked + in flight at the target).
     // 0.5 = no more siegeships than warships; 0 or less = none; 1 or more = no cap.
     public float siegeshipMaxFleetShare = 0.5f;
+    // A siegeship group leaves for the assault target only when the fight projection of its arrival (my ships docked there, mine
+    // in flight there, the ships leaving this turn and the group itself, against the war rivals' ships and bunker fire) shows it
+    // not wiped and losing less than this share of the arriving group's strength; otherwise it waits where it is (no stall: the
+    // warships never wait for it). 1 or more = only a wipe-out holds it back; 0 or less = no siegeship ever leaves into a fight.
+    public float followerMaxLossFraction = 0.5f;
 
     [Header("Production (Consolidate)")]
     // The Warship production weight is multiplied by 1 + this x (fleet shortfall / wanted fleet), where

@@ -1684,11 +1684,139 @@ namespace FlatSpace
             public int SiegeMultiplierBuilds { get; private set; }
 
             /// <summary>
-            /// TASK 14 SEAM (arrival safety): may `count` siegeships leave `origin` for `target` this turn? Always true for now; Task 14
-            /// fills it (a siegeship goes only when the fight projection says the arriving group is not outmatched). Wired into
-            /// AssaultPlanner.SiegeshipGate by PlanShipActions.
+            /// The follower gate (AssaultPlanner.SiegeshipGate, wired by PlanShipActions): may `count` siegeships leave `origin` for
+            /// `target` this turn? ArrivalNotOutmatched with the actions already planned this turn. An unknown target allows the send.
             /// </summary>
-            public bool CanSendSiegeship(string origin, string target, int count) => true;
+            public bool CanSendSiegeship(string origin, string target, int count,
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing)
+            {
+                var planet = AIMap.GetPlanet(target);
+                return planet == null || ArrivalNotOutmatched(origin, planet, count, departing);
+            }
+
+            /// <summary>
+            /// Every in-flight order (GameAI.CurrentAIOrders), set by GameAI before ProcessResults; the arrival projection reads my
+            /// ship transports to the target from it. Null (a self-check that does not set it) means nothing is in flight.
+            /// </summary>
+            public System.Collections.Generic.IReadOnlyList<GameAI.GameAIOrder> InFlightOrders { get; set; }
+
+            /// <summary>
+            /// The fight projection (FightProjector.Project, exact: no random draw) of `count` siegeships leaving `origin` now and
+            /// landing at `target`: my ships already docked there and my ships in flight there (InFlightOrders), the ships `departing`
+            /// this turn for the target (actions planned before this one: the warship force, siegeship groups already let through)
+            /// and the group itself, each fleet carrying the real snapshots and damage of the ships that would leave (Peek, skipping
+            /// ships an earlier action from the same origin takes) and landing after the EmitShipOrders delay. A delay beyond
+            /// retreatProjectionTurns is projected as landing on that last round. Null when there is no fight to project (no war rival's
+            /// ship or bunker at the target, or diplomacy off). Pure: reads the map, writes nothing. Public for the self-check.
+            /// </summary>
+            public FightProjection ProjectArrival(string origin, Planet target, int count,
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null)
+            {
+                if (target == null || count <= 0) return null;
+                var constants = AIMap.GameAIConstants;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var orders = new List<GameAI.GameAIOrder>();
+                if (InFlightOrders != null)
+                    orders.AddRange(InFlightOrders.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport
+                                                              && o.PlayerId == Player.playerID && o.Target == target.PlanetName));
+
+                // Ships leaving earlier in the same turn claim their origin's first ships of their kind (as in ProcessShipActions).
+                var claimed = new Dictionary<(string origin, Ship.ShipKind kind), int>();
+                void Leave(string from, Ship.ShipKind kind, int ships, float cost, bool toTarget)
+                {
+                    claimed.TryGetValue((from, kind), out var skip);
+                    claimed[(from, kind)] = skip + ships;
+                    if (!toTarget) return;
+                    var fleet = HypotheticalFleet(from, kind, ships, skip, cost, target.PlanetName, constants);
+                    if (fleet != null) orders.Add(fleet);
+                }
+                if (departing != null)
+                    foreach (var action in departing)
+                        Leave(action.Origin, action.Kind, action.Count, action.Cost, action.Target == target.PlanetName);
+
+                var originPlanet = AIMap.GetPlanet(origin);
+                if (originPlanet == null || !originPlanet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var path)) return null;
+                Leave(origin, Ship.ShipKind.SiegeShip, count, path.Cost, true);
+                return FightProjector.Project(AIMap, target, Player.playerID, stats, constants, orders);
+            }
+
+            /// <summary>
+            /// The follower gate's rule: the arrival projection (ProjectArrival) shows the arriving group not wiped and losing less than
+            /// followerMaxLossFraction of its strength. With no fight to project (no war rival there) the group may go. Deterministic
+            /// and free of side effects (the planner consults it twice a turn).
+            /// </summary>
+            public bool ArrivalNotOutmatched(string origin, Planet target, int count,
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null)
+                => ArrivalVerdict(ProjectArrival(origin, target, count, departing), out _);
+
+            // The gate's reading of an arrival projection; `reason` is the SiegeHeld reason when it refuses (null when it allows).
+            private bool ArrivalVerdict(FightProjection projection, out string reason)
+            {
+                reason = null;
+                if (projection == null) return true;
+                if (projection.MyGroupWiped) reason = SiegeFollowerTracker.ReasonWiped;
+                else if (!(projection.PerceivedLossFraction < AIMap.GameAIConstants.followerMaxLossFraction))
+                    reason = SiegeFollowerTracker.ReasonOutmatched;
+                return reason == null;
+            }
+
+            // A ship transport order as EmitShipOrders would emit it (same snapshots, damage and delay), never queued: the projection's
+            // stand-in for ships that leave this turn. Null when too few such ships are docked (EmitShipOrders would skip the fleet).
+            private GameAI.GameAIOrder HypotheticalFleet(string origin, Ship.ShipKind kind, int count, int skip, float cost, string target,
+                GameAIConstants constants)
+            {
+                var planet = AIMap.GetPlanet(origin);
+                if (planet == null) return null;
+                var snapshots = planet.PeekShipSnapshots(kind, Player.playerID, count, skip);
+                if (snapshots.Count < count) return null;
+                var delay = Math.Min(TravelDelay(cost), Math.Max(1, constants.retreatProjectionTurns));
+                return new GameAI.GameAIOrder
+                {
+                    Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                    TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                    TimingDelay = delay, TotalDelay = delay, Data = count, Origin = origin, Target = target, PlayerId = Player.playerID,
+                    Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                    {
+                        Kind = kind, Snapshots = snapshots, Damage = planet.PeekShipDamage(kind, Player.playerID, count, skip),
+                    },
+                };
+            }
+
+            /// <summary>A ship transport's delay in turns: path cost / defaultTravelSpeed, at least 1 (see EmitShipOrders).</summary>
+            private int TravelDelay(float cost) => Math.Max(1, Convert.ToInt32(cost / AIMap.GameAIConstants.defaultTravelSpeed));
+
+            // Log-only: the follower-gate decisions, reported on change only (SiegeFollow / SiegeHeld).
+            private readonly SiegeFollowerTracker _siegeFollowers = new SiegeFollowerTracker();
+
+            /// <summary>The SiegeFollow / SiegeHeld entries the last PlanShipActions reported (log-only; public for the self-check).</summary>
+            public List<SiegeFollowerTracker.Entry> LastSiegeFollowerChanges { get; private set; } = new List<SiegeFollowerTracker.Entry>();
+
+            // Re-projects each gate call of the real plan (same inputs, so the same verdict) for its loss and reason, and logs the changes.
+            private void LogSiegeFollowers(int turnNumber, List<AssaultPlanner.SiegeGateCall> calls)
+            {
+                var entries = new List<SiegeFollowerTracker.Entry>();
+                foreach (var call in calls)
+                {
+                    var target = AIMap.GetPlanet(call.Target);
+                    var projection = ProjectArrival(call.Origin, target, call.Count, call.Departing);
+                    ArrivalVerdict(projection, out var reason);
+                    entries.Add(new SiegeFollowerTracker.Entry
+                    {
+                        Origin = call.Origin, Target = call.Target, Ships = call.Count,
+                        Kind = call.Allowed ? SiegeFollowerTracker.KindFollow : SiegeFollowerTracker.KindHeld,
+                        Reason = call.Allowed ? string.Empty : reason ?? SiegeFollowerTracker.ReasonOutmatched,
+                        LossFraction = projection != null ? projection.PerceivedLossFraction : 0f,
+                    });
+                }
+                LastSiegeFollowerChanges = _siegeFollowers.Update(entries);
+                foreach (var entry in LastSiegeFollowerChanges)
+                {
+                    if (entry.Kind == SiegeFollowerTracker.KindFollow)
+                        AITuningLogger.LogSiegeFollow(turnNumber, Player.playerID, entry.Origin, entry.Target, entry.Ships, entry.LossFraction);
+                    else
+                        AITuningLogger.LogSiegeHeld(turnNumber, Player.playerID, entry.Origin, entry.Target, entry.Reason);
+                }
+            }
 
             // Log-only: the last SiegeSized state logged (null = nothing logged or no bunkered target), so the line fires on change only.
             private string _lastSiegeSized;
@@ -2225,6 +2353,8 @@ namespace FlatSpace
                 actions.AddRange(homeActions);
                 actions.AddRange(assault.Plan(target, transport.LastStates, homeActions));
                 LogSiegeSizing(turnNumber, assault, target, stats);
+                // Read before the conversion-hold audit below runs Plan again (and replaces the planner's gate calls).
+                LogSiegeFollowers(turnNumber, assault.LastSiegeGateCalls);
 
                 var force = assault.LastBlockadeForce;
                 if (blockadeTarget != null && force.Ships > 0)
@@ -2287,7 +2417,7 @@ namespace FlatSpace
                 };
                 // At least 1: a Delayed order with TimingDelay <= 0 is both queued AND executed
                 // immediately by ProcessNewOrders, which would dock the fleet twice.
-                var delay = Math.Max(1, Convert.ToInt32(action.Cost / AIMap.GameAIConstants.defaultTravelSpeed));
+                var delay = TravelDelay(action.Cost);
 
                 var transport = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,

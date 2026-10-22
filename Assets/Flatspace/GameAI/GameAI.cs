@@ -651,6 +651,9 @@ namespace FlatSpace
             {
                 for (var playerID = 0; playerID < Gameboard.Instance.players.Count(); ++playerID)
                 {
+                    // The follower gate projects my ships already in flight (PlayerAI.ProjectArrival); read-only for the AI.
+                    var ai = Gameboard.Instance.players[playerID].playerAI;
+                    if (ai != null) ai.InFlightOrders = CurrentAIOrders;
                     Gameboard.Instance.players[playerID].ProcessResults(results, orders);
                 }
             }
