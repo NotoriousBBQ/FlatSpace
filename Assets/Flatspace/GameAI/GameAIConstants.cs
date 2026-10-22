@@ -47,6 +47,13 @@ public class GameAIConstants : ScriptableObject
     public float assaultRatio = 1.5f;
     // ...but never fewer than this.
     public int assaultMinimumShips = 3;
+    // Siegeships join the assault until their bombard (docked at the target + in flight there) covers the target's known
+    // bunker defense x this. No known bunkers means no siegeships wanted (and none built).
+    public float siegeBombardMargin = 1.3f;
+    // Siegeships are at most this share of the assault fleet (warships + siegeships): the cap is
+    // floor(share x W / (1 - share)), W = max(the required warship force, my warships docked + in flight at the target).
+    // 0.5 = no more siegeships than warships; 0 or less = none; 1 or more = no cap.
+    public float siegeshipMaxFleetShare = 0.5f;
 
     [Header("Production (Consolidate)")]
     // The Warship production weight is multiplied by 1 + this x (fleet shortfall / wanted fleet), where

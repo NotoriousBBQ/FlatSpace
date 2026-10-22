@@ -1168,6 +1168,16 @@ public class Planet : MonoBehaviour
         => _incomingOffense[(kind, owner)] = System.Math.Max(0f, GetIncomingOffense(kind, owner) + delta);
     public void ClearIncomingOffense() => _incomingOffense.Clear();
 
+    // Bombard of the warships and siegeships in flight toward this planet, per kind and owning player. Derived like the offense
+    // counter and recomputed with it (GameAIMap.RecomputeIncomingOffense), never saved.
+    private readonly Dictionary<(Ship.ShipKind kind, int owner), float> _incomingBombard
+        = new Dictionary<(Ship.ShipKind kind, int owner), float>();
+    public float GetIncomingBombard(Ship.ShipKind kind, int owner)
+        => _incomingBombard.TryGetValue((kind, owner), out var bombard) ? bombard : 0f;
+    public void AddIncomingBombard(Ship.ShipKind kind, int owner, float delta)
+        => _incomingBombard[(kind, owner)] = System.Math.Max(0f, GetIncomingBombard(kind, owner) + delta);
+    public void ClearIncomingBombard() => _incomingBombard.Clear();
+
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
     {
         if (owner < 0 || owner >= Gameboard.Instance.players.Count) return new List<string>();

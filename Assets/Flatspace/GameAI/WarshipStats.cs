@@ -103,12 +103,14 @@ namespace FlatSpace.AI
 
         /// <summary>Bombard scaled by remaining health (bombard x current health / Health stat); 0 for a Health stat of 0.</summary>
         public float EffectiveBombard(Ship ship)
+            => EffectiveBombard(ship.Template, ship.ResearchSnapshot, ship.Damage, SubtypeOf(ship.Kind));
+
+        /// <summary>The same for a ship known only by its template, snapshot and damage (a fleet in flight).</summary>
+        public float EffectiveBombard(ShipData template, ICollection<string> snapshot, float damage, string subtype)
         {
-            var subtype = SubtypeOf(ship.Kind);
-            var max = Health(ship.Template, ship.ResearchSnapshot, subtype);
+            var max = Health(template, snapshot, subtype);
             if (max <= 0f) return 0f;
-            return Bombard(ship.Template, ship.ResearchSnapshot, subtype)
-                   * CurrentHealth(ship.Template, ship.ResearchSnapshot, ship.Damage, subtype) / max;
+            return Bombard(template, snapshot, subtype) * CurrentHealth(template, snapshot, damage, subtype) / max;
         }
 
         // Ship-based overloads pick the subtype from the ship's kind (a WarShip gives the same numbers as before).

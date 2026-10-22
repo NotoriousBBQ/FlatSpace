@@ -341,6 +341,19 @@ public static class AITuningLogger
             count.ToString(), cap.ToString(), weight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>
+    /// The siegeship sizing for an assault target with known bunkers changed (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeSized|target|bunkerDefense|bombardNeeded
+    /// (bunkerDefense x siegeBombardMargin)|siegeships (committed + still wanted)|cap (siegeshipMaxFleetShare cap).
+    /// </summary>
+    public static void LogSiegeSized(int turnNumber, int playerId, string target, float bunkerDefense, float bombardNeeded,
+        int siegeships, int cap)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeSized", target, bunkerDefense.ToString("0.#", ci),
+            bombardNeeded.ToString("0.#", ci), siegeships.ToString(ci), cap.ToString(ci)) });
+    }
+
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
     public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
     {

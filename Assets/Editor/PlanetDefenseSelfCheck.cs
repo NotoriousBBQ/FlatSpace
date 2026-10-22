@@ -26,6 +26,9 @@ public static class PlanetDefenseSelfCheck
         ok &= RunSaveRoundTripCheck();
         ok &= RunNewSubtypeWeightsCheck();
         ok &= RunBunkerThreatWeightCheck();
+        ok &= RunSiegeSizingCheck();
+        ok &= RunSiegeshipWeightCheck();
+        ok &= RunAssaultCompositionCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -500,6 +503,231 @@ public static class PlanetDefenseSelfCheck
                 ok &= Check(Near(t.Weight("C"), 12f), "a blockaded outer planet with a rival ship: 1 x 2 x 3 x 2 = 12");
                 ok &= Check(t.Weight("C") > 4f, "the blockade boosts the bunker weight");
             }
+        }
+        return ok;
+    }
+
+    // Task 13 fixture: line A-B-C-D, player 0 colonizes A, B and C, player 1 colonizes D, at war, knowledge updated (D is known as
+    // C's neighbour). With `bunkers`, D holds 4 of player 1's bunkers of Defense 25 (no Bunker research lines: the base) = 100.
+    // Siegeship template: bombard 20, health 100 (no Siegeship research lines). Garrisons are 0, so every warship is spare.
+    private static Fixture BunkeredLine(bool bunkers)
+    {
+        var f = Fixture.Line();
+        f.BunkerTemplate.shipDefense = 25f;
+        f.Constants.garrisonOuter = 0;
+        f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0); f.Colonize("D", 1);
+        if (bunkers) f.Bunkers("D", 1, 4);
+        f.War(0, 1);
+        f.Map.Knowledge.Update(f.Map, 2);
+        return f;
+    }
+
+    private static AssaultPlanner SiegePlanner(Fixture f)
+        => new AssaultPlanner(f.Map, 0, stats: f.Stats, warRivals: new HashSet<int> { 1 });
+
+    private static GameAI.GameAIOrder SiegeFleet(string origin, string target, int player, int ships)
+    {
+        var fleet = new GameAI.GameAIOrder.ShipFleetPayload
+        {
+            Kind = Ship.ShipKind.SiegeShip,
+            Snapshots = Enumerable.Range(0, ships).Select(_ => new List<string>()).ToList(),
+            Damage = Enumerable.Repeat(0f, ships).ToList(),
+        };
+        return new GameAI.GameAIOrder
+        {
+            Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = player, Origin = origin, Target = target,
+            TimingDelay = 2, Data = ships, Fleet = fleet,
+        };
+    }
+
+    // Task 13: bombard needed = known bunker defense x siegeBombardMargin; siegeships still wanted = ceil((needed - committed
+    // bombard) / bombard per siegeship), capped so siegeships <= siegeshipMaxFleetShare of the fleet:
+    // cap = floor(share x W / (1 - share)), W = max(RequiredForce, my warships docked + incoming at the target).
+    public static bool RunSiegeSizingCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            ok &= Check(Near(f.Constants.siegeBombardMargin, 1.3f) && Near(f.Constants.siegeshipMaxFleetShare, 0.5f),
+                "siegeBombardMargin defaults to 1.3 and siegeshipMaxFleetShare to 0.5");
+            f.Colonize("C", 0); f.Colonize("D", 1); f.Bunkers("D", 1, 2); f.War(0, 1);
+            ok &= Check(SiegePlanner(f).KnownBunkerDefense(f.P("D")) == 0f, "an unknown planet's bunkers are not seen: defense 0");
+        }
+
+        using (var f = BunkeredLine(true))
+        {
+            var d = f.P("D");
+            var assault = SiegePlanner(f);
+            ok &= Check(Near(assault.KnownBunkerDefense(d), 100f), "4 known bunkers of defense 25: 100");
+            ok &= Check(Near(assault.RequiredBombard(d), 130f), "bombard needed: 100 x 1.3 = 130");
+            ok &= Check(assault.RequiredForce() == 3 && assault.SiegeshipCap(d) == 3,
+                "no rival warships: force 3 (the minimum), cap floor(0.5 x 3 / 0.5) = 3");
+            ok &= Check(assault.WantedSiegeships(d, 20f) == 3, "ceil(130 / 20) = 7 wanted, stopped at the share cap of 3");
+            ok &= Check(assault.WantedSiegeships(d, 0f) == 0, "a siegeship with no bombard adds nothing: 0 wanted");
+
+            f.Constants.assaultMinimumShips = 10;   // W = 10, cap 10: the need decides
+            ok &= Check(assault.SiegeshipCap(d) == 10 && assault.WantedSiegeships(d, 20f) == 7,
+                "with a force of 10 the cap is 10 and ceil(130 / 20) = 7 are wanted");
+
+            // Two siegeships in flight (40 bombard) count toward the need: ceil(90 / 20) = 5, room 10 - 2 = 8.
+            var orders = new List<GameAI.GameAIOrder> { SiegeFleet("B", "D", 0, 2) };
+            f.Map.RecomputeIncomingShips(orders);
+            f.Map.RecomputeIncomingOffense(orders, f.Stats);
+            ok &= Check(Near(d.GetIncomingBombard(Ship.ShipKind.SiegeShip, 0), 40f) && assault.CommittedSiegeships(d) == 2,
+                "precondition: 2 siegeships and 40 bombard in flight to D");
+            ok &= Check(Near(assault.CommittedSiegeBombard(d), 40f) && assault.WantedSiegeships(d, 20f) == 5,
+                "incoming siegeship bombard counts toward the need: ceil(90 / 20) = 5 still wanted");
+
+            // One more docked at D (20): ceil(70 / 20) = 4.
+            f.Siege("D", 0, 1);
+            ok &= Check(Near(assault.CommittedSiegeBombard(d), 60f) && assault.WantedSiegeships(d, 20f) == 4,
+                "docked siegeship bombard counts too: ceil(70 / 20) = 4 still wanted");
+
+            // Back to the minimum force of 3: the 3 committed fill the cap, none more.
+            f.Constants.assaultMinimumShips = 3;
+            ok &= Check(assault.WantedSiegeships(d, 20f) == 0, "3 committed siegeships fill a cap of 3: none more wanted");
+
+            f.Constants.siegeshipMaxFleetShare = 0f;
+            ok &= Check(assault.SiegeshipCap(d) == 0, "a share of 0: no siegeships");
+            f.Constants.siegeshipMaxFleetShare = 1f;
+            ok &= Check(assault.SiegeshipCap(d) == int.MaxValue, "a share of 1: no cap");
+        }
+
+        using (var f = BunkeredLine(false))
+        {
+            var d = f.P("D");
+            var assault = SiegePlanner(f);
+            ok &= Check(assault.KnownBunkerDefense(d) == 0f && assault.RequiredBombard(d) == 0f && assault.WantedSiegeships(d, 20f) == 0,
+                "no bunkers: no bombard needed and 0 siegeships wanted");
+        }
+        return ok;
+    }
+
+    // Task 13: the Siegeship situational multiplier is the Warship shortfall shape on wanted vs owned siegeships (boost 2, cap 1.5),
+    // 0 when none is wanted (no bunkers) and 0 outside Consolidate/Amass; computed once per production turn.
+    public static bool RunSiegeshipWeightCheck()
+    {
+        var ok = true;
+        var consolidate = PlayerAI.AIStrategy.AIStrategyConsolidate;
+        using (var f = BunkeredLine(true))
+        {
+            f.Ships("B", 0, 2);   // a holder of my warships, so D is the assault target
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                t.Item.subType = "Siegeship";
+                ok &= Check(t.Ai.WantedSiegeships() == 3 && t.Ai.OwnedSiegeships() == 0,
+                    "precondition: 3 siegeships wanted (the cap of 3), none owned");
+                ok &= Check(Near(t.Weight("A"), 3f), "none owned: 1 + 2 x 3/3 = 3");
+                ok &= Check(Near(t.Weight("B"), 3f) && t.Ai.SiegeMultiplierBuilds == 1,
+                    "the multiplier is computed once per production turn");
+            }
+            f.Siege("A", 0, 1);
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                t.Item.subType = "Siegeship";
+                ok &= Check(Near(t.Weight("A"), 1f + 2f * 2f / 3f), "one owned: 1 + 2 x 2/3");
+            }
+            using (var t = new ThreatAi(f, PlayerAI.AIStrategy.AIStrategyAmass))
+            {
+                t.Item.subType = "Siegeship";
+                ok &= Check(t.Weight("A") > 1f, "Amass is Consolidate-like: boosted too");
+            }
+            foreach (var strategy in new[] { PlayerAI.AIStrategy.AIStrategyExpand, PlayerAI.AIStrategy.AIStrategyNone })
+            {
+                using var t = new ThreatAi(f, strategy);
+                t.Item.subType = "Siegeship";
+                ok &= Check(t.Weight("A") == 0f, $"{strategy} builds no siegeships: weight 0");
+            }
+        }
+        using (var f = BunkeredLine(false))
+        {
+            f.Ships("B", 0, 2);
+            using var t = new ThreatAi(f, consolidate);
+            t.Item.subType = "Siegeship";
+            ok &= Check(t.Ai.WantedSiegeships() == 0 && t.Weight("A") == 0f,
+                "no bunkers anywhere: 0 siegeships wanted and the Siegeship weight is 0 (the choice is dropped)");
+        }
+        return ok;
+    }
+
+    private static List<ShipAction> PlanAt(Fixture f, AssaultPlanner assault, string target)
+    {
+        var transport = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate) { HeldPlanet = target };
+        var home = transport.Plan();
+        return assault.Plan(f.P(target), transport.LastStates, home);
+    }
+
+    // Task 13: AssaultPlanner.Plan sends the warship force and, as separate SiegeShip actions, the siegeships that exist (cheapest
+    // first, up to the bombard need and the share cap). With no siegeship the warships leave alone (no stall). The garrison planner
+    // never moves siegeships.
+    public static bool RunAssaultCompositionCheck()
+    {
+        var ok = true;
+        // 5 warships at B; 2 siegeships at C (path 100) and 2 at A (path 300). Force 3, cap 3, need 130 (> 3 x 20).
+        using (var f = BunkeredLine(true))
+        {
+            f.Ships("B", 0, 5); f.Siege("C", 0, 2); f.Siege("A", 0, 2);
+            var actions = PlanAt(f, SiegePlanner(f), "D");
+            ok &= Check(actions.Count == 3, $"three actions: the warship force and two siegeship groups (got {actions.Count})");
+            ok &= Check(actions.Exists(a => a.Kind == Ship.ShipKind.WarShip && a.Origin == "B" && a.Target == "D" && a.Count == 3),
+                "the warship force: 3 from B, sized as before");
+            ok &= Check(actions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "C" && a.Count == 2)
+                        && actions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "A" && a.Count == 1),
+                "siegeships: C's 2 (cheapest) then 1 of A's 2, stopping at the cap of 3");
+
+            var gated = SiegePlanner(f);
+            gated.SiegeshipGate = (origin, target, count) => origin != "C";
+            var gatedActions = PlanAt(f, gated, "D");
+            ok &= Check(!gatedActions.Exists(a => a.Origin == "C")
+                        && gatedActions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "A" && a.Count == 2)
+                        && gatedActions.Exists(a => a.Kind == Ship.ShipKind.WarShip && a.Count == 3),
+                "the Task 14 seam: a refused source is skipped, the next one sends, the warships are unaffected");
+        }
+
+        // No siegeship exists: the warships leave alone, the same force (no stall).
+        using (var f = BunkeredLine(true))
+        {
+            f.Ships("B", 0, 5);
+            var actions = PlanAt(f, SiegePlanner(f), "D");
+            ok &= Check(actions.Count == 1 && actions[0].Kind == Ship.ShipKind.WarShip && actions[0].Origin == "B" && actions[0].Count == 3,
+                "no siegeship built: the 3 warships depart anyway");
+        }
+
+        // No bunkers: siegeships wait where they are.
+        using (var f = BunkeredLine(false))
+        {
+            f.Ships("B", 0, 5); f.Siege("A", 0, 2);
+            var actions = PlanAt(f, SiegePlanner(f), "D");
+            ok &= Check(actions.Count == 1 && actions[0].Kind == Ship.ShipKind.WarShip,
+                "no bunkers at the target: no siegeship is sent");
+        }
+
+        // Garrison planner: siegeships are neither sources nor counted as garrison.
+        using (var f = BunkeredLine(true))
+        {
+            f.Constants.garrisonOuter = 2;   // C is outer: garrison 2
+            f.Siege("C", 0, 3); f.Siege("A", 0, 4);
+            var transport = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            var home = transport.Plan();
+            var c = transport.LastStates.Find(s => s.Planet.PlanetName == "C");
+            ok &= Check(home.Count == 0 && c != null && c.Docked == 0 && c.Deficit == 2,
+                "siegeships fill no garrison and are no garrison source");
+        }
+
+        // The order trio: warships and siegeships leaving the same planet the same turn each carry their own kind's ships.
+        using (var f = BunkeredLine(true))
+        {
+            f.Ships("B", 0, 5);
+            for (var i = 0; i < 2; i++) f.P("B").DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string> { "sg" });
+            using var t = new ThreatAi(f, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            var orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessShipActions(orders);
+            var transports = orders.FindAll(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport && o.Origin == "B");
+            var siege = transports.Find(o => o.Fleet != null && o.Fleet.Kind == Ship.ShipKind.SiegeShip);
+            var war = transports.Find(o => o.Fleet != null && o.Fleet.Kind == Ship.ShipKind.WarShip);
+            ok &= Check(war != null && war.Fleet.Snapshots.Count == 3, "B's warship fleet of 3 is emitted");
+            ok &= Check(siege != null && siege.Fleet.Snapshots.Count == 2 && siege.Fleet.Snapshots.All(s => s.Count == 1 && s[0] == "sg"),
+                "B's siegeship fleet of 2 is emitted with the siegeships' own snapshots (claims are per kind)");
         }
         return ok;
     }
@@ -1330,6 +1558,11 @@ public static class PlanetDefenseSelfCheck
                 "incoming: a siegeship fleet counts as siegeships, a fleet-less order as warships");
             ok &= Check(Near(a.GetIncomingOffense(Ship.ShipKind.SiegeShip, 1), 0f),
                 "incoming offense: a siegeship fleet adds none (Task 13 adds incoming bombard)");
+            // Task 13: siegeship bombard 20, health 100 (no Siegeship research lines): 20 x 95/100 + 20 = 39.
+            ok &= Check(Near(a.GetIncomingBombard(Ship.ShipKind.SiegeShip, 1), 39f),
+                "incoming bombard: the siegeship fleet adds 19 (5 damage) + 20 = 39");
+            ok &= Check(Near(a.GetIncomingBombard(Ship.ShipKind.WarShip, 1), 0f),
+                "incoming bombard: a fleet-less order adds none");
         }
 
         // An older save: warships only, no damage key, no bunker or siegeship entries.

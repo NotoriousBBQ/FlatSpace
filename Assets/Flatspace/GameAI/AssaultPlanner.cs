@@ -431,19 +431,166 @@ namespace FlatSpace
                 return sources.OrderBy(s => s.Cost).ThenBy(s => s.Name, StringComparer.Ordinal).ToList();
             }
 
+            // ── Siegeships (assault composition) ─────────────────────────────
+
+            /// <summary>
+            /// Task 14 seam: may `count` siegeships leave `origin` for `target` now? Null (the default) allows every send. PlayerAI sets it
+            /// to PlayerAI.CanSendSiegeship (the arrival-safety gate). A refused source is skipped; the next source is tried.
+            /// </summary>
+            public Func<string, string, int, bool> SiegeshipGate { get; set; }
+
+            /// <summary>A war rival's (any other player's without a war set) bunker is docked here.</summary>
+            private bool HoldsRivalBunker(Planet planet)
+                => planet.DockedShips.Exists(s => s.Kind == Ship.ShipKind.Bunker && s.Owner >= 0 && IsRival(s.Owner));
+
+            /// <summary>
+            /// The summed Defense stat (WarshipStats, the bunker's own research line) of the war rivals' bunkers on the target, as far as I
+            /// can see it: the target must be a planet I know, the way the force sizing sees docked warships. 0 for an unknown planet, with
+            /// no bunkers, or without warship stats.
+            /// </summary>
+            public float KnownBunkerDefense(Planet target)
+            {
+                if (_stats == null || target == null || !_map.Knowledge.IsKnown(_playerId, target.PlanetName)) return 0f;
+                var sum = 0f;
+                foreach (var ship in target.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.Bunker && ship.Owner >= 0 && IsRival(ship.Owner))
+                        sum += _stats.Defense(ship);
+                return sum;
+            }
+
+            /// <summary>Bombard the assault wants at the target: KnownBunkerDefense x siegeBombardMargin.</summary>
+            public float RequiredBombard(Planet target) => KnownBunkerDefense(target) * _constants.siegeBombardMargin;
+
+            private int CountSiegeships(Planet planet)
+                => planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip && s.Owner == _playerId);
+
+            /// <summary>My siegeships docked at the target plus those in flight there.</summary>
+            public int CommittedSiegeships(Planet target)
+                => CountSiegeships(target) + target.GetIncomingShips(Ship.ShipKind.SiegeShip, _playerId);
+
+            /// <summary>My siegeships' effective bombard at the target: docked (health-scaled) plus in flight (GetIncomingBombard). 0 without stats.</summary>
+            public float CommittedSiegeBombard(Planet target)
+            {
+                if (_stats == null) return 0f;
+                var sum = target.GetIncomingBombard(Ship.ShipKind.SiegeShip, _playerId);
+                foreach (var ship in target.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.SiegeShip && ship.Owner == _playerId)
+                        sum += _stats.EffectiveBombard(ship);
+                return sum;
+            }
+
+            /// <summary>
+            /// The most siegeships the assault fleet at the target may hold, so they are at most siegeshipMaxFleetShare of warships +
+            /// siegeships: floor(share x W / (1 - share)), W = max(RequiredForce, my warships docked + in flight there). A share of 0 or
+            /// less gives 0, 1 or more no cap (int.MaxValue). The small epsilon keeps a product that is whole in decimal from flooring
+            /// one short.
+            /// </summary>
+            public int SiegeshipCap(Planet target)
+            {
+                var share = _constants.siegeshipMaxFleetShare;
+                if (share <= 0f) return 0;
+                if (share >= 1f) return int.MaxValue;
+                var warships = Math.Max(RequiredForce(),
+                    CountWarships(target) + target.GetIncomingShips(Ship.ShipKind.WarShip, _playerId));
+                return (int)Math.Floor(share * warships / (1f - share) + 1e-4f);
+            }
+
+            /// <summary>
+            /// Siegeships still to send to the target: ceil((RequiredBombard - CommittedSiegeBombard) / bombardPerSiegeship), at most the
+            /// room left under SiegeshipCap (cap - CommittedSiegeships), never below 0. 0 when nothing is needed or a siegeship adds no
+            /// bombard. Production wants CommittedSiegeships + this (PlayerAI.WantedSiegeships).
+            /// </summary>
+            public int WantedSiegeships(Planet target, float bombardPerSiegeship)
+            {
+                if (target == null || bombardPerSiegeship <= 0f) return 0;
+                var remaining = RequiredBombard(target) - CommittedSiegeBombard(target);
+                if (remaining <= 0f) return 0;
+                var need = (int)Math.Ceiling(remaining / bombardPerSiegeship - 1e-4f);
+                var room = Math.Max(0, SiegeshipCap(target) - CommittedSiegeships(target));
+                return Math.Min(need, room);
+            }
+
+            /// <summary>
+            /// The siegeship part of the assault: siegeships docked on my other planets (none from a planet where a war rival's bunker
+            /// stands: they are bombarding it), cheapest usable path first, each ship counted at its own effective bombard, until the
+            /// bombard still needed is covered or the cap's room is used. Each source is one action of Kind SiegeShip; SiegeshipGate
+            /// may refuse a source. Never waits for anything: with no siegeship available it returns nothing.
+            /// </summary>
+            private List<ShipAction> PlanSiegeships(Planet target)
+            {
+                var actions = new List<ShipAction>();
+                if (_stats == null) return actions;
+                var remaining = RequiredBombard(target) - CommittedSiegeBombard(target);
+                var room = Math.Max(0, SiegeshipCap(target) - CommittedSiegeships(target));
+                if (remaining <= 0f || room <= 0) return actions;
+
+                var template = _constants.siegeShipData;
+                var subtype = WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip);
+                var sources = new List<Source>();
+                foreach (var planet in _map.PlanetList)
+                {
+                    if (planet == target) continue;
+                    var docked = CountSiegeships(planet);
+                    if (docked <= 0 || HoldsRivalBunker(planet)) continue;
+                    if (!planet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var entry) || !IsUsablePath(entry)) continue;
+                    sources.Add(new Source { Name = planet.PlanetName, Remaining = docked, Cost = entry.Cost });
+                }
+
+                foreach (var source in sources.OrderBy(s => s.Cost).ThenBy(s => s.Name, StringComparer.Ordinal))
+                {
+                    if (remaining <= 0f || room <= 0) break;
+                    var sourcePlanet = _map.GetPlanet(source.Name);
+                    var available = Math.Min(source.Remaining, room);
+                    var snapshots = sourcePlanet.PeekShipSnapshots(Ship.ShipKind.SiegeShip, _playerId, available);
+                    var damages = sourcePlanet.PeekShipDamage(Ship.ShipKind.SiegeShip, _playerId, available);
+                    var taken = 0;
+                    var bombard = 0f;
+                    for (var i = 0; i < snapshots.Count && remaining - bombard > 0f; i++)
+                    {
+                        bombard += _stats.EffectiveBombard(template, snapshots[i], damages[i], subtype);
+                        taken++;
+                    }
+                    if (taken == 0) continue;
+                    if (SiegeshipGate != null && !SiegeshipGate(source.Name, target.PlanetName, taken)) continue;
+
+                    actions.Add(new ShipAction
+                    {
+                        Origin = source.Name,
+                        Target = target.PlanetName,
+                        Cost   = source.Cost,
+                        Count  = taken,
+                        Kind   = Ship.ShipKind.SiegeShip,
+                    });
+                    remaining -= bombard;
+                    room -= taken;
+                }
+                return actions;
+            }
+
             /// <summary>
             /// Sends spare ships to the target, cheapest path first. An ordinary target is sized by ship count until the
             /// deficit is met; a blockaded target is sized by real offense until NeededOffense is covered (or every spare
             /// ship is sent). A source's spare is its state's Spare minus what the home actions already send from it.
+            /// Then the siegeship part (PlanSiegeships) is appended as separate actions of Kind SiegeShip: the warships leave
+            /// with what exists whether or not any siegeship is available (no stall), and siegeships that exist go the same turn.
             /// </summary>
             public List<ShipAction> Plan(Planet target, List<ShipTransportPlanner.PlanetState> states,
                 List<ShipAction> homeActions)
             {
                 LastBlockadeForce = default;
-                var actions = new List<ShipAction>();
-                if (target == null) return actions;
+                if (target == null) return new List<ShipAction>();
+                var actions = PlanWarships(target, states, homeActions);
+                actions.AddRange(PlanSiegeships(target));
+                return actions;
+            }
 
+            private List<ShipAction> PlanWarships(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                List<ShipAction> homeActions)
+            {
+                var actions = new List<ShipAction>();
+                // A source's warship spare is reduced by the warships already leaving it (siegeship actions do not claim warships).
                 var sentByOrigin = homeActions
+                    .Where(a => a.Kind != Ship.ShipKind.SiegeShip)
                     .GroupBy(a => a.Origin)
                     .ToDictionary(g => g.Key, g => g.Sum(a => a.Count));
 

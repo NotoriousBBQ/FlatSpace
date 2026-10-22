@@ -1630,6 +1630,92 @@ namespace FlatSpace
             // production turn: the first Warship choice evaluated fills it, BuildIndustryMatrix resets it.
             private float? _warshipMultiplierThisTurn;
 
+            // ── Siegeships (assault composition) ─────────────────────────────
+
+            /// <summary>Bombard of a siegeship built now: the Siegeship template at full health with my researched Siegeship improvements.</summary>
+            private float NewSiegeshipBombard(WarshipStats stats)
+            {
+                var subtype = WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip);
+                var researched = WarshipStats.ResearchedNames(ResearchCatalog != null ? ResearchCatalog.catalogItems : null, subtype);
+                return stats.Bombard(AIMap.GameAIConstants.siegeShipData, researched, subtype);
+            }
+
+            /// <summary>
+            /// The siegeships the current assault wants: those already committed to the assault target (docked + in flight) plus
+            /// AssaultPlanner.WantedSiegeships (the bombard still missing against the target's known bunkers, in new-siegeship bombard,
+            /// capped by siegeshipMaxFleetShare). The target is the one PlanShipActions would pick (blockade first, else enemy-occupied,
+            /// retreat cooldowns excluded); 0 with no target or no known bunker there. Free of Gameboard.Instance apart from the turn.
+            /// </summary>
+            public int WantedSiegeships()
+            {
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turn,
+                    AssaultWarFilter()) { ExcludedTargets = new HashSet<string>(CooldownPlanets(turn)) };
+                var target = assault.ChooseTarget();
+                if (target == null || assault.RequiredBombard(target) <= 0f) return 0;   // no known bunker: none wanted
+                return assault.CommittedSiegeships(target) + assault.WantedSiegeships(target, NewSiegeshipBombard(stats));
+            }
+
+            /// <summary>Every siegeship I own: docked anywhere plus my own in flight.</summary>
+            public int OwnedSiegeships()
+                => AIMap.PlanetList.Sum(p =>
+                    p.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip && s.Owner == Player.playerID)
+                    + p.GetIncomingShips(Ship.ShipKind.SiegeShip, Player.playerID));
+
+            /// <summary>
+            /// The Siegeship production multiplier: 0 unless the strategy is Consolidate-like and the assault wants siegeships;
+            /// otherwise the Warship shortfall shape (WarshipShortfallMultiplier with warshipShortfallBoost and warshipFleetCap) on
+            /// wanted vs owned siegeships. Unlike Warship, nothing wanted means 0, so no siegeship is built with no bunker to break.
+            /// </summary>
+            public float ComputeSiegeshipMultiplier(AIStrategy strategy)
+            {
+                if (!IsConsolidateLike(strategy)) return 0f;
+                var wanted = WantedSiegeships();
+                if (wanted <= 0) return 0f;
+                return WarshipShortfallMultiplier(wanted, OwnedSiegeships(),
+                    AIMap.GameAIConstants.warshipShortfallBoost, AIMap.GameAIConstants.warshipFleetCap);
+            }
+
+            // Like the Warship multiplier: reads every planet, so computed at most once per production turn (the first Siegeship
+            // choice fills it, BuildIndustryMatrix resets it). SiegeMultiplierBuilds counts the computations (the self-check's proof).
+            private float? _siegeMultiplierThisTurn;
+
+            public int SiegeMultiplierBuilds { get; private set; }
+
+            /// <summary>
+            /// TASK 14 SEAM (arrival safety): may `count` siegeships leave `origin` for `target` this turn? Always true for now; Task 14
+            /// fills it (a siegeship goes only when the fight projection says the arriving group is not outmatched). Wired into
+            /// AssaultPlanner.SiegeshipGate by PlanShipActions.
+            /// </summary>
+            public bool CanSendSiegeship(string origin, string target, int count) => true;
+
+            // Log-only: the last SiegeSized state logged (null = nothing logged or no bunkered target), so the line fires on change only.
+            private string _lastSiegeSized;
+
+            /// <summary>
+            /// SiegeSized|target|bunkerDefense|bombardNeeded|siegeships|cap on change only, for an assault target with known bunkers.
+            /// siegeships is the sized siegeship fleet (committed + still wanted, the production figure), cap the share cap.
+            /// </summary>
+            private void LogSiegeSizing(int turnNumber, AssaultPlanner assault, Planet target, WarshipStats stats)
+            {
+                var defense = target != null ? assault.KnownBunkerDefense(target) : 0f;
+                if (defense <= 0f)
+                {
+                    _lastSiegeSized = null;
+                    return;
+                }
+                var needed = assault.RequiredBombard(target);
+                var sized = assault.CommittedSiegeships(target) + assault.WantedSiegeships(target, NewSiegeshipBombard(stats));
+                var cap = assault.SiegeshipCap(target);
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                var key = string.Join("|", target.PlanetName, defense.ToString("0.#", ci), needed.ToString("0.#", ci),
+                    sized.ToString(ci), cap.ToString(ci));
+                if (key == _lastSiegeSized) return;
+                _lastSiegeSized = key;
+                AITuningLogger.LogSiegeSized(turnNumber, Player.playerID, target.PlanetName, defense, needed, sized, cap);
+            }
+
             // The per-turn part of the Bunker weight (my war rivals, whether a known rival planet exists, the garrison categories). It
             // reads many planets, so it is built once per production turn: the first Bunker choice evaluated fills it,
             // BuildIndustryMatrix resets it. BunkerThreatContextBuilds counts the builds (the self-check's once-per-turn proof).
@@ -1727,6 +1813,15 @@ namespace FlatSpace
                 }
                 if (item.subType == "Bunker")
                     return BunkerThreatMultiplier(planetName);   // 0 at the cap, under Expand/None, or with no rival nearby
+                if (item.subType == "Siegeship")
+                {
+                    if (_siegeMultiplierThisTurn == null)
+                    {
+                        SiegeMultiplierBuilds++;
+                        _siegeMultiplierThisTurn = ComputeSiegeshipMultiplier(Strategy);
+                    }
+                    return _siegeMultiplierThisTurn.Value;   // 0 under Expand/None or with no known bunker to break
+                }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
                 var blockaded = IsBlockaded(planetName);
@@ -1832,6 +1927,7 @@ namespace FlatSpace
 
                 _warshipMultiplierThisTurn = null;   // recomputed lazily by GetIndustrySituationalWeightMultiplier
                 _bunkerThreatThisTurn = null;        // likewise the Bunker threat context
+                _siegeMultiplierThisTurn = null;     // and the Siegeship multiplier
 
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
@@ -1911,13 +2007,15 @@ namespace FlatSpace
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
 
                 // Nothing is undocked until the orders execute, so a second fleet leaving the same
-                // origin this turn (home defence + assault) must skip the ships the first one takes.
-                var claimedByOrigin = new Dictionary<string, int>();
+                // origin this turn (home defence + assault) must skip the ships the first one takes. Claims are per kind: the
+                // skip counts docked ships of the fleet's own kind, so a siegeship fleet never skips past warships.
+                var claimedByOrigin = new Dictionary<(string origin, Ship.ShipKind kind), int>();
                 foreach (var action in PlanShipActions(turn, results))
                 {
-                    claimedByOrigin.TryGetValue(action.Origin, out var claimed);
+                    var key = (action.Origin, action.Kind);
+                    claimedByOrigin.TryGetValue(key, out var claimed);
                     EmitShipOrders(action, orders, claimed);
-                    claimedByOrigin[action.Origin] = claimed + action.Count;
+                    claimedByOrigin[key] = claimed + action.Count;
                 }
             }
 
@@ -2098,7 +2196,7 @@ namespace FlatSpace
                 var excluded = new HashSet<string>(CooldownPlanets(turnNumber));
                 excluded.UnionWith(retreat.Retreating);
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
-                    AssaultWarFilter()) { ExcludedTargets = excluded };
+                    AssaultWarFilter()) { ExcludedTargets = excluded, SiegeshipGate = CanSendSiegeship };
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
@@ -2126,6 +2224,7 @@ namespace FlatSpace
                 var homeActions = transport.Plan();
                 actions.AddRange(homeActions);
                 actions.AddRange(assault.Plan(target, transport.LastStates, homeActions));
+                LogSiegeSizing(turnNumber, assault, target, stats);
 
                 var force = assault.LastBlockadeForce;
                 if (blockadeTarget != null && force.Ships > 0)
