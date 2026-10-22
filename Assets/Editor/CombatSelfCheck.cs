@@ -20,6 +20,7 @@ public static class CombatSelfCheck
         ok &= RunRepairAndColonyShipCheck();
         ok &= RunRoundCheck();
         ok &= RunAttritionShareCheck();
+        ok &= RunClassOrderCheck();
         Debug.Log(ok
             ? "[CombatSelfCheck] ALL PASSED"
             : "[CombatSelfCheck] FAILURES (see errors above)");
@@ -118,6 +119,53 @@ public static class CombatSelfCheck
                 $"the window share is lost / engaged about 0.5 for a wipe-out by attrition (got {(engaged > 0f ? drop / engaged : 0f):0.###})");
             ok &= Check(engaged > 0f && destroyedOnly / engaged < 0.03f, "the old numerator (only the ship's strength when it died) would read under 0.03");
         }
+        return ok;
+    }
+
+    // Victim order within a side is class first (0 warship, 1 siegeship, 2 bunker), then lowest health fraction, then dock index.
+    // All-class-0 units keep the old order (health fraction, then index) because the class key ties.
+    public static bool RunClassOrderCheck()
+    {
+        var ok = true;
+        System.Func<int, int, bool> war = (a, b) => a != b;
+        System.Func<int, int, float> hostility = (a, b) => 1f;
+        List<CombatUnit> Attackers(int count)
+        {
+            var list = new List<CombatUnit>();
+            for (var i = 0; i < count; i++) list.Add(CombatUnit.Make(100 + i, 0, 100 + i, 10f, 100f, 5f, 0f));
+            return list;
+        }
+
+        var wounded = CombatUnit.Make(1, 1, 1, 3f, 100f, 5f, 50f, 1);   // siegeship, health fraction 0.5
+        var healthy = CombatUnit.Make(2, 1, 2, 10f, 100f, 5f, 0f, 0);   // warship, health fraction 1
+        var nearDead = CombatUnit.Make(3, 1, 3, 12f, 100f, 5f, 90f, 2); // bunker, health fraction 0.1
+        ok &= Check(wounded.Class == 1 && healthy.Class == 0 && nearDead.Class == 2 && CombatUnit.Make(9, 0, 9, 1f, 1f, 1f, 0f).Class == 0,
+            "Make sets Class from the optional parameter, defaulting to 0");
+        ok &= Check(wounded.WithDamage(5f).Class == 1 && nearDead.WithDamage(5f).Class == 2, "WithDamage keeps the class");
+
+        var small = Attackers(1);
+        small.AddRange(new[] { wounded, healthy, nearDead });
+        var byClass = CombatSystem.Round(small, war, hostility, 20f);
+        ok &= Check(byClass.Damage.Count == 1 && byClass.Damage.ContainsKey(2),
+            "a small pool lands on the warship (class 0) although the siegeship and bunker have lower health fractions");
+
+        var flat = Attackers(1);
+        flat.AddRange(new[] { CombatUnit.Make(1, 1, 1, 3f, 100f, 5f, 50f), CombatUnit.Make(2, 1, 2, 10f, 100f, 5f, 0f),
+            CombatUnit.Make(3, 1, 3, 12f, 100f, 5f, 90f) });
+        var byHealth = CombatSystem.Round(flat, war, hostility, 20f);
+        ok &= Check(byHealth.Damage.Count == 1 && byHealth.Damage.ContainsKey(3),
+            "the same units all class 0 are hit by lowest health fraction, as before");
+
+        var big = Attackers(13);   // pool 130: the warship needs 125, the 5 left lands on the siegeship (needs 62.5)
+        big.AddRange(new[] { wounded, healthy, nearDead });
+        var spill = CombatSystem.Round(big, war, hostility, 20f);
+        ok &= Check(spill.Destroyed.SequenceEqual(new[] { 2 }) && spill.Damage.Count == 1 && Near(spill.Damage[1], 4f) && !spill.Damage.ContainsKey(3),
+            "a pool of 130 kills the warship first, spills 5 x 0.8 = 4 onto the siegeship and never reaches the bunker");
+
+        var bunkersOnly = Attackers(1);
+        bunkersOnly.AddRange(new[] { CombatUnit.Make(1, 1, 1, 1f, 100f, 5f, 0f, 2), CombatUnit.Make(2, 1, 2, 1f, 100f, 5f, 80f, 2) });
+        ok &= Check(CombatSystem.Round(bunkersOnly, war, hostility, 20f).Damage.ContainsKey(2),
+            "within one class the lowest health fraction is still hit first");
         return ok;
     }
 

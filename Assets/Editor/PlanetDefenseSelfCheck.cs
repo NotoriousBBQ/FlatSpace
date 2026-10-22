@@ -19,6 +19,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunCatalogCheck();
         ok &= RunBunkerCapCheck();
         ok &= RunBunkersAreNotShipsCheck();
+        ok &= RunSiegeshipCombatCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -466,6 +467,106 @@ public static class PlanetDefenseSelfCheck
             siege.Damage = 50f;
             ok &= Check(FleetUIController.FormatShipRow(siege, f.Research) == "SiegeShip (Spd 120, HP 50/100, Off 1.5/3, Def 3, Bomb 10/20)",
                 "a damaged siegeship shows current/maximum health, effective/base offense and bombard");
+        }
+        return ok;
+    }
+
+    private static List<CombatReport> Resolve(Fixture f, List<Planet.UpdateResult> results)
+        => CombatSystem.Resolve(f.Map, f.Stats, f.Constants, 1, results);
+
+    // Task 6: siegeships fight as units of class 1 (hit after warships), bunkers never do, siegeships repair like warships and
+    // guard or raid colony ships like warships. Siegeship template: Offense 3, Health 100, Defense 3; warship: 10 / 100 / 5; K 20.
+    public static bool RunSiegeshipCombatCheck()
+    {
+        var ok = true;
+        var warLost = Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost;
+        var colonyLost = Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonyShipsLost;
+
+        using (var f = Fixture.Line())   // the warship dies first although the siegeship has the lower health fraction
+        {
+            f.Siege("A", 1, 1, 50f);      // dock index 0, health fraction 0.5
+            f.Ships("A", 1, 1);           // dock index 1, health fraction 1
+            f.Ships("A", 0, 13);          // pool 130: the warship needs 100 / 0.8 = 125
+            f.War(0, 1);
+            Resolve(f, new List<Planet.UpdateResult>());
+            var rival = f.P("A").DockedShips.Where(s => s.Owner == 1).ToList();
+            ok &= Check(rival.Count == 1 && rival[0].Kind == Ship.ShipKind.SiegeShip, "the warship is destroyed first, the damaged siegeship survives");
+            ok &= Check(rival.Count == 1 && Near(rival[0].Damage, 50f + 5f * 20f / 23f),
+                "the 5 left over lands on the siegeship at 20 / (20 + 3): damage 50 + 4.348");
+        }
+
+        using (var f = Fixture.Line())   // a side of siegeships alone still takes damage, and its offense joins its pool
+        {
+            f.Siege("A", 1, 2, 0f);
+            f.Ships("A", 0, 1);
+            f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            Resolve(f, results);
+            var siege = f.P("A").DockedShips.Where(s => s.Owner == 1).ToList();
+            ok &= Check(Near(siege[0].Damage, 10f * 20f / 23f) && Near(siege[1].Damage, 0f),
+                "a warship's pool of 10 lands on the first siegeship: 10 x 20 / 23");
+            ok &= Check(Near(f.P("A").DockedShips.First(s => s.Owner == 0).Damage, 6f * 0.8f),
+                "two siegeships' pool of 3 + 3 lands on the warship at 0.8");
+            ok &= Check(results.Count(r => r.Result == warLost) == 2, "one loss result per victim, siegeships included");
+        }
+
+        using (var f = Fixture.Line())   // bunkers are never combat units
+        {
+            f.Ships("A", 0, 1);
+            f.Bunkers("A", 1, 3);
+            f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            var reports = Resolve(f, results);
+            ok &= Check(reports.Count == 0 && results.Count == 0 && f.P("A").DockedShips.All(s => Near(s.Damage, 0f)),
+                "a warship against bunkers alone: no fight, no damage to either side");
+        }
+
+        using (var f = Fixture.Line())   // siegeship repair
+        {
+            f.Colonize("A", 0);
+            f.Siege("A", 0, 1, 50f);
+            Resolve(f, new List<Planet.UpdateResult>());
+            ok &= Check(Near(f.P("A").DockedShips[0].Damage, 40f), "a damaged siegeship at its owner's populated planet heals 10% of its Health stat");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("A", 0);
+            f.Siege("A", 0, 1, 50f);
+            f.Siege("A", 1, 1);
+            f.War(0, 1);
+            Resolve(f, new List<Planet.UpdateResult>());
+            ok &= Check(Near(f.P("A").DockedShips[0].Damage, 50f + 3f * 20f / 23f),
+                "an at-war siegeship docked there takes the hit and blocks repair");
+        }
+
+        using (var f = Fixture.Line())   // colony ships: a docked siegeship protects them, a raiding one destroys them
+        {
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Siege("A", 0, 1);
+            f.Ships("A", 1, 1);
+            f.War(0, 1);
+            Resolve(f, new List<Planet.UpdateResult>());
+            ok &= Check(f.P("A").DockedShips.Any(s => s.Kind == Ship.ShipKind.ColonyShip), "a docked siegeship of the owner protects its colony ship");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Siege("A", 1, 1);
+            f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            Resolve(f, results);
+            var lost = results.Where(r => r.Result == colonyLost).ToList();
+            ok &= Check(f.P("A").DockedShips.All(s => s.Kind != Ship.ShipKind.ColonyShip)
+                        && lost.Count == 1 && ((ColonyLoss)lost[0].Data).ByPlayer == 1,
+                "an at-war siegeship destroys a colony ship with no guard");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.P("A").DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
+            f.Bunkers("A", 1, 2);
+            f.War(0, 1);
+            Resolve(f, new List<Planet.UpdateResult>());
+            ok &= Check(f.P("A").DockedShips.Any(s => s.Kind == Ship.ShipKind.ColonyShip), "an at-war bunker is not a raider: the colony ship lives");
         }
         return ok;
     }

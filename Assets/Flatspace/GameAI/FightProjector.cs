@@ -91,10 +91,10 @@ namespace FlatSpace.AI
             for (var i = 0; i < planet.DockedShips.Count; i++)
             {
                 var ship = planet.DockedShips[i];
-                if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner == Planet.NoOwner) continue;
+                if (!Ship.IsFightingKind(ship.Kind) || ship.Owner == Planet.NoOwner) continue;
                 if (stats.CurrentHealth(ship) <= 0f) continue;
-                units.Add(CombatUnit.Make(nextId++, ship.Owner, i, stats.Offense(ship.Template, ship.ResearchSnapshot),
-                    stats.Health(ship.Template, ship.ResearchSnapshot), stats.Defense(ship.Template, ship.ResearchSnapshot), ship.Damage));
+                units.Add(CombatUnit.Make(nextId++, ship.Owner, i, stats.Offense(ship), stats.Health(ship), stats.Defense(ship), ship.Damage,
+                    ship.Kind == Ship.ShipKind.SiegeShip ? 1 : 0));
             }
 
             Func<int, int, bool> atWar = (a, b) => map.Diplomacy.IsAtWar(a, b, true);
@@ -104,7 +104,7 @@ namespace FlatSpace.AI
             // Imperfect intel: the rival seen at `rivalFactor` of its offense and health (the same health fraction, the same Defense).
             if (rivalFactor != 1f)
                 units = units.Select(u => rivals.Contains(u.Owner)
-                    ? CombatUnit.Make(u.Id, u.Owner, u.Index, u.BaseOffense * rivalFactor, u.Max * rivalFactor, u.Defense, (u.Max - u.Health) * rivalFactor)
+                    ? CombatUnit.Make(u.Id, u.Owner, u.Index, u.BaseOffense * rivalFactor, u.Max * rivalFactor, u.Defense, (u.Max - u.Health) * rivalFactor, u.Class)
                     : u).ToList();
 
             // My own fleets heading here: they join before the combat of the projected round equal to their delay.
@@ -113,15 +113,17 @@ namespace FlatSpace.AI
             foreach (var order in orders ?? Enumerable.Empty<GameAI.GameAIOrder>())
             {
                 if (order.Type != GameAI.GameAIOrder.OrderType.OrderTypeShipTransport || order.PlayerId != player) continue;
-                if (order.Target != planet.PlanetName || order.Fleet == null || order.Fleet.Kind != Ship.ShipKind.WarShip) continue;
+                if (order.Target != planet.PlanetName || order.Fleet == null || !Ship.IsFightingKind(order.Fleet.Kind)) continue;
                 var round = Math.Max(1, order.TimingDelay);
                 if (round > constants.retreatProjectionTurns) continue;
-                var template = constants.warShipData;
+                var siege = order.Fleet.Kind == Ship.ShipKind.SiegeShip;
+                var template = siege ? constants.siegeShipData : constants.warShipData;
+                var subtype = WarshipStats.SubtypeOf(order.Fleet.Kind);
                 for (var i = 0; i < order.Fleet.Snapshots.Count; i++)
                 {
                     var snapshot = order.Fleet.Snapshots[i];
-                    var unit = CombatUnit.Make(nextId++, player, index++, stats.Offense(template, snapshot),
-                        stats.Health(template, snapshot), stats.Defense(template, snapshot), order.Fleet.DamageAt(i));
+                    var unit = CombatUnit.Make(nextId++, player, index++, stats.Offense(template, snapshot, subtype),
+                        stats.Health(template, snapshot, subtype), stats.Defense(template, snapshot, subtype), order.Fleet.DamageAt(i), siege ? 1 : 0);
                     if (unit.Health > 0f) inbound.Add((round, unit));
                 }
             }
