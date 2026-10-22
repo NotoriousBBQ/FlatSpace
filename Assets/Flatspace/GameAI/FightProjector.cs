@@ -168,7 +168,11 @@ namespace FlatSpace.AI
                     projection.InboundShips++;
                     projection.MyStrength += arrival.unit.Strength;
                 }
-                if (!units.Any(u => u.Owner == player) || !(units.Any(IsRival) || bunkers.Any(IsRival))) break;
+                // Nothing of mine here and nothing of mine still to land: my group is gone. While an arrival is pending the
+                // projection keeps going (an inbound-only group waits for its landing turn).
+                var mineHere = units.Any(u => u.Owner == player);
+                var pending = inbound.Any(a => a.round > round);
+                if ((!mineHere && !pending) || !(units.Any(IsRival) || bunkers.Any(IsRival))) break;
 
                 // The ship-to-ship round, then (as in the real turn) the bombardment step on the state it left: bunkers whose owner
                 // has no fighting ship left fire at the at-war ships and take their bombard. With no bunkers the step never runs.
@@ -180,7 +184,11 @@ namespace FlatSpace.AI
                     units = Apply(units, bombard.ShipHits);
                     bunkers = Apply(bunkers, bombard.BunkerHits);
                 }
-                if (Idle(fight) && (bombard == null || Idle(bombard.ShipHits) && Idle(bombard.BunkerHits))) break;   // nobody can hurt anybody: the fight is over
+                if (Idle(fight) && (bombard == null || Idle(bombard.ShipHits) && Idle(bombard.BunkerHits)))
+                {
+                    if (!mineHere) continue;   // still waiting for my group to land: a quiet turn does not end the fight
+                    break;                     // nobody can hurt anybody: the fight is over
+                }
                 projection.Turns = round;
             }
 

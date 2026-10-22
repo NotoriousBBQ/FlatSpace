@@ -946,8 +946,10 @@ public static class PlanetDefenseSelfCheck
             f.Siege("A", 0, 6);
             f.War(0, 1);
             var p = Project(f, "A", 0);
-            ok &= Check(p != null && !p.RivalSurvives && !p.MyGroupWiped && p.Turns == 4 && p.ProjectedLossFraction < 0.1f,
-                "six siegeships destroy both bunkers by the fourth projected turn and keep every ship");
+            // All bunker fire lands on the first siegeship: 20.870, 14.907, 9.152, 3.544, leaving health 51.528, offense 1.546,
+            // strength 1.546 x 54.528 = 84.29 of 309 (strength is quadratic in health): loss (309 - 84.29) / 1854 = 0.1212.
+            ok &= Check(p != null && !p.RivalSurvives && !p.MyGroupWiped && p.Turns == 4 && Near(p.ProjectedLossFraction, 0.1212f),
+                "six siegeships destroy both bunkers by the fourth projected turn and keep every ship (loss 0.1212, all on one wounded ship)");
         }
 
         // A bunker owner's ship protects its bunkers in the projection as in the real step: the bunkers only fire after it dies.
@@ -984,6 +986,36 @@ public static class PlanetDefenseSelfCheck
                 "the inbound siegeship is the whole group: 0 docked, 1 inbound, strength 309");
             ok &= Check(p != null && p.MyGroupWiped && Near(p.ProjectedLossFraction, 1f) && p.RivalSurvives,
                 "it is projected to be destroyed by the defenders' warships (the follower gate reads this as a loss)");
+
+            // The same siegeship landing in round 3: rounds 1 and 2 are quiet waiting turns, then the same fight as above.
+            follower.TimingDelay = 3;
+            var late = Project(f, "A", 0, follower);
+            ok &= Check(late != null && late.InboundShips == 1 && Near(late.MyStrength, 309f) && late.MyGroupWiped
+                        && Near(late.ProjectedLossFraction, 1f) && late.RivalSurvives && late.Turns > 3,
+                "landing in round 3: strength 309, wiped with a loss of 1 (not 'wiped with loss 0' from ending before it lands)");
+        }
+
+        // A strong inbound group landing in round 3: 11 siegeships against 1 bunker, nothing of mine docked. Same numbers as the docked
+        // case above (bunker at dock index 0, siegeships after it): strength 3399, loss 60.28 / 3399 = 0.01774, the bunker dies on turn 3.
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("A", 1, 1);
+            f.War(0, 1);
+            var group = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = 0, Origin = "B", Target = "A", TimingDelay = 3, Data = 11,
+                Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                {
+                    Kind = Ship.ShipKind.SiegeShip,
+                    Snapshots = Enumerable.Range(0, 11).Select(_ => new List<string>()).ToList(),
+                    Damage = new List<float>(),
+                },
+            };
+            var p = Project(f, "A", 0, group);
+            ok &= Check(p != null && p.MyShips == 0 && p.InboundShips == 11 && Near(p.MyStrength, 3399f),
+                "eleven inbound siegeships: 0 docked, 11 inbound, strength 3399");
+            ok &= Check(p != null && !p.MyGroupWiped && !p.RivalSurvives && p.Turns == 3 && Near(p.ProjectedLossFraction, 60.2813f / 3399f),
+                "they land in round 3 and destroy the bunker that turn: loss 0.01774, not wiped");
         }
         return ok;
     }
