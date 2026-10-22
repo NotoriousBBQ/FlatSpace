@@ -1635,7 +1635,7 @@ namespace FlatSpace
             // BuildIndustryMatrix resets it. BunkerThreatContextBuilds counts the builds (the self-check's once-per-turn proof).
             private sealed class BunkerThreatContext
             {
-                public ISet<int> Rivals;
+                public System.Collections.Generic.ISet<int> Rivals;
                 public bool HasKnownEnemyPlanet;
                 public ShipTransportPlanner Planner;
             }
@@ -1657,7 +1657,7 @@ namespace FlatSpace
                 return _bunkerThreatThisTurn;
             }
 
-            private static bool HoldsRivalShip(Planet planet, ISet<int> rivals)
+            private static bool HoldsRivalShip(Planet planet, System.Collections.Generic.ISet<int> rivals)
                 => planet != null && planet.DockedShips.Exists(s =>
                     (s.Kind == Ship.ShipKind.WarShip || s.Kind == Ship.ShipKind.SiegeShip) && s.Owner >= 0 && rivals.Contains(s.Owner));
 
