@@ -828,6 +828,10 @@ public class Planet : MonoBehaviour
         // An emptied planet is dead (every path that removes inhabitants, including the economy's starvation loss, ends here): its bunkers go too.
         if (Population.Count == 0)
             ClearBunkers();
+        // On a mixed planet, a player whose last inhabitant just left (starvation, launched as a colonist) loses its bunkers too: they
+        // would otherwise block conversion and fire at the planet's new owner. Other players' bunkers stay.
+        else if (changeAmount < 0 && !Population.Exists(x => x.Player == playerId))
+            ClearBunkersOf(playerId);
     }
 
     private void SetPlanetOwnership()
@@ -1008,6 +1012,13 @@ public class Planet : MonoBehaviour
     public void ClearBunkers()
     {
         foreach (var bunker in DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker).ToList())
+            DestroyDockedShip(bunker);
+    }
+
+    /// <summary>Destroys every docked bunker of one owner (its last inhabitant left a planet others still inhabit). No Gameboard.Instance.</summary>
+    public void ClearBunkersOf(int owner)
+    {
+        foreach (var bunker in DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker && s.Owner == owner).ToList())
             DestroyDockedShip(bunker);
     }
 

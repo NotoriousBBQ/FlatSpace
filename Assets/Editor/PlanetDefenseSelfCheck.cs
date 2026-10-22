@@ -32,6 +32,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunFollowerGateCheck();
         ok &= RunEscortCheck();
         ok &= RunEscortReservationCheck();
+        ok &= RunConversionBlockedCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -1350,6 +1351,24 @@ public static class PlanetDefenseSelfCheck
                         && b.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip) == 1,
                 "ClearBunkers leaves warships and siegeships docked");
         }
+
+        // A mixed planet: a player whose last inhabitant leaves loses its own bunkers only. C holds A (player 0) x2 and B (player 1) x1,
+        // bunkers 0:2 and 1:1.
+        using (var f = Fixture.Line())
+        {
+            var c = f.P("C");
+            ConversionSelfCheck.Populate(c, (0, 2), (1, 1));
+            f.Bunkers("C", 0, 2);
+            f.Bunkers("C", 1, 1);
+            c.ChangePopulation(-1, 0);
+            ok &= Check(c.Population.Count == 2 && c.BunkerCount(0) == 2 && c.BunkerCount(1) == 1,
+                "removing one of two inhabitants keeps that player's bunkers");
+            c.ChangePopulation(-1, 0);
+            ok &= Check(c.Population.Count == 1 && c.Owner == 1 && c.BunkerCount(0) == 0 && c.BunkerCount(1) == 1,
+                "removing a player's last inhabitant destroys its bunkers; the other player's stay");
+            c.ChangePopulation(-1, 1);
+            ok &= Check(c.Population.Count == 0 && c.BunkerCount(1) == 0 && c.DockedShips.Count == 0, "the planet emptying clears the rest");
+        }
         return ok;
     }
 
@@ -1836,7 +1855,7 @@ public static class PlanetDefenseSelfCheck
                 f.Bunkers("A", bunkerOwner, 1);
                 var r1 = ConvTurn(f, 1);
                 ConvTurn(f, 2);
-                ok &= Check(r1.Count == 0 && a.ConversionBy == Planet.NoOwner && Near(a.ConversionProgress, 0f) && a.Population.Count(p => p.Player == 1) == 4,
+                ok &= Check(r1.All(r => r.What == ConversionReport.Kind.Blocked) && a.ConversionBy == Planet.NoOwner && Near(a.ConversionProgress, 0f) && a.Population.Count(p => p.Player == 1) == 4,
                     $"a bunker of player {bunkerOwner} on the planet: no session starts, no progress");
 
                 // The last bunker destroyed: the very next Resolve starts the session.
@@ -1872,6 +1891,67 @@ public static class PlanetDefenseSelfCheck
             f.Ships("A", 0, 1); f.Bunkers("A", 1, 1); f.Ships("A", 1, 1); f.War(0, 1);
             ok &= Check(!BombardmentSystem.Dominated(f.P("A"), 1, f.Map, f.Stats) && ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == Planet.NoOwner,
                 "Dominated and Dominator agree: an at-war defender warship means nobody dominates");
+        }
+        return ok;
+    }
+
+    private static List<BunkerBlockTracker.Entry> Blocked(List<ConversionReport> reports)
+        => reports.Where(r => r.What == ConversionReport.Kind.Blocked)
+            .Select(r => new BunkerBlockTracker.Entry { Planet = r.Planet, Dominator = r.Dominator, Bunkers = r.Bunkers }).ToList();
+
+    // The ConversionBlocked report (ConversionSystem.Step) and its change-only bookkeeping (BunkerBlockTracker).
+    public static bool RunConversionBlockedCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            f.Constants.conversionTurnsBase = 4f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Ships("A", 0, 1); f.War(0, 1);
+            f.Bunkers("A", 1, 2);
+            var tracker = new BunkerBlockTracker();
+
+            var r1 = ConvTurn(f, 1);
+            ok &= Check(Blocked(r1).Count == 1 && Blocked(r1)[0].Bunkers == 2 && Blocked(r1)[0].Dominator == 0 && Blocked(r1)[0].Planet == "A",
+                "dominated + war + foreign inhabitant + 2 bunkers: one Blocked report (A, dominator 0, 2 bunkers)");
+            ok &= Check(tracker.Update(Blocked(r1)).Count == 1, "the first blocked turn logs one line");
+            ok &= Check(tracker.Update(Blocked(ConvTurn(f, 2))).Count == 0, "a second turn with the same bunker count logs nothing");
+
+            a.DestroyDockedShip(a.DockedShips.First(s => s.Kind == Ship.ShipKind.Bunker));
+            var r3 = ConvTurn(f, 3);
+            var lines3 = tracker.Update(Blocked(r3));
+            ok &= Check(lines3.Count == 1 && lines3[0].Bunkers == 1, "one bunker destroyed (2 -> 1): the count change logs one line with 1");
+
+            a.DestroyDockedShip(a.DockedShips.First(s => s.Kind == Ship.ShipKind.Bunker));
+            var r4 = ConvTurn(f, 4);
+            ok &= Check(Blocked(r4).Count == 0 && r4.Any(r => r.What == ConversionReport.Kind.Start) && tracker.Update(Blocked(r4)).Count == 0,
+                "the last bunker destroyed: no Blocked report, the conversion starts, nothing is logged");
+
+            f.Bunkers("A", 1, 1);
+            var r5 = ConvTurn(f, 5);
+            ok &= Check(Blocked(r5).Count == 1 && tracker.Update(Blocked(r5)).Count == 1, "a new bunker after the clearing blocks again and logs again");
+        }
+        using (var f = Fixture.Line())     // no war with a holder: no session could ever start, so nothing is reported
+        {
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Ships("A", 0, 1); f.Bunkers("A", 1, 1);
+            ok &= Check(Blocked(ConvTurn(f, 1)).Count == 0, "peace with the only holder: no Blocked report");
+        }
+        using (var f = Fixture.Line())     // nothing foreign to convert
+        {
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (0, 4));
+            f.Ships("A", 0, 1); f.War(0, 1); f.Bunkers("A", 1, 1);
+            ok &= Check(Blocked(ConvTurn(f, 1)).Count == 0, "the dominator holds every inhabitant: no Blocked report");
+        }
+        using (var f = Fixture.Line())     // no dominator (no warship of mine): nothing is blocked
+        {
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.War(0, 1); f.Bunkers("A", 1, 1);
+            ok &= Check(Blocked(ConvTurn(f, 1)).Count == 0, "no dominator: no Blocked report");
         }
         return ok;
     }

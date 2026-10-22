@@ -25,7 +25,7 @@ namespace FlatSpace.AI
     /// <summary>One line of the tuning log: a session started, an inhabitant flipped, or a session ended.</summary>
     public class ConversionReport
     {
-        public enum Kind { Start, Flip, End }
+        public enum Kind { Start, Flip, End, Blocked }
 
         public Kind What;
         public string Planet;
@@ -36,6 +36,7 @@ namespace FlatSpace.AI
         public float BombardFactor = 1f;            // Start
         public ConversionEvent Flip;                // Flip
         public ConversionEndReason EndReason;       // End
+        public int Bunkers;                         // Blocked: the bunkers (any owner's) standing on the planet
     }
 
     /// <summary>
@@ -148,7 +149,18 @@ namespace FlatSpace.AI
                     planet.EndConversionSession();
                 }
             }
-            if (dominator == Planet.NoOwner || bunkers) return;   // bunkers (any owner's) hold the planet: no session starts or continues
+            if (dominator == Planet.NoOwner) return;
+            if (bunkers)   // bunkers (any owner's) hold the planet: no session starts or continues
+            {
+                // Report it (each turn; the log dedups) when a session would otherwise run: a foreign inhabitant to convert and a war with a holder.
+                if (planet.Population.Exists(p => p.Player != dominator) && WarMask(planet, dominator, diplomacy) != 0)
+                    reports.Add(new ConversionReport
+                    {
+                        What = ConversionReport.Kind.Blocked, Planet = planet.PlanetName, Dominator = dominator,
+                        Bunkers = planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.Bunker),
+                    });
+                return;
+            }
             if (!planet.Population.Exists(p => p.Player != dominator)) return;
             var factor = BombardSpeedFactor(DockedBombard(planet, dominator, stats), constants);
 

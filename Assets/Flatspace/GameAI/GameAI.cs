@@ -138,12 +138,16 @@ namespace FlatSpace
             // Log-only: conversion sessions in progress (start turn, flips) and the players already reported out of planets.
             private readonly ConversionTracker _conversions = new ConversionTracker();
 
+            // Log-only: the planets where bunkers currently block a conversion (ConversionBlocked on change only).
+            private readonly BunkerBlockTracker _bunkerBlocks = new BunkerBlockTracker();
+
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
                 _grotsitsShort.Clear();
                 _redirectFailedLogged.Clear();
                 _conversions.Clear();
+                _bunkerBlocks.Clear();
 
             }
 
@@ -238,6 +242,11 @@ namespace FlatSpace
                         }
                     }
                 }
+                // Planets where bunkers block a conversion that would otherwise run: one line when blocked or the count changes.
+                var blocked = reports.Where(r => r.What == ConversionReport.Kind.Blocked)
+                    .Select(r => new BunkerBlockTracker.Entry { Planet = r.Planet, Dominator = r.Dominator, Bunkers = r.Bunkers });
+                foreach (var entry in _bunkerBlocks.Update(blocked))
+                    AITuningLogger.LogConversionBlocked(turn, entry.Dominator, entry.Planet, entry.Bunkers);
                 // A session found on a planet after a load has no tracker entry yet: begin it and log its Start once more.
                 foreach (var planet in GameAIMap.PlanetList)
                 {

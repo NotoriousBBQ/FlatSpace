@@ -112,6 +112,7 @@ namespace FlatSpace.AI
             if (result.Kind != RedirectKind.Divert) return;
 
             colonist.Target = result.Target;
+            colonist.EscortOffense = 0f;   // the escort ships still fly to the old target: the colonist no longer has their cover
             if (rider != null) rider.Target = result.Target;
 
             var stillHeadingThere = orders.Exists(o => o != colonist

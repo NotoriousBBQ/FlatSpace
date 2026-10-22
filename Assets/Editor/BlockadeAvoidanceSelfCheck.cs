@@ -878,6 +878,15 @@ public static class BlockadeAvoidanceSelfCheck
             ColonistRedirect.Apply(map, new List<GameAI.GameAIOrder> { weak }, weak, result);
             ok &= Check(string.Join(">", weak.Route) == "A>C>D" && weak.TotalDelay == 361 && Near(weak.EscortOffense, 5f),
                 "the redirected colonist flies A>C>D (delay 361) and keeps its EscortOffense 5");
+
+            // A Divert re-targets the colonist while the escort ships still fly to the old target: the escort cover is dropped.
+            var diverted = Order(5f);
+            ColonistRedirect.Apply(map, new List<GameAI.GameAIOrder> { diverted }, diverted, new ColonistRedirect.Result
+            {
+                Kind = ColonistRedirect.RedirectKind.Divert, Target = "C", CurrentNode = "A",
+                Nodes = new List<string> { "A", "C" }, Cost = 100f,
+            });
+            ok &= Check(diverted.Target == "C" && Near(diverted.EscortOffense, 0f), "a Divert to another planet zeroes EscortOffense (the escort flies to the old target)");
         }
         finally
         {

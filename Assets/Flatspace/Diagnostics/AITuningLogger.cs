@@ -639,6 +639,14 @@ public static class AITuningLogger
             turnsHeld.ToString(ci), converted.ToString(ci)) });
     }
 
+    /// <summary>Bunkers block a conversion the dominator would otherwise run (on change only): T&lt;turn&gt;|P&lt;dominator&gt;|ConversionBlocked|planet|bunkers.</summary>
+    public static void LogConversionBlocked(int turnNumber, int playerId, string planet, int bunkers)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionBlocked", planet, bunkers.ToString(ci)) });
+    }
+
     /// <summary>A planet changed owner through conversion (P = the new owner, -1 for a tie): OwnerChanged|planet|oldOwner|newOwner|clearedItem or -.</summary>
     public static void LogOwnerChanged(int turnNumber, int newOwner, string planet, int oldOwner, string clearedItem)
     {
