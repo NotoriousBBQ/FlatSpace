@@ -102,6 +102,13 @@ namespace FlatSpace.AI
             return Math.Min(1f, Math.Max(c.conversionBombardMinFactor, factor));
         }
 
+        /// <summary>
+        /// A bunker stands here that player `me` will never bombard away: its owner is me or not at war with me (BombardmentSystem.Triggers
+        /// needs war), so no conversion can ever run for me. A bunker of a player I am at war with is not stuck (my fleet bombards it).
+        /// </summary>
+        public static bool HasStuckBunker(Planet planet, int me, DiplomacyState diplomacy)
+            => planet.DockedShips.Exists(s => s.Kind == Ship.ShipKind.Bunker && (s.Owner == Planet.NoOwner || !diplomacy.IsAtWar(me, s.Owner, true)));
+
         /// <summary>Any bunker (any owner's) stands on the planet: no conversion session can run there.</summary>
         public static bool HasBunkers(Planet planet) => planet.DockedShips.Exists(s => s.Kind == Ship.ShipKind.Bunker);
 

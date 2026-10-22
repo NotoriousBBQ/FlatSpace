@@ -196,6 +196,7 @@ namespace FlatSpace
                 {
                     if (ConversionSystem.DockedBombard(planet, _playerId, _stats) <= 0f) continue;   // dominance is by bombard
                     if (ConversionSystem.Dominator(planet, _map, _stats) != _playerId) continue;
+                    if (ConversionSystem.HasStuckBunker(planet, _playerId, _map.Diplomacy)) continue;   // conversion can never run here
                     var session = planet.ConversionBy == _playerId && planet.Population.Exists(p => p.Player != _playerId);
                     var atWarHolder = planet.Population.Exists(p => p.Player != _playerId && _map.Diplomacy.IsAtWar(_playerId, p.Player, true));
                     if (session || atWarHolder) holds.Add(planet.PlanetName);

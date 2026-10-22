@@ -28,6 +28,7 @@ public static class ConversionSelfCheck
         ok &= RunConversionSaveCheck();
         ok &= RunConversionHoldCheck();
         ok &= RunConversionColonizeCheck();
+        ok &= RunStuckBunkerCheck();
         ok &= RunConversionHoldTrackerCheck();
         ok &= RunConversionHoldAuditCheck();
         ok &= RunCapitolLostCheck();
@@ -491,6 +492,40 @@ public static class ConversionSelfCheck
 
     // A dominated planet where I hold at least one inhabitant and which is below max is a valid target even when I already hold
     // the plurality; the choice cost is divided by 1 + weight x (1 - my share).
+    // Bunkers only a war can remove: a bunker of mine or of a player I am not at war with is never bombarded, so no conversion
+    // can run there and the planet is neither a conversion colonization target nor a conversion hold. A bunker of a player I am at
+    // war with stays both (the held fleet is what bombards it away). Player 0 = me, 1 = the at-war holder, 2 = not at war with me.
+    public static bool RunStuckBunkerCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            foreach (var (bunkerOwner, expected, label) in new[]
+            {
+                (-1, true, "no bunkers: unchanged, a target and a hold"),
+                (1, true, "a bunker of the at-war holder: still a target and a hold (bombardment removes it)"),
+                (2, false, "a bunker of a player I am not at war with: neither a target nor a hold"),
+                (0, false, "a bunker of my own: neither (nothing would ever bombard it)"),
+            })
+            {
+                using (var f = CombatSelfCheck.Fixture.Line())
+                {
+                    var ai = MakeAI(f, 0, gos);
+                    var a = f.P("A");
+                    Populate(a, (0, 2), (1, 2));          // 4 of max 5, an at-war holder left
+                    f.Ships("A", 0, 1); f.War(0, 1);
+                    if (bunkerOwner != -1) a.DockShipFromSave(Ship.ShipKind.Bunker, bunkerOwner, new List<string>(), 0f);
+                    var planner = new AssaultPlanner(f.Map, 0, null, f.Stats, null, 0, new HashSet<int> { 1 });
+                    ok &= Check(ai.IsConversionTarget(a) == expected, "IsConversionTarget: " + label);
+                    ok &= Check(planner.ConversionHolds().Contains("A") == expected, "ConversionHolds: " + label);
+                }
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
     public static bool RunConversionColonizeCheck()
     {
         var ok = true;

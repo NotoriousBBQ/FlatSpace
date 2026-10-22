@@ -309,7 +309,9 @@ starts dominance the same turn), in the engine step, so no player's decision ord
   bombard above 0 and no warship/siegeship of a player I am at war with (`IsAtWar(me, x, true)`, a truce is not war). Two dominators not at war
   with each other: more docked bombard, then the lower id. **Pace:** progress a turn is `BombardSpeedFactor(my docked bombard) / TurnsPerFlip`,
   the factor `clamp(bombard / conversionBombardReference (60), conversionBombardMinFactor (0.05), 1)`. **Bunker gate:** no session starts or
-  continues while any bunker (any owner's) stands on the planet; a bunker appearing mid-session ends it as `DominanceLost`. `ConversionStart` and
+  continues while any bunker (any owner's) stands on the planet; a bunker appearing mid-session ends it as `DominanceLost`. A bunker only a
+  war can remove (`ConversionSystem.HasStuckBunker`: mine, ownerless, or of a player I am not at war with, which `BombardmentSystem.Triggers` never
+  bombards) also takes the planet out of `IsConversionTarget` and `ConversionHolds`; a bunker of an at-war player stays both. `ConversionStart` and
   `Convert` log a trailing `bombardFactor`. Fixtures set the reference to 1 in `WarshipSelfCheck.MakeConstants` so the older pace checks hold.
 - **Session** (state on `Planet`: `ConversionBy`, `ConversionProgress`, `ConversionWarMask`; saved as id + 1, so an older save loads with none):
   starts only against a holder I am at war with (the gate is on holders, never on `Owner`, which is `NoOwner` on a tie); each turn

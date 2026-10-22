@@ -721,6 +721,7 @@ namespace FlatSpace
             public bool IsConversionTarget(Planet planet)
             {
                 if (!AIMap.Diplomacy.Enabled || planet.Population.Count >= planet.MaxPopulation) return false;
+                if (ConversionSystem.HasStuckBunker(planet, Player.playerID, AIMap.Diplomacy)) return false;   // bunkers I will never bombard away
                 if (!planet.Population.Exists(p => p.Player != Player.playerID)) return false;
                 if (planet.ConversionBy != Player.playerID
                     && !planet.Population.Exists(p => p.Player != Player.playerID && AIMap.Diplomacy.IsAtWar(Player.playerID, p.Player, true)))
