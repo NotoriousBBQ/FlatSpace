@@ -2078,7 +2078,9 @@ namespace FlatSpace
                 if (!rivalBeside && !(special && ctx.HasKnownEnemyPlanet)) return 0f;
 
                 var weight = constants.bunkerBaseWeight;
-                if (special) weight *= constants.bunkerOuterFactor;
+                if (special)
+                    weight *= Math.Max(ctx.Planner.IsOuter(planet) ? constants.bunkerOuterFactor : 1f,
+                        ctx.Planner.IsChokepoint(planet) ? constants.bunkerChokepointFactor : 1f);
                 if (IsBlockaded(planet.PlanetName)) weight *= constants.bunkerBlockadedBoost;
                 if (rivalBeside) weight *= constants.bunkerRivalAdjacentBoost;
                 return weight;
@@ -2096,7 +2098,7 @@ namespace FlatSpace
                 var weight = IsConsolidateLike(Strategy) ? BunkerWeight(planet) : 0f;
                 _bunkerThreatThisTurn = null;
                 AITuningLogger.LogBunkerBuilt(turn, Player.playerID, planetName, planet.BunkerCount(Player.playerID),
-                    planet.MaxPopulation, weight);
+                    planet.MaxPopulation, weight, AIMap.IsChokepoint(planetName));
             }
 
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
@@ -2345,6 +2347,8 @@ namespace FlatSpace
             }
 
             private string _lastLoggedAssaultTarget;
+            // Log-only: the target|nearestTarget pair last logged as a ChokepointAssault, so a standing choice logs once.
+            private string _lastLoggedChokepointAssault;
 
             // A planet I retreated from -> the first turn it may be an assault target again (player-private, not saved: a load forgets it).
             private readonly Dictionary<string, int> _retreatCooldown = new Dictionary<string, int>();
@@ -2537,6 +2541,16 @@ namespace FlatSpace
                 if (blockadeTarget == null && targetName != null && targetName != _lastLoggedAssaultTarget)
                     AITuningLogger.LogAssaultTarget(turnNumber, Player.playerID, targetName, assault.RequiredForce());
                 _lastLoggedAssaultTarget = blockadeTarget == null ? targetName : null;
+                var tilt = assault.LastChokepointTilt;
+                if (blockadeTarget == null && tilt.Active)
+                {
+                    var tiltKey = tilt.Target + "|" + tilt.NearestTarget;
+                    if (tiltKey != _lastLoggedChokepointAssault)
+                        AITuningLogger.LogChokepointAssault(turnNumber, Player.playerID, tilt.Target, tilt.PathCost, tilt.Percentile,
+                            tilt.NearestTarget, tilt.NearestCost);
+                    _lastLoggedChokepointAssault = tiltKey;
+                }
+                else _lastLoggedChokepointAssault = null;
 
                 // A planet I am converting keeps only the ships its nearby rival makes necessary (conversionHoldKeepFraction) and releases
                 // the rest to the garrison and blockade calls; the assault target and contested holds still keep every ship.

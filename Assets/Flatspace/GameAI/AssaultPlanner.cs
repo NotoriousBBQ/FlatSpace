@@ -378,17 +378,24 @@ namespace FlatSpace
 
             /// <summary>
             /// The known, reachable, enemy-occupied planet where I already have the most warships
-            /// docked + incoming (sticky); otherwise the cheapest path from a planet holding warships;
-            /// ties by name. Null when there is no such planet.
+            /// docked + incoming (sticky); otherwise the cheapest path from a planet holding warships, where a chokepoint's cost is
+            /// divided by 1 + assaultChokepointWeight x its percentile (the real cost is untouched); ties by name. Null when there is
+            /// no such planet. LastChokepointTilt says whether the tilt changed the pick.
             /// </summary>
             public Planet ChooseEnemyTarget()
             {
+                LastChokepointTilt = default;
                 var holders = _map.PlanetList.Where(p => CountWarships(p) > 0).ToList();
                 if (holders.Count == 0) return null;
 
-                Planet best = null;
+                Planet best = null, untilted = null;
                 var bestOwn = -1;
-                var bestCost = float.MaxValue;
+                var bestCost = float.MaxValue;          // the tilted cost the pick is compared on
+                var bestRealCost = 0f;
+                var untiltedOwn = -1;
+                var untiltedCost = float.MaxValue;      // the real cost, as the pick was made before the tilt existed
+                var weight = _constants.assaultChokepointWeight;
+                var bestPercentile = 0f;
                 foreach (var name in _map.Knowledge.KnownPlanets(_playerId).OrderBy(n => n, StringComparer.Ordinal))
                 {
                     var planet = _map.GetPlanet(name);
@@ -399,15 +406,46 @@ namespace FlatSpace
                     var cost = own > 0 ? 0f : CheapestPathCost(holders, planet);
                     if (cost == null) continue;
 
-                    if (own > bestOwn || (own == bestOwn && cost.Value < bestCost))
+                    // Only a target with no ships of mine committed is tilted, and only a real chokepoint (as in ChooseBlockadeTarget).
+                    var percentile = own == 0 && weight > 0f && _map.IsChokepoint(name) ? _map.Chokepoint(name) : 0f;
+                    var tilted = cost.Value / (1f + weight * percentile);
+
+                    if (own > bestOwn || (own == bestOwn && tilted < bestCost))
                     {
                         best = planet;
                         bestOwn = own;
-                        bestCost = cost.Value;
+                        bestCost = tilted;
+                        bestRealCost = cost.Value;
+                        bestPercentile = percentile;
+                    }
+                    if (own > untiltedOwn || (own == untiltedOwn && cost.Value < untiltedCost))
+                    {
+                        untilted = planet;
+                        untiltedOwn = own;
+                        untiltedCost = cost.Value;
                     }
                 }
+                if (best != null && best != untilted)
+                    LastChokepointTilt = new ChokepointTilt
+                    {
+                        Active = true, Target = best.PlanetName, PathCost = bestRealCost, Percentile = bestPercentile,
+                        NearestTarget = untilted.PlanetName, NearestCost = untiltedCost,
+                    };
                 return best;
             }
+
+            /// <summary>The last ChooseEnemyTarget pick when the chokepoint tilt changed it against the untilted pick (Active false otherwise).</summary>
+            public struct ChokepointTilt
+            {
+                public bool   Active;
+                public string Target;
+                public float  PathCost;        // the chosen target's real cheapest path cost
+                public float  Percentile;
+                public string NearestTarget;   // the pick with assaultChokepointWeight at 0
+                public float  NearestCost;     // its real cheapest path cost
+            }
+
+            public ChokepointTilt LastChokepointTilt { get; private set; }
 
             /// <summary>What the last Plan call sent at a blockade target; all zero for any other target.</summary>
             public struct BlockadeForce

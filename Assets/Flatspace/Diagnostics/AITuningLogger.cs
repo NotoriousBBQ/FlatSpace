@@ -333,13 +333,16 @@ public static class AITuningLogger
             value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
-    /// <summary>A Bunker production completed: T&lt;turn&gt;|P&lt;id&gt;|BunkerBuilt|planet|count (bunkers of the owner after it)|cap (MaxPopulation)|weight (threat weight now).</summary>
-    public static void LogBunkerBuilt(int turnNumber, int playerId, string planetName, int count, int cap, float weight)
+    /// <summary>A Bunker production completed: T&lt;turn&gt;|P&lt;id&gt;|BunkerBuilt|planet|count (bunkers of the owner after it)|cap (MaxPopulation)|weight (threat weight now)|chokepoint (1 when the planet is a chokepoint now, else 0).</summary>
+    public static void LogBunkerBuilt(int turnNumber, int playerId, string planetName, int count, int cap, float weight, bool chokepoint)
     {
         if (_currentLogPath == null) return;
-        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BunkerBuilt", planetName,
-            count.ToString(), cap.ToString(), weight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)) });
+        AppendLines(new List<string> { FormatBunkerBuilt(turnNumber, playerId, planetName, count, cap, weight, chokepoint) });
     }
+
+    public static string FormatBunkerBuilt(int turnNumber, int playerId, string planetName, int count, int cap, float weight, bool chokepoint)
+        => FormatLine(turnNumber, playerId, "BunkerBuilt", planetName, count.ToString(), cap.ToString(),
+            weight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture), chokepoint ? "1" : "0");
 
     /// <summary>
     /// The siegeship sizing for an assault target with known bunkers changed (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeSized|target|bunkerDefense|bombardNeeded
@@ -567,6 +570,22 @@ public static class AITuningLogger
     {
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(0, -1, "Chokepoints", FormatChokepointList(chokepoints)) });
+    }
+
+    /// <summary>The assault target changed and the chokepoint cost divisor changed the pick: T&lt;turn&gt;|P&lt;id&gt;|ChokepointAssault|target|pathCost|percentile|nearestTarget|nearestCost (real costs; nearest is the pick with the tilt off).</summary>
+    public static void LogChokepointAssault(int turnNumber, int playerId, string target, float pathCost, float percentile,
+        string nearestTarget, float nearestCost)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatChokepointAssault(turnNumber, playerId, target, pathCost, percentile, nearestTarget, nearestCost) });
+    }
+
+    public static string FormatChokepointAssault(int turnNumber, int playerId, string target, float pathCost, float percentile,
+        string nearestTarget, float nearestCost)
+    {
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        return FormatLine(turnNumber, playerId, "ChokepointAssault", target, pathCost.ToString("0.#", ci),
+            percentile.ToString("0.00", ci), nearestTarget, nearestCost.ToString("0.#", ci));
     }
 
     /// <summary>Every 25 turns per player: T&lt;turn&gt;|P&lt;id&gt;|ChokepointGarrison|colonized|boardTotal|shipsOnThem|allShips.</summary>

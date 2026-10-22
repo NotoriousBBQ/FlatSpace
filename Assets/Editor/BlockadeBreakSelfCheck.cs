@@ -16,6 +16,7 @@ public static class BlockadeBreakSelfCheck
         ok &= RunBlockadeTargetCheck();
         ok &= RunBlockadeRankingCheck();
         ok &= RunChokepointRankingCheck();
+        ok &= RunAssaultChokepointCheck();
         ok &= RunChokepointColonizationCheck();
         ok &= RunBlockadePlanCheck();
         ok &= RunTrackerCheck();
@@ -421,6 +422,73 @@ public static class BlockadeBreakSelfCheck
             ok &= Check(Near(s.Map.Chokepoint("C1"), s.Map.Chokepoint("C2"))
                         && planner.ChooseBlockadeTarget(out var reason) == s.P("C2") && reason == AssaultPlanner.ReasonCheapest,
                 "tied chokepoint percentile: the smaller need decides, as before");
+        }
+        return ok;
+    }
+
+    // Assault target choice with the chokepoint cost divisor. Hub: A(0,0) holds my ships; enemy planets H (chokepoint, percentile 1,
+    // real cost 100) and Y (a leaf, real cost 80). At weight 0.5 H costs 100 / 1.5 = 66.7 and beats Y.
+    public static bool RunAssaultChokepointCheck()
+    {
+        var ok = true;
+
+        AssaultPlanner Setup(Scenario s, float weight, float percentile = 0.9f)
+        {
+            s.Constants.chokepointPercentile = percentile;
+            s.Constants.assaultChokepointWeight = weight;
+            s.Ships("A", 0, 2);
+            s.Colonize("H", 1); s.Colonize("Y", 1);
+            s.Map.Knowledge.Update(s.Map, 2, 6);
+            return new AssaultPlanner(s.Map, 0);
+        }
+
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0.5f);
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("H"), "weight 0.5: the farther chokepoint H (100 / 1.5 = 66.7) beats the leaf Y (80)");
+            var tilt = planner.LastChokepointTilt;
+            ok &= Check(tilt.Active && tilt.Target == "H" && tilt.NearestTarget == "Y" && Near(tilt.PathCost, 100f)
+                        && Near(tilt.NearestCost, 80f) && Near(tilt.Percentile, 1f),
+                "the tilt reports H against the untilted pick Y with their real costs and H's percentile");
+        }
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0f);
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("Y") && !planner.LastChokepointTilt.Active, "weight 0: the old cheapest pick Y, no tilt");
+            s.Constants.assaultChokepointWeight = -1f;
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("Y") && !planner.LastChokepointTilt.Active, "a negative weight is off too");
+        }
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0.2f);
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("Y") && !planner.LastChokepointTilt.Active,
+                "weight 0.2: 100 / 1.2 = 83.3 is still above 80, so Y keeps winning and there is no tilt to log");
+        }
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0.5f, percentile: 2f);
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("Y") && !planner.LastChokepointTilt.Active,
+                "chokepointPercentile above 1: no planet is a chokepoint, so the tilt is off");
+        }
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0.5f);
+            s.Ships("Y", 0, 1);   // one of my warships already docked at Y
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("Y") && !planner.LastChokepointTilt.Active,
+                "sticky: a committed fleet at Y is not pulled to the chokepoint");
+        }
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0.5f);
+            planner.ExcludedTargets = new HashSet<string> { "H" };
+            ok &= Check(planner.ChooseEnemyTarget() == s.P("Y"), "an excluded chokepoint (retreat cooldown) is never chosen");
+        }
+        using (var s = Scenario.Hub())
+        {
+            var planner = Setup(s, 0.5f);
+            s.Constants.maxPathNodesForShipTransport = 1;   // every route is now unusable (IsUsablePath needs 2 or more nodes)
+            ok &= Check(planner.ChooseEnemyTarget() == null && !planner.LastChokepointTilt.Active,
+                "no usable path to any enemy planet: no target, chokepoint or not");
         }
         return ok;
     }

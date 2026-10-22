@@ -41,6 +41,10 @@ public class GameAIConstants : ScriptableObject
     // Consolidate colonization: a target's choice cost is its route cost / (1 + this x its chokepoint percentile), so a
     // hub may be farther and still win. 0 (or below) switches the tilt off; Expand never uses it.
     public float colonizationChokepointWeight = 0.5f;
+    // Assault target choice (AssaultPlanner.ChooseEnemyTarget): the cost compared for a target with none of my ships committed is its
+    // cheapest path cost / (1 + this x its chokepoint percentile), so a hub may be farther and still win. 0 (or below) switches the
+    // tilt off; only real chokepoints (IsChokepoint) tilt, and a target with ships already committed never does.
+    public float assaultChokepointWeight = 0.5f;
 
     [Header("Assault (Consolidate)")]
     // Force committed to a known enemy-occupied planet: ceil(enemy known docked warships x this)...
@@ -88,8 +92,11 @@ public class GameAIConstants : ScriptableObject
     // at-war rival is known nearby: its warship/siegeship docked on or beside the planet, or an outer/chokepoint planet while a
     // known at-war rival planet exists. Expand and None never build bunkers.
     public float bunkerBaseWeight = 1f;
-    // Multiplier for an outer planet or a colonized chokepoint (the garrison planner's categories); other planets use 1.
+    // Multiplier for an outer planet (the garrison planner's category); a colonized chokepoint uses bunkerChokepointFactor; other planets use 1.
     public float bunkerOuterFactor = 2f;
+    // Multiplier for a colonized chokepoint (flat, not scaled by its percentile). A planet that is also outer takes the larger of this
+    // and bunkerOuterFactor, not the product; the gate (a rival nearby, or a known enemy planet) is unchanged.
+    public float bunkerChokepointFactor = 3f;
     // Multiplier on a planet that is blockaded against its owner (a bunker raises the cost of staying put).
     public float bunkerBlockadedBoost = 3f;
     // Multiplier when an at-war rival's docked warship or siegeship is on the planet or on a direct neighbour.
