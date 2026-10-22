@@ -23,6 +23,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunBombardmentCheck();
         ok &= RunConversionGateCheck();
         ok &= RunProjectionBunkerFireCheck();
+        ok &= RunSaveRoundTripCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -1043,6 +1044,94 @@ public static class PlanetDefenseSelfCheck
             ok &= Check(p != null && !p.MyGroupWiped && !p.RivalSurvives && p.Turns == 3 && Near(p.ProjectedLossFraction, 60.2813f / 3399f),
                 "they land in round 3 and destroy the bunker that turn: loss 0.01774, not wiped");
         }
+        return ok;
+    }
+
+    // Saves: siegeship and bunker kinds and damage survive JsonUtility, the restore loop (the one in
+    // GameAIMap.SetPlanetSimulationStats, which needs Gameboard.Instance as a whole, so it is mirrored here) docks them with the
+    // right kind/owner/damage, a siegeship fleet keeps its Kind through ToSave/FromSave, an older PlanetSave with only
+    // warships loads unchanged, and the derived incoming counters cope with a siegeship fleet.
+    public static bool RunSaveRoundTripCheck()
+    {
+        var ok = true;
+        var planetSave = new SaveLoadSystem.GameSave.PlanetSave
+        {
+            name = "A",
+            dockedShips = new List<SaveLoadSystem.GameSave.ShipSave>
+            {
+                new SaveLoadSystem.GameSave.ShipSave { kind = Ship.ShipKind.SiegeShip, owner = 1, researchSnapshot = new List<string> { "s1" }, damage = 12.5f },
+                new SaveLoadSystem.GameSave.ShipSave { kind = Ship.ShipKind.Bunker, owner = 0, researchSnapshot = new List<string> { "b1", "b2" }, damage = 40f },
+                new SaveLoadSystem.GameSave.ShipSave { kind = Ship.ShipKind.WarShip, owner = 0, researchSnapshot = new List<string>(), damage = 0f },
+            },
+        };
+        var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>(JsonUtility.ToJson(planetSave));
+        ok &= Check(loaded.dockedShips != null && loaded.dockedShips.Count == 3, "save: three docked ships survive JsonUtility");
+        if (loaded.dockedShips == null || loaded.dockedShips.Count != 3) return false;
+        ok &= Check(loaded.dockedShips[0].kind == Ship.ShipKind.SiegeShip && loaded.dockedShips[0].owner == 1
+                    && Near(loaded.dockedShips[0].damage, 12.5f) && loaded.dockedShips[0].researchSnapshot.SequenceEqual(new[] { "s1" }),
+            "save: a siegeship keeps kind, owner, damage and snapshot");
+        ok &= Check(loaded.dockedShips[1].kind == Ship.ShipKind.Bunker && loaded.dockedShips[1].owner == 0
+                    && Near(loaded.dockedShips[1].damage, 40f) && loaded.dockedShips[1].researchSnapshot.SequenceEqual(new[] { "b1", "b2" }),
+            "save: a bunker keeps kind, owner, damage and snapshot");
+
+        using (var f = Fixture.Line())
+        {
+            var a = f.P("A");
+            foreach (var s in loaded.dockedShips) a.DockShipFromSave(s.kind, s.owner, s.researchSnapshot, s.damage);
+            ok &= Check(a.DockedShips.Count == 3, "restore: three ships docked");
+            if (a.DockedShips.Count == 3)
+            {
+                ok &= Check(a.DockedShips[0].Kind == Ship.ShipKind.SiegeShip && a.DockedShips[0].Owner == 1 && Near(a.DockedShips[0].Damage, 12.5f),
+                    "restore: the siegeship docks with its kind, owner and damage");
+                ok &= Check(a.DockedShips[1].Kind == Ship.ShipKind.Bunker && a.DockedShips[1].Owner == 0 && Near(a.DockedShips[1].Damage, 40f)
+                            && a.DockedShips[1].ResearchSnapshot.Count == 2,
+                    "restore: the bunker docks with its kind, owner, damage and snapshot");
+            }
+            ok &= Check(a.BunkerCount(0) == 1, "restore: BunkerCount sees the restored bunker");
+
+            // A siegeship fleet in flight.
+            var fleet = new GameAI.GameAIOrder.ShipFleetPayload
+            {
+                Kind = Ship.ShipKind.SiegeShip,
+                Snapshots = new List<List<string>> { new List<string> { "x" }, new List<string>() },
+                Damage = new List<float> { 5f, 0f },
+            };
+            var order = new SaveLoadSystem.GameSave.OrderSave
+            {
+                type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, target = "A", origin = "B", playerId = 1, data = 2f,
+                dataType = "int", fleetShips = fleet.ToSave(1),
+            };
+            var orderBack = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>(JsonUtility.ToJson(order));
+            var restored = GameAI.GameAIOrder.ShipFleetPayload.FromSave(orderBack.fleetShips);
+            ok &= Check(restored != null && restored.Kind == Ship.ShipKind.SiegeShip && restored.Snapshots.Count == 2
+                        && restored.Snapshots[0].SequenceEqual(new[] { "x" }) && Near(restored.DamageAt(0), 5f) && Near(restored.DamageAt(1), 0f),
+                "save: a siegeship fleet keeps its Kind, snapshots and damage through ToSave/JsonUtility/FromSave");
+
+            // Derived counters: a siegeship fleet counts as incoming siegeships and adds no warship offense; a missing Fleet counts as warships.
+            var arrival = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = 1, Origin = "B", Target = "A", TimingDelay = 2,
+                Data = 2, Fleet = restored,
+            };
+            var legacy = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = 1, Origin = "C", Target = "A", TimingDelay = 2, Data = 3,
+            };
+            var orders = new List<GameAI.GameAIOrder> { arrival, legacy };
+            f.Map.RecomputeIncomingShips(orders);
+            f.Map.RecomputeIncomingOffense(orders, f.Stats);
+            ok &= Check(a.GetIncomingShips(Ship.ShipKind.SiegeShip, 1) == 2 && a.GetIncomingShips(Ship.ShipKind.WarShip, 1) == 3,
+                "incoming: a siegeship fleet counts as siegeships, a fleet-less order as warships");
+            ok &= Check(Near(a.GetIncomingOffense(Ship.ShipKind.SiegeShip, 1), 0f),
+                "incoming offense: a siegeship fleet adds none (Task 13 adds incoming bombard)");
+        }
+
+        // An older save: warships only, no damage key, no bunker or siegeship entries.
+        const string oldJson = "{\"name\":\"A\",\"dockedShips\":[{\"kind\":1,\"owner\":0,\"researchSnapshot\":[\"w\"]}]}";
+        var old = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>(oldJson);
+        ok &= Check(old.dockedShips != null && old.dockedShips.Count == 1 && old.dockedShips[0].kind == Ship.ShipKind.WarShip
+                    && old.dockedShips[0].owner == 0 && Near(old.dockedShips[0].damage, 0f) && old.dockedShips[0].researchSnapshot.Count == 1,
+            "older save: a warship-only dockedShips list loads unchanged at full health");
         return ok;
     }
 
