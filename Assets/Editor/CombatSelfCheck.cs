@@ -146,20 +146,22 @@ public static class CombatSelfCheck
         var small = Attackers(1);
         small.AddRange(new[] { wounded, healthy, nearDead });
         var byClass = CombatSystem.Round(small, war, hostility, 20f);
-        ok &= Check(byClass.Damage.Count == 1 && byClass.Damage.ContainsKey(2),
+        // Owner 1's pool (1.5 + 10 + 1.2) also damages the attacker unit 100, so only the owner-1 keys are asserted.
+        ok &= Check(byClass.Damage.ContainsKey(2) && !byClass.Damage.ContainsKey(1) && !byClass.Damage.ContainsKey(3),
             "a small pool lands on the warship (class 0) although the siegeship and bunker have lower health fractions");
 
         var flat = Attackers(1);
         flat.AddRange(new[] { CombatUnit.Make(1, 1, 1, 3f, 100f, 5f, 50f), CombatUnit.Make(2, 1, 2, 10f, 100f, 5f, 0f),
             CombatUnit.Make(3, 1, 3, 12f, 100f, 5f, 90f) });
         var byHealth = CombatSystem.Round(flat, war, hostility, 20f);
-        ok &= Check(byHealth.Damage.Count == 1 && byHealth.Damage.ContainsKey(3),
+        ok &= Check(byHealth.Damage.ContainsKey(3) && !byHealth.Damage.ContainsKey(1) && !byHealth.Damage.ContainsKey(2),
             "the same units all class 0 are hit by lowest health fraction, as before");
 
         var big = Attackers(13);   // pool 130: the warship needs 125, the 5 left lands on the siegeship (needs 62.5)
         big.AddRange(new[] { wounded, healthy, nearDead });
         var spill = CombatSystem.Round(big, war, hostility, 20f);
-        ok &= Check(spill.Destroyed.SequenceEqual(new[] { 2 }) && spill.Damage.Count == 1 && Near(spill.Damage[1], 4f) && !spill.Damage.ContainsKey(3),
+        ok &= Check(spill.Destroyed.SequenceEqual(new[] { 2 }) && spill.Damage.ContainsKey(1) && Near(spill.Damage[1], 4f)
+                        && !spill.Damage.ContainsKey(2) && !spill.Damage.ContainsKey(3),
             "a pool of 130 kills the warship first, spills 5 x 0.8 = 4 onto the siegeship and never reaches the bunker");
 
         var bunkersOnly = Attackers(1);
