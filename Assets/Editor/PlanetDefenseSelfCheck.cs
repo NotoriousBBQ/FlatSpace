@@ -995,6 +995,32 @@ public static class PlanetDefenseSelfCheck
                 "landing in round 3: strength 309, wiped with a loss of 1 (not 'wiped with loss 0' from ending before it lands)");
         }
 
+        // No bunkers, a docked group wiped before its reinforcement lands: the old behaviour, the projection ends with the docked group.
+        // My one warship has health 10 (offense 1, strength 1 x (10 + 5) = 15); the rival's two warships (pool 20 >= 10 / 0.8 = 12.5)
+        // kill it in round 1 while it does 1 x 0.8 = 0.8 to one of them (health 99.2, offense 9.92, strength 9.92 x 104.2 = 1033.66).
+        // Thirteen warships of mine landing in round 4 would win, but they are never reached: wiped, loss 1, rival left 2083.66.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 1, 2);
+            f.Ships("A", 0, 1, 90f);
+            f.War(0, 1);
+            var reinforcement = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = 0, Origin = "B", Target = "A", TimingDelay = 4, Data = 13,
+                Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                {
+                    Kind = Ship.ShipKind.WarShip,
+                    Snapshots = Enumerable.Range(0, 13).Select(_ => new List<string>()).ToList(),
+                    Damage = new List<float>(),
+                },
+            };
+            var p = Project(f, "A", 0, reinforcement);
+            ok &= Check(p != null && p.MyShips == 1 && p.InboundShips == 0 && Near(p.MyStrength, 15f) && Near(p.MyStrengthLeft, 0f)
+                        && p.MyGroupWiped && Near(p.ProjectedLossFraction, 1f) && p.RivalSurvives && p.Turns == 1
+                        && Near(p.RivalStrength, 2100f) && Near(p.RivalStrengthLeft, 2083.664f),
+                "a docked group wiped in round 1 ends the projection: the round-4 reinforcement is not counted (as before bunkers)");
+        }
+
         // A strong inbound group landing in round 3: 11 siegeships against 1 bunker, nothing of mine docked. Same numbers as the docked
         // case above (bunker at dock index 0, siegeships after it): strength 3399, loss 60.28 / 3399 = 0.01774, the bunker dies on turn 3.
         using (var f = Fixture.Line())

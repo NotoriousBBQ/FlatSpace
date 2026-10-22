@@ -160,6 +160,9 @@ namespace FlatSpace.AI
             };
 
             Func<int, int, float> hostility = (a, b) => map.Diplomacy.Hostility(a, b);
+            // Whether any ship of mine has been on the planet yet (docked at the start, or landed). Only an inbound-only group that has
+            // not landed yet waits for its arrival; once a group of mine has been here, its loss ends the projection as it always did.
+            var mineEntered = units.Any(u => u.Owner == player);
             for (var round = 1; round <= constants.retreatProjectionTurns; round++)
             {
                 foreach (var arrival in inbound.Where(a => a.round == round))
@@ -168,11 +171,10 @@ namespace FlatSpace.AI
                     projection.InboundShips++;
                     projection.MyStrength += arrival.unit.Strength;
                 }
-                // Nothing of mine here and nothing of mine still to land: my group is gone. While an arrival is pending the
-                // projection keeps going (an inbound-only group waits for its landing turn).
                 var mineHere = units.Any(u => u.Owner == player);
                 var pending = inbound.Any(a => a.round > round);
-                if ((!mineHere && !pending) || !(units.Any(IsRival) || bunkers.Any(IsRival))) break;
+                if ((!mineHere && (mineEntered || !pending)) || !(units.Any(IsRival) || bunkers.Any(IsRival))) break;
+                mineEntered |= mineHere;
 
                 // The ship-to-ship round, then (as in the real turn) the bombardment step on the state it left: bunkers whose owner
                 // has no fighting ship left fire at the at-war ships and take their bombard. With no bunkers the step never runs.
@@ -186,7 +188,7 @@ namespace FlatSpace.AI
                 }
                 if (Idle(fight) && (bombard == null || Idle(bombard.ShipHits) && Idle(bombard.BunkerHits)))
                 {
-                    if (!mineHere) continue;   // still waiting for my group to land: a quiet turn does not end the fight
+                    if (!mineEntered) continue;   // still waiting for my group's first landing: a quiet turn does not end the fight
                     break;                     // nobody can hurt anybody: the fight is over
                 }
                 projection.Turns = round;
