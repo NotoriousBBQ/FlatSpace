@@ -708,6 +708,17 @@ public static class ConversionSelfCheck
             ok &= Check(Near(c.conversionHoldKeepFraction, 0.5f), "conversionHoldKeepFraction defaults to 0.5");
             ok &= Check(Near(c.hostilityPerConversion, 3f), "hostilityPerConversion defaults to 3");
             ok &= Check(Near(c.conversionColonizeWeight, 0.5f), "conversionColonizeWeight defaults to 0.5");
+            ok &= Check(Near(c.conversionBombardReference, 60f), "conversionBombardReference defaults to 60");
+            ok &= Check(Near(c.conversionBombardMinFactor, 0.05f), "conversionBombardMinFactor defaults to 0.05");
+
+            // BombardSpeedFactor = clamp(bombard / reference, minFactor, 1); a non-positive reference means always full pace.
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(30f, c), 0.5f), "bombard 30 of reference 60: factor 0.5");
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(1f, c), 0.05f), "bombard 1: 1/60 is below the minimum, so the factor is 0.05");
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(0f, c), 0.05f), "no bombard: the minimum factor (never 0)");
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(60f, c), 1f) && Near(ConversionSystem.BombardSpeedFactor(600f, c), 1f),
+                "bombard at or above the reference: factor 1");
+            c.conversionBombardReference = 0f;
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(1f, c), 1f), "a reference of 0 switches the scaling off");
             return ok;
         }
         finally { Object.DestroyImmediate(c); }

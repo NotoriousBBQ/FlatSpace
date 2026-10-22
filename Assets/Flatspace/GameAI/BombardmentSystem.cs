@@ -59,37 +59,14 @@ namespace FlatSpace.AI
 
         /// <summary>
         /// The planet is dominated against this bunker owner by an at-war rival, so its bunkers do not repair. The dominance rule is the
-        /// one ConversionSystem.Dominator gets in task 8 (task 8 makes this call it): a player with docked warships/siegeships of
-        /// effective bombard above 0 dominates unless another player it is at war with has a docked warship or siegeship (so a
-        /// bunker owner's own ship, siegeship included, blocks); of two that are not at war, more docked bombard, then the lower id.
+        /// single one in ConversionSystem.Dominator (a player with docked warships/siegeships of effective bombard above 0 dominates
+        /// unless another player it is at war with has a docked warship or siegeship, so a bunker owner's own ship, siegeship
+        /// included, blocks; of two that are not at war, more docked bombard, then the lower id).
         /// </summary>
         public static bool Dominated(Planet planet, int bunkerOwner, GameAIMap map, WarshipStats stats)
         {
-            var dominator = BombardDominator(planet, map, stats);
+            var dominator = ConversionSystem.Dominator(planet, map, stats);
             return dominator != Planet.NoOwner && dominator != bunkerOwner && map.Diplomacy.IsAtWar(dominator, bunkerOwner, true);
-        }
-
-        private static int BombardDominator(Planet planet, GameAIMap map, WarshipStats stats)
-        {
-            var present = new SortedSet<int>();
-            var bombard = new SortedDictionary<int, float>();
-            foreach (var ship in planet.DockedShips)
-            {
-                if (!Ship.IsFightingKind(ship.Kind) || ship.Owner == Planet.NoOwner) continue;
-                present.Add(ship.Owner);
-                var value = stats.EffectiveBombard(ship);
-                if (value <= 0f) continue;
-                bombard[ship.Owner] = (bombard.TryGetValue(ship.Owner, out var sum) ? sum : 0f) + value;
-            }
-            var best = Planet.NoOwner;
-            var bestBombard = 0f;
-            foreach (var pair in bombard)   // ascending id: a tie keeps the lower id
-            {
-                var player = pair.Key;
-                if (present.Any(other => other != player && map.Diplomacy.IsAtWar(player, other, true))) continue;
-                if (pair.Value > bestBombard) { best = player; bestBombard = pair.Value; }
-            }
-            return best;
         }
 
         /// <summary>

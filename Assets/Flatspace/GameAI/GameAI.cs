@@ -206,14 +206,15 @@ namespace FlatSpace
                         case ConversionReport.Kind.Start:
                             _conversions.Begin(report.Planet, turn);
                             AITuningLogger.LogConversionStart(turn, report.Dominator, report.Planet,
-                                ConversionSystem.PlayersIn(report.WarMask), report.MyPopulation, report.TotalPopulation, report.TurnsPerFlip);
+                                ConversionSystem.PlayersIn(report.WarMask), report.MyPopulation, report.TotalPopulation, report.TurnsPerFlip,
+                                report.BombardFactor);
                             break;
                         case ConversionReport.Kind.Flip:
                         {
                             var flip = report.Flip;
                             _conversions.CountFlip(report.Planet);
                             AITuningLogger.LogConvert(turn, flip.Dominator, report.Planet, flip.From, flip.AtWar,
-                                flip.MyPopulation, flip.TotalPopulation, flip.Progress);
+                                flip.MyPopulation, flip.TotalPopulation, flip.Progress, flip.BombardFactor);
                             if (flip.OwnerChanged)
                                 AITuningLogger.LogOwnerChanged(turn, flip.NewOwner, report.Planet, flip.OldOwner, flip.ClearedItem);
                             if (!GameAIMap.PlanetList.Any(p => p.Population.Exists(i => i.Player == flip.From))

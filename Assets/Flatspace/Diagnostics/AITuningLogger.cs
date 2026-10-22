@@ -542,22 +542,24 @@ public static class AITuningLogger
             conversionTerm.ToString("0.#", ci)) });
     }
 
-    /// <summary>A conversion session began: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionStart|planet|fromPlayers|myPop|totalPop|turnsPerFlip.</summary>
-    public static void LogConversionStart(int turnNumber, int playerId, string planet, string fromPlayers, int myPop, int totalPop, float turnsPerFlip)
+    /// <summary>A conversion session began: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionStart|planet|fromPlayers|myPop|totalPop|turnsPerFlip|bombardFactor.</summary>
+    public static void LogConversionStart(int turnNumber, int playerId, string planet, string fromPlayers, int myPop, int totalPop, float turnsPerFlip,
+        float bombardFactor = 1f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionStart", planet, fromPlayers,
-            myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci)) });
+            myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci), bombardFactor.ToString("0.##", ci)) });
     }
 
-    /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress.</summary>
-    public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress)
+    /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress|bombardFactor.</summary>
+    public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress,
+        float bombardFactor = 1f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Convert", planet, fromPlayer.ToString(ci),
-            atWar ? "AtWar" : "NonWar", myPop.ToString(ci), totalPop.ToString(ci), progress.ToString("0.##", ci)) });
+            atWar ? "AtWar" : "NonWar", myPop.ToString(ci), totalPop.ToString(ci), progress.ToString("0.##", ci), bombardFactor.ToString("0.##", ci)) });
     }
 
     /// <summary>A conversion session ended: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionEnd|planet|Clean, DominanceLost or WarEnded|turnsHeld|converted.</summary>

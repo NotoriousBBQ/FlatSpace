@@ -305,8 +305,12 @@ Docked warships of players at war that share a planet fight once a turn. Determi
 Spec `docs/superpowers/specs/2026-10-06-invasion-conversion-design.md`. A planet changes hands by **dominance and conversion**, not by troops.
 `ConversionSystem` (`Assets/Flatspace/GameAI/ConversionSystem.cs`, pure) runs in `GameAI.GameAIUpdate` right after `RunCombat` (so a won fight
 starts dominance the same turn), in the engine step, so no player's decision order matters; off in legacy mode.
-- **Dominance:** my warships docked with effective offense above 0 and no warship of a player I am at war with (`IsAtWar(me, x, true)`, a truce
-  is not war). Two dominators not at war with each other: more docked offense, then the lower id.
+- **Dominance** (`ConversionSystem.Dominator`, the single rule; `BombardmentSystem.Dominated` calls it): my warships/siegeships docked with effective
+  bombard above 0 and no warship/siegeship of a player I am at war with (`IsAtWar(me, x, true)`, a truce is not war). Two dominators not at war
+  with each other: more docked bombard, then the lower id. **Pace:** progress a turn is `BombardSpeedFactor(my docked bombard) / TurnsPerFlip`,
+  the factor `clamp(bombard / conversionBombardReference (60), conversionBombardMinFactor (0.05), 1)`. **Bunker gate:** no session starts or
+  continues while any bunker (any owner's) stands on the planet; a bunker appearing mid-session ends it as `DominanceLost`. `ConversionStart` and
+  `Convert` log a trailing `bombardFactor`. Fixtures set the reference to 1 in `WarshipSelfCheck.MakeConstants` so the older pace checks hold.
 - **Session** (state on `Planet`: `ConversionBy`, `ConversionProgress`, `ConversionWarMask`; saved as id + 1, so an older save loads with none):
   starts only against a holder I am at war with (the gate is on holders, never on `Owner`, which is `NoOwner` on a tie); each turn
   progress += `1 / max(1, conversionTurnsBase x (1 - p))`, `p` my share of the current inhabitants; at 1 one inhabitant flips (the

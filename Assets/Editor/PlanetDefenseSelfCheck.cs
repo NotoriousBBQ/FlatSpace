@@ -21,6 +21,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunBunkersAreNotShipsCheck();
         ok &= RunSiegeshipCombatCheck();
         ok &= RunBombardmentCheck();
+        ok &= RunConversionGateCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -755,6 +756,131 @@ public static class PlanetDefenseSelfCheck
             var reports = Bombard(f, results);
             ok &= Check(reports.Count == 0 && results.Count == 0 && f.P("A").DockedShips.All(s => Near(s.Damage, 0f)),
                 "no bunkers: no reports, no results, no damage");
+        }
+        return ok;
+    }
+
+    private static List<ConversionReport> ConvTurn(Fixture f, int turn)
+    {
+        f.Map.Diplomacy.Turn = turn;
+        return ConversionSystem.Resolve(f.Map, f.Stats, f.Constants, turn, new List<Planet.UpdateResult>());
+    }
+
+    // Task 8: dominance by bombard, the bombard-scaled pace, and the bunker gate. Fixture (MakeConstants sets the bombard reference
+    // to 1; these checks set the real default 60, min factor 0.05): warship bombard 1, siegeship bombard 20, conversionTurnsBase 4 and
+    // an all-foreign planet (my share 0) give 4 turns per flip at full pace, so the progress a turn is factor / 4.
+    public static bool RunConversionGateCheck()
+    {
+        var ok = true;
+
+        // Dominance by bombard: a siegeship dominates; more bombard beats more offense; an at-war siegeship blocks.
+        using (var f = Fixture.Line())
+        {
+            var a = f.P("A");
+            f.Siege("A", 0, 1);
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "a siegeship alone (bombard 20) dominates");
+            f.Siege("A", 1, 1);
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "two peaceful siegeships, equal bombard: the lower id");
+            f.Ships("A", 1, 1);
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 1, "player 1 has 20 + 1 bombard against 20: it dominates");
+            f.War(0, 1);
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "at-war siegeships/warships docked together: nobody dominates");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1);     // offense 10, bombard 1
+            f.Siege("A", 1, 1);     // offense 3, bombard 20
+            ok &= Check(ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == 1, "the tie-break is total bombard, not offense");
+            f.Bunkers("A", 0, 3);
+            ok &= Check(ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == 1, "bunkers do not enter the dominance rule");
+        }
+
+        // A warship alone (bombard 1) dominates but converts at the minimum factor: 0.05 / 4 a turn.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.conversionBombardReference = 60f; f.Constants.conversionTurnsBase = 4f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Ships("A", 0, 1); f.War(0, 1);
+            var reports = ConvTurn(f, 1);
+            ok &= Check(a.ConversionBy == 0 && Near(a.ConversionProgress, 0.05f / 4f), "one warship (bombard 1): factor 0.05, progress 0.0125 after a turn");
+            ok &= Check(reports.Any(r => r.What == ConversionReport.Kind.Start && Near(r.BombardFactor, 0.05f) && Near(r.TurnsPerFlip, 4f)),
+                "the Start report carries the factor 0.05 and the 4 turns per flip");
+            ConvTurn(f, 2);
+            ok &= Check(Near(a.ConversionProgress, 2f * 0.05f / 4f), "progress is linear in the turns: 0.025 after two");
+        }
+
+        // Siegeships: 2 x 20 = 40 of 60 gives 2/3; 3 x 20 = 60 gives 1; 4 x 20 = 80 is clamped to 1.
+        foreach (var (count, factor) in new[] { (2, 2f / 3f), (3, 1f), (4, 1f) })
+        {
+            using (var f = Fixture.Line())
+            {
+                f.Constants.conversionBombardReference = 60f; f.Constants.conversionTurnsBase = 4f;
+                var a = f.P("A");
+                ConversionSelfCheck.Populate(a, (1, 4));
+                f.Siege("A", 0, count); f.War(0, 1);
+                ConvTurn(f, 1);
+                ok &= Check(Near(a.ConversionProgress, factor / 4f), $"{count} siegeships (bombard {count * 20}): progress {factor / 4f} a turn");
+            }
+        }
+        using (var f = Fixture.Line())     // a damaged fleet's effective bombard is what counts: 3 siegeships, one at half health = 50
+        {
+            f.Constants.conversionBombardReference = 60f; f.Constants.conversionTurnsBase = 4f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Siege("A", 0, 2); f.Siege("A", 0, 1, 50f); f.War(0, 1);
+            ConvTurn(f, 1);
+            ok &= Check(Near(a.ConversionProgress, (50f / 60f) / 4f), "20 + 20 + 10 = 50 of 60: factor 5/6");
+        }
+
+        // A bunker (any owner's) blocks a session from starting, and a running one ends as DominanceLost.
+        foreach (var bunkerOwner in new[] { 1, 0 })
+        {
+            using (var f = Fixture.Line())
+            {
+                f.Constants.conversionTurnsBase = 4f;   // reference 1 (fixture): factor 1, progress 0.25 a turn
+                var a = f.P("A");
+                ConversionSelfCheck.Populate(a, (1, 4));
+                f.Ships("A", 0, 1); f.War(0, 1);
+                f.Bunkers("A", bunkerOwner, 1);
+                var r1 = ConvTurn(f, 1);
+                ConvTurn(f, 2);
+                ok &= Check(r1.Count == 0 && a.ConversionBy == Planet.NoOwner && Near(a.ConversionProgress, 0f) && a.Population.Count(p => p.Player == 1) == 4,
+                    $"a bunker of player {bunkerOwner} on the planet: no session starts, no progress");
+
+                // The last bunker destroyed: the very next Resolve starts the session.
+                a.DestroyDockedShip(a.DockedShips.First(s => s.Kind == Ship.ShipKind.Bunker));
+                var r3 = ConvTurn(f, 3);
+                ok &= Check(r3.Any(r => r.What == ConversionReport.Kind.Start) && a.ConversionBy == 0 && Near(a.ConversionProgress, 0.25f),
+                    "the last bunker gone: the next Resolve starts the session and adds a turn of progress");
+            }
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Constants.conversionTurnsBase = 4f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Ships("A", 0, 1); f.War(0, 1);
+            ConvTurn(f, 1); ConvTurn(f, 2);
+            ok &= Check(a.ConversionBy == 0 && Near(a.ConversionProgress, 0.5f), "precondition: a session at progress 0.5");
+            f.Bunkers("A", 1, 2);
+            var r3 = ConvTurn(f, 3);
+            ok &= Check(r3.Any(r => r.What == ConversionReport.Kind.End && r.EndReason == ConversionEndReason.DominanceLost)
+                        && !r3.Any(r => r.What == ConversionReport.Kind.Start) && a.ConversionBy == Planet.NoOwner && Near(a.ConversionProgress, 0f),
+                "a bunker appearing mid-session ends it as DominanceLost and resets progress");
+            ConvTurn(f, 4);
+            ok &= Check(a.ConversionBy == Planet.NoOwner && Near(a.ConversionProgress, 0f), "and it stays blocked while a bunker stands");
+            foreach (var bunker in a.DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker).ToList()) a.DestroyDockedShip(bunker);
+            ConvTurn(f, 5);
+            ok &= Check(a.ConversionBy == 0 && Near(a.ConversionProgress, 0.25f), "with every bunker destroyed the conversion starts again from 0 (one turn of progress)");
+        }
+
+        // BombardmentSystem.Dominated is the same rule (a bunker owner's own warship still blocks).
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1); f.Bunkers("A", 1, 1); f.Ships("A", 1, 1); f.War(0, 1);
+            ok &= Check(!BombardmentSystem.Dominated(f.P("A"), 1, f.Map, f.Stats) && ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == Planet.NoOwner,
+                "Dominated and Dominator agree: an at-war defender warship means nobody dominates");
         }
         return ok;
     }

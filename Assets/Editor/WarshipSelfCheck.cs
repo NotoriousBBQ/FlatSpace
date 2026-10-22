@@ -230,6 +230,9 @@ public static class WarshipSelfCheck
         constants.warShipData = warship;
         constants.chokepointPercentile = 2f;            // chokepoints off: older checks keep their meaning
         constants.colonizationChokepointWeight = 0f;
+        // Conversion pace scales with docked bombard (default reference 60). The fixture warship has bombard 1, so a reference of 1
+        // keeps the pre-bombard pace (factor 1) for every older conversion check; the bombard checks set their own reference.
+        constants.conversionBombardReference = 1f;
         return constants;
     }
 

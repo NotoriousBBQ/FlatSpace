@@ -182,7 +182,7 @@ namespace FlatSpace
             public float HeldOffense(Planet planet) => DockedOffense(planet);
 
             /// <summary>
-            /// Planets I dominate (my warships docked with offense, no warship of a player at war with me) and convert, or could: an
+            /// Planets I dominate (my warships or siegeships docked with bombard, none of a player at war with me) and convert, or could: an
             /// at-war holder still has inhabitants there, or my own conversion session is running with inhabitants of others left (the
             /// non-war tail has no assault target, so only this hold keeps the fleet). Stateless; empty without warship stats and in
             /// legacy mode (nothing converts there). The home plan never strips these planets, so the dominance, and with it the
@@ -194,7 +194,7 @@ namespace FlatSpace
                 if (_stats == null || !_map.Diplomacy.Enabled) return holds;
                 foreach (var planet in _map.PlanetList)
                 {
-                    if (DockedOffense(planet) <= 0f) continue;
+                    if (ConversionSystem.DockedBombard(planet, _playerId, _stats) <= 0f) continue;   // dominance is by bombard
                     if (ConversionSystem.Dominator(planet, _map, _stats) != _playerId) continue;
                     var session = planet.ConversionBy == _playerId && planet.Population.Exists(p => p.Player != _playerId);
                     var atWarHolder = planet.Population.Exists(p => p.Player != _playerId && _map.Diplomacy.IsAtWar(_playerId, p.Player, true));

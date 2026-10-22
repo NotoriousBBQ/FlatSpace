@@ -312,8 +312,10 @@ user asked about one specific thing.
     roll declined), `RetreatHeld NoDestination` counts, the stale-blockade gap in `RetreatArrive`, ships preserved (warships at T300
     and `FleetHealth` against the earlier combat baselines; ships destroyed per run should fall), and that no planet named in a
     `Retreat` line becomes an `AssaultTarget` or `BlockadeTarget` of that player within `cooldownUntil`.
-  - **Invasion (conversion):** `ConversionStart|<planet>|<fromPlayers>|<myPop>|<totalPop>|<turnsPerFlip>` begins a session (P = the dominator;
-    also logged once more per session found after a load), `Convert|<planet>|<fromPlayer>|<AtWar or NonWar>|<myPop>|<totalPop>|<progress>`
+  - **Invasion (conversion):** `ConversionStart|<planet>|<fromPlayers>|<myPop>|<totalPop>|<turnsPerFlip>|<bombardFactor>` begins a session (P = the dominator;
+    also logged once more per session found after a load, where bombardFactor reads 1), `Convert|<planet>|<fromPlayer>|<AtWar or NonWar>|<myPop>|<totalPop>|<progress>|<bombardFactor>`
+    (bombardFactor 0..1 = the pace fraction from the dominator's docked bombard, `ConversionSystem.BombardSpeedFactor`; the progress per turn is factor / turnsPerFlip;
+    no session runs while any bunker stands on the planet)
     is one converted inhabitant, `ConversionEnd|<planet>|<Clean, DominanceLost or WarEnded>|<turnsHeld>|<converted>` ends it,
     `OwnerChanged|<planet>|<oldOwner>|<newOwner>|<clearedItem or ->` (P = the new owner) is an ownership change, `PlayerOutOfPlanets|<player>`
     is logged once per player, `ConversionHoldSpare|<planet>|<heldShips>|<heldOffense>|<shipsACallWanted>|<Garrison, Assault, Blockade or ->|<callTarget or ->|<rivalOffenseNearby>|<progress>|<keep>|<released>`
