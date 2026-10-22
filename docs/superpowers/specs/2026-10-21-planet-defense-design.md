@@ -55,8 +55,12 @@ the more useful value; that item is folded into this one (requirement 16).
 13. **AI support.** The AI adjusts all ship-related functions as necessary to support siegeships and mixed fleets.
 14. **ScoreMatrix.** AI decisions about fleet composition and actions are made by `ScoreMatrix` whenever possible.
 15. **Reuse first.** Reuse or modify existing components instead of designing new systems whenever possible (session rule 2).
-16. **Bombard replaces offense in conversion.** Bombard value is used for conversion instead of attack value. Dominance itself keeps its
-    current rule, with "has offense" becoming "has bombard above zero". Only the speed share (`ConversionSystem`, my share `p`) uses bombard.
+16. **Bombard replaces offense in conversion, and scales its speed (owner's call, 2026-10-21, option B).** Dominance keeps its current rule,
+    with "has offense" becoming "has bombard above zero" (and the two-dominator tie-break comparing bombard). **Conversion speed becomes
+    bombard-scaled:** conversion speed today depends only on the population share (`TurnsPerFlip`), not on offense, so this is a new factor. Each
+    turn's progress is multiplied by `clamp(myDockedBombard / conversionBombardReference, conversionBombardMinFactor, 1)` (my guess at the
+    shape; both tunables on `GameAIConstants`, values left to tuning). This is the former "offense-scaled conversion speed" item, now built on
+    bombard and removed from `FUTURE_FEATURES.md`.
 17. **Escort to a dominated planet.** The AI escorts the colony ship to a dominated planet.
 18. **Escort through known blockades.** If the AI wants to colonize a **non-dominated** planet and knows of a blockade on the way, it builds an
     escort of comparable combat value, and the group passes through the known blockade instead of taking the long way round. Decided as
@@ -85,8 +89,8 @@ Per planet each turn:
 3. **Repair**, as now for warships, and for bunkers: heal `repairFractionPerTurn` of the Health stat per turn, but a bunker repairs only when
    its planet is not dominated by an at-war rival. Dominated means the existing dominance rule: a rival has docked bombard above zero and the
    bunker owner has no at-war ship docked. **(my call)** A defender's docked siegeship counts, like a warship, as a blocker of dominance.
-4. **Conversion** (`ConversionSystem`) starts and continues only while the planet has no bunkers. Speed uses bombard share instead of offense
-   share (requirement 16).
+4. **Conversion** (`ConversionSystem`) starts and continues only while the planet has no bunkers. Dominance uses bombard and the speed is
+   bombard-scaled (requirement 16).
 
 ### Data model
 
