@@ -1633,6 +1633,8 @@ namespace FlatSpace
                     if (IsConsolidateLike(Strategy))
                         return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
+                if (item.subType == "Bunker" && !AIMap.GetPlanet(planetName).CanBuildBunker())
+                    return 0f;                           // at the bunker cap (MaxPopulation) or no owner — do not offer it
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
                 var blockaded = IsBlockaded(planetName);

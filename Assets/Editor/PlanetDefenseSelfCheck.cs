@@ -17,6 +17,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunBombardStatsCheck();
         ok &= RunProductionCostCheck();
         ok &= RunCatalogCheck();
+        ok &= RunBunkerCapCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -287,6 +288,62 @@ public static class PlanetDefenseSelfCheck
                         && item.requiredTech == requires && Near(item.cost, 150f),
                 $"{name}: type Ship, subType/effect {subType}, requires {requires}, cost 150");
             ok &= Check(byName.ContainsKey(item.requiredTech), $"{name}: requiredTech exists in the research catalog");
+        }
+        return ok;
+    }
+
+    // Bunker cap (MaxPopulation), survival over the cap, death cleanup and the kind-to-subtype mapping that
+    // BuildResearchSnapshot uses. Planet.DockNewShip / StageCompletedProductionItem need Gameboard.Instance, so docking goes
+    // through DockShipFromSave and the death path is tested through ClearBunkers (the call ConsumeFood makes when the last
+    // inhabitant dies; reaching it through UpdatePlanet would need full resource data and, with mixed owners, Gameboard).
+    public static bool RunBunkerCapCheck()
+    {
+        var ok = true;
+        ok &= Check(WarshipStats.SubtypeOf(Ship.ShipKind.ColonyShip) == "ColonyShip"
+                    && WarshipStats.SubtypeOf(Ship.ShipKind.WarShip) == "Warship"
+                    && WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip) == "Siegeship"
+                    && WarshipStats.SubtypeOf(Ship.ShipKind.Bunker) == "Bunker",
+            "SubtypeOf maps every kind to its catalog subtype (the research snapshot filter)");
+
+        using (var f = Fixture.Line())
+        {
+            var a = f.P("A");
+            ok &= Check(!a.CanBuildBunker(), "a planet with no owner cannot build a bunker");
+
+            f.Colonize("A", 0);
+            var cap = a.MaxPopulation;
+            ok &= Check(cap > 1, "precondition: the fixture planet has a max population above 1");
+            ok &= Check(a.CanBuildBunker() && a.BunkerCount(0) == 0, "an owned planet with no bunkers can build one");
+
+            f.Bunkers("A", 0, cap - 1);
+            ok &= Check(a.BunkerCount(0) == cap - 1 && a.CanBuildBunker(), "one below the cap can still build");
+
+            f.Bunkers("A", 0, 1);
+            ok &= Check(a.BunkerCount(0) == cap && !a.CanBuildBunker(), "MaxPopulation bunkers is the cap: cannot build");
+
+            f.Bunkers("A", 1, 1);
+            ok &= Check(a.BunkerCount(0) == cap && a.BunkerCount(1) == 1, "BunkerCount counts per owner");
+
+            // Population drop: the owner keeps every bunker, and is simply over (or at) the cap.
+            a.Population.Clear();
+            a.Population.Add(new Planet.Inhabitant { Player = 0 });   // owner stays 0
+            ok &= Check(a.Owner == 0 && a.BunkerCount(0) == cap && !a.CanBuildBunker(),
+                "over the cap after a population drop: bunkers survive and none can be added");
+
+            a.ClearBunkers();
+            ok &= Check(a.BunkerCount(0) == 0 && a.BunkerCount(1) == 0 && a.DockedShips.Count == 0,
+                "ClearBunkers (the planet-death cleanup) destroys the bunkers of every owner");
+
+            // Other docked ships are untouched by the cleanup.
+            f.Ships("B", 0, 2);
+            f.Siege("B", 0, 1);
+            f.Bunkers("B", 0, 2);
+            var b = f.P("B");
+            b.ClearBunkers();
+            ok &= Check(b.DockedShips.Count == 3 && !b.HasDockedShip(Ship.ShipKind.Bunker)
+                        && b.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip) == 2
+                        && b.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip) == 1,
+                "ClearBunkers leaves warships and siegeships docked");
         }
         return ok;
     }

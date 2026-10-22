@@ -630,7 +630,8 @@ public class Planet : MonoBehaviour
                      1, playerID));
                  if (Population.Count <= 0)
                  {
-                     // planet is dead
+                     // planet is dead: its bunkers go with it
+                     ClearBunkers();
                      resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeDead, null));
                  }
              }
@@ -962,6 +963,16 @@ public class Planet : MonoBehaviour
         {
             DockNewShip(Ship.ShipKind.WarShip);
         }
+        else if (CurrentProduction?.Item.subType == "Siegeship")
+        {
+            DockNewShip(Ship.ShipKind.SiegeShip);
+        }
+        else if (CurrentProduction?.Item.subType == "Bunker")
+        {
+            // The cap is re-checked here: a bunker queued before the planet hit the cap (or changed hands) must not exceed it.
+            if (CanBuildBunker())
+                DockNewShip(Ship.ShipKind.Bunker);
+        }
         else if (CurrentProduction?.Item.subType == "WarshipUpdate")
         {
             // Needs Gameboard.Instance, like DockNewShip's snapshot; the self-check calls ApplyWarshipUpdate directly.
@@ -974,6 +985,28 @@ public class Planet : MonoBehaviour
     public bool HasDockedShip(Ship.ShipKind kind)
     {
         return DockedShips.Exists(s => s.Kind == kind);
+    }
+
+    /// <summary>Bunkers docked here for this owner.</summary>
+    public int BunkerCount(int owner)
+    {
+        return DockedShips.Count(s => s.Kind == Ship.ShipKind.Bunker && s.Owner == owner);
+    }
+
+    /// <summary>
+    /// The owner may add a bunker: the planet has an owner and holds fewer of the owner's bunkers than MaxPopulation.
+    /// Existing bunkers survive a population drop, so a planet over the cap is simply false.
+    /// </summary>
+    public bool CanBuildBunker()
+    {
+        return Owner != NoOwner && BunkerCount(Owner) < MaxPopulation;
+    }
+
+    /// <summary>Destroys every docked bunker of any owner (a dead planet keeps none). No Gameboard.Instance, so a self-check can call it.</summary>
+    public void ClearBunkers()
+    {
+        foreach (var bunker in DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker).ToList())
+            DestroyDockedShip(bunker);
     }
 
     /// <summary>
@@ -1136,7 +1169,7 @@ public class Planet : MonoBehaviour
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
     {
         if (owner < 0 || owner >= Gameboard.Instance.players.Count) return new List<string>();
-        var subType = kind == Ship.ShipKind.ColonyShip ? "ColonyShip" : "Warship";
+        var subType = WarshipStats.SubtypeOf(kind);
         var researchCatalog = Gameboard.Instance.players[owner].playerAI.ResearchCatalog;
         return researchCatalog.catalogItems
             .Where(x => x.researched && x.type == "Ship Improvement" && x.subType == subType)
