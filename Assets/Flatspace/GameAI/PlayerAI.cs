@@ -1829,7 +1829,7 @@ namespace FlatSpace
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turn,
                     AssaultWarFilter()) { ExcludedTargets = new HashSet<string>(CooldownPlanets(turn)) };
                 var target = assault.ChooseTarget();
-                if (target == null || assault.RequiredBombard(target) <= 0f) return 0;   // no known bunker: none wanted
+                if (target == null || assault.RequiredBombard(target) <= 0f) return 0;   // no bunker and no pace need: none wanted
                 return assault.CommittedSiegeships(target) + assault.WantedSiegeships(target, NewSiegeshipBombard(stats));
             }
 

@@ -219,6 +219,8 @@ namespace FlatSpace
                             AITuningLogger.LogConversionStart(turn, report.Dominator, report.Planet,
                                 ConversionSystem.PlayersIn(report.WarMask), report.MyPopulation, report.TotalPopulation, report.TurnsPerFlip,
                                 report.BombardFactor);
+                            if (report.ResumedProgress > 0f)
+                                AITuningLogger.LogConversionResumed(turn, report.Dominator, report.Planet, report.ResumedProgress);
                             break;
                         case ConversionReport.Kind.Flip:
                         {

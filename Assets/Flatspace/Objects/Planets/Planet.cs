@@ -124,6 +124,12 @@ public class Planet : MonoBehaviour
     public float ConversionProgress = 0f;
     public int ConversionWarMask = 0;
 
+    // A session that ended as dominance lost keeps its progress here for conversionCarryTurns: the same player dominating again
+    // within the window resumes from it (ConversionSystem.Step). Not saved: a load forgets it, like the tracker state.
+    public int ConversionCarryBy = NoOwner;
+    public float ConversionCarryProgress = 0f;
+    public int ConversionCarryUntilTurn = 0;
+
     public void EndConversionSession()
     {
         ConversionBy = NoOwner;

@@ -233,6 +233,8 @@ public static class WarshipSelfCheck
         // Conversion pace scales with docked bombard (default reference 60). The fixture warship has bombard 1, so a reference of 1
         // keeps the pre-bombard pace (factor 1) for every older conversion check; the bombard checks set their own reference.
         constants.conversionBombardReference = 1f;
+        constants.dominanceRivalRatio = -1f;   // the old any-rival-ship rule: older checks keep their meaning; the ratio has its own check
+        constants.conversionCarryTurns = 0;   // the carry has its own check; older conversion checks start every session at 0
         return constants;
     }
 

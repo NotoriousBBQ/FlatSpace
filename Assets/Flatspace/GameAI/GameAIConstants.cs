@@ -48,8 +48,12 @@ public class GameAIConstants : ScriptableObject
     // ...but never fewer than this.
     public int assaultMinimumShips = 3;
     // Siegeships join the assault until their bombard (docked at the target + in flight there) covers the target's known
-    // bunker defense x this. No known bunkers means no siegeships wanted (and none built).
+    // bunker defense x this (or the pace term below, if larger).
     public float siegeBombardMargin = 1.3f;
+    // Conversion pace term: against an enemy-occupied target the assault also wants this share of conversionBombardReference in
+    // siegeship bombard, so a warship-only conquest (bombard far below the reference) does not crawl at the minimum pace. The
+    // need is the larger of this and the bunker need. 0 = off (siegeships only to break known bunkers).
+    public float siegePaceFraction = 1f;
     // Siegeships are at most this share of the assault fleet (warships + siegeships): the cap is
     // floor(share x W / (1 - share)), W = max(the required warship force, my warships docked + in flight at the target).
     // 0.5 = no more siegeships than warships; 0 or less = none; 1 or more = no cap.
@@ -230,6 +234,14 @@ public class GameAIConstants : ScriptableObject
     public float conversionBombardReference = 60f;
     // The slowest conversion pace (as a fraction of full) however little bombard the dominator has. Starting point, tuned from logs.
     public float conversionBombardMinFactor = 0.05f;
+    // A session that ends because dominance was lost (a lone rival ship docking for a turn) keeps its progress this many turns: the
+    // same player dominating the planet again within the window resumes from it instead of from 0. 0 = off (a new session starts at 0).
+    public int conversionCarryTurns = 3;
+    // Dominance: my docked warships and siegeships are contested only when the at-war rivals' docked WARSHIPS (a rival's siegeships
+    // never contest) that hold inhabitants on the planet add up to more than this x my fighting strength (offense x (health + defense),
+    // the fight projector's figure). 0.5 = a rival needs more than half my strength; at or below 1 so two at-war players cannot both
+    // qualify. Negative = the old rule: any docked warship or siegeship of an at-war rival contests, whatever its strength or holdings.
+    public float dominanceRivalRatio = 0.5f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's

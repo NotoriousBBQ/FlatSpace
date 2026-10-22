@@ -487,8 +487,18 @@ namespace FlatSpace
                 return sum;
             }
 
-            /// <summary>Bombard the assault wants at the target: KnownBunkerDefense x siegeBombardMargin.</summary>
-            public float RequiredBombard(Planet target) => KnownBunkerDefense(target) * _constants.siegeBombardMargin;
+            /// <summary>
+            /// Bombard the assault wants at the target: the larger of KnownBunkerDefense x siegeBombardMargin and, for a known
+            /// enemy-occupied target, the conversion pace term (siegePaceFraction x conversionBombardReference).
+            /// </summary>
+            public float RequiredBombard(Planet target)
+            {
+                var need = KnownBunkerDefense(target) * _constants.siegeBombardMargin;
+                if (_constants.siegePaceFraction > 0f && target != null && IsEnemyOccupied(target)
+                    && _map.Knowledge.IsKnown(_playerId, target.PlanetName))
+                    need = Math.Max(need, _constants.siegePaceFraction * _constants.conversionBombardReference);
+                return need;
+            }
 
             private int CountSiegeships(Planet planet)
                 => planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip && s.Owner == _playerId);

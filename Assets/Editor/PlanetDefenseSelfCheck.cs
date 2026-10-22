@@ -603,6 +603,26 @@ public static class PlanetDefenseSelfCheck
             var assault = SiegePlanner(f);
             ok &= Check(assault.KnownBunkerDefense(d) == 0f && assault.RequiredBombard(d) == 0f && assault.WantedSiegeships(d, 20f) == 0,
                 "no bunkers: no bombard needed and 0 siegeships wanted");
+
+            // Pace term: an enemy-occupied target wants siegePaceFraction x conversionBombardReference even without bunkers.
+            f.Constants.conversionBombardReference = 60f;
+            f.Constants.siegePaceFraction = 1f;
+            ok &= Check(Near(assault.RequiredBombard(d), 60f) && assault.WantedSiegeships(d, 20f) == 3,
+                "pace term: 60 bombard wanted at a bunkerless enemy planet, ceil(60 / 20) = 3 (the cap of 3)");
+            f.Constants.siegePaceFraction = 0.5f;
+            ok &= Check(Near(assault.RequiredBombard(d), 30f), "a fraction of 0.5 wants 30");
+            f.Constants.siegePaceFraction = 0f;
+            ok &= Check(assault.RequiredBombard(d) == 0f, "a fraction of 0 switches the pace term off");
+            f.Constants.siegePaceFraction = 1f;
+            ok &= Check(assault.RequiredBombard(f.P("A")) == 0f, "no enemy inhabitant at A: no pace need");
+        }
+
+        // The pace term never lowers a bunker need: 130 (bunkers) beats 60 (pace).
+        using (var f = BunkeredLine(true))
+        {
+            f.Constants.conversionBombardReference = 60f;
+            f.Constants.siegePaceFraction = 1f;
+            ok &= Check(Near(SiegePlanner(f).RequiredBombard(f.P("D")), 130f), "the larger need decides: 130, not 60");
         }
         return ok;
     }
@@ -1796,6 +1816,49 @@ public static class PlanetDefenseSelfCheck
             f.War(0, 1);
             ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "at-war siegeships/warships docked together: nobody dominates");
         }
+        // The ratio rule (dominanceRivalRatio 0.5): a warship is 10 x (100 + 5) = 1050. Only at-war WARSHIPS of a player with inhabitants
+        // here contest, summed, against more than half my fleet strength.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.dominanceRivalRatio = 0.5f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (0, 2), (1, 2));   // both sides hold inhabitants, so both can contest
+            f.Ships("A", 0, 4); f.Ships("A", 1, 1); f.War(0, 1);   // 4200 against 1050 <= 2100
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "ratio: 1 rival warship against my 4 does not contest");
+            f.Ships("A", 1, 2);                                     // 3150 > 2100
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "ratio: 3 rival warships against my 4 contest, nobody dominates");
+        }
+        using (var f = Fixture.Line())   // a negative ratio is the old rule
+        {
+            f.Constants.dominanceRivalRatio = -1f;
+            var a = f.P("A");
+            f.Ships("A", 0, 4); f.Ships("A", 1, 1); f.War(0, 1);
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "ratio -1 (the old rule): any at-war rival ship contests");
+        }
+        using (var f = Fixture.Line())   // a rival's siegeships never contest
+        {
+            f.Constants.dominanceRivalRatio = 0.5f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (0, 2), (1, 2));
+            f.Ships("A", 0, 4); f.Siege("A", 1, 5); f.War(0, 1);
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "ratio: a rival's siegeships do not contest, even five of them");
+        }
+        using (var f = Fixture.Line())   // a rival with no inhabitants here never contests, however large its fleet
+        {
+            f.Constants.dominanceRivalRatio = 0.5f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Ships("A", 0, 6); f.Ships("A", 2, 5); f.War(0, 2);   // player 2 holds nobody on A; its bombard 5 < my 6
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "ratio: a landless at-war fleet does not contest; more bombard (6 against 5) dominates");
+        }
+        using (var f = Fixture.Line())   // two rivals with inhabitants add up
+        {
+            f.Constants.dominanceRivalRatio = 0.5f;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (0, 1), (1, 2), (2, 1));
+            f.Ships("A", 0, 4); f.Ships("A", 1, 1); f.Ships("A", 2, 2); f.War(0, 1); f.War(0, 2);   // 3150 > 2100
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "ratio: two at-war holders' warships are summed (1 + 2 against my 4)");
+        }
         using (var f = Fixture.Line())
         {
             f.Ships("A", 0, 1);     // offense 10, bombard 1
@@ -1883,6 +1946,41 @@ public static class PlanetDefenseSelfCheck
             foreach (var bunker in a.DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker).ToList()) a.DestroyDockedShip(bunker);
             ConvTurn(f, 5);
             ok &= Check(a.ConversionBy == 0 && Near(a.ConversionProgress, 0.25f), "with every bunker destroyed the conversion starts again from 0 (one turn of progress)");
+        }
+
+        // The carry: a session that loses dominance keeps its progress for conversionCarryTurns; the same player back in time resumes it.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.conversionBombardReference = 60f; f.Constants.conversionTurnsBase = 4f; f.Constants.conversionCarryTurns = 3;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Siege("A", 0, 3); f.War(0, 1);   // 60 bombard: factor 1, 0.25 a turn
+            ConvTurn(f, 1); ConvTurn(f, 2);
+            ok &= Check(a.ConversionBy == 0 && Near(a.ConversionProgress, 0.5f), "carry: precondition, a session at progress 0.5");
+            f.Ships("A", 1, 1);   // a lone rival warship docks: dominance lost
+            var lost = ConvTurn(f, 3);
+            ok &= Check(lost.Any(r => r.What == ConversionReport.Kind.End && r.EndReason == ConversionEndReason.DominanceLost)
+                        && a.ConversionBy == Planet.NoOwner && Near(a.ConversionCarryProgress, 0.5f) && a.ConversionCarryBy == 0,
+                "dominance lost: the session ends and keeps 0.5 as the carry");
+            foreach (var ship in a.DockedShips.Where(s => s.Owner == 1).ToList()) a.DestroyDockedShip(ship);
+            var back = ConvTurn(f, 5);   // 2 turns later, inside the window
+            ok &= Check(back.Any(r => r.What == ConversionReport.Kind.Start && Near(r.ResumedProgress, 0.5f)) && Near(a.ConversionProgress, 0.75f),
+                "back within 3 turns: the session resumes at 0.5 and adds a turn (0.75)");
+            ok &= Check(a.ConversionCarryBy == Planet.NoOwner, "a resumed carry is spent");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Constants.conversionBombardReference = 60f; f.Constants.conversionTurnsBase = 4f; f.Constants.conversionCarryTurns = 3;
+            var a = f.P("A");
+            ConversionSelfCheck.Populate(a, (1, 4));
+            f.Siege("A", 0, 3); f.War(0, 1);
+            ConvTurn(f, 1); ConvTurn(f, 2);
+            f.Ships("A", 1, 1);
+            ConvTurn(f, 3);
+            foreach (var ship in a.DockedShips.Where(s => s.Owner == 1).ToList()) a.DestroyDockedShip(ship);
+            var late = ConvTurn(f, 7);   // 4 turns later, past the window (turn 3 + 3 = 6)
+            ok &= Check(late.Any(r => r.What == ConversionReport.Kind.Start && Near(r.ResumedProgress, 0f)) && Near(a.ConversionProgress, 0.25f),
+                "back after the window: a fresh start from 0");
         }
 
         // BombardmentSystem.Dominated is the same rule (a bunker owner's own warship still blocks).
@@ -2231,6 +2329,7 @@ public static class PlanetDefenseSelfCheck
             f.Constants = WarshipSelfCheck.MakeConstants(f.Template);
             f.Constants.siegeShipData = f.SiegeTemplate;
             f.Constants.bunkerData = f.BunkerTemplate;
+            f.Constants.siegePaceFraction = 0f;   // the pace term has its own check; the rest test the bunker need alone
             f.Research = WarshipSelfCheck.MakeResearch();
             f.Stats = new WarshipStats(f.Research);
             f.MapGo = new GameObject("PlanetDefenseSelfCheckMap");

@@ -34,6 +34,7 @@ namespace FlatSpace.AI
         public int MyPopulation, TotalPopulation;   // Start: before the first flip
         public float TurnsPerFlip;                  // Start
         public float BombardFactor = 1f;            // Start
+        public float ResumedProgress;               // Start: progress carried over from a session that lost dominance (0 = a fresh start)
         public ConversionEvent Flip;                // Flip
         public ConversionEndReason EndReason;       // End
         public int Bunkers;                         // Blocked: the bunkers (any owner's) standing on the planet
@@ -55,20 +56,33 @@ namespace FlatSpace.AI
             return Math.Max(1f, constants.conversionTurnsBase * (1f - share));
         }
 
+        /// <summary>Combat strength of one docked ship, the fight projector's figure: effective offense x (current health + defense).</summary>
+        private static float ShipStrength(Ship ship, WarshipStats stats)
+            => stats.EffectiveOffense(ship) * (stats.CurrentHealth(ship) + stats.Defense(ship));
+
         /// <summary>
         /// The player that dominates the planet, or Planet.NoOwner. The single dominance rule (BombardmentSystem.Dominated uses it too):
-        /// players with no docked warship or siegeship of effective bombard above 0 never dominate; a player with any docked warship or
-        /// siegeship of an at-war rival beside it does not either; of two that are not at war with each other the one with more docked
-        /// bombard wins, ties to the lower id. Bunkers are not considered (Step gates on them).
+        /// players with no docked warship or siegeship of effective bombard above 0 never dominate; a player is contested, and does not
+        /// dominate, when the docked WARSHIPS of the players at war with it that hold inhabitants here add up to more than
+        /// dominanceRivalRatio x its own fighting strength (warships and siegeships; a rival's siegeships and a rival with no inhabitants
+        /// here never contest); of two that are not contested the one with more docked bombard wins, ties to the lower id. A negative
+        /// ratio is the old rule: any docked fighting ship of an at-war rival contests. Bunkers are not considered (Step gates on them).
         /// </summary>
         public static int Dominator(Planet planet, GameAIMap map, WarshipStats stats)
         {
+            var ratio = map.GameAIConstants != null ? map.GameAIConstants.dominanceRivalRatio : -1f;
             var present = new SortedSet<int>();
             var bombard = new SortedDictionary<int, float>();
+            var fleet = new Dictionary<int, float>();      // each player's strength, warships and siegeships
+            var warships = new Dictionary<int, float>();   // each player's warship strength
             foreach (var ship in planet.DockedShips)
             {
                 if (!Ship.IsFightingKind(ship.Kind) || ship.Owner == Planet.NoOwner) continue;
                 present.Add(ship.Owner);
+                var strength = ShipStrength(ship, stats);
+                fleet[ship.Owner] = (fleet.TryGetValue(ship.Owner, out var all) ? all : 0f) + strength;
+                if (ship.Kind == Ship.ShipKind.WarShip)
+                    warships[ship.Owner] = (warships.TryGetValue(ship.Owner, out var war) ? war : 0f) + strength;
                 var value = stats.EffectiveBombard(ship);
                 if (value <= 0f) continue;
                 bombard[ship.Owner] = (bombard.TryGetValue(ship.Owner, out var sum) ? sum : 0f) + value;
@@ -78,7 +92,19 @@ namespace FlatSpace.AI
             foreach (var pair in bombard)   // ascending id: a tie keeps the lower id
             {
                 var player = pair.Key;
-                if (present.Any(other => other != player && map.Diplomacy.IsAtWar(player, other, true))) continue;
+                bool contested;
+                if (ratio < 0f)
+                    contested = present.Any(other => other != player && map.Diplomacy.IsAtWar(player, other, true));
+                else
+                {
+                    var rivals = 0f;
+                    foreach (var rival in warships)
+                        if (rival.Key != player && map.Diplomacy.IsAtWar(player, rival.Key, true)
+                            && planet.Population.Exists(p => p.Player == rival.Key))
+                            rivals += rival.Value;
+                    contested = rivals > ratio * fleet[player];
+                }
+                if (contested) continue;
                 if (pair.Value > bestBombard) { best = player; bestBombard = pair.Value; }
             }
             return best;
@@ -125,11 +151,11 @@ namespace FlatSpace.AI
             var reports = new List<ConversionReport>();
             if (map == null || stats == null || !map.Diplomacy.Enabled) return reports;
             foreach (var planet in map.PlanetList)
-                Step(planet, map, stats, constants, results, reports);
+                Step(planet, map, stats, constants, turn, results, reports);
             return reports;
         }
 
-        private static void Step(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants,
+        private static void Step(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants, int turn,
             List<Planet.UpdateResult> results, List<ConversionReport> reports)
         {
             var diplomacy = map.Diplomacy;
@@ -146,6 +172,13 @@ namespace FlatSpace.AI
                     {
                         What = ConversionReport.Kind.End, Planet = planet.PlanetName, Dominator = planet.ConversionBy, EndReason = reason.Value,
                     });
+                    if (reason.Value == ConversionEndReason.DominanceLost && constants.conversionCarryTurns > 0)
+                    {
+                        planet.ConversionCarryBy = planet.ConversionBy;
+                        planet.ConversionCarryProgress = planet.ConversionProgress;
+                        planet.ConversionCarryUntilTurn = turn + constants.conversionCarryTurns;
+                    }
+                    else planet.ConversionCarryBy = Planet.NoOwner;
                     planet.EndConversionSession();
                 }
             }
@@ -169,14 +202,18 @@ namespace FlatSpace.AI
                 var mask = WarMask(planet, dominator, diplomacy);
                 if (mask == 0) return;       // a session starts only against a holder I am at war with
                 planet.ConversionBy = dominator;
-                planet.ConversionProgress = 0f;
+                // The same player back within the carry window resumes its progress; any other start is fresh.
+                var resumed = planet.ConversionCarryBy == dominator && turn <= planet.ConversionCarryUntilTurn
+                    ? planet.ConversionCarryProgress : 0f;
+                planet.ConversionCarryBy = Planet.NoOwner;
+                planet.ConversionProgress = resumed;
                 planet.ConversionWarMask = mask;
                 var mineNow = planet.Population.Count(p => p.Player == dominator);
                 reports.Add(new ConversionReport
                 {
                     What = ConversionReport.Kind.Start, Planet = planet.PlanetName, Dominator = dominator, WarMask = mask,
                     MyPopulation = mineNow, TotalPopulation = planet.Population.Count,
-                    TurnsPerFlip = TurnsPerFlip(mineNow, planet.Population.Count, constants), BombardFactor = factor,
+                    TurnsPerFlip = TurnsPerFlip(mineNow, planet.Population.Count, constants), BombardFactor = factor, ResumedProgress = resumed,
                 });
             }
 

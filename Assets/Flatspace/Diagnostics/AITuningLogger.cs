@@ -620,6 +620,14 @@ public static class AITuningLogger
             myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci), bombardFactor.ToString("0.##", ci)) });
     }
 
+    /// <summary>A session resumed the progress a lost-dominance session carried: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionResumed|planet|progress (follows that turn's ConversionStart).</summary>
+    public static void LogConversionResumed(int turnNumber, int playerId, string planet, float progress)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionResumed", planet, progress.ToString("0.##", ci)) });
+    }
+
     /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress|bombardFactor.</summary>
     public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress,
         float bombardFactor = 1f)

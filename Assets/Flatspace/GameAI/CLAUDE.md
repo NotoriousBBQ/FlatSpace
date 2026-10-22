@@ -329,7 +329,7 @@ Spec `docs/superpowers/specs/2026-10-06-invasion-conversion-design.md`. A planet
 `ConversionSystem` (`Assets/Flatspace/GameAI/ConversionSystem.cs`, pure) runs in `GameAI.GameAIUpdate` right after `RunCombat` (so a won fight
 starts dominance the same turn), in the engine step, so no player's decision order matters; off in legacy mode.
 - **Dominance** (`ConversionSystem.Dominator`, the single rule; `BombardmentSystem.Dominated` calls it): my warships/siegeships docked with effective
-  bombard above 0 and no warship/siegeship of a player I am at war with (`IsAtWar(me, x, true)`, a truce is not war). Two dominators not at war
+  bombard above 0 and not contested: the docked WARSHIPS of players I am at war with (`IsAtWar(me, x, true)`, a truce is not war) that hold inhabitants on the planet, summed, must not exceed `dominanceRivalRatio` (0.5) x my fighting strength (offense x (health + defense), warships and siegeships); a rival's siegeships and a rival with no inhabitants there never contest (a negative ratio restores the old any-rival-ship rule). A session that loses dominance keeps its progress for `conversionCarryTurns` (3) turns (`Planet.ConversionCarry*`, not saved; `ConversionResumed` log line). Two dominators not at war
   with each other: more docked bombard, then the lower id. **Pace:** progress a turn is `BombardSpeedFactor(my docked bombard) / TurnsPerFlip`,
   the factor `clamp(bombard / conversionBombardReference (60), conversionBombardMinFactor (0.05), 1)`. **Bunker gate:** no session starts or
   continues while any bunker (any owner's) stands on the planet; a bunker appearing mid-session ends it as `DominanceLost`. A bunker only a
