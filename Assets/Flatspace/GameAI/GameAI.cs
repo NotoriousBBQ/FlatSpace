@@ -149,6 +149,7 @@ namespace FlatSpace
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
+                RunBombardment(planetUpdateResults);
                 RunConversion(planetUpdateResults);
                 RunFightProjections(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
@@ -174,6 +175,17 @@ namespace FlatSpace
                 foreach (var report in CombatSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results))
                     AITuningLogger.LogCombat(turn, report.Attacker, report.Planet, report.Victim, report.DamageDealt,
                         report.ShipsDestroyed);
+            }
+
+            // After ship combat, before conversion: docked ships at war with a planet's undefended bunkers bombard them and take their
+            // fire (see BombardmentSystem), then bunkers repair. Ship losses reach ProcessResults through the shared results.
+            private void RunBombardment(List<Planet.UpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                var turn = Gameboard.Instance.TurnNumber;
+                foreach (var report in BombardmentSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, results))
+                    AITuningLogger.LogBombard(turn, report.Attacker, report.Planet, report.Victim, report.BombardDealt,
+                        report.BunkersLeft, report.ShipDamage);
             }
 
             // After combat: a planet one player dominates converts one inhabitant at a time (see ConversionSystem). The reports are

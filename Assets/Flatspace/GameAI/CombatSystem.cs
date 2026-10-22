@@ -49,8 +49,11 @@ namespace FlatSpace
             public float Offense;     // effective: BaseOffense x Health / Max, 0 for a Max of 0 (the WarshipStats formula)
             public float Strength;    // Offense x (Health + Defense)
             public int Class;         // victim order within a side: 0 warship, 1 siegeship, 2 bunker (lower is hit first)
+            public float BaseBombard; // the Bombard stat before damage (only the bombardment step reads it)
+            public float Bombard;     // effective: BaseBombard x Health / Max, 0 for a Max of 0 (WarshipStats.EffectiveBombard)
 
-            public static CombatUnit Make(int id, int owner, int index, float baseOffense, float max, float defense, float damage, int cls = 0)
+            public static CombatUnit Make(int id, int owner, int index, float baseOffense, float max, float defense, float damage, int cls = 0,
+                float baseBombard = 0f)
             {
                 var health = Math.Max(0f, max - damage);
                 var offense = max <= 0f ? 0f : baseOffense * health / max;
@@ -58,12 +61,13 @@ namespace FlatSpace
                 {
                     Id = id, Owner = owner, Index = index, Health = health, Max = max, Defense = defense,
                     BaseOffense = baseOffense, Offense = offense, Strength = offense * (health + defense), Class = cls,
+                    BaseBombard = baseBombard, Bombard = max <= 0f ? 0f : baseBombard * health / max,
                 };
             }
 
             /// <summary>The same unit after taking `more` further damage.</summary>
             public CombatUnit WithDamage(float more)
-                => Make(Id, Owner, Index, BaseOffense, Max, Defense, (Max - Health) + more, Class);
+                => Make(Id, Owner, Index, BaseOffense, Max, Defense, (Max - Health) + more, Class, BaseBombard);
         }
 
         /// <summary>What one attacker did to one victim in a round. Ships and StrengthLost are the attacker's share of what the victim lost; Engaged is the same share of the victim's strength at the start of the round.</summary>

@@ -20,6 +20,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunBunkerCapCheck();
         ok &= RunBunkersAreNotShipsCheck();
         ok &= RunSiegeshipCombatCheck();
+        ok &= RunBombardmentCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -567,6 +568,193 @@ public static class PlanetDefenseSelfCheck
             f.War(0, 1);
             Resolve(f, new List<Planet.UpdateResult>());
             ok &= Check(f.P("A").DockedShips.Any(s => s.Kind == Ship.ShipKind.ColonyShip), "an at-war bunker is not a raider: the colony ship lives");
+        }
+        return ok;
+    }
+
+    private static List<BombardReport> Bombard(Fixture f, List<Planet.UpdateResult> results)
+        => BombardmentSystem.Resolve(f.Map, f.Stats, f.Constants, results);
+
+    private static List<Ship> Of(Planet planet, Ship.ShipKind kind, int owner)
+        => planet.DockedShips.Where(s => s.Kind == kind && s.Owner == owner).ToList();
+
+    // Task 7: the bombardment step. Templates (no research lines for them in the fixture, so base values): warship Offense 10,
+    // Health 100, Defense 5, Bombard 1; siegeship 3 / 100 / 3, Bombard 20; bunker Offense 12, Health 150, Defense 8; K 20, repair 0.1.
+    public static bool RunBombardmentCheck()
+    {
+        var ok = true;
+        var warLost = Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost;
+
+        // (1) Trigger. A defender warship, or only a defender siegeship, protects the bunkers; no war, no bombardment.
+        foreach (var guard in new[] { Ship.ShipKind.WarShip, Ship.ShipKind.SiegeShip })
+        {
+            using (var f = Fixture.Line())
+            {
+                f.Ships("A", 0, 2);
+                f.Bunkers("A", 1, 2);
+                if (guard == Ship.ShipKind.WarShip) f.Ships("A", 1, 1); else f.Siege("A", 1, 1);
+                f.War(0, 1);
+                var results = new List<Planet.UpdateResult>();
+                var reports = Bombard(f, results);
+                ok &= Check(!BombardmentSystem.Triggers(f.P("A"), 1, f.Map) && reports.Count == 0 && results.Count == 0
+                            && f.P("A").DockedShips.All(s => Near(s.Damage, 0f)),
+                    $"a defender {guard} docked beside its bunkers: no bombardment, nothing damaged");
+            }
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 2);
+            f.Bunkers("A", 1, 2);
+            var results = new List<Planet.UpdateResult>();
+            var reports = Bombard(f, results);
+            ok &= Check(!BombardmentSystem.Triggers(f.P("A"), 1, f.Map) && reports.Count == 0 && results.Count == 0
+                        && f.P("A").DockedShips.All(s => Near(s.Damage, 0f)),
+                "ships of a player not at war with the bunker owner do not bombard");
+        }
+        using (var f = Fixture.Line())   // the last defender ship dies in ship combat: bombardment the same turn
+        {
+            f.Ships("A", 1, 1);
+            f.Bunkers("A", 1, 2);
+            f.Ships("A", 0, 13);          // pool 130 kills the defender (needs 100 / 0.8 = 125); it hits back 10 x 0.8 = 8
+            f.War(0, 1);
+            var a = f.P("A");
+            ok &= Check(!BombardmentSystem.Triggers(a, 1, f.Map), "precondition: the defender warship protects the bunkers before combat");
+            var results = new List<Planet.UpdateResult>();
+            Resolve(f, results);
+            ok &= Check(Of(a, Ship.ShipKind.WarShip, 1).Count == 0 && BombardmentSystem.Triggers(a, 1, f.Map),
+                "the defender's last warship died in ship combat: the bunkers are exposed");
+            var reports = Bombard(f, results);
+            var bunkers = Of(a, Ship.ShipKind.Bunker, 1);
+            var hurt = Of(a, Ship.ShipKind.WarShip, 0).OrderByDescending(s => s.Damage).First();
+            // Bombard: 12 healthy x 1 + the hurt ship's 1 x 92 / 100 = 12.92 at 20 / (20 + 8). Bunker fire: 2 x 12 = 24 on the most
+            // damaged warship at 20 / (20 + 5): 8 + 19.2.
+            ok &= Check(reports.Count == 1 && reports[0].Attacker == 0 && reports[0].Victim == 1 && reports[0].BunkersLeft == 2,
+                "bombardment runs on the same turn the last defender ship died (one report, 0 against 1, both bunkers left)");
+            ok &= Check(Near(bunkers[0].Damage, 12.92f * 20f / 28f) && Near(bunkers[1].Damage, 0f),
+                "the fleet's bombard 12.92 lands on the first bunker at 20 / 28");
+            ok &= Check(Near(hurt.Damage, 8f + 24f * 0.8f), "the bunkers' 24 lands on the most damaged warship at 0.8: 8 + 19.2");
+        }
+
+        // (2) Simultaneity: a bunker destroyed this step still fires, a siegeship destroyed this step still bombards.
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("A", 1, 1);
+            f.Siege("A", 0, 11);          // bombard 220 >= 150 / (20 / 28) = 210
+            f.War(0, 1);
+            var reports = Bombard(f, new List<Planet.UpdateResult>());
+            var siege = Of(f.P("A"), Ship.ShipKind.SiegeShip, 0);
+            ok &= Check(f.P("A").BunkerCount(1) == 0, "eleven siegeships destroy the bunker");
+            ok &= Check(siege.Count == 11 && Near(siege[0].Damage, 12f * 20f / 23f) && Near(siege[1].Damage, 0f),
+                "the destroyed bunker still fired: 12 x 20 / 23 on the first siegeship");
+            ok &= Check(reports.Count == 1 && Near(reports[0].BombardDealt, 150f) && Near(reports[0].BunkersDestroyed, 1f)
+                        && reports[0].BunkersLeft == 0 && Near(reports[0].ShipDamage, 12f * 20f / 23f),
+                "the report: 150 dealt, 1 bunker destroyed, 0 left, 10.43 ship damage");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("A", 1, 1);
+            f.Siege("A", 0, 1, 99f);      // health 1: effective bombard 20 x 1 / 100 = 0.2; the bunker's 12 kills it
+            f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            Bombard(f, results);
+            var lost = results.Where(r => r.Result == warLost).ToList();
+            ok &= Check(Of(f.P("A"), Ship.ShipKind.SiegeShip, 0).Count == 0, "the bunker destroys the wounded siegeship");
+            ok &= Check(Near(Of(f.P("A"), Ship.ShipKind.Bunker, 1)[0].Damage, 0.2f * 20f / 28f),
+                "the destroyed siegeship still bombarded: 0.2 x 20 / 28 on the bunker (and the hit bunker does not repair)");
+            ok &= Check(lost.Count == 1 && lost[0].PlayerID == 0 && lost[0].Data is CombatLoss loss && loss.Attacker == 1
+                        && Near(loss.Ships, 1f),
+                "the siegeship loss is a WarshipsLost result: victim the ship owner, attacker the bunker owner");
+        }
+
+        // (3) Arithmetic: bombard 100 (five siegeships) against one bunker of Defense 20 at K 20: 100 x 20 / 40 = 50.
+        using (var f = Fixture.Line())
+        {
+            f.BunkerTemplate.shipDefense = 20f;
+            f.Bunkers("A", 1, 1);
+            f.Siege("A", 0, 5);
+            f.War(0, 1);
+            var reports = Bombard(f, new List<Planet.UpdateResult>());
+            ok &= Check(Near(Of(f.P("A"), Ship.ShipKind.Bunker, 1)[0].Damage, 50f), "bombard 100 against defense 20 at K 20 does 50");
+            ok &= Check(reports.Count == 1 && Near(reports[0].BombardDealt, 50f) && Near(reports[0].ShipDamage, 12f * 20f / 23f),
+                "the report carries 50 dealt and the bunker's 12 x 20 / 23 back");
+        }
+
+        // (4) A warship-only fleet (bombard 1 each) against three bunkers: the bunkers win the exchange and barely notice.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 3);
+            f.Bunkers("A", 1, 3);
+            f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            var reports = Bombard(f, results);
+            var bunkers = Of(f.P("A"), Ship.ShipKind.Bunker, 1);
+            var ships = Of(f.P("A"), Ship.ShipKind.WarShip, 0);
+            ok &= Check(bunkers.Count == 3 && Near(bunkers[0].Damage, 3f * 20f / 28f) && Near(bunkers[1].Damage, 0f),
+                "three warships' bombard 3 does 3 x 20 / 28 = 2.14 to the first bunker; all three survive");
+            ok &= Check(ships.Count == 3 && Near(ships[0].Damage, 36f * 0.8f), "the bunkers' 36 does 28.8 to the first warship");
+            ok &= Check(reports.Count == 1 && reports[0].ShipDamage > reports[0].BombardDealt && reports[0].BunkersLeft == 3,
+                "the bunkers' damage exceeds the fleet's");
+            var lost = results.Where(r => r.Result == warLost).ToList();
+            ok &= Check(lost.Count == 1 && lost[0].PlayerID == 0 && lost[0].Data is CombatLoss l && l.Attacker == 1
+                        && Near(l.Ships, 0f) && Near(l.Engaged, 3f * 10f * 105f),
+                "one WarshipsLost result (nothing died, engaged = the fleet's ship strength 3 x 10 x 105)");
+        }
+
+        // (5) Repair.
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("A", 1, 1, 50f);
+            Bombard(f, new List<Planet.UpdateResult>());
+            ok &= Check(Near(Of(f.P("A"), Ship.ShipKind.Bunker, 1)[0].Damage, 35f),
+                "an undamaged-this-turn bunker on a non-dominated planet heals 10% of its Health stat (50 - 15)");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1);
+            f.Bunkers("A", 1, 2, 50f);
+            f.War(0, 1);
+            ok &= Check(BombardmentSystem.Dominated(f.P("A"), 1, f.Map, f.Stats), "a rival's warship with bombard 1 and no defender ship: dominated");
+            Bombard(f, new List<Planet.UpdateResult>());
+            var bunkers = Of(f.P("A"), Ship.ShipKind.Bunker, 1);
+            ok &= Check(Near(bunkers[0].Damage, 50f + 20f / 28f), "the hit bunker takes 1 x 20 / 28 and does not heal");
+            ok &= Check(Near(bunkers[1].Damage, 50f), "the bunker not hit this turn does not heal on a dominated planet");
+        }
+        using (var f = Fixture.Line())   // hit but not dominated: player 2, at war with 0 and at peace with 1, blocks 0's dominance
+        {
+            f.Ships("A", 0, 1);
+            f.Ships("A", 2, 1);
+            f.Bunkers("A", 1, 2, 50f);
+            f.War(0, 1);
+            f.War(0, 2);
+            ok &= Check(!BombardmentSystem.Dominated(f.P("A"), 1, f.Map, f.Stats) && BombardmentSystem.Triggers(f.P("A"), 1, f.Map),
+                "precondition: player 0 bombards but player 2 blocks its dominance");
+            Bombard(f, new List<Planet.UpdateResult>());
+            var bunkers = Of(f.P("A"), Ship.ShipKind.Bunker, 1);
+            ok &= Check(Near(bunkers[0].Damage, 50f + 20f / 28f), "a bunker hit this turn does not heal even on a non-dominated planet");
+            ok &= Check(Near(bunkers[1].Damage, 35f), "the other bunker heals: not hit, not dominated");
+            ok &= Check(Near(Of(f.P("A"), Ship.ShipKind.WarShip, 2)[0].Damage, 0f), "the bunkers never fire at a player they are not at war with");
+        }
+        using (var f = Fixture.Line())   // a defender siegeship blocks dominance (and protects the bunkers)
+        {
+            f.Ships("A", 0, 1);
+            f.Siege("A", 1, 1);
+            f.Bunkers("A", 1, 1, 50f);
+            f.War(0, 1);
+            ok &= Check(!BombardmentSystem.Dominated(f.P("A"), 1, f.Map, f.Stats), "the bunker owner's siegeship blocks dominance");
+            Bombard(f, new List<Planet.UpdateResult>());
+            ok &= Check(Near(Of(f.P("A"), Ship.ShipKind.Bunker, 1)[0].Damage, 35f), "so its bunker repairs");
+        }
+
+        // (6) No bunkers: no bombardment results at all.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 1);
+            f.Ships("A", 1, 1);
+            f.War(0, 1);
+            var results = new List<Planet.UpdateResult>();
+            var reports = Bombard(f, results);
+            ok &= Check(reports.Count == 0 && results.Count == 0 && f.P("A").DockedShips.All(s => Near(s.Damage, 0f)),
+                "no bunkers: no reports, no results, no damage");
         }
         return ok;
     }

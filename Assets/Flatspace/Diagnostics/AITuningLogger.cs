@@ -159,6 +159,16 @@ public static class AITuningLogger
             damage.ToString("0.#", ci), ships.ToString("0.##", ci)) });
     }
 
+    /// <summary>A bombardment turn at a planet: T&lt;turn&gt;|P&lt;attacker&gt;|Bombard|planet|attacker|victim|bombardDealt|bunkersLeft|shipDamageTaken.</summary>
+    public static void LogBombard(int turnNumber, int attacker, string planet, int victim, float bombardDealt, int bunkersLeft,
+        float shipDamageTaken)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, attacker, "Bombard", planet, attacker.ToString(ci), victim.ToString(ci),
+            bombardDealt.ToString("0.#", ci), bunkersLeft.ToString(ci), shipDamageTaken.ToString("0.#", ci)) });
+    }
+
     /// <summary>A surrender: T&lt;turn&gt;|P&lt;surrenderer&gt;|Surrender|rival|lossShare|pSurrender|truceUntil.</summary>
     public static void LogSurrender(int turnNumber, int me, int rival, float lossShare, float pSurrender, int truceUntil)
     {
