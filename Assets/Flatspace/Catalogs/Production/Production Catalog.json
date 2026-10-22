@@ -171,6 +171,30 @@
             "maintenanceCost": 0.0
         },
         {
+          "itemName": "SiegeshipProduction",
+          "description": "Create a siegeship",
+          "type": "Ship",
+          "subType" : "Siegeship",
+          "tier" : 1,
+          "cost": 150.0,
+          "effect": "Siegeship",
+          "requiredTech": "Siegeship 1",
+          "researched": false,
+          "maintenanceCost": 5.0
+        },
+        {
+          "itemName": "BunkerProduction",
+          "description": "Create a defense bunker",
+          "type": "Ship",
+          "subType" : "Bunker",
+          "tier" : 1,
+          "cost": 150.0,
+          "effect": "Bunker",
+          "requiredTech": "Bunker 1",
+          "researched": false,
+          "maintenanceCost": 0.0
+        },
+        {
           "itemName": "BaseGrotsitsProduction",
           "description": "Base Grotsits improvement",
           "type": "Improvement",

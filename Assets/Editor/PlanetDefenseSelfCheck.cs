@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using FlatSpace.AI;
@@ -13,6 +15,8 @@ public static class PlanetDefenseSelfCheck
     {
         var ok = RunKindsAndDefaultsCheck();
         ok &= RunBombardStatsCheck();
+        ok &= RunProductionCostCheck();
+        ok &= RunCatalogCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -151,6 +155,138 @@ public static class PlanetDefenseSelfCheck
             {
                 WarshipSelfCheck.DestroyAll(extra);
             }
+        }
+        return ok;
+    }
+
+    private static CatalogItem ProductionItem(string name, string subType, float cost)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.itemName = name; item.name = name;
+        item.type = "Ship"; item.subType = subType; item.cost = cost;
+        return item;
+    }
+
+    public static bool RunProductionCostCheck()
+    {
+        var ok = true;
+        var warship = ProductionItem("WarShipProduction", "Warship", 100f);
+        var siege = ProductionItem("SiegeshipProduction", "Siegeship", 150f);
+        var bunker = ProductionItem("BunkerProduction", "Bunker", 150f);
+        var research = new List<CatalogItem>();
+        try
+        {
+            // No research: 1.5 x the base warship cost.
+            ok &= Check(Near(WarshipCosts.ProductionCost(siege, null, 0, research, 100f, 0.1f, 1.5f, 1.5f), 150f),
+                "a siegeship with no research costs 1.5 x the base warship cost");
+            ok &= Check(Near(WarshipCosts.ProductionCost(bunker, null, 0, research, 100f, 0.1f, 1.5f, 1.5f), 150f),
+                "a bunker with no research costs 1.5 x the base warship cost");
+            ok &= Check(Near(WarshipCosts.ProductionCost(siege, null, 0, research, 100f, 0.1f), 150f),
+                "the ratio parameters default to 1.5");
+
+            research.Add(Line("S1", "Siegeship", "Siegeship Offense", 1));
+            research.Add(Line("S2", "Siegeship", "Siegeship Bombard", 1));
+            research.Add(Line("B1", "Bunker", "Bunker Defense", 1));
+            research.Add(Line("B2", "Bunker", "Bunker Health", 1));
+            research.Add(Line("W1", "Warship", "Warship Offense", 1));
+            // 150 x (1 + 0.1 x 2) = 180 for each; the other subtypes' items add nothing.
+            ok &= Check(Near(WarshipCosts.ProductionCost(siege, null, 0, research, 100f, 0.1f, 1.5f, 1.5f), 180f),
+                "a siegeship with 2 siegeship improvements at factor 0.1 costs 180");
+            ok &= Check(Near(WarshipCosts.ProductionCost(bunker, null, 0, research, 100f, 0.1f, 1.5f, 1.5f), 180f),
+                "a bunker with 2 bunker improvements at factor 0.1 costs 180");
+            ok &= Check(Near(WarshipCosts.ProductionCost(siege, null, 0, research, 100f, 0.1f, 2f, 1.5f), 240f),
+                "the siegeship ratio is applied (100 x 2 x 1.2)");
+            ok &= Check(Near(WarshipCosts.ProductionCost(bunker, null, 0, research, 100f, 0.1f, 2f, 3f), 360f),
+                "the bunker ratio is applied (100 x 3 x 1.2)");
+            ok &= Check(Near(WarshipCosts.ProductionCost(warship, null, 0, research, 100f, 0.1f, 1.5f, 1.5f), 110f),
+                "a warship is unchanged: 100 x (1 + 0.1 x 1 warship improvement)");
+        }
+        finally
+        {
+            WarshipSelfCheck.DestroyAll(research);
+            Object.DestroyImmediate(warship);
+            Object.DestroyImmediate(siege);
+            Object.DestroyImmediate(bunker);
+        }
+        return ok;
+    }
+
+    private static Catalog.CatalogSaveData ReadCatalog(string folder, string file)
+    {
+        var path = Application.dataPath + "/Flatspace/Catalogs/" + folder + "/" + file + ".json";
+        if (!File.Exists(path))
+        {
+            Debug.LogError($"[PlanetDefenseSelfCheck] FAIL: catalog file not found: {path}");
+            return null;
+        }
+        return JsonUtility.FromJson<Catalog.CatalogSaveData>(File.ReadAllText(path));
+    }
+
+    // Reads the shipped JSON catalogs from disk (no Gameboard) and checks the planet-defense items.
+    public static bool RunCatalogCheck()
+    {
+        var research = ReadCatalog("Research", "Research Catalog");
+        var production = ReadCatalog("Production", "Production Catalog");
+        if (!Check(research != null && production != null, "both catalog files load")) return false;
+
+        var ok = true;
+        var byName = new Dictionary<string, Catalog.CatalogSaveData.ItemSaveData>();
+        foreach (var item in research.items)
+        {
+            ok &= Check(!byName.ContainsKey(item.itemName), $"research item name is unique: {item.itemName}");
+            byName[item.itemName] = item;
+        }
+
+        // Every requiredTech in the research catalog is "" or another research item.
+        foreach (var item in research.items)
+        {
+            ok &= Check(string.IsNullOrEmpty(item.requiredTech) || byName.ContainsKey(item.requiredTech),
+                $"{item.itemName}: requiredTech '{item.requiredTech}' exists in the research catalog");
+        }
+
+        // (name prefix, subtype, effect, first tier's requirement)
+        var lines = new[]
+        {
+            ("Warship Bombard Upgrade", "Warship", "Warship Bombard", "Warship 1"),
+            ("Siegeship Offense", "Siegeship", "Siegeship Offense", "Siegeship 1"),
+            ("Siegeship Armor", "Siegeship", "Siegeship Health", "Siegeship 1"),
+            ("Siegeship Shields", "Siegeship", "Siegeship Defense", "Siegeship 1"),
+            ("Siegeship Bombard", "Siegeship", "Siegeship Bombard", "Siegeship 1"),
+            ("Bunker Weapons", "Bunker", "Bunker Offense", "Bunker 1"),
+            ("Bunker Armor", "Bunker", "Bunker Health", "Bunker 1"),
+            ("Bunker Shields", "Bunker", "Bunker Defense", "Bunker 1"),
+        };
+        foreach (var (prefix, subType, effect, first) in lines)
+        {
+            for (var t = 1; t <= 5; t++)
+            {
+                var name = prefix + " " + t;
+                if (!Check(byName.TryGetValue(name, out var item), $"research item exists: {name}")) { ok = false; continue; }
+                var requires = t == 1 ? first : prefix + " " + (t - 1);
+                ok &= Check(item.type == "Ship Improvement" && item.subType == subType && item.effect == effect,
+                    $"{name}: type Ship Improvement, subType {subType}, effect {effect}");
+                ok &= Check(item.tier == t && Near(item.cost, 3000f * t), $"{name}: tier {t}, cost {3000 * t}");
+                ok &= Check(item.requiredTech == requires, $"{name}: requires {requires}");
+            }
+        }
+
+        foreach (var unlock in new[] { "Siegeship 1", "Bunker 1" })
+        {
+            if (!Check(byName.TryGetValue(unlock, out var item), $"unlock item exists: {unlock}")) { ok = false; continue; }
+            var subType = unlock.Split(' ')[0];
+            ok &= Check(item.type == "Ship Type" && item.requiredTech == "Warship 1" && item.subType == subType,
+                $"{unlock}: type Ship Type, subType {subType}, requires Warship 1");
+        }
+
+        var productionByName = production.items.ToDictionary(i => i.itemName);
+        foreach (var (name, subType, requires) in new[]
+                 { ("SiegeshipProduction", "Siegeship", "Siegeship 1"), ("BunkerProduction", "Bunker", "Bunker 1") })
+        {
+            if (!Check(productionByName.TryGetValue(name, out var item), $"production item exists: {name}")) { ok = false; continue; }
+            ok &= Check(item.type == "Ship" && item.subType == subType && item.effect == subType
+                        && item.requiredTech == requires && Near(item.cost, 150f),
+                $"{name}: type Ship, subType/effect {subType}, requires {requires}, cost 150");
+            ok &= Check(byName.ContainsKey(item.requiredTech), $"{name}: requiredTech exists in the research catalog");
         }
         return ok;
     }

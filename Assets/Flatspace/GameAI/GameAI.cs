@@ -456,7 +456,9 @@ namespace FlatSpace
                         var fixedCost = WarshipCosts.ProductionCost(newProductionItem, targetPlanet,
                             executableOrder.PlayerId, productionAI.ResearchCatalog.catalogItems,
                             baseWarship != null ? baseWarship.cost : 0f,
-                            GameAIMap.GameAIConstants.warshipImprovementCostFactor);
+                            GameAIMap.GameAIConstants.warshipImprovementCostFactor,
+                            GameAIMap.GameAIConstants.siegeshipCostRatio,
+                            GameAIMap.GameAIConstants.bunkerCostRatio);
                         targetPlanet.ScheduleProductionItem(newProductionItem, fixedCost);
                         break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
