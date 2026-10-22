@@ -39,7 +39,7 @@ name are ad-hoc fixtures). The established substitute is a **self-check invoked 
 failure, a summary `Debug.Log` at the end), reachable as a `[MenuItem]` under `Assets/Editor/` (`FlatSpace -> Fog | AI | UI -> Run ... Self-Check`;
 list them with `ls Assets/Editor/*SelfCheck*.cs`) or as a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50
 seeds)"). Every AI suite exposes `public static bool RunChecks()` and must be added to the list in `Assets/Editor/AllAISelfChecks.cs`
-(`FlatSpace -> AI -> Run All AI Self-Checks`). When adding a subsystem that needs regression coverage, extend or add one of these rather than
+(`FlatSpace -> AI -> Run All AI Self-Checks`; planet defense has its own, `FlatSpace -> AI -> Run Planet Defense Self-Check`). When adding a subsystem that needs regression coverage, extend or add one of these rather than
 reaching for a test framework. A self-check must never depend on `Gameboard.Instance` (build a minimal `GameAIMap`/`Planet`/`PlayerAI` set
 directly instead) - several of `Planet`'s methods (`GetPopulationFraction` among them) touch it transitively, so check before assuming a method is
 safe in isolation. `FleetSummarySelfCheck` covers only the per-player grouping, not the icons (those need a Play-mode look). The one deliberate
@@ -341,7 +341,7 @@ subsystem's self-check (see Tests above).
 
 ### AI subsystems (moved)
 
-Player Knowledge, Ship Transport, Warships and Blockade, Ship combat, Invasion (conversion), Diplomacy, Connectivity (chokepoints) and
+Player Knowledge, Ship Transport, Warships and Blockade, Ship combat, Planet defense (bunkers, siegeships), Invasion (conversion), Diplomacy, Connectivity (chokepoints) and
 Distribution Centers are documented in `Assets/Flatspace/GameAI/CLAUDE.md`, which loads when working under that folder. Read it before
 changing any of those systems; `FUTURE_FEATURES.md` and the session configuration still apply.
 
@@ -350,11 +350,11 @@ changing any of those systems; `FUTURE_FEATURES.md` and the session configuratio
 `AITuningLogger` (`Assets/Flatspace/Diagnostics/AITuningLogger.cs`, global namespace, plain static class) writes a durable, plain-text,
 pipe-delimited log of outcome-level AI events, `T<turn>|P<playerId>|<EventCode>|<fields...>`, for reviewing AI behavior after a match (the in-game
 notification panel is transient). **The event codes and their fields are defined at the `AITuningLogger.Log*` call sites and in the `tuning-log`
-skill; read those, not this file.** Rules that are not derivable from the code:
+skill (including the planet-defense lines `Bombard`, `BunkerBuilt`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`); read those, not this file.** Rules that are not derivable from the code:
 
 - Every new feature adds its log lines (see the plan rule in the session configuration); keep `.claude/skills/tuning-log/SKILL.md` in step with any
   new log line or invariant. Lines that fire on a state change only go through a tracker class (`GrotsitsShortTracker`, `BlockadeTargetTracker`,
-  `RetreatTracker`, `ConversionTracker` ...) or log-only state in `PlayerAI`/`GameAI`; such state is not saved, so a load logs each current state once more.
+  `RetreatTracker`, `ConversionTracker`, `SiegeFollowerTracker`, `EscortDetourTracker` ...) or log-only state in `PlayerAI`/`GameAI`; such state is not saved, so a load logs each current state once more.
 - `T0|P-1|BoardConfig|<name>` ties a log to its board (the LAST one is real: `InitGame` can run twice per match, e.g. default board then designer
   load); likewise `T0|P-1|Chokepoints|...`. Planet-death lines carry no player (`P-1`); pair `PlanetDead` with the `PopulationLoss` before it.
 - Known caveats: `ColonizerReady` and `ResearchComplete` are emitted every turn the condition holds, so a grep-count overcounts; two inits within the

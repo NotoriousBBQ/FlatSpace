@@ -1289,8 +1289,8 @@ public static class PlanetDefenseSelfCheck
 
     // Bunker cap (MaxPopulation), survival over the cap, death cleanup and the kind-to-subtype mapping that
     // BuildResearchSnapshot uses. Planet.DockNewShip / StageCompletedProductionItem need Gameboard.Instance, so docking goes
-    // through DockShipFromSave and the death path is tested through ClearBunkers (the call ConsumeFood makes when the last
-    // inhabitant dies; reaching it through UpdatePlanet would need full resource data and, with mixed owners, Gameboard).
+    // through DockShipFromSave. The death path is tested through the public ChangePopulation(int, int), which calls ClearBunkers
+    // once the last inhabitant is gone (the economy's starvation loss ends there too), and through ClearBunkers directly.
     public static bool RunBunkerCapCheck()
     {
         var ok = true;

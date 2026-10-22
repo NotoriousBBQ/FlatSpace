@@ -12,7 +12,7 @@ namespace FlatSpace.AI
     {
         public string Planet;
         public int Player;
-        public int MyShips;                 // my warships docked there that can fight (health > 0)
+        public int MyShips;                 // my warships and siegeships docked there that can fight (health > 0)
         public int InboundShips;            // my own ships that join within the projection
         public float MyStrength;            // strength of every ship of mine that takes part (docked + inbound), at its entry state
         public float MyStrengthLeft;        // strength of my survivors at the end (damage lowers it: a wounded survivor counts as partly lost)

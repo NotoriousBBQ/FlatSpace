@@ -130,7 +130,7 @@ public static class ConversionSelfCheck
 
     private static int Flips(IEnumerable<ConversionReport> reports) => reports.Count(r => r.What == ConversionReport.Kind.Flip);
 
-    // Dominance: warships docked with offense, no at-war rival warship; two non-war dominators: more offense, then the lower id.
+    // Dominance: warships docked with effective bombard, no at-war rival warship; two non-war dominators: more bombard, then the lower id.
     public static bool RunDominatorCheck()
     {
         var ok = true;
@@ -141,15 +141,15 @@ public static class ConversionSelfCheck
             f.Ships("A", 0, 1);
             ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "one warship: its owner dominates");
             f.Ships("A", 1, 1);
-            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "two players at peace, equal offense: the lower id dominates");
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "two players at peace, equal bombard: the lower id dominates");
             f.Ships("A", 1, 1);
-            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 1, "two players at peace: the one with more offense dominates");
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 1, "two players at peace: the one with more bombard dominates");
             f.War(0, 1);
             ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "at-war warships on the same planet: nobody dominates");
         }
         using (var f = CombatSelfCheck.Fixture.Line())
         {
-            f.Ships("A", 0, 1, 100f);     // 100 damage on a Health stat of 100: health 0, offense 0
+            f.Ships("A", 0, 1, 100f);     // 100 damage on a Health stat of 100: health 0, so effective bombard 0
             ok &= Check(ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == Planet.NoOwner, "a ship with no health left does not dominate");
             WarshipSelfCheck.DockWarships(f.P("B"), Planet.NoOwner, 2);
             ok &= Check(ConversionSystem.Dominator(f.P("B"), f.Map, f.Stats) == Planet.NoOwner, "ownerless ships never dominate");
