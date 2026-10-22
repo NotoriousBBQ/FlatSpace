@@ -72,6 +72,12 @@ namespace FlatSpace
                 // (no route recorded) means "use the shortest path".
                 [NonSerialized] public List<string> Route;
 
+                // A colonist order's escort (Task 15, escort option B): the offense of the warships launched with it the same turn,
+                // recorded at launch. BlockadeSystem subtracts it from the blockade value at each node the colonist passes (a node
+                // is passed when Value - EscortOffense <= 0). 0 = no escort. Saved as OrderSave.escortOffense; an older save has no
+                // key and loads as 0.
+                public float EscortOffense;
+
                 /// <summary>A saved route of fewer than 2 nodes (older saves, non-route orders) restores as none.</summary>
                 public static List<string> RouteFromSave(List<string> saved)
                     => saved != null && saved.Count >= 2 ? new List<string>(saved) : null;
@@ -674,6 +680,7 @@ namespace FlatSpace
                         PlayerId = orderStatus.playerId,
                         Fleet = GameAIOrder.ShipFleetPayload.FromSave(orderStatus.fleetShips),
                         Route = GameAIOrder.RouteFromSave(orderStatus.route),
+                        EscortOffense = orderStatus.escortOffense,
                     });
                 }
 

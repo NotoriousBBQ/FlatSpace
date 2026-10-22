@@ -376,6 +376,30 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeHeld", origin, target, reason) });
     }
 
+    /// <summary>
+    /// A colonist launched with an escort (once per launch): T&lt;turn&gt;|P&lt;id&gt;|EscortLaunch|origin-&gt;target|escortOffense (the
+    /// escort warships' offense, recorded on the colonist order)|blockadeValue (the largest known blockade on the shortest route; 0 for
+    /// a dominated target with a clean route).
+    /// </summary>
+    public static void LogEscortLaunch(int turnNumber, int playerId, string origin, string target, float escortOffense, float blockadeValue)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "EscortLaunch", $"{origin}->{target}",
+            escortOffense.ToString("0.#", ci), blockadeValue.ToString("0.#", ci)) });
+    }
+
+    /// <summary>
+    /// An escort was declined for a colonization candidate (on change only): T&lt;turn&gt;|P&lt;id&gt;|EscortDetour|origin-&gt;target|reason
+    /// (NoSpare: no spare warship at the origin; ShortOffense: the spare offense is below the blockade x (1 + blockadeBreakMargin)).
+    /// The colonist takes the detour if one exists.
+    /// </summary>
+    public static void LogEscortDetour(int turnNumber, int playerId, string origin, string target, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "EscortDetour", $"{origin}->{target}", reason) });
+    }
+
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
     public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
     {

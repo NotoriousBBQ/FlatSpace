@@ -58,6 +58,31 @@ namespace FlatSpace.AI
         }
 
         /// <summary>
+        /// The ordinary shortest path as a route (IsDetour false), blockades ignored, or null when the target is out of range
+        /// (PlanRoute's range rule: unknown or the same planet, FindPath's 1-node stub, more than maxNodes). The escorted
+        /// colonist's route (Task 15): the escort covers the blockades on it instead of the colonist going round them.
+        /// </summary>
+        public static PlannedRoute ShortestRoute(GameAIMap map, string origin, string target, int maxNodes)
+        {
+            if (!InRange(map, origin, target, maxNodes)) return null;
+            var shortest = map.GetPath(origin, target);
+            return new PlannedRoute { Nodes = shortest.PathNodes.Select(n => n.Name).ToList(), Cost = shortest.Cost, IsDetour = false };
+        }
+
+        /// <summary>
+        /// The largest blockade value the view knows along the route, after its origin (the target included); 0 with no view
+        /// or no route. What an escort's offense must cover (a colonist never checks its origin).
+        /// </summary>
+        public static float MaxBlockadeValue(PlannedRoute route, BlockadeView view)
+        {
+            if (route == null || view == null) return 0f;
+            var max = 0f;
+            foreach (var name in route.Nodes.Skip(1))
+                max = Math.Max(max, view.Value(name));
+            return max;
+        }
+
+        /// <summary>
         /// The route for a resource shipment, or null when it cannot be planned at all (out of range by its shortest
         /// path, the no-route stub, unknown planets). Unlike colonization a blockaded planet is not refused: a clean route
         /// (PlanRoute, which may detour beyond maxNodes) is used when one exists; otherwise the least-loss route, then the

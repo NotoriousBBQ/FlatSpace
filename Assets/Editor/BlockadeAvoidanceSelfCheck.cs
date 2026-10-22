@@ -28,6 +28,8 @@ public static class BlockadeAvoidanceSelfCheck
         ok &= RunBlockadeCutsCheck();
         ok &= RunLearningRoutingCheck();
         ok &= RunRememberedBlockadeSaveCheck();
+        ok &= RunEscortPlanningCheck();
+        ok &= RunEscortRedirectCheck();
         Debug.Log(ok
             ? "[BlockadeAvoidanceSelfCheck] ALL PASSED"
             : "[BlockadeAvoidanceSelfCheck] FAILURES (see errors above)");
@@ -703,6 +705,186 @@ public static class BlockadeAvoidanceSelfCheck
             s.AI.RefreshBlockadeView();
             ok &= Check(s.AI.CurrentBlockadeView.IsBlockaded("D") && s.Colonize().Count == 0,
                 "a visibly blockaded target is never chosen: colonization is cancelled");
+        }
+        return ok;
+    }
+
+    private static List<GameAI.GameAIOrder> OfType(List<GameAI.GameAIOrder> orders, GameAI.GameAIOrder.OrderType type)
+        => orders.FindAll(o => o.Type == type);
+
+    private static int MyWarships(Planet planet)
+        => planet.DockedShips.FindAll(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == 0).Count;
+
+    // Task 15: escort or detour for a known blockade on the way (diamond: A>B>D costs 2 x 111.80 = 223.61, A>C>D 2 x 180.28 =
+    // 360.56; travel speed 1, so delays 224 and 361). Player 1 holds B with one warship: blockade 10, so the escort needs
+    // 10 x (1 + blockadeBreakMargin 0.1) = 11 offense; a warship has 10. Garrisons 0 (A is outer): every warship at A is spare.
+    public static bool RunEscortPlanningCheck()
+    {
+        var ok = true;
+        var transport = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport;
+        using (var s = Scenario.Diamond())
+        {
+            s.Constants.garrisonOuter = 0;
+            ok &= Check(Near(s.Constants.blockadeBreakMargin, 0.1f), "blockadeBreakMargin defaults to 0.1");
+            s.Blockade("B");
+            s.AI.RefreshBlockadeView();
+            var a = s.Map.GetPlanet("A");
+            var d = s.Map.GetPlanet("D");
+            var shortest = RoutePlanner.ShortestRoute(s.Map, "A", "D", 6);
+            var detour = RoutePlanner.PlanRoute(s.Map, "A", "D", s.AI.CurrentBlockadeView, 6);
+            ok &= Check(Join(shortest) == "A>B>D" && !shortest.IsDetour && Near(shortest.Cost, 223.61f)
+                        && Join(detour) == "A>C>D" && Near(detour.Cost, 360.56f),
+                "precondition: the shortest route A>B>D (223.61) crosses B, the detour A>C>D costs 360.56");
+            ok &= Check(Near(RoutePlanner.MaxBlockadeValue(shortest, s.AI.CurrentBlockadeView), 10f)
+                        && Near(RoutePlanner.MaxBlockadeValue(detour, s.AI.CurrentBlockadeView), 0f),
+                "MaxBlockadeValue: 10 on the shortest route, 0 on the detour");
+            var stats = new WarshipStats(s.Research);
+
+            // No warship at A: no escort (NoSpare), the colonist detours as before.
+            ok &= Check(s.AI.PlanEscort(a, d, shortest, stats) == null, "no spare warship: PlanEscort is null");
+            var orders = s.Colonize();
+            var none = Colonist(orders);
+            ok &= Check(none != null && string.Join(">", none.Route) == "A>C>D"
+                        && Near(none.EscortOffense, 0f) && OfType(orders, transport).Count == 0,
+                "no spare warship: the colonist takes the detour A>C>D, unescorted, and no ship moves");
+            var changes = s.AI.LastEscortDetourChanges;
+            ok &= Check(changes.Count == 1 && changes[0].Origin == "A" && changes[0].Target == "D"
+                        && changes[0].Reason == EscortDetourTracker.ReasonNoSpare,
+                "EscortDetour|A->D|NoSpare is reported");
+
+            // One warship (offense 10 < 11): offense short, PlanEscort null, the detour is used; the new reason is reported once.
+            WarshipSelfCheck.DockWarships(a, 0, 1);
+            s.AI.RefreshBlockadeView();
+            ok &= Check(s.AI.PlanEscort(a, d, shortest, stats) == null, "one warship: 10 < 11, PlanEscort is null");
+            orders = s.Colonize();
+            var shortOne = Colonist(orders);
+            ok &= Check(shortOne != null && string.Join(">", shortOne.Route) == "A>C>D" && Near(shortOne.EscortOffense, 0f)
+                        && OfType(orders, transport).Count == 0,
+                "offense short: the colonist takes the detour A>C>D and no escort leaves");
+            changes = s.AI.LastEscortDetourChanges;
+            ok &= Check(changes.Count == 1 && changes[0].Reason == EscortDetourTracker.ReasonShortOffense,
+                "EscortDetour|A->D|ShortOffense is reported (the reason changed)");
+            s.Colonize();
+            ok &= Check(s.AI.LastEscortDetourChanges.Count == 0, "the same decline next turn is not reported again (on change only)");
+
+            // Two warships (20 >= 11): the escorted shortest route (223.61) beats the detour (360.56).
+            WarshipSelfCheck.DockWarships(a, 0, 1);
+            s.AI.RefreshBlockadeView();
+            var plan = s.AI.PlanEscort(a, d, shortest, stats);
+            ok &= Check(plan.HasValue && plan.Value.ships == 2 && Near(plan.Value.offense, 20f), "two warships: PlanEscort sends 2, offense 20");
+            orders = s.Colonize();
+            var escorted = Colonist(orders);
+            ok &= Check(escorted != null && string.Join(">", escorted.Route) == "A>B>D" && Near(escorted.EscortOffense, 20f)
+                        && escorted.TimingDelay == 224 && escorted.TotalDelay == 224,
+                "the colonist flies the shortest route A>B>D with EscortOffense 20 (delay 224)");
+            var fleets = OfType(orders, transport);
+            var departures = OfType(orders, GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture);
+            var flags = OfType(orders, GameAI.GameAIOrder.OrderType.OrderTypeShipTransferInProgress);
+            ok &= Check(fleets.Count == 1 && fleets[0].Origin == "A" && fleets[0].Target == "D" && System.Convert.ToInt32(fleets[0].Data) == 2
+                        && fleets[0].Fleet != null && fleets[0].Fleet.Snapshots.Count == 2 && fleets[0].TimingDelay == 224,
+                "the escort is the ordinary transport order: 2 warships A->D, launched the same turn, delay 224");
+            ok &= Check(departures.Count == 1 && departures[0].Origin == "A" && System.Convert.ToInt32(departures[0].Data) == 2
+                        && flags.Count == 1 && flags[0].Target == "D",
+                "with the departure (A, 2) and in-progress (D) orders of the EmitShipOrders trio");
+            ok &= Check(s.AI.LastEscortDetourChanges.Count == 0, "an escort launched: no EscortDetour line");
+            ok &= Check(s.AI.EscortClaimed("A") == 2, "the escort's 2 ships are claimed at A");
+            s.AI.ProcessShipActions(orders);
+            ok &= Check(s.AI.EscortClaimed("A") == 0 && OfType(orders, transport).Count == 1,
+                "ProcessShipActions consumes the claims (nothing else to move)");
+
+            // In flight, the escorted colonist passes the live blockade at B: at TimingDelay 112 its progress is 0.5 = B's fraction.
+            var blockade = new BlockadeSystem(s.Map, s.Research);
+            escorted.TimingDelay = 112;
+            var inFlight = new List<GameAI.GameAIOrder> { escorted };
+            ok &= Check(blockade.Apply(inFlight, 1).Count == 0 && inFlight.Count == 1, "in flight: 10 - 20 <= 0, the escorted colonist passes B");
+
+            // The escort's ships leave A and arrive at D as ordinary docked warships.
+            GameAI.ApplyShipDeparture(a, departures[0]);
+            GameAI.ApplyShipTransferInProgress(d, flags[0]);
+            ok &= Check(MyWarships(a) == 0 && d.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 2,
+                "departure: both warships leave A and count as incoming at D");
+            GameAI.ApplyShipArrival(d, fleets[0]);
+            ok &= Check(MyWarships(d) == 2 && d.GetIncomingShips(Ship.ShipKind.WarShip, 0) == 0,
+                "arrival: 2 ordinary warships of player 0 docked at D, nothing incoming");
+        }
+
+        // The ship planners do not send the escort's ships again. Garrison 1 (A and C are outer); player 0 also holds C (no ship,
+        // deficit 1). A has 3 warships: spare 2, all taken by the escort (2 x 10 >= 11), so the garrison move A->C is dropped and A
+        // keeps its garrison ship. Control: with B free there is no escort and the planner sends 1 ship A->C.
+        using (var s = Scenario.Diamond())
+        {
+            s.Constants.garrisonOuter = 1;
+            var c = s.Map.GetPlanet("C");
+            c.Owner = 0;
+            c.Population.Add(new Planet.Inhabitant { Player = 0 });
+            WarshipSelfCheck.DockWarships(s.Map.GetPlanet("A"), 0, 3);
+
+            s.AI.RefreshBlockadeView();
+            var control = s.Colonize();
+            s.AI.ProcessShipActions(control);
+            ok &= Check(OfType(control, transport).Exists(o => o.Origin == "A" && o.Target == "C" && System.Convert.ToInt32(o.Data) == 1)
+                        && Near(Colonist(control).EscortOffense, 0f),
+                "control (no blockade): no escort, the garrison planner sends 1 ship A->C");
+
+            s.Blockade("B");
+            s.AI.RefreshBlockadeView();
+            var orders = s.Colonize();
+            ok &= Check(Near(Colonist(orders).EscortOffense, 20f), "B blockaded: the colonist leaves with a 2-ship escort (offense 20)");
+            s.AI.ProcessShipActions(orders);
+            var fleets = OfType(orders, transport);
+            ok &= Check(fleets.Count == 1 && fleets[0].Target == "D" && System.Convert.ToInt32(fleets[0].Data) == 2,
+                "the escort took A's spare: the garrison move A->C is dropped, only the escort's transport is emitted");
+            foreach (var departure in OfType(orders, GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture))
+                GameAI.ApplyShipDeparture(s.Map.GetPlanet(departure.Origin), departure);
+            ok &= Check(MyWarships(s.Map.GetPlanet("A")) == 1, "A keeps its garrison ship");
+        }
+        return ok;
+    }
+
+    // ColonistRedirect and an escorted colonist (Task 15): only a node whose known value exceeds the escort's offense counts as blocked
+    // ahead, so a covered colonist is not re-planned; a redirected colonist keeps its EscortOffense (Apply changes route and delay only).
+    public static bool RunEscortRedirectCheck()
+    {
+        var ok = true;
+        var go = new GameObject("BASelfCheckMap_EscortRedirect");
+        var template = WarshipSelfCheck.MakeTemplate();
+        var constants = WarshipSelfCheck.MakeConstants(template);
+        var research = WarshipSelfCheck.MakeResearch();
+        try
+        {
+            var map = BuildDiamond(go, constants);
+            var blockade = new BlockadeSystem(map, research);
+            var view = BlockadeView.WithValues(("B", 10f));
+            GameAI.GameAIOrder Order(float escort)
+            {
+                var order = ColonistOrder("A", "D", 224, 224, new List<string> { "A", "B", "D" });
+                order.EscortOffense = escort;
+                return order;
+            }
+            ColonistRedirect.Result Plan(GameAI.GameAIOrder order)
+                => ColonistRedirect.Plan(map, blockade, order, view, 6, _ => false, _ => 1f);
+
+            var covered = Plan(Order(11f));
+            ok &= Check(covered.Kind == ColonistRedirect.RedirectKind.None && covered.BlockedAhead.Count == 0,
+                "an escort of 11 covers B (10): nothing is blocked ahead, the colonist keeps its route");
+            var plain = Plan(Order(0f));
+            ok &= Check(plain.Kind == ColonistRedirect.RedirectKind.Detour && string.Join(">", plain.Nodes) == "A>C>D",
+                "unescorted: B is blocked ahead and the colonist detours A>C>D");
+
+            var weak = Order(5f);
+            var result = Plan(weak);
+            ok &= Check(result.Kind == ColonistRedirect.RedirectKind.Detour && result.BlockedAhead.Count == 1,
+                "an escort of 5 does not cover B (10): the colonist is redirected");
+            ColonistRedirect.Apply(map, new List<GameAI.GameAIOrder> { weak }, weak, result);
+            ok &= Check(string.Join(">", weak.Route) == "A>C>D" && weak.TotalDelay == 361 && Near(weak.EscortOffense, 5f),
+                "the redirected colonist flies A>C>D (delay 361) and keeps its EscortOffense 5");
+        }
+        finally
+        {
+            WarshipSelfCheck.DestroyAll(research);
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(constants);
+            Object.DestroyImmediate(template);
         }
         return ok;
     }

@@ -30,6 +30,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunSiegeshipWeightCheck();
         ok &= RunAssaultCompositionCheck();
         ok &= RunFollowerGateCheck();
+        ok &= RunEscortCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -966,6 +967,138 @@ public static class PlanetDefenseSelfCheck
             ok &= Check(tracker.Update(new[] { E(SiegeFollowerTracker.KindFollow, string.Empty) }).Count == 1,
                 "tracker: the follower leaving is reported");
             ok &= Check(tracker.Update(new SiegeFollowerTracker.Entry[0]).Count == 0 && tracker.Update(new[] { held }).Count == 1,
+                "tracker: a route that left the list is reported again when it returns");
+        }
+        return ok;
+    }
+
+    // A colonist order flying A>B>C, launched with TotalDelay 2: at TimingDelay 1 its progress is 0.5, so it passes B (fraction 0.5).
+    private static GameAI.GameAIOrder EscortedColonist(float escortOffense)
+        => new GameAI.GameAIOrder
+        {
+            Type = GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
+            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+            TimingDelay = 1, TotalDelay = 2, Data = 1, Origin = "A", Target = "C", PlayerId = 0,
+            Route = new List<string> { "A", "B", "C" },
+            EscortOffense = escortOffense,
+        };
+
+    // Task 15: escorted colonists (escort option B). The colonist order carries the escort's offense, which BlockadeSystem subtracts
+    // from the blockade value at each node (passed when Value - EscortOffense <= 0); a dominated target gets an escort of at least one
+    // spare warship, flown as the ordinary ship-transport trio; EscortOffense is saved (an older order loads as 0). The planning
+    // against a known blockade on the way (escort versus detour) is in BlockadeAvoidanceSelfCheck.RunEscortPlanningCheck.
+    public static bool RunEscortCheck()
+    {
+        var ok = true;
+
+        // Simulation. Player 1 holds B with one warship: offense 10, so the blockade against player 0 at B is 10.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("B", 1, 1);
+            var blockade = new BlockadeSystem(f.Map, f.Research);
+            ok &= Check(Near(blockade.Value(f.P("B"), 0, out _), 10f), "precondition: the blockade at B is 10");
+
+            // An escort of 11 (= 10 x 1.1, what the planner asks for): the colonist passes B.
+            var escorted = EscortedColonist(11f);
+            var orders = new List<GameAI.GameAIOrder> { escorted };
+            var cuts = blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 1 && cuts.Count == 0, "escort 11 against a blockade of 10: 10 - 11 <= 0, the colonist passes B uncut");
+
+            // The same colonist without an escort is cut at B, and one short of the blockade (9.5) is cut too.
+            var plain = EscortedColonist(0f);
+            orders = new List<GameAI.GameAIOrder> { plain };
+            cuts = blockade.Apply(orders, 1);
+            ok &= Check(orders.Count == 0 && cuts.Count == 1 && cuts[0].Planet == "B" && Near(cuts[0].Value, 10f),
+                "no escort: the colonist is cut at B (value 10)");
+            orders = new List<GameAI.GameAIOrder> { EscortedColonist(9.5f) };
+            ok &= Check(blockade.Apply(orders, 1).Count == 1 && orders.Count == 0, "escort 9.5 against 10: 10 - 9.5 > 0, cut");
+        }
+
+        // A dominated target launches an escort. Line A-B-C-D: player 0 colonizes C (my only colonizer, food 100), player 1 has one
+        // inhabitant on D, at war; my one warship docked at D (bombard 1 > 0, no at-war defender ship) makes me D's dominator. A and B
+        // carry an inbound-colonist flag, so D is the only target. Garrisons 0: both warships at C are spare. No blockade anywhere, so
+        // the needed offense is 0 and the escort is the minimum of one ship: offense 10. Route C>D (cost 100, travel speed 1: delay 100).
+        using (var f = Fixture.Line())
+        {
+            f.Constants.garrisonOuter = 0;
+            f.Colonize("C", 0);
+            f.P("C").Food = 100f;
+            f.Colonize("D", 1);
+            f.Ships("C", 0, 2);
+            f.Ships("D", 0, 1);
+            f.War(0, 1);
+            f.P("A").SetPopulationTransferInProgress(0);
+            f.P("B").SetPopulationTransferInProgress(0);
+            f.Map.Knowledge.Update(f.Map, 2, 8);
+            using var t = new ThreatAi(f, PlayerAI.AIStrategy.AIStrategyExpand);
+            t.Ai.RefreshBlockadeView(1);
+            var d = f.P("D");
+            ok &= Check(t.Ai.IsConversionTarget(d) && t.Ai.IsValidColonizationTarget(d), "precondition: D is a dominated, valid colonization target");
+
+            var shortest = RoutePlanner.ShortestRoute(f.Map, "C", "D", 6);
+            ok &= Check(shortest != null && string.Join(">", shortest.Nodes) == "C>D" && Near(shortest.Cost, 100f) && !shortest.IsDetour,
+                "ShortestRoute C>D, cost 100");
+            var plan = t.Ai.PlanEscort(f.P("C"), d, shortest, f.Stats);
+            ok &= Check(plan.HasValue && plan.Value.ships == 1 && Near(plan.Value.offense, 10f),
+                "PlanEscort for a dominated target with no blockade: 1 ship, offense 10");
+
+            var results = new List<Planet.UpdateResult>
+            {
+                new Planet.UpdateResult("C", Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0),
+            };
+            var orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(results, orders);
+            var colonist = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+            var transport = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport);
+            var departure = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture);
+            var inProgress = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransferInProgress);
+            ok &= Check(colonist != null && colonist.Target == "D" && string.Join(">", colonist.Route) == "C>D" && Near(colonist.EscortOffense, 10f),
+                "the colonist to D carries route C>D and EscortOffense 10");
+            ok &= Check(transport != null && transport.Origin == "C" && transport.Target == "D" && System.Convert.ToInt32(transport.Data) == 1
+                        && transport.Fleet != null && transport.Fleet.Kind == Ship.ShipKind.WarShip && transport.Fleet.Snapshots.Count == 1
+                        && transport.TimingDelay == 100 && colonist != null && colonist.TimingDelay == 100,
+                "the escort is one warship C->D on the ordinary transport order, launched with the colonist (both delay 100)");
+            ok &= Check(departure != null && departure.Origin == "C" && System.Convert.ToInt32(departure.Data) == 1
+                        && inProgress != null && inProgress.Target == "D",
+                "with its departure (C, 1 ship) and in-progress (D) orders: the EmitShipOrders trio");
+            ok &= Check(t.Ai.EscortClaimed("C") == 1, "the escort's ship is claimed at C for this turn's ship planners");
+
+            // No spare warship: the dominated target is still colonized, unescorted.
+            f.Constants.garrisonOuter = 2;   // C (outer) keeps both its ships
+            orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(results, orders);
+            var unescorted = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+            ok &= Check(unescorted != null && unescorted.Target == "D" && Near(unescorted.EscortOffense, 0f)
+                        && !orders.Exists(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport)
+                        && t.Ai.EscortClaimed("C") == 0,
+                "no spare warship at C: the colonist still goes to D, without an escort");
+        }
+
+        // Saves: EscortOffense round-trips through OrderSave (writer and loader copy the field one to one); an older order has no key
+        // and loads as 0.
+        var save = new SaveLoadSystem.GameSave.OrderSave
+        {
+            type = GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport, origin = "C", target = "D", playerId = 0, data = 1f,
+            dataType = "int", route = new List<string> { "C", "D" }, escortOffense = 22.5f,
+        };
+        var back = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>(JsonUtility.ToJson(save));
+        ok &= Check(Near(back.escortOffense, 22.5f), "save: escortOffense 22.5 survives a JsonUtility round trip");
+        var older = JsonUtility.FromJson<SaveLoadSystem.GameSave.OrderSave>(
+            "{\"type\":1,\"origin\":\"C\",\"target\":\"D\",\"playerId\":0,\"data\":1.0,\"dataType\":\"int\"}");
+        ok &= Check(Near(older.escortOffense, 0f), "save: an older order JSON without escortOffense loads as 0");
+        ok &= Check(Near(JsonUtility.FromJson<GameAI.GameAIOrder>(JsonUtility.ToJson(EscortedColonist(7f))).EscortOffense, 7f),
+            "the order's EscortOffense field itself is serialized");
+
+        // The tracker: a declined escort is reported on first sight and on a change of reason, and again after it left the list.
+        {
+            var tracker = new EscortDetourTracker();
+            EscortDetourTracker.Entry E(string reason) => new EscortDetourTracker.Entry { Origin = "A", Target = "D", Reason = reason };
+            ok &= Check(tracker.Update(new[] { E(EscortDetourTracker.ReasonNoSpare) }).Count == 1
+                        && tracker.Update(new[] { E(EscortDetourTracker.ReasonNoSpare) }).Count == 0,
+                "tracker: a declined escort is reported once");
+            ok &= Check(tracker.Update(new[] { E(EscortDetourTracker.ReasonShortOffense) }).Count == 1, "tracker: a new reason is reported");
+            ok &= Check(tracker.Update(new EscortDetourTracker.Entry[0]).Count == 0
+                        && tracker.Update(new[] { E(EscortDetourTracker.ReasonShortOffense) }).Count == 1,
                 "tracker: a route that left the list is reported again when it returns");
         }
         return ok;

@@ -102,6 +102,9 @@ public class SaveLoadSystem : MonoBehaviour
             public List<GameSave.ShipSave> fleetShips;
             // A colonist order's planned route (null/empty for every other order and for older saves).
             public List<string> route;
+            // A colonist order's escort offense (GameAIOrder.EscortOffense); 0 for every other order, and an older save has no key
+            // and loads as 0.
+            public float escortOffense;
         }
 
         // A planet where one of the player's orders was cut by a blockade, remembered for routing (see BlockadeMemory).
@@ -293,7 +296,8 @@ public class SaveLoadSystem : MonoBehaviour
                         dataType = order.Data is float ? "float" : "int",
                         playerId = order.PlayerId,
                         fleetShips = order.Fleet?.ToSave(order.PlayerId),
-                        route = order.Route != null ? new List<string>(order.Route) : null
+                        route = order.Route != null ? new List<string>(order.Route) : null,
+                        escortOffense = order.EscortOffense,
                     });
             }
 
