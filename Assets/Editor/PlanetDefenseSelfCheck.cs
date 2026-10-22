@@ -324,15 +324,25 @@ public static class PlanetDefenseSelfCheck
             f.Bunkers("A", 1, 1);
             ok &= Check(a.BunkerCount(0) == cap && a.BunkerCount(1) == 1, "BunkerCount counts per owner");
 
-            // Population drop: the owner keeps every bunker, and is simply over (or at) the cap.
-            a.Population.Clear();
-            a.Population.Add(new Planet.Inhabitant { Player = 0 });   // owner stays 0
-            ok &= Check(a.Owner == 0 && a.BunkerCount(0) == cap && !a.CanBuildBunker(),
-                "over the cap after a population drop: bunkers survive and none can be added");
+            // Losing inhabitants while some remain: bunkers stay (a planet can only hold more bunkers than MaxPopulation
+            // after an owner change; here the planet stays at the cap and still cannot add one).
+            a.ChangePopulation(1, 0);
+            a.ChangePopulation(-1, 0);
+            ok &= Check(a.Population.Count == 1 && a.Owner == 0 && a.BunkerCount(0) == cap && !a.CanBuildBunker(),
+                "a population loss that leaves inhabitants keeps the bunkers");
 
+            // The last inhabitant dying through the public ChangePopulation path (GameAI population orders) clears every bunker.
+            a.ChangePopulation(-1, 0);
+            ok &= Check(a.Population.Count == 0 && a.Owner == Planet.NoOwner && a.BunkerCount(0) == 0
+                        && a.BunkerCount(1) == 0 && a.DockedShips.Count == 0,
+                "ChangePopulation removing the last inhabitant destroys the planet's bunkers");
+
+            f.Colonize("A", 0);
+            f.Bunkers("A", 0, 2);
+            f.Ships("A", 0, 1);
             a.ClearBunkers();
-            ok &= Check(a.BunkerCount(0) == 0 && a.BunkerCount(1) == 0 && a.DockedShips.Count == 0,
-                "ClearBunkers (the planet-death cleanup) destroys the bunkers of every owner");
+            ok &= Check(a.BunkerCount(0) == 0 && a.DockedShips.Count == 1 && a.HasDockedShip(Ship.ShipKind.WarShip),
+                "ClearBunkers destroys the bunkers and leaves the warship");
 
             // Other docked ships are untouched by the cleanup.
             f.Ships("B", 0, 2);

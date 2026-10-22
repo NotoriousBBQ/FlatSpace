@@ -630,8 +630,7 @@ public class Planet : MonoBehaviour
                      1, playerID));
                  if (Population.Count <= 0)
                  {
-                     // planet is dead: its bunkers go with it
-                     ClearBunkers();
+                     // planet is dead (ChangePopulation already cleared its bunkers)
                      resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeDead, null));
                  }
              }
@@ -826,6 +825,9 @@ public class Planet : MonoBehaviour
             }
         }
         SetPlanetOwnership();
+        // An emptied planet is dead (every path that removes inhabitants, including the economy's starvation loss, ends here): its bunkers go too.
+        if (Population.Count == 0)
+            ClearBunkers();
     }
 
     private void SetPlanetOwnership()
