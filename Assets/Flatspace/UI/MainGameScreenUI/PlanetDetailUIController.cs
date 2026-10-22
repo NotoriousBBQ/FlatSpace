@@ -104,9 +104,7 @@ public class PlanetDetailUIController : MonoBehaviour
         icon.style.marginLeft = 4;
         icon.style.backgroundColor = new StyleColor((Color)FleetSummary.ColorFor(group.Owner));
 
-        var shipIcon = group.IconKind == Ship.ShipKind.WarShip
-            ? _planet.GameAIConstants.warShipData.shipIcon
-            : _planet.GameAIConstants.colonyShipData.shipIcon;
+        var shipIcon = FleetSummary.IconFor(_planet.GameAIConstants, group.IconKind);
         var sprite = new VisualElement { pickingMode = PickingMode.Ignore };
         sprite.style.position = Position.Absolute;
         sprite.style.left = sprite.style.right = sprite.style.top = sprite.style.bottom = 0;

@@ -868,7 +868,15 @@ namespace FlatSpace
             }
 
             private static string FleetKindLabel(GameAI.GameAIOrder order)
-                => order.Fleet != null && order.Fleet.Kind == Ship.ShipKind.ColonyShip ? "colony ships" : "warships";
+                {
+                if (order.Fleet == null) return "warships";
+                switch (order.Fleet.Kind)
+                {
+                    case Ship.ShipKind.ColonyShip: return "colony ships";
+                    case Ship.ShipKind.SiegeShip: return "siegeships";
+                    default: return "warships";
+                }
+            }
 
             public void CreateNotificationsForExecutingOrders(List<GameAI.GameAIOrder> gameAIOrders)
             {

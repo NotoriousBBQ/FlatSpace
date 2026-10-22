@@ -228,7 +228,7 @@ namespace FlatSpace
                 foreach (var planet in PlanetList)
                 {
                     var hasPopulation = planet.GetPopulationFraction(playerId) > 0f;
-                    var hasOwnedShip = planet.DockedShips.Exists(s => s.Owner == playerId);
+                    var hasOwnedShip = planet.DockedShips.Exists(s => s.Owner == playerId && Ship.CountsAsShip(s.Kind));
                     if (hasPopulation || hasOwnedShip)
                         result.Add(new VisionSource
                         {

@@ -18,6 +18,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunProductionCostCheck();
         ok &= RunCatalogCheck();
         ok &= RunBunkerCapCheck();
+        ok &= RunBunkersAreNotShipsCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -354,6 +355,117 @@ public static class PlanetDefenseSelfCheck
                         && b.DockedShips.Count(s => s.Kind == Ship.ShipKind.WarShip) == 2
                         && b.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip) == 1,
                 "ClearBunkers leaves warships and siegeships docked");
+        }
+        return ok;
+    }
+
+    // Task 5: a bunker is a planetary defense, not a ship. It gives no vision, no contact and no fleet icon, and it changes none
+    // of the warship-only readers (garrison count, fleet strength, blockade offense). A siegeship counts as presence like a
+    // warship but, being warship-only elsewhere, adds nothing to those three readers either.
+    public static bool RunBunkersAreNotShipsCheck()
+    {
+        var ok = true;
+        ok &= Check(Ship.CountsAsShip(Ship.ShipKind.ColonyShip) && Ship.CountsAsShip(Ship.ShipKind.WarShip)
+                    && Ship.CountsAsShip(Ship.ShipKind.SiegeShip) && !Ship.CountsAsShip(Ship.ShipKind.Bunker),
+            "CountsAsShip is false only for Bunker");
+
+        // Contact and vision: player 0 holds A (neighbour B is known); player 1's pieces sit on B and D.
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("A", 0);
+            f.Bunkers("B", 1, 2);
+            f.Map.Knowledge.Update(f.Map, 2);
+            ok &= Check(f.Map.Knowledge.IsKnown(0, "B"), "precondition: player 0 knows the neighbour B");
+            ok &= Check(!f.Map.Knowledge.HasContact(f.Map, 0), "a rival's bunkers alone are not contact");
+            ok &= Check(f.Map.Knowledge.ContactPlayers(f.Map, 0).Count == 0, "a rival's bunkers alone name no contact player");
+
+            f.Siege("B", 1, 1);
+            ok &= Check(f.Map.Knowledge.HasContact(f.Map, 0) && f.Map.Knowledge.ContactPlayers(f.Map, 0).Contains(1),
+                "a rival's siegeship is contact, like a warship");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("A", 0);
+            f.Bunkers("B", 1, 1);
+            f.Ships("B", 1, 1);
+            f.Map.Knowledge.Update(f.Map, 2);
+            ok &= Check(f.Map.Knowledge.HasContact(f.Map, 0), "a rival's warship beside its bunkers is contact");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("D", 1, 2);
+            ok &= Check(f.Map.GetVisionSourcePlanets(1).Count == 0, "bunkers on an unpopulated planet are not a vision source");
+            f.Siege("D", 1, 1);
+            var sources = f.Map.GetVisionSourcePlanets(1);
+            ok &= Check(sources.Count == 1 && sources[0].Planet.PlanetName == "D" && sources[0].HasOwnedShip && !sources[0].HasPopulation,
+                "a siegeship on an unpopulated planet is a vision source, like a warship");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Colonize("C", 1);
+            f.Bunkers("C", 1, 1);
+            var sources = f.Map.GetVisionSourcePlanets(1);
+            ok &= Check(sources.Count == 1 && sources[0].HasPopulation && !sources[0].HasOwnedShip,
+                "a populated planet's bunkers add presence but no owned ship");
+        }
+
+        // Fleet summary: bunkers are ignored; a siegeship-only fleet takes the siegeship icon.
+        using (var f = Fixture.Line())
+        {
+            var d = f.P("D");
+            f.Bunkers("D", 1, 3);
+            ok &= Check(FleetSummary.ForPlanet(d).Count == 0, "FleetSummary ignores bunkers (no group for a bunker-only owner)");
+            f.Siege("D", 1, 1);
+            var groups = FleetSummary.ForPlanet(d);
+            ok &= Check(groups.Count == 1 && groups[0].Count == 1 && groups[0].IconKind == Ship.ShipKind.SiegeShip,
+                "a siegeship fleet counts the siegeship only and shows the siegeship icon");
+            f.Ships("D", 1, 1);
+            groups = FleetSummary.ForPlanet(d);
+            ok &= Check(groups.Count == 1 && groups[0].Count == 2 && groups[0].IconKind == Ship.ShipKind.WarShip,
+                "a warship in the fleet wins the icon; bunkers still do not count");
+        }
+
+        // Warship-only readers are unchanged by bunkers and siegeships on the same planet.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("B", 0, 2);
+            f.Ships("B", 1, 1);
+            var b = f.P("B");
+            var planner = new ShipTransportPlanner(f.Map, 0, PlayerAI.AIStrategy.AIStrategyConsolidate);
+            var blockade = new BlockadeSystem(f.Map, f.Research);
+            var garrison = planner.CountWarships(b);
+            var strength = FleetStrength.Mine(f.Map, 0, f.Stats);
+            var rivalStrength = FleetStrength.VisibleOf(f.Map, 0, 1, f.Stats);
+            var offense = blockade.DockedOffense(b, 0);
+            var value = blockade.Value(b, 0, out var blocker);
+            ok &= Check(garrison == 2 && strength > 0f && offense > 0f, "precondition: two warships give a garrison, strength and offense");
+
+            f.Bunkers("B", 0, 3);
+            f.Bunkers("B", 1, 3);
+            f.Siege("B", 0, 2);
+            f.Siege("B", 1, 2);
+            ok &= Check(planner.CountWarships(b) == garrison, "garrison CountWarships ignores bunkers and siegeships");
+            ok &= Check(Near(FleetStrength.Mine(f.Map, 0, f.Stats), strength), "FleetStrength.Mine ignores bunkers and siegeships");
+            ok &= Check(Near(FleetStrength.VisibleOf(f.Map, 0, 1, f.Stats), rivalStrength), "FleetStrength.VisibleOf ignores bunkers and siegeships");
+            ok &= Check(Near(blockade.DockedOffense(b, 0), offense), "BlockadeSystem.DockedOffense ignores bunkers and siegeships");
+            ok &= Check(Near(blockade.Value(b, 0, out var blocker2), value) && blocker2 == blocker,
+                "the blockade value and its blocker are unchanged by bunkers and siegeships");
+        }
+
+        // Fleet rows: siegeship and bunker rows show health, offense, defense and bombard.
+        using (var f = Fixture.Line())
+        {
+            f.Siege("A", 0, 1);
+            f.Bunkers("A", 0, 1);
+            var siege = f.P("A").DockedShips[0];
+            var bunker = f.P("A").DockedShips[1];
+            ok &= Check(FleetUIController.FormatShipRow(siege, f.Research) == "SiegeShip (Spd 120, HP 100, Off 3, Def 3, Bomb 20)",
+                "a siegeship row shows speed, health, offense, defense and bombard");
+            ok &= Check(FleetUIController.FormatShipRow(bunker, f.Research) == "Bunker (Spd 0, HP 150, Off 12, Def 8, Bomb 0)",
+                "a bunker row shows health, offense, defense and bombard");
+            siege.Damage = 50f;
+            ok &= Check(FleetUIController.FormatShipRow(siege, f.Research) == "SiegeShip (Spd 120, HP 50/100, Off 1.5/3, Def 3, Bomb 10/20)",
+                "a damaged siegeship shows current/maximum health, effective/base offense and bombard");
         }
         return ok;
     }

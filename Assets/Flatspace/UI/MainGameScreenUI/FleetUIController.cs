@@ -59,7 +59,7 @@ public class FleetUIController : MonoBehaviour
             : null;
         foreach (var ship in _planet.DockedShips)
         {
-            if (ship.Owner != _owner) continue;
+            if (ship.Owner != _owner || !Ship.CountsAsShip(ship.Kind)) continue;
             var row = new Label(FormatShipRow(ship, research))
             {
                 pickingMode = PickingMode.Ignore
@@ -79,18 +79,27 @@ public class FleetUIController : MonoBehaviour
         var label = template == null || string.IsNullOrEmpty(template.shipName)
             ? ship.Kind.ToString()
             : $"{ship.Kind} - {template.shipName}";
-        if (ship.Kind != Ship.ShipKind.WarShip || template == null) return label;
+        if (ship.Kind == Ship.ShipKind.ColonyShip || template == null) return label;
 
         var stats = new WarshipStats(research);
         // A damaged ship shows current/maximum health and effective/base offense; an undamaged one shows the plain numbers.
-        var maxHp = stats.Health(template, ship.ResearchSnapshot);
-        var baseOff = stats.Offense(template, ship.ResearchSnapshot);
+        // Stats come from the ship's own subtype (Warship, Siegeship, Bunker), so each reads its own research lines.
+        var maxHp = stats.Health(ship);
+        var baseOff = stats.Offense(ship);
         var hpText = ship.Damage > 0f ? $"{stats.CurrentHealth(ship):0.#}/{maxHp:0.#}" : $"{maxHp:0.#}";
         var offText = ship.Damage > 0f ? $"{stats.EffectiveOffense(ship):0.#}/{baseOff:0.#}" : $"{baseOff:0.#}";
-        return $"{label} (Spd {stats.Speed(template):0.#}, " +
-               $"HP {hpText}, " +
-               $"Off {offText}, " +
-               $"Def {stats.Defense(template, ship.ResearchSnapshot):0.#})";
+        var row = $"{label} (Spd {stats.Speed(template):0.#}, " +
+                  $"HP {hpText}, " +
+                  $"Off {offText}, " +
+                  $"Def {stats.Defense(ship):0.#}";
+        // Bombard is the siegeship's and the bunker's stat; a warship row is unchanged (its bombard is a minor side stat).
+        if (ship.Kind == Ship.ShipKind.SiegeShip || ship.Kind == Ship.ShipKind.Bunker)
+        {
+            var maxBombard = stats.Bombard(template, ship.ResearchSnapshot, WarshipStats.SubtypeOf(ship.Kind));
+            var bombardText = ship.Damage > 0f ? $"{stats.EffectiveBombard(ship):0.#}/{maxBombard:0.#}" : $"{maxBombard:0.#}";
+            row += $", Bomb {bombardText}";
+        }
+        return row + ")";
     }
 
     // Same bounds-test pattern as PlanetDetailUIController.ContainsScreenPoint.

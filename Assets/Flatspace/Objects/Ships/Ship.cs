@@ -14,6 +14,10 @@ public class Ship : MonoBehaviour
     // Kinds that fight in ship combat (Bunkers defend planets through their own rules).
     public static bool IsFightingKind(ShipKind k) => k == ShipKind.WarShip || k == ShipKind.SiegeShip;
 
+    // Whether a docked ship of this kind counts as a ship for presence: vision, contact and the fleet summary. Bunkers are
+    // planetary defenses, not ships (siegeships DO count, like warships).
+    public static bool CountsAsShip(ShipKind k) => k != ShipKind.Bunker;
+
     public ShipKind Kind;
     public int Owner = Planet.NoOwner;
     public ShipData Template;
