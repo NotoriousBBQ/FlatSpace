@@ -28,6 +28,7 @@ public static class ConversionSelfCheck
         ok &= RunConversionSaveCheck();
         ok &= RunConversionHoldCheck();
         ok &= RunConversionColonizeCheck();
+        ok &= RunStuckBunkerCheck();
         ok &= RunConversionHoldTrackerCheck();
         ok &= RunConversionHoldAuditCheck();
         ok &= RunCapitolLostCheck();
@@ -129,7 +130,7 @@ public static class ConversionSelfCheck
 
     private static int Flips(IEnumerable<ConversionReport> reports) => reports.Count(r => r.What == ConversionReport.Kind.Flip);
 
-    // Dominance: warships docked with offense, no at-war rival warship; two non-war dominators: more offense, then the lower id.
+    // Dominance: warships docked with effective bombard, no at-war rival warship; two non-war dominators: more bombard, then the lower id.
     public static bool RunDominatorCheck()
     {
         var ok = true;
@@ -140,15 +141,15 @@ public static class ConversionSelfCheck
             f.Ships("A", 0, 1);
             ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "one warship: its owner dominates");
             f.Ships("A", 1, 1);
-            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "two players at peace, equal offense: the lower id dominates");
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 0, "two players at peace, equal bombard: the lower id dominates");
             f.Ships("A", 1, 1);
-            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 1, "two players at peace: the one with more offense dominates");
+            ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == 1, "two players at peace: the one with more bombard dominates");
             f.War(0, 1);
             ok &= Check(ConversionSystem.Dominator(a, f.Map, f.Stats) == Planet.NoOwner, "at-war warships on the same planet: nobody dominates");
         }
         using (var f = CombatSelfCheck.Fixture.Line())
         {
-            f.Ships("A", 0, 1, 100f);     // 100 damage on a Health stat of 100: health 0, offense 0
+            f.Ships("A", 0, 1, 100f);     // 100 damage on a Health stat of 100: health 0, so effective bombard 0
             ok &= Check(ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == Planet.NoOwner, "a ship with no health left does not dominate");
             WarshipSelfCheck.DockWarships(f.P("B"), Planet.NoOwner, 2);
             ok &= Check(ConversionSystem.Dominator(f.P("B"), f.Map, f.Stats) == Planet.NoOwner, "ownerless ships never dominate");
@@ -491,6 +492,40 @@ public static class ConversionSelfCheck
 
     // A dominated planet where I hold at least one inhabitant and which is below max is a valid target even when I already hold
     // the plurality; the choice cost is divided by 1 + weight x (1 - my share).
+    // Bunkers only a war can remove: a bunker of mine or of a player I am not at war with is never bombarded, so no conversion
+    // can run there and the planet is neither a conversion colonization target nor a conversion hold. A bunker of a player I am at
+    // war with stays both (the held fleet is what bombards it away). Player 0 = me, 1 = the at-war holder, 2 = not at war with me.
+    public static bool RunStuckBunkerCheck()
+    {
+        var ok = true;
+        var gos = new List<GameObject>();
+        try
+        {
+            foreach (var (bunkerOwner, expected, label) in new[]
+            {
+                (-1, true, "no bunkers: unchanged, a target and a hold"),
+                (1, true, "a bunker of the at-war holder: still a target and a hold (bombardment removes it)"),
+                (2, false, "a bunker of a player I am not at war with: neither a target nor a hold"),
+                (0, false, "a bunker of my own: neither (nothing would ever bombard it)"),
+            })
+            {
+                using (var f = CombatSelfCheck.Fixture.Line())
+                {
+                    var ai = MakeAI(f, 0, gos);
+                    var a = f.P("A");
+                    Populate(a, (0, 2), (1, 2));          // 4 of max 5, an at-war holder left
+                    f.Ships("A", 0, 1); f.War(0, 1);
+                    if (bunkerOwner != -1) a.DockShipFromSave(Ship.ShipKind.Bunker, bunkerOwner, new List<string>(), 0f);
+                    var planner = new AssaultPlanner(f.Map, 0, null, f.Stats, null, 0, new HashSet<int> { 1 });
+                    ok &= Check(ai.IsConversionTarget(a) == expected, "IsConversionTarget: " + label);
+                    ok &= Check(planner.ConversionHolds().Contains("A") == expected, "ConversionHolds: " + label);
+                }
+            }
+        }
+        finally { foreach (var go in gos) Object.DestroyImmediate(go); }
+        return ok;
+    }
+
     public static bool RunConversionColonizeCheck()
     {
         var ok = true;
@@ -708,6 +743,17 @@ public static class ConversionSelfCheck
             ok &= Check(Near(c.conversionHoldKeepFraction, 0.5f), "conversionHoldKeepFraction defaults to 0.5");
             ok &= Check(Near(c.hostilityPerConversion, 3f), "hostilityPerConversion defaults to 3");
             ok &= Check(Near(c.conversionColonizeWeight, 0.5f), "conversionColonizeWeight defaults to 0.5");
+            ok &= Check(Near(c.conversionBombardReference, 60f), "conversionBombardReference defaults to 60");
+            ok &= Check(Near(c.conversionBombardMinFactor, 0.05f), "conversionBombardMinFactor defaults to 0.05");
+
+            // BombardSpeedFactor = clamp(bombard / reference, minFactor, 1); a non-positive reference means always full pace.
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(30f, c), 0.5f), "bombard 30 of reference 60: factor 0.5");
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(1f, c), 0.05f), "bombard 1: 1/60 is below the minimum, so the factor is 0.05");
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(0f, c), 0.05f), "no bombard: the minimum factor (never 0)");
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(60f, c), 1f) && Near(ConversionSystem.BombardSpeedFactor(600f, c), 1f),
+                "bombard at or above the reference: factor 1");
+            c.conversionBombardReference = 0f;
+            ok &= Check(Near(ConversionSystem.BombardSpeedFactor(1f, c), 1f), "a reference of 0 switches the scaling off");
             return ok;
         }
         finally { Object.DestroyImmediate(c); }

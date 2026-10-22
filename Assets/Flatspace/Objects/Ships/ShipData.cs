@@ -12,5 +12,8 @@ public class ShipData : ScriptableObject
     public float shipDefenseMax;
     public float shipOffense;
     public float shipOffenseMax;
+    // Planet bombardment strength (0 = cannot bombard). Raised by the "<Subtype> Bombard" research effect up to the max.
+    public float shipBombard;
+    public float shipBombardMax;
     public Sprite shipIcon;
 }

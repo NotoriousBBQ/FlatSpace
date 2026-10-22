@@ -34,7 +34,7 @@ namespace FlatSpace
                     var planet = map.GetPlanet(name);
                     if (planet == null) continue;
                     if (planet.Population.Exists(p => p.Player != playerId)) return true;
-                    if (planet.DockedShips.Exists(s => s.Owner != playerId)) return true;
+                    if (planet.DockedShips.Exists(s => s.Owner != playerId && Ship.CountsAsShip(s.Kind))) return true;
                 }
                 return false;
             }
@@ -53,7 +53,7 @@ namespace FlatSpace
                     foreach (var inhabitant in planet.Population)
                         if (inhabitant.Player != playerId && inhabitant.Player >= 0) found.Add(inhabitant.Player);
                     foreach (var ship in planet.DockedShips)
-                        if (ship.Owner != playerId && ship.Owner >= 0) found.Add(ship.Owner);
+                        if (ship.Owner != playerId && ship.Owner >= 0 && Ship.CountsAsShip(ship.Kind)) found.Add(ship.Owner);
                 }
                 return found.ToList();
             }

@@ -48,21 +48,26 @@ namespace FlatSpace
             public float BaseOffense; // the Offense stat before damage
             public float Offense;     // effective: BaseOffense x Health / Max, 0 for a Max of 0 (the WarshipStats formula)
             public float Strength;    // Offense x (Health + Defense)
+            public int Class;         // victim order within a side: 0 warship, 1 siegeship, 2 bunker (lower is hit first)
+            public float BaseBombard; // the Bombard stat before damage (only the bombardment step reads it)
+            public float Bombard;     // effective: BaseBombard x Health / Max, 0 for a Max of 0 (WarshipStats.EffectiveBombard)
 
-            public static CombatUnit Make(int id, int owner, int index, float baseOffense, float max, float defense, float damage)
+            public static CombatUnit Make(int id, int owner, int index, float baseOffense, float max, float defense, float damage, int cls = 0,
+                float baseBombard = 0f)
             {
                 var health = Math.Max(0f, max - damage);
                 var offense = max <= 0f ? 0f : baseOffense * health / max;
                 return new CombatUnit
                 {
                     Id = id, Owner = owner, Index = index, Health = health, Max = max, Defense = defense,
-                    BaseOffense = baseOffense, Offense = offense, Strength = offense * (health + defense),
+                    BaseOffense = baseOffense, Offense = offense, Strength = offense * (health + defense), Class = cls,
+                    BaseBombard = baseBombard, Bombard = max <= 0f ? 0f : baseBombard * health / max,
                 };
             }
 
             /// <summary>The same unit after taking `more` further damage.</summary>
             public CombatUnit WithDamage(float more)
-                => Make(Id, Owner, Index, BaseOffense, Max, Defense, (Max - Health) + more);
+                => Make(Id, Owner, Index, BaseOffense, Max, Defense, (Max - Health) + more, Class, BaseBombard);
         }
 
         /// <summary>What one attacker did to one victim in a round. Ships and StrengthLost are the attacker's share of what the victim lost; Engaged is the same share of the victim's strength at the start of the round.</summary>
@@ -106,8 +111,8 @@ namespace FlatSpace
             }
 
             /// <summary>
-            /// One round of a fight, pure: hostility-weighted pools per attacker, ONE pool per victim, focus fire on the lowest
-            /// health fraction (then dock index), a hit scaled by K / (K + Defense), simultaneous. Nothing is mutated; the caller
+            /// One round of a fight, pure: hostility-weighted pools per attacker, ONE pool per victim, focus fire by class (warships, then siegeships, then bunkers),
+            /// each on the lowest health fraction (then dock index), a hit scaled by K / (K + Defense), simultaneous. Nothing is mutated; the caller
             /// applies the outcome. Units with no health are ignored by the caller (Make gives them 0 offense and 0 strength).
             /// </summary>
             public static RoundOutcome Round(List<CombatUnit> units, Func<int, int, bool> atWar, Func<int, int, float> hostility, float k)
@@ -141,7 +146,7 @@ namespace FlatSpace
                     var lostShips = 0;
                     var lostStrength = 0f;
                     var dealt = 0f;
-                    var ordered = units.Where(u => u.Owner == victim).OrderBy(u => u.Health / u.Max).ThenBy(u => u.Index);
+                    var ordered = units.Where(u => u.Owner == victim).OrderBy(u => u.Class).ThenBy(u => u.Health / u.Max).ThenBy(u => u.Index);
                     foreach (var target in ordered)
                     {
                         if (pool <= 0f) break;
@@ -187,15 +192,16 @@ namespace FlatSpace
             private static void FightAt(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants,
                 List<Planet.UpdateResult> results, List<CombatReport> reports)
             {
-                // Start-of-turn snapshot of every warship that can fight (a ship with no health left, or no Health stat, cannot).
+                // Start-of-turn snapshot of every warship and siegeship that can fight (a ship with no health left, or no Health stat,
+                // cannot). Bunkers are never units here: they only take part in the bombardment step.
                 var units = new List<CombatUnit>();
                 for (var i = 0; i < planet.DockedShips.Count; i++)
                 {
                     var ship = planet.DockedShips[i];
-                    if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner == Planet.NoOwner) continue;
+                    if (!Ship.IsFightingKind(ship.Kind) || ship.Owner == Planet.NoOwner) continue;
                     if (stats.CurrentHealth(ship) <= 0f) continue;
-                    units.Add(CombatUnit.Make(i, ship.Owner, i, stats.Offense(ship.Template, ship.ResearchSnapshot),
-                        stats.Health(ship.Template, ship.ResearchSnapshot), stats.Defense(ship.Template, ship.ResearchSnapshot), ship.Damage));
+                    units.Add(CombatUnit.Make(i, ship.Owner, i, stats.Offense(ship), stats.Health(ship), stats.Defense(ship), ship.Damage,
+                        ship.Kind == Ship.ShipKind.SiegeShip ? 1 : 0));
                 }
 
                 var outcome = Round(units, (a, b) => map.Diplomacy.IsAtWar(a, b, true), (a, b) => map.Diplomacy.Hostility(a, b),
@@ -228,27 +234,27 @@ namespace FlatSpace
                 if (constants.repairFractionPerTurn <= 0f) return;
                 foreach (var ship in planet.DockedShips)
                 {
-                    if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner == Planet.NoOwner || ship.Damage <= 0f) continue;
+                    if (!Ship.IsFightingKind(ship.Kind) || ship.Owner == Planet.NoOwner || ship.Damage <= 0f) continue;
                     if (planet.Owner != ship.Owner || planet.Population.Count == 0) continue;
-                    var enemyHere = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner
+                    var enemyHere = planet.DockedShips.Any(s => Ship.IsFightingKind(s.Kind) && s.Owner != Planet.NoOwner
                         && s.Owner != ship.Owner && map.Diplomacy.IsAtWar(ship.Owner, s.Owner, true));
                     if (enemyHere) continue;
-                    var max = stats.Health(ship.Template, ship.ResearchSnapshot);
+                    var max = stats.Health(ship);
                     ship.Damage = Math.Max(0f, ship.Damage - constants.repairFractionPerTurn * max);
                 }
             }
 
-            // After combat and repair: a player with colony ships here but no warship, where a player at war with it has a
-            // warship, loses its colony ships. Everywhere, a planet the owner populates included.
+            // After combat and repair: a player with colony ships here but no warship or siegeship, where a player at war with it has
+            // one, loses its colony ships. Everywhere, a planet the owner populates included.
             private static void DestroyStrandedColonyShips(Planet planet, GameAIMap map, List<Planet.UpdateResult> results)
             {
                 var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner != Planet.NoOwner)
                     .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
                 foreach (var owner in owners)
                 {
-                    if (planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == owner)) continue;
+                    if (planet.DockedShips.Any(s => Ship.IsFightingKind(s.Kind) && s.Owner == owner)) continue;
                     var raiders = planet.DockedShips
-                        .Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner && s.Owner != owner
+                        .Where(s => Ship.IsFightingKind(s.Kind) && s.Owner != Planet.NoOwner && s.Owner != owner
                                     && map.Diplomacy.IsAtWar(owner, s.Owner, true))
                         .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
                     if (raiders.Count == 0) continue;

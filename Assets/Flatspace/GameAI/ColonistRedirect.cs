@@ -31,7 +31,10 @@ namespace FlatSpace.AI
             var result = new Result { Target = order.Target, CurrentNode = blockade.CurrentNode(order) };
             if (view == null || order.TimingDelay <= 0) return result;
 
-            result.BlockedAhead = blockade.NodesAhead(order).Where(view.IsBlockaded).ToList();
+            // An escorted colonist (Task 15) flies through the blockades its escort covers on purpose: only a node whose known value
+            // exceeds the escort's offense counts as blocked ahead (an unescorted colonist has 0, so every blockaded node counts).
+            result.BlockedAhead = blockade.NodesAhead(order)
+                .Where(n => view.IsBlockaded(n) && view.Value(n) - order.EscortOffense > 0f).ToList();
             if (result.BlockedAhead.Count == 0) return result;
 
             var detour = RoutePlanner.PlanRoute(map, result.CurrentNode, order.Target, view, maxNodes);
@@ -109,6 +112,7 @@ namespace FlatSpace.AI
             if (result.Kind != RedirectKind.Divert) return;
 
             colonist.Target = result.Target;
+            colonist.EscortOffense = 0f;   // the escort ships still fly to the old target: the colonist no longer has their cover
             if (rider != null) rider.Target = result.Target;
 
             var stillHeadingThere = orders.Exists(o => o != colonist

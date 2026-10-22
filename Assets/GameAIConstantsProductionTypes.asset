@@ -38,6 +38,10 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 226c68321455ed34595ae20b3978ffe1, type: 2}
   colonyShipData: {fileID: 11400000, guid: f6b5445eaddc90a4b8c222c727f858ef, type: 2}
   warShipData: {fileID: 11400000, guid: b8400d812184ad7438279ac32978464d, type: 2}
+  siegeShipData: {fileID: 11400000, guid: 5d9999f020b795b47ae11a92770c4d99, type: 2}
+  bunkerData: {fileID: 11400000, guid: e05b279305006294188009dc3efb8328, type: 2}
+  siegeshipCostRatio: 1.5
+  bunkerCostRatio: 1.5
   maxPathNodesForShipTransport: 10
   garrisonSpecialized: 4
   garrisonOuter: 6
@@ -45,20 +49,35 @@ MonoBehaviour:
   garrisonHighTraffic: 2
   garrisonHighlySpecialized: 1
   category5UnlockShipsPerColonizedPlanet: 3
+  chokepointPercentile: 0.9
+  colonizationChokepointWeight: 0.5
   assaultRatio: 1.5
   assaultMinimumShips: 3
   warshipShortfallBoost: 2
   warshipFleetCap: 1.5
   warshipsPerColonizedPlanet: 8
+  blockadedWarshipBoost: 3
+  blockadeTargetRecentTurns: 5
+  blockadeBreakMargin: 0.1
+  blockadedOffenseResearchBoost: 2
+  blockadeMemoryTurns: 20
+  shipmentMinDeliveredFraction: 0.5
+  warshipImprovementCostFactor: 0.1
   improvementUpkeepScale: 0.5
   colonyFoodRider: 10
   maxPathNodesForColonization: 6
+  colonistDetourDivertRatio: 2
   maxPathNodesForKnowledge: 6
-  minPlanetsForDistributionCenters: 30
-  minPlanetsForSecondDistributionCenter: 60
-  distributionCenterFoodTargetStock: 50
-  distributionCenterGrotsitsTargetStock: 50
+  diplomacyEnabled: 1
+  hostilityPerCut: 5
+  hostilityPerNearShip: 0.5
+  hostilityStrengthWeight: 1
+  hostilityDecay: 0.05
+  hostilityMax: 100
+  stanceMidpoint: 30
   stanceSteepness: 4
+  stanceStickiness: 3
+  stanceHoldTurns: 10
   combatDamageK: 20
   repairFractionPerTurn: 0.1
   hostilityPerShipLost: 1
@@ -80,3 +99,7 @@ MonoBehaviour:
   hostilityPerConversion: 3
   conversionColonizeWeight: 0.5
   conversionHoldKeepFraction: 0.5
+  minPlanetsForDistributionCenters: 30
+  minPlanetsForSecondDistributionCenter: 60
+  distributionCenterFoodTargetStock: 50
+  distributionCenterGrotsitsTargetStock: 50

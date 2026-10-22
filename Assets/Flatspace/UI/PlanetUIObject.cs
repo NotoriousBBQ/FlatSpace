@@ -85,9 +85,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
                 }
                 var group = groups[i];
                 view.Owner = group.Owner;
-                view.Sprite.sprite = group.IconKind == Ship.ShipKind.WarShip
-                    ? planet.GameAIConstants.warShipData.shipIcon
-                    : planet.GameAIConstants.colonyShipData.shipIcon;
+                view.Sprite.sprite = FleetSummary.IconFor(planet.GameAIConstants, group.IconKind);
                 view.Background.color = FleetSummary.ColorFor(group.Owner);
                 view.Count.text = group.Count.ToString();
                 view.Rect.anchoredPosition = new Vector2(i * (FleetIconSize + FleetIconSpacing), 0f);

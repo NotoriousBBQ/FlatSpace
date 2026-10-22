@@ -24,6 +24,7 @@ public static class RetreatSelfCheck
         ok &= RunLargestOtherOffenseCheck();
         ok &= RunPerceivedProjectionCheck();
         ok &= RunPerceivedPlannerCheck();
+        ok &= RunBunkerFireProjectionCheck();
         Debug.Log(ok
             ? "[RetreatSelfCheck] ALL PASSED"
             : "[RetreatSelfCheck] FAILURES (see errors above)");
@@ -575,6 +576,72 @@ public static class RetreatSelfCheck
                 (1f, true, true), (0.8f, true, false), (0.8f, true, false), (0.8f, true, false)));
             ok &= Check(hurt.Actions.Count == 0 && hurt.Holds.Count == 1 && hurt.Holds[0].Reason == RetreatPlanner.HoldOwnPlanetNotWiped,
                 "own colony: a wipe-out in only a quarter of the samples stays (RetreatHeld OwnPlanetNotWiped)");
+        }
+        return ok;
+    }
+
+    // Bunker fire in the projection (planet defense, task 9): with no bunker that can fire the projection is the old one; a warship
+    // group projected to be wiped out by a rival's bunkers retreats; a planet holding a war rival's bunkers is never a destination.
+    public static bool RunBunkerFireProjectionCheck()
+    {
+        var ok = true;
+        bool Same(float a, float b) => Mathf.Abs(a - b) < 0.0001f;
+
+        // Hand-computed, no bunkers: 13 warships (pool 130) kill the rival's one (needs 100 / 0.8 = 125) in the first round, which
+        // hits back 10 x 0.8 = 8 (health 92, offense 9.2, strength 9.2 x 97 = 892.4). Strength 13 x 1050 = 13650, left
+        // 12 x 1050 + 892.4 = 13492.4: a loss of 157.6 / 13650 = 0.011546.
+        FightProjection Thirteen(int bunkerOwner)
+        {
+            using (var f = PlanetDefenseSelfCheck.Fixture.Line())
+            {
+                f.Ships("A", 1, 1); f.Ships("A", 0, 13); f.War(0, 1);
+                if (bunkerOwner != Planet.NoOwner) f.Bunkers("A", bunkerOwner, 2);
+                return FightProjector.Project(f.Map, f.P("A"), 0, f.Stats, f.Constants, new GameAI.GameAIOrder[0]);
+            }
+        }
+        var plain = Thirteen(Planet.NoOwner);
+        ok &= Check(plain != null && plain.MyShips == 13 && plain.InboundShips == 0 && plain.Turns == 1 && !plain.RivalSurvives
+                    && Same(plain.MyStrength, 13650f) && Same(plain.MyStrengthLeft, 13492.4f) && Same(plain.RivalStrength, 1050f)
+                    && Same(plain.RivalStrengthLeft, 0f) && Mathf.Abs(plain.ProjectedLossFraction - 157.6f / 13650f) < 0.00001f,
+            "no bunkers: 13 against 1 projects exactly the hand-computed old result (1 turn, loss 0.011546)");
+        foreach (var owner in new[] { 0, 2 })    // my own bunkers (my ships protect them) and a bunker owner at war with nobody
+        {
+            var p = Thirteen(owner);
+            ok &= Check(p != null && p.MyShips == plain.MyShips && p.InboundShips == plain.InboundShips && p.Turns == plain.Turns
+                        && p.RivalSurvives == plain.RivalSurvives && p.Rivals.SequenceEqual(plain.Rivals)
+                        && Same(p.MyStrength, plain.MyStrength) && Same(p.MyStrengthLeft, plain.MyStrengthLeft)
+                        && Same(p.RivalStrength, plain.RivalStrength) && Same(p.RivalStrengthLeft, plain.RivalStrengthLeft),
+                $"bunkers of player {owner} that never fire leave the projection exactly as without them");
+        }
+
+        RetreatPlanner.Plan Decide(PlanetDefenseSelfCheck.Fixture f)
+        {
+            f.Constants.retreatSteepness = 0.001f;              // a deterministic roll
+            f.Constants.retreatDestinationCostExponent = 50f;   // and the strictly nearest destination
+            GameAI.Rand = new System.Random(3);
+            f.Map.Knowledge.Update(f.Map, 2, 8);
+            var projection = FightProjector.Project(f.Map, f.P("C"), 0, f.Stats, f.Constants, new GameAI.GameAIOrder[0]);
+            return new RetreatPlanner(f.Map, 0, new SortedSet<int> { 1 }, null, f.Stats).Decide(new[] { projection });
+        }
+
+        // Three warships against three of the rival's bunkers at C (no rival ship): projected wiped, so the gate passes and the
+        // group retreats to my nearest colony B.
+        using (var f = PlanetDefenseSelfCheck.Fixture.Line())
+        {
+            f.Colonize("A", 0); f.Colonize("B", 0);
+            f.Ships("C", 0, 3); f.Bunkers("C", 1, 3); f.War(0, 1);
+            var plan = Decide(f);
+            ok &= Check(plan.Actions.Count == 1 && plan.Actions[0].Origin == "C" && plan.Actions[0].Target == "B" && plan.Actions[0].Count == 3
+                        && plan.Retreats.Count == 1 && plan.Retreats[0].Tier == 1 && Near(plan.Retreats[0].ExactLossFraction, 1f),
+                "a warship group the rival's bunkers would wipe out retreats from C to B (tier 1, exact loss 100%)");
+        }
+        using (var f = PlanetDefenseSelfCheck.Fixture.Line())    // the same, with a war rival's bunker on B: B is no destination, A is
+        {
+            f.Colonize("A", 0); f.Colonize("B", 0);
+            f.Ships("C", 0, 3); f.Bunkers("C", 1, 3); f.Bunkers("B", 1, 1); f.War(0, 1);
+            var plan = Decide(f);
+            ok &= Check(plan.Actions.Count == 1 && plan.Actions[0].Target == "A" && plan.Retreats[0].Tier == 1,
+                "B holds a war rival's bunker, so the group retreats to A instead");
         }
         return ok;
     }

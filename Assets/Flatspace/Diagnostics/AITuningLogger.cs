@@ -159,6 +159,16 @@ public static class AITuningLogger
             damage.ToString("0.#", ci), ships.ToString("0.##", ci)) });
     }
 
+    /// <summary>A bombardment turn at a planet: T&lt;turn&gt;|P&lt;attacker&gt;|Bombard|planet|attacker|victim|bombardDealt|bunkersLeft|shipDamageTaken.</summary>
+    public static void LogBombard(int turnNumber, int attacker, string planet, int victim, float bombardDealt, int bunkersLeft,
+        float shipDamageTaken)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, attacker, "Bombard", planet, attacker.ToString(ci), victim.ToString(ci),
+            bombardDealt.ToString("0.#", ci), bunkersLeft.ToString(ci), shipDamageTaken.ToString("0.#", ci)) });
+    }
+
     /// <summary>A surrender: T&lt;turn&gt;|P&lt;surrenderer&gt;|Surrender|rival|lossShare|pSurrender|truceUntil.</summary>
     public static void LogSurrender(int turnNumber, int me, int rival, float lossShare, float pSurrender, int truceUntil)
     {
@@ -321,6 +331,74 @@ public static class AITuningLogger
         if (_currentLogPath == null) return;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BlockadedProduction", planetName, itemName,
             value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>A Bunker production completed: T&lt;turn&gt;|P&lt;id&gt;|BunkerBuilt|planet|count (bunkers of the owner after it)|cap (MaxPopulation)|weight (threat weight now).</summary>
+    public static void LogBunkerBuilt(int turnNumber, int playerId, string planetName, int count, int cap, float weight)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BunkerBuilt", planetName,
+            count.ToString(), cap.ToString(), weight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
+    /// <summary>
+    /// The siegeship sizing for an assault target with known bunkers changed (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeSized|target|bunkerDefense|bombardNeeded
+    /// (bunkerDefense x siegeBombardMargin)|siegeships (committed + still wanted)|cap (siegeshipMaxFleetShare cap).
+    /// </summary>
+    public static void LogSiegeSized(int turnNumber, int playerId, string target, float bunkerDefense, float bombardNeeded,
+        int siegeships, int cap)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeSized", target, bunkerDefense.ToString("0.#", ci),
+            bombardNeeded.ToString("0.#", ci), siegeships.ToString(ci), cap.ToString(ci)) });
+    }
+
+    /// <summary>
+    /// A siegeship group passed the follower gate and left for the assault target (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeFollow|
+    /// origin-&gt;target|ships|projectedLossPct (the arrival projection's loss, in percent).
+    /// </summary>
+    public static void LogSiegeFollow(int turnNumber, int playerId, string origin, string target, int ships, float lossFraction)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeFollow", $"{origin}->{target}", ships.ToString(ci),
+            (100f * lossFraction).ToString("0", ci)) });
+    }
+
+    /// <summary>
+    /// A siegeship group stays where it is because its arrival projection is a loss (on change only): T&lt;turn&gt;|P&lt;id&gt;|SiegeHeld|
+    /// origin|target|reason (Wiped: the group would be destroyed; Outmatched: it would lose followerMaxLossFraction or more).
+    /// </summary>
+    public static void LogSiegeHeld(int turnNumber, int playerId, string origin, string target, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "SiegeHeld", origin, target, reason) });
+    }
+
+    /// <summary>
+    /// A colonist launched with an escort (once per launch): T&lt;turn&gt;|P&lt;id&gt;|EscortLaunch|origin-&gt;target|escortOffense (the
+    /// escort warships' offense, recorded on the colonist order)|blockadeValue (the largest known blockade on the shortest route; 0 for
+    /// a dominated target with a clean route).
+    /// </summary>
+    public static void LogEscortLaunch(int turnNumber, int playerId, string origin, string target, float escortOffense, float blockadeValue)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "EscortLaunch", $"{origin}->{target}",
+            escortOffense.ToString("0.#", ci), blockadeValue.ToString("0.#", ci)) });
+    }
+
+    /// <summary>
+    /// An escort was declined for a colonization candidate (on change only): T&lt;turn&gt;|P&lt;id&gt;|EscortDetour|origin-&gt;target|reason
+    /// (NoSpare: no spare warship at the origin; ShortOffense: the spare offense is below the blockade x (1 + blockadeBreakMargin);
+    /// Fight: the origin has a fight projection of mine this turn, so its ships are left to a possible retreat).
+    /// The colonist takes the detour if one exists.
+    /// </summary>
+    public static void LogEscortDetour(int turnNumber, int playerId, string origin, string target, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "EscortDetour", $"{origin}->{target}", reason) });
     }
 
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
@@ -532,22 +610,32 @@ public static class AITuningLogger
             conversionTerm.ToString("0.#", ci)) });
     }
 
-    /// <summary>A conversion session began: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionStart|planet|fromPlayers|myPop|totalPop|turnsPerFlip.</summary>
-    public static void LogConversionStart(int turnNumber, int playerId, string planet, string fromPlayers, int myPop, int totalPop, float turnsPerFlip)
+    /// <summary>A conversion session began: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionStart|planet|fromPlayers|myPop|totalPop|turnsPerFlip|bombardFactor.</summary>
+    public static void LogConversionStart(int turnNumber, int playerId, string planet, string fromPlayers, int myPop, int totalPop, float turnsPerFlip,
+        float bombardFactor = 1f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionStart", planet, fromPlayers,
-            myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci)) });
+            myPop.ToString(ci), totalPop.ToString(ci), turnsPerFlip.ToString("0.##", ci), bombardFactor.ToString("0.##", ci)) });
     }
 
-    /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress.</summary>
-    public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress)
+    /// <summary>A session resumed the progress a lost-dominance session carried: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionResumed|planet|progress (follows that turn's ConversionStart).</summary>
+    public static void LogConversionResumed(int turnNumber, int playerId, string planet, float progress)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionResumed", planet, progress.ToString("0.##", ci)) });
+    }
+
+    /// <summary>One inhabitant converted: T&lt;turn&gt;|P&lt;dominator&gt;|Convert|planet|fromPlayer|AtWar or NonWar|myPop|totalPop|progress|bombardFactor.</summary>
+    public static void LogConvert(int turnNumber, int playerId, string planet, int fromPlayer, bool atWar, int myPop, int totalPop, float progress,
+        float bombardFactor = 1f)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Convert", planet, fromPlayer.ToString(ci),
-            atWar ? "AtWar" : "NonWar", myPop.ToString(ci), totalPop.ToString(ci), progress.ToString("0.##", ci)) });
+            atWar ? "AtWar" : "NonWar", myPop.ToString(ci), totalPop.ToString(ci), progress.ToString("0.##", ci), bombardFactor.ToString("0.##", ci)) });
     }
 
     /// <summary>A conversion session ended: T&lt;turn&gt;|P&lt;dominator&gt;|ConversionEnd|planet|Clean, DominanceLost or WarEnded|turnsHeld|converted.</summary>
@@ -557,6 +645,14 @@ public static class AITuningLogger
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionEnd", planet, reason,
             turnsHeld.ToString(ci), converted.ToString(ci)) });
+    }
+
+    /// <summary>Bunkers block a conversion the dominator would otherwise run (on change only): T&lt;turn&gt;|P&lt;dominator&gt;|ConversionBlocked|planet|bunkers.</summary>
+    public static void LogConversionBlocked(int turnNumber, int playerId, string planet, int bunkers)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "ConversionBlocked", planet, bunkers.ToString(ci)) });
     }
 
     /// <summary>A planet changed owner through conversion (P = the new owner, -1 for a tie): OwnerChanged|planet|oldOwner|newOwner|clearedItem or -.</summary>

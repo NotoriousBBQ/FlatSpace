@@ -228,7 +228,7 @@ namespace FlatSpace
                 foreach (var planet in PlanetList)
                 {
                     var hasPopulation = planet.GetPopulationFraction(playerId) > 0f;
-                    var hasOwnedShip = planet.DockedShips.Exists(s => s.Owner == playerId);
+                    var hasOwnedShip = planet.DockedShips.Exists(s => s.Owner == playerId && Ship.CountsAsShip(s.Kind));
                     if (hasPopulation || hasOwnedShip)
                         result.Add(new VisionSource
                         {
@@ -347,21 +347,35 @@ namespace FlatSpace
             /// Rebuilds every planet's in-flight warship offense from the in-flight ShipTransport orders: the real offense
             /// of each ship from the snapshot it left with. Derived state, recomputed once per turn before the AI decides
             /// (GameAI.GameAIUpdate), so it matches the incoming ship counter and never drifts. Orders without a warship
-            /// fleet are ignored.
+            /// fleet are ignored. The in-flight bombard (Planet.GetIncomingBombard) is rebuilt in the same pass, for warship and
+            /// siegeship fleets, each on its own kind's template and research line; the offense counter stays warship-only.
             /// </summary>
             public void RecomputeIncomingOffense(List<GameAI.GameAIOrder> orders, WarshipStats stats)
             {
-                foreach (var planet in PlanetList) planet.ClearIncomingOffense();
-                var template = GameAIConstants.warShipData;
+                foreach (var planet in PlanetList)
+                {
+                    planet.ClearIncomingOffense();
+                    planet.ClearIncomingBombard();
+                }
                 foreach (var order in orders)
                 {
                     if (order.Type != GameAI.GameAIOrder.OrderType.OrderTypeShipTransport) continue;
-                    if (order.Fleet == null || order.Fleet.Kind != Ship.ShipKind.WarShip) continue;
+                    if (order.Fleet == null) continue;
+                    var kind = order.Fleet.Kind;
+                    if (kind != Ship.ShipKind.WarShip && kind != Ship.ShipKind.SiegeShip) continue;
                     var target = GetPlanet(order.Target);
                     if (target == null) continue;
-                    var offense = order.Fleet.Snapshots
-                        .Select((snapshot, i) => stats.EffectiveOffense(template, snapshot, order.Fleet.DamageAt(i))).Sum();
-                    target.AddIncomingOffense(Ship.ShipKind.WarShip, order.PlayerId, offense);
+                    var template = kind == Ship.ShipKind.WarShip ? GameAIConstants.warShipData : GameAIConstants.siegeShipData;
+                    var subtype = WarshipStats.SubtypeOf(kind);
+                    if (kind == Ship.ShipKind.WarShip)
+                    {
+                        var offense = order.Fleet.Snapshots
+                            .Select((snapshot, i) => stats.EffectiveOffense(template, snapshot, order.Fleet.DamageAt(i))).Sum();
+                        target.AddIncomingOffense(Ship.ShipKind.WarShip, order.PlayerId, offense);
+                    }
+                    var bombard = order.Fleet.Snapshots
+                        .Select((snapshot, i) => stats.EffectiveBombard(template, snapshot, order.Fleet.DamageAt(i), subtype)).Sum();
+                    target.AddIncomingBombard(kind, order.PlayerId, bombard);
                 }
             }
 

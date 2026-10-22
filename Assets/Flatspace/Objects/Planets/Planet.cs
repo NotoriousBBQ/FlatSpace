@@ -124,6 +124,12 @@ public class Planet : MonoBehaviour
     public float ConversionProgress = 0f;
     public int ConversionWarMask = 0;
 
+    // A session that ended as dominance lost keeps its progress here for conversionCarryTurns: the same player dominating again
+    // within the window resumes from it (ConversionSystem.Step). Not saved: a load forgets it, like the tracker state.
+    public int ConversionCarryBy = NoOwner;
+    public float ConversionCarryProgress = 0f;
+    public int ConversionCarryUntilTurn = 0;
+
     public void EndConversionSession()
     {
         ConversionBy = NoOwner;
@@ -630,7 +636,7 @@ public class Planet : MonoBehaviour
                      1, playerID));
                  if (Population.Count <= 0)
                  {
-                     // planet is dead
+                     // planet is dead (ChangePopulation already cleared its bunkers)
                      resultList.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeDead, null));
                  }
              }
@@ -825,6 +831,13 @@ public class Planet : MonoBehaviour
             }
         }
         SetPlanetOwnership();
+        // An emptied planet is dead (every path that removes inhabitants, including the economy's starvation loss, ends here): its bunkers go too.
+        if (Population.Count == 0)
+            ClearBunkers();
+        // On a mixed planet, a player whose last inhabitant just left (starvation, launched as a colonist) loses its bunkers too: they
+        // would otherwise block conversion and fire at the planet's new owner. Other players' bunkers stay.
+        else if (changeAmount < 0 && !Population.Exists(x => x.Player == playerId))
+            ClearBunkersOf(playerId);
     }
 
     private void SetPlanetOwnership()
@@ -962,6 +975,16 @@ public class Planet : MonoBehaviour
         {
             DockNewShip(Ship.ShipKind.WarShip);
         }
+        else if (CurrentProduction?.Item.subType == "Siegeship")
+        {
+            DockNewShip(Ship.ShipKind.SiegeShip);
+        }
+        else if (CurrentProduction?.Item.subType == "Bunker")
+        {
+            // The cap is re-checked here: a bunker queued before the planet hit the cap (or changed hands) must not exceed it.
+            if (CanBuildBunker())
+                DockNewShip(Ship.ShipKind.Bunker);
+        }
         else if (CurrentProduction?.Item.subType == "WarshipUpdate")
         {
             // Needs Gameboard.Instance, like DockNewShip's snapshot; the self-check calls ApplyWarshipUpdate directly.
@@ -974,6 +997,35 @@ public class Planet : MonoBehaviour
     public bool HasDockedShip(Ship.ShipKind kind)
     {
         return DockedShips.Exists(s => s.Kind == kind);
+    }
+
+    /// <summary>Bunkers docked here for this owner.</summary>
+    public int BunkerCount(int owner)
+    {
+        return DockedShips.Count(s => s.Kind == Ship.ShipKind.Bunker && s.Owner == owner);
+    }
+
+    /// <summary>
+    /// The owner may add a bunker: the planet has an owner and holds fewer of the owner's bunkers than MaxPopulation.
+    /// Existing bunkers survive a population drop, so a planet over the cap is simply false.
+    /// </summary>
+    public bool CanBuildBunker()
+    {
+        return Owner != NoOwner && BunkerCount(Owner) < MaxPopulation;
+    }
+
+    /// <summary>Destroys every docked bunker of any owner (a dead planet keeps none). No Gameboard.Instance, so a self-check can call it.</summary>
+    public void ClearBunkers()
+    {
+        foreach (var bunker in DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker).ToList())
+            DestroyDockedShip(bunker);
+    }
+
+    /// <summary>Destroys every docked bunker of one owner (its last inhabitant left a planet others still inhabit). No Gameboard.Instance.</summary>
+    public void ClearBunkersOf(int owner)
+    {
+        foreach (var bunker in DockedShips.Where(s => s.Kind == Ship.ShipKind.Bunker && s.Owner == owner).ToList())
+            DestroyDockedShip(bunker);
     }
 
     /// <summary>
@@ -1010,9 +1062,15 @@ public class Planet : MonoBehaviour
 
     private Ship CreateShip(Ship.ShipKind kind, int owner)
     {
-        var template = kind == Ship.ShipKind.ColonyShip
-            ? GameAIConstants.colonyShipData
-            : GameAIConstants.warShipData;
+        ShipData template;
+        switch (kind)
+        {
+            case Ship.ShipKind.ColonyShip: template = GameAIConstants.colonyShipData; break;
+            case Ship.ShipKind.WarShip: template = GameAIConstants.warShipData; break;
+            case Ship.ShipKind.SiegeShip: template = GameAIConstants.siegeShipData; break;
+            case Ship.ShipKind.Bunker: template = GameAIConstants.bunkerData; break;
+            default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, null);
+        }
         var ship = this.AddComponent<Ship>();
         ship.Kind = kind;
         ship.Owner = owner;
@@ -1127,10 +1185,20 @@ public class Planet : MonoBehaviour
         => _incomingOffense[(kind, owner)] = System.Math.Max(0f, GetIncomingOffense(kind, owner) + delta);
     public void ClearIncomingOffense() => _incomingOffense.Clear();
 
+    // Bombard of the warships and siegeships in flight toward this planet, per kind and owning player. Derived like the offense
+    // counter and recomputed with it (GameAIMap.RecomputeIncomingOffense), never saved.
+    private readonly Dictionary<(Ship.ShipKind kind, int owner), float> _incomingBombard
+        = new Dictionary<(Ship.ShipKind kind, int owner), float>();
+    public float GetIncomingBombard(Ship.ShipKind kind, int owner)
+        => _incomingBombard.TryGetValue((kind, owner), out var bombard) ? bombard : 0f;
+    public void AddIncomingBombard(Ship.ShipKind kind, int owner, float delta)
+        => _incomingBombard[(kind, owner)] = System.Math.Max(0f, GetIncomingBombard(kind, owner) + delta);
+    public void ClearIncomingBombard() => _incomingBombard.Clear();
+
     private List<string> BuildResearchSnapshot(Ship.ShipKind kind, int owner)
     {
         if (owner < 0 || owner >= Gameboard.Instance.players.Count) return new List<string>();
-        var subType = kind == Ship.ShipKind.ColonyShip ? "ColonyShip" : "Warship";
+        var subType = WarshipStats.SubtypeOf(kind);
         var researchCatalog = Gameboard.Instance.players[owner].playerAI.ResearchCatalog;
         return researchCatalog.catalogItems
             .Where(x => x.researched && x.type == "Ship Improvement" && x.subType == subType)

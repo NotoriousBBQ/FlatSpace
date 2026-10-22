@@ -856,6 +856,7 @@ public static class ShipTransportSelfCheck
         var ok = RunAssaultSizingCheck();
         ok &= RunAssaultTargetCheck();
         ok &= RunAssaultPlanCheck();
+        ok &= RunSiegeshipsIgnoredCheck();
         return ok;
     }
 
@@ -995,6 +996,41 @@ public static class ShipTransportSelfCheck
             var actions = assault.Plan(target, transport.LastStates, home);
             ok &= Check(actions.Count == 1 && actions[0].Origin == "A" && actions[0].Target == "E" && actions[0].Count == 6,
                 "the assault gets only A's remaining 6 (9 - 3), never the ships home defence claimed");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // Task 13: siegeships are never garrison sources or sinks (both strategies), and an assault planner without warship stats
+    // (every pre-siegeship check here) sees no bunker, so it sends no siegeship even when some are docked.
+    private static bool RunSiegeshipsIgnoredCheck()
+    {
+        var ok = true;
+        _nextPlanetX = 0f;
+        var go = new GameObject("STSelfCheckMap_SiegeIgnored");
+        try
+        {
+            var map = BuildAssaultLine(go);
+            for (var i = 0; i < 6; i++) map.GetPlanet("A").DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>());
+            for (var i = 0; i < 2; i++) map.GetPlanet("B").DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>());
+            map.Knowledge.Update(map, numPlayers: 2);
+            foreach (var strategy in new[] { PlayerAI.AIStrategy.AIStrategyExpand, PlayerAI.AIStrategy.AIStrategyConsolidate })
+            {
+                var planner = new ShipTransportPlanner(map, 0, strategy);
+                var plan = planner.Plan();
+                var b = planner.LastStates.Find(s => s.Planet.PlanetName == "B");
+                ok &= Check(plan.Count == 0 && b != null && b.Docked == 0 && b.Deficit == 6,
+                    $"{strategy}: 8 docked siegeships fill no garrison (B still short 6) and source no transport");
+            }
+
+            Dock(map.GetPlanet("A"), 12);   // 6 fill B's outer garrison, 3 (the minimum force) go to E
+            var assault = new AssaultPlanner(map, 0);
+            var target = assault.ChooseTarget();
+            var transport = ConsolidatePlanner(map, target.PlanetName);
+            var home = transport.Plan();
+            var actions = assault.Plan(target, transport.LastStates, home);
+            ok &= Check(actions.Count > 0 && actions.TrueForAll(a => a.Kind == Ship.ShipKind.WarShip),
+                "an assault with no known bunker sends warships only; the siegeships wait");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;

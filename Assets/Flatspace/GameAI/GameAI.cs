@@ -72,6 +72,12 @@ namespace FlatSpace
                 // (no route recorded) means "use the shortest path".
                 [NonSerialized] public List<string> Route;
 
+                // A colonist order's escort (Task 15, escort option B): the offense of the warships launched with it the same turn,
+                // recorded at launch. BlockadeSystem subtracts it from the blockade value at each node the colonist passes (a node
+                // is passed when Value - EscortOffense <= 0). 0 = no escort. Saved as OrderSave.escortOffense; an older save has no
+                // key and loads as 0.
+                public float EscortOffense;
+
                 /// <summary>A saved route of fewer than 2 nodes (older saves, non-route orders) restores as none.</summary>
                 public static List<string> RouteFromSave(List<string> saved)
                     => saved != null && saved.Count >= 2 ? new List<string>(saved) : null;
@@ -132,12 +138,16 @@ namespace FlatSpace
             // Log-only: conversion sessions in progress (start turn, flips) and the players already reported out of planets.
             private readonly ConversionTracker _conversions = new ConversionTracker();
 
+            // Log-only: the planets where bunkers currently block a conversion (ConversionBlocked on change only).
+            private readonly BunkerBlockTracker _bunkerBlocks = new BunkerBlockTracker();
+
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
                 _grotsitsShort.Clear();
                 _redirectFailedLogged.Clear();
                 _conversions.Clear();
+                _bunkerBlocks.Clear();
 
             }
 
@@ -149,10 +159,12 @@ namespace FlatSpace
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
+                RunBombardment(planetUpdateResults);
                 RunConversion(planetUpdateResults);
                 RunFightProjections(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
+                LogBunkersBuilt(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
                 LogEconomySummary(Gameboard.Instance.TurnNumber, Gameboard.Instance.players.Count);
                 GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count,
@@ -176,6 +188,17 @@ namespace FlatSpace
                         report.ShipsDestroyed);
             }
 
+            // After ship combat, before conversion: docked ships at war with a planet's undefended bunkers bombard them and take their
+            // fire (see BombardmentSystem), then bunkers repair. Ship losses reach ProcessResults through the shared results.
+            private void RunBombardment(List<Planet.UpdateResult> results)
+            {
+                var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
+                var turn = Gameboard.Instance.TurnNumber;
+                foreach (var report in BombardmentSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, results))
+                    AITuningLogger.LogBombard(turn, report.Attacker, report.Planet, report.Victim, report.BombardDealt,
+                        report.BunkersLeft, report.ShipDamage);
+            }
+
             // After combat: a planet one player dominates converts one inhabitant at a time (see ConversionSystem). The reports are
             // only for the tuning log.
             private void RunConversion(List<Planet.UpdateResult> results)
@@ -194,14 +217,17 @@ namespace FlatSpace
                         case ConversionReport.Kind.Start:
                             _conversions.Begin(report.Planet, turn);
                             AITuningLogger.LogConversionStart(turn, report.Dominator, report.Planet,
-                                ConversionSystem.PlayersIn(report.WarMask), report.MyPopulation, report.TotalPopulation, report.TurnsPerFlip);
+                                ConversionSystem.PlayersIn(report.WarMask), report.MyPopulation, report.TotalPopulation, report.TurnsPerFlip,
+                                report.BombardFactor);
+                            if (report.ResumedProgress > 0f)
+                                AITuningLogger.LogConversionResumed(turn, report.Dominator, report.Planet, report.ResumedProgress);
                             break;
                         case ConversionReport.Kind.Flip:
                         {
                             var flip = report.Flip;
                             _conversions.CountFlip(report.Planet);
                             AITuningLogger.LogConvert(turn, flip.Dominator, report.Planet, flip.From, flip.AtWar,
-                                flip.MyPopulation, flip.TotalPopulation, flip.Progress);
+                                flip.MyPopulation, flip.TotalPopulation, flip.Progress, flip.BombardFactor);
                             if (flip.OwnerChanged)
                                 AITuningLogger.LogOwnerChanged(turn, flip.NewOwner, report.Planet, flip.OldOwner, flip.ClearedItem);
                             if (!GameAIMap.PlanetList.Any(p => p.Population.Exists(i => i.Player == flip.From))
@@ -218,6 +244,11 @@ namespace FlatSpace
                         }
                     }
                 }
+                // Planets where bunkers block a conversion that would otherwise run: one line when blocked or the count changes.
+                var blocked = reports.Where(r => r.What == ConversionReport.Kind.Blocked)
+                    .Select(r => new BunkerBlockTracker.Entry { Planet = r.Planet, Dominator = r.Dominator, Bunkers = r.Bunkers });
+                foreach (var entry in _bunkerBlocks.Update(blocked))
+                    AITuningLogger.LogConversionBlocked(turn, entry.Dominator, entry.Planet, entry.Bunkers);
                 // A session found on a planet after a load has no tracker entry yet: begin it and log its Start once more.
                 foreach (var planet in GameAIMap.PlanetList)
                 {
@@ -231,7 +262,7 @@ namespace FlatSpace
             }
 
             // After combat: one FightProjection result per (planet, player) where that player's warships share a planet with a
-            // war rival's, so every player decides about leaving against the same projection (see FightProjector, RetreatPlanner).
+            // war rival's warships or bunkers, so every player decides about leaving against the same projection (see FightProjector, RetreatPlanner).
             private void RunFightProjections(List<Planet.UpdateResult> results)
             {
                 var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
@@ -250,7 +281,12 @@ namespace FlatSpace
                 {
                     var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner)
                         .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
-                    if (owners.Count < 2) continue;
+                    // Another player's bunkers count as a side too (the projection includes bunker fire), so a warship group facing
+                    // only a rival's bunkers is projected and can retreat. With no bunkers this is the warship-owner count, as before.
+                    var sides = planet.DockedShips.Where(s => (s.Kind == Ship.ShipKind.WarShip || s.Kind == Ship.ShipKind.Bunker)
+                                                              && s.Owner != Planet.NoOwner)
+                        .Select(s => s.Owner).Distinct().Count();
+                    if (owners.Count == 0 || sides < 2) continue;
                     foreach (var owner in owners)
                     {
                         var projection = FightProjector.ProjectPerceived(map, planet, owner, stats, constants, orders, rand);
@@ -258,6 +294,21 @@ namespace FlatSpace
                             results.Add(new Planet.UpdateResult(planet.PlanetName,
                                 Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection, projection, owner));
                     }
+                }
+            }
+
+            // One BunkerBuilt line per completed Bunker production (it fires once per completion, so no tracker is needed).
+            private void LogBunkersBuilt(int turnNumber, List<Planet.UpdateResult> results)
+            {
+                foreach (var result in results)
+                {
+                    if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete) continue;
+                    if (result.PlayerID < 0 || result.PlayerID >= Gameboard.Instance.players.Count) continue;
+                    var ai = Gameboard.Instance.players[result.PlayerID].playerAI;
+                    var itemName = result.Data as string;
+                    if (ai == null || ai.ProductionCatalog == null || itemName == null) continue;
+                    var item = ai.ProductionCatalog.catalogItems.Find(x => x.itemName == itemName);
+                    if (item != null && item.subType == "Bunker") ai.LogBunkerBuilt(turnNumber, result.Name);
                 }
             }
 
@@ -456,7 +507,9 @@ namespace FlatSpace
                         var fixedCost = WarshipCosts.ProductionCost(newProductionItem, targetPlanet,
                             executableOrder.PlayerId, productionAI.ResearchCatalog.catalogItems,
                             baseWarship != null ? baseWarship.cost : 0f,
-                            GameAIMap.GameAIConstants.warshipImprovementCostFactor);
+                            GameAIMap.GameAIConstants.warshipImprovementCostFactor,
+                            GameAIMap.GameAIConstants.siegeshipCostRatio,
+                            GameAIMap.GameAIConstants.bunkerCostRatio);
                         targetPlanet.ScheduleProductionItem(newProductionItem, fixedCost);
                         break;
                     case GameAIOrder.OrderType.OrderTypeResearchChange:
@@ -615,6 +668,9 @@ namespace FlatSpace
             {
                 for (var playerID = 0; playerID < Gameboard.Instance.players.Count(); ++playerID)
                 {
+                    // The follower gate projects my ships already in flight (PlayerAI.ProjectArrival); read-only for the AI.
+                    var ai = Gameboard.Instance.players[playerID].playerAI;
+                    if (ai != null) ai.InFlightOrders = CurrentAIOrders;
                     Gameboard.Instance.players[playerID].ProcessResults(results, orders);
                 }
             }
@@ -635,6 +691,7 @@ namespace FlatSpace
                         PlayerId = orderStatus.playerId,
                         Fleet = GameAIOrder.ShipFleetPayload.FromSave(orderStatus.fleetShips),
                         Route = GameAIOrder.RouteFromSave(orderStatus.route),
+                        EscortOffense = orderStatus.escortOffense,
                     });
                 }
 

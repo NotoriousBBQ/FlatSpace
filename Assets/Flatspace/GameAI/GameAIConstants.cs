@@ -14,6 +14,13 @@ public class GameAIConstants : ScriptableObject
     public List<PlanetResourceData> resourceData;
     public ShipData colonyShipData;
     public ShipData warShipData;
+    public ShipData siegeShipData;
+    public ShipData bunkerData;
+
+    [Header("Planet defense")]
+    // Siegeship and Defense Bunker catalog cost as a multiple of the Warship catalog cost.
+    public float siegeshipCostRatio = 1.5f;
+    public float bunkerCostRatio = 1.5f;
 
     [Header("Ship transport")]
     // Longest trip (path node count) a ship transport may take.
@@ -40,6 +47,22 @@ public class GameAIConstants : ScriptableObject
     public float assaultRatio = 1.5f;
     // ...but never fewer than this.
     public int assaultMinimumShips = 3;
+    // Siegeships join the assault until their bombard (docked at the target + in flight there) covers the target's known
+    // bunker defense x this (or the pace term below, if larger).
+    public float siegeBombardMargin = 1.3f;
+    // Conversion pace term: against an enemy-occupied target the assault also wants this share of conversionBombardReference in
+    // siegeship bombard, so a warship-only conquest (bombard far below the reference) does not crawl at the minimum pace. The
+    // need is the larger of this and the bunker need. 0 = off (siegeships only to break known bunkers).
+    public float siegePaceFraction = 1f;
+    // Siegeships are at most this share of the assault fleet (warships + siegeships): the cap is
+    // floor(share x W / (1 - share)), W = max(the required warship force, my warships docked + in flight at the target).
+    // 0.5 = no more siegeships than warships; 0 or less = none; 1 or more = no cap.
+    public float siegeshipMaxFleetShare = 0.5f;
+    // A siegeship group leaves for the assault target only when the fight projection of its arrival (my ships docked there, mine
+    // in flight there, the ships leaving this turn and the group itself, against the war rivals' ships and bunker fire) shows it
+    // not wiped and losing less than this share of the arriving group's strength; otherwise it waits where it is (no stall: the
+    // warships never wait for it). 1 or more = only a wipe-out holds it back; 0 or less = no siegeship ever leaves into a fight.
+    public float followerMaxLossFraction = 0.5f;
 
     [Header("Production (Consolidate)")]
     // The Warship production weight is multiplied by 1 + this x (fleet shortfall / wanted fleet), where
@@ -59,6 +82,18 @@ public class GameAIConstants : ScriptableObject
     // cutoff no longer applies: the Warship multiplier is floored at 1 before this boost. Update Warship's existing 0
     // (nothing to upgrade) stays 0.
     public float blockadedWarshipBoost = 3f;
+
+    [Header("Bunker building (Consolidate and Amass)")]
+    // Base of the situational Bunker production weight (it multiplies the strategy table's Bunker value). The weight is 0 unless an
+    // at-war rival is known nearby: its warship/siegeship docked on or beside the planet, or an outer/chokepoint planet while a
+    // known at-war rival planet exists. Expand and None never build bunkers.
+    public float bunkerBaseWeight = 1f;
+    // Multiplier for an outer planet or a colonized chokepoint (the garrison planner's categories); other planets use 1.
+    public float bunkerOuterFactor = 2f;
+    // Multiplier on a planet that is blockaded against its owner (a bunker raises the cost of staying put).
+    public float bunkerBlockadedBoost = 3f;
+    // Multiplier when an at-war rival's docked warship or siegeship is on the planet or on a direct neighbour.
+    public float bunkerRivalAdjacentBoost = 2f;
 
     [Header("Blockade breaking (Consolidate)")]
     // A planet that cut one of my orders within this many turns ranks first among blockade-breaking targets (after the
@@ -194,6 +229,19 @@ public class GameAIConstants : ScriptableObject
     // ships there (never more than it has) and releases the rest to garrison and blockade calls. 0 keeps just 1 ship; a negative
     // value keeps every ship (the original hold). An assault target and a contested hold always keep every ship.
     public float conversionHoldKeepFraction = 0.5f;
+    // Conversion speed scales with the dominator's total docked bombard: the progress a turn is clamp(bombard / this, conversionBombardMinFactor, 1)
+    // / TurnsPerFlip. A fleet at or above this bombard converts at full pace. Starting point, tuned from logs. 0 or below = always full pace.
+    public float conversionBombardReference = 60f;
+    // The slowest conversion pace (as a fraction of full) however little bombard the dominator has. Starting point, tuned from logs.
+    public float conversionBombardMinFactor = 0.05f;
+    // A session that ends because dominance was lost (a lone rival ship docking for a turn) keeps its progress this many turns: the
+    // same player dominating the planet again within the window resumes from it instead of from 0. 0 = off (a new session starts at 0).
+    public int conversionCarryTurns = 3;
+    // Dominance: my docked warships and siegeships are contested only when the at-war rivals' docked WARSHIPS (a rival's siegeships
+    // never contest) that hold inhabitants on the planet add up to more than this x my fighting strength (offense x (health + defense),
+    // the fight projector's figure). 0.5 = a rival needs more than half my strength; at or below 1 so two at-war players cannot both
+    // qualify. Negative = the old rule: any docked warship or siegeship of an at-war rival contests, whatever its strength or holdings.
+    public float dominanceRivalRatio = 0.5f;
 
     [Header("Distribution Centers")]
     // At or above this many colonized planets on the WHOLE BOARD (every player, not just this one), a player's

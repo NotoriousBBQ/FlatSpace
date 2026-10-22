@@ -202,8 +202,8 @@ namespace FlatSpace.AI
         /// <summary>
         /// Once per turn, after in-flight delays were decremented and before orders execute: applies blockades to the
         /// orders that passed a planet this turn. Colony orders are removed (colonist and food rider are lost, the
-        /// origin already paid for them); food and grotsits shipments lose the blockade value at every blockaded
-        /// node they pass and are removed when nothing is left.
+        /// origin already paid for them) unless their EscortOffense covers the value at that node; food and grotsits
+        /// shipments lose the blockade value at every blockaded node they pass and are removed when nothing is left.
         /// </summary>
         public List<BlockadeCut> Apply(List<GameAI.GameAIOrder> orders, int turnNumber)
         {
@@ -231,7 +231,8 @@ namespace FlatSpace.AI
             foreach (var node in PassedNodes(order))
             {
                 var value = Value(_map.GetPlanet(node.Name), order.PlayerId, out var blocker);
-                if (value <= 0f) continue;
+                // An escorted colonist (Task 15) passes a node when its escort's offense covers the blockade there.
+                if (value - order.EscortOffense <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
                 cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker });

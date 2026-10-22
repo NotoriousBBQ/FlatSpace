@@ -721,6 +721,7 @@ namespace FlatSpace
             public bool IsConversionTarget(Planet planet)
             {
                 if (!AIMap.Diplomacy.Enabled || planet.Population.Count >= planet.MaxPopulation) return false;
+                if (ConversionSystem.HasStuckBunker(planet, Player.playerID, AIMap.Diplomacy)) return false;   // bunkers I will never bombard away
                 if (!planet.Population.Exists(p => p.Player != Player.playerID)) return false;
                 if (planet.ConversionBy != Player.playerID
                     && !planet.Population.Exists(p => p.Player != Player.playerID && AIMap.Diplomacy.IsAtWar(Player.playerID, p.Player, true)))
@@ -768,17 +769,105 @@ namespace FlatSpace
                 return weight <= 0f ? 1f : 1f + weight * AIMap.Chokepoint(targetName);
             }
 
+            // ── Escorted colonists (Task 15, escort option B) ─────────────────
+
+            // The escorts emitted this turn (one ShipAction each, as EmitShipOrders sent it). ProcessColonizers runs first in the routine
+            // (ProcessResultsStrategyExpand: ProcessColonizers, ..., ProcessShipActions) and fills it; PlanShipActions hands it to the
+            // planners BEFORE they plan (ShipTransportPlanner.Reserved, AssaultPlanner.PreDeparting), so sizing, the siegeship gate's
+            // projection and the emitted actions all see the escort's ships as gone; ProcessShipActions starts its claims from it and
+            // clears it. Nothing undocks until the orders execute, so without it the escort's ships would be sent a second time.
+            private readonly List<ShipAction> _escortActions = new List<ShipAction>();
+
+            /// <summary>The escorts' warships per origin (the planners' Reserved map). Empty when no escort left this turn.</summary>
+            private Dictionary<string, int> EscortReserved()
+            {
+                var reserved = new Dictionary<string, int>();
+                foreach (var escort in _escortActions)
+                {
+                    if (escort.Kind != Ship.ShipKind.WarShip) continue;
+                    reserved.TryGetValue(escort.Origin, out var count);
+                    reserved[escort.Origin] = count + escort.Count;
+                }
+                return reserved;
+            }
+
+            // Log-only: declined escorts, reported on change only (EscortDetour).
+            private readonly EscortDetourTracker _escortDetours = new EscortDetourTracker();
+
+            /// <summary>The EscortDetour entries the last ProcessColonizers reported (log-only; public for the self-check).</summary>
+            public List<EscortDetourTracker.Entry> LastEscortDetourChanges { get; private set; } = new List<EscortDetourTracker.Entry>();
+
+            /// <summary>The escort ships ProcessColonizers claimed this turn per origin (warships), not yet consumed by ProcessShipActions. Public for the self-check.</summary>
+            public int EscortClaimed(string origin)
+                => EscortReserved().TryGetValue(origin, out var claimed) ? claimed : 0;
+
+            /// <summary>
+            /// Spare warships per planet for an escort: the garrison planner's states built the way PlanShipActions builds them (the
+            /// retreat cooldown; under Consolidate/Amass the contested holds and the conversion keep), without the assault target, which is
+            /// never a colonizing origin (it is enemy-occupied or blockaded).
+            /// </summary>
+            private Dictionary<string, int> EscortSpareShips(int turn, WarshipStats stats)
+            {
+                var planner = new ShipTransportPlanner(AIMap, Player.playerID, Strategy) { RefillBlocked = CooldownPlanets(turn) };
+                if (IsConsolidateLike(Strategy))
+                {
+                    var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turn, AssaultWarFilter());
+                    planner.HeldPlanets = assault.ContestedHolds();
+                    planner.ConversionKeep = assault.ConversionKeep();
+                }
+                var spare = new Dictionary<string, int>();
+                foreach (var state in planner.BuildStates()) spare[state.Planet.PlanetName] = state.Spare;
+                return spare;
+            }
+
+            /// <summary>
+            /// The escort a colonist needs on `route` (normally the shortest route): needed offense = the largest blockade value my view
+            /// knows along it (after the origin) x (1 + blockadeBreakMargin), and at least one ship when the target is a planet I dominate
+            /// (IsConversionTarget). The ships are the origin's existing SPARE warships only (no production request), taken in dock
+            /// order (the ones EmitShipOrders sends) until the offense covers the need. Null when nothing is needed (a clean route to a
+            /// planet I do not dominate) or the spare ships fall short. `spareByOrigin` is ProcessColonizers' once-per-turn cache; null
+            /// builds it. Public for the self-check.
+            /// </summary>
+            public (int ships, float offense)? PlanEscort(Planet origin, Planet target, RoutePlanner.PlannedRoute shortest, WarshipStats stats,
+                IDictionary<string, int> spareByOrigin = null)
+            {
+                if (origin == null || target == null || shortest == null) return null;
+                var needed = RoutePlanner.MaxBlockadeValue(shortest, _blockadeView) * (1f + AIMap.GameAIConstants.blockadeBreakMargin);
+                var minShips = IsConversionTarget(target) ? 1 : 0;
+                if (needed <= 0f && minShips == 0) return null;
+
+                stats = stats ?? new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var spares = spareByOrigin
+                             ?? EscortSpareShips(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0, stats);
+                spares.TryGetValue(origin.PlanetName, out var spare);
+
+                var ships = 0;
+                var offense = 0f;
+                foreach (var ship in origin.DockedShips)
+                {
+                    if (ship.Kind != Ship.ShipKind.WarShip || ship.Owner != Player.playerID) continue;
+                    if (ships >= minShips && offense >= needed) break;
+                    if (ships >= spare) break;
+                    ships++;
+                    offense += stats.EffectiveOffense(ship);
+                }
+                if (ships < minShips || offense < needed) return null;
+                return (ships, offense);
+            }
+
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public void ProcessColonizers(
                 List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
+                _escortActions.Clear();   // a new turn's escorts (ProcessShipActions consumes them later in this routine)
                 var colonizers = results.FindAll(
-                    x => x.PlayerID == Player.playerID 
+                    x => x.PlayerID == Player.playerID
                          && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady);
                 if (colonizers.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nobody is ready, so nobody is being held back
+                    LastEscortDetourChanges = _escortDetours.Update(new List<EscortDetourTracker.Entry>());
                     return;
                 }
 
@@ -786,6 +875,7 @@ namespace FlatSpace
                 if (targets.Count == 0)
                 {
                     _colonizeHeldBack.Clear();   // nothing to colonize: not held back by a blockade
+                    LastEscortDetourChanges = _escortDetours.Update(new List<EscortDetourTracker.Entry>());
                     return;
                 }
 
@@ -800,6 +890,11 @@ namespace FlatSpace
                 var plannedRoutes = new Dictionary<(string origin, string target), RoutePlanner.PlannedRoute>();
                 // Per origin, the candidate with the lowest route cost, so the log shows when the chokepoint tilt moved the pick.
                 var nearest = new Dictionary<string, (string target, float cost)>();
+                // The escort planned for each (origin, target) choice whose route is escorted (Task 15); built lazily, once per call.
+                var plannedEscorts = new Dictionary<(string origin, string target), (int ships, float offense)>();
+                var declinedEscorts = new List<EscortDetourTracker.Entry>();
+                WarshipStats escortStats = null;
+                Dictionary<string, int> escortSpares = null;
 
                 var matrix = new ScoreMatrix<ScoreMatrixDecisionElement, ScoreMatrixChoiceElement, ScoreMatrixAction>
                     (new ScoreMatrixDecisionComparer());
@@ -829,8 +924,63 @@ namespace FlatSpace
 
                         // Avoid planets I can see are blockaded; a target with no such route is dropped.
                         var route = RoutePlanner.PlanRoute(AIMap, colonizer.Name, t.PlanetName, _blockadeView, maxNodes);
+
+                        // Escort (Task 15): a dominated target, or a shortest route that crosses a known blockade (the target
+                        // included). The escorted shortest route and the detour are the two ways to this target; the choice
+                        // carries the cheaper one that is possible (see the report: the matrix's greedy pick within a row always
+                        // takes the cheaper of two same-target entries, so one entry at that cost is the same decision).
+                        var shortest = RoutePlanner.ShortestRoute(AIMap, colonizer.Name, t.PlanetName, maxNodes);
+                        var shortestBlockade = RoutePlanner.MaxBlockadeValue(shortest, _blockadeView);
+                        var dominated = shortest != null && IsConversionTarget(t);
+                        (int ships, float offense)? escort = null;
+                        if (shortest != null && (dominated || shortestBlockade > 0f))
+                        {
+                            escortStats = escortStats ?? new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                            if (escortSpares == null)
+                            {
+                                escortSpares = EscortSpareShips(turn, escortStats);
+                                // A retreat has priority over an escort: retreats only leave planets with a fight projection of mine
+                                // this turn (RetreatPlanner reads those, later in this routine), so such an origin has no spare for an
+                                // escort, and no ship is ever both retreated and escorted.
+                                foreach (var fight in results.Where(r => r.PlayerID == Player.playerID
+                                             && r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection))
+                                    escortSpares[fight.Name] = 0;
+                            }
+                            if (shortestBlockade <= 0f)
+                            {
+                                // A dominated target on a clean route: the planned route already is the shortest; one ship escorts.
+                                escort = PlanEscort(colonizerPlanet, t, shortest, escortStats, escortSpares);
+                            }
+                            else if (route == null || shortest.Cost < route.Cost)
+                            {
+                                escort = PlanEscort(colonizerPlanet, t, shortest, escortStats, escortSpares);
+                                if (escort != null)
+                                {
+                                    route = shortest;
+                                }
+                                else
+                                {
+                                    escortSpares.TryGetValue(colonizer.Name, out var spareHere);
+                                    var inFight = results.Exists(r => r.PlayerID == Player.playerID && r.Name == colonizer.Name
+                                        && r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection);
+                                    declinedEscorts.Add(new EscortDetourTracker.Entry
+                                    {
+                                        Origin = colonizer.Name,
+                                        Target = t.PlanetName,
+                                        Reason = inFight ? EscortDetourTracker.ReasonFight
+                                            : spareHere <= 0 ? EscortDetourTracker.ReasonNoSpare : EscortDetourTracker.ReasonShortOffense,
+                                    });
+                                    // Too few spare ships to cover the blockade: the detour (if any). A dominated target still
+                                    // gets its one-ship escort along the clean detour.
+                                    if (dominated && route != null)
+                                        escort = PlanEscort(colonizerPlanet, t, route, escortStats, escortSpares);
+                                }
+                            }
+                        }
+
                         if (route == null) continue;
                         plannedRoutes[(colonizer.Name, t.PlanetName)] = route;
+                        if (escort != null) plannedEscorts[(colonizer.Name, t.PlanetName)] = escort.Value;
                         if (!nearest.TryGetValue(colonizer.Name, out var best) || route.Cost < best.cost
                             || (route.Cost == best.cost && string.CompareOrdinal(t.PlanetName, best.target) < 0))
                             nearest[colonizer.Name] = (t.PlanetName, route.Cost);
@@ -866,6 +1016,10 @@ namespace FlatSpace
                     }
                 }
 
+                LastEscortDetourChanges = _escortDetours.Update(declinedEscorts);
+                foreach (var declined in LastEscortDetourChanges)
+                    AITuningLogger.LogEscortDetour(turn, Player.playerID, declined.Origin, declined.Target, declined.Reason);
+
                 foreach (var action in matrix.GenerateActionList(
                              actionFactory: (origin, element) => new ScoreMatrixAction
                              {
@@ -897,6 +1051,29 @@ namespace FlatSpace
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
                         delay, delay, amount, action.Origin, action.Target);
                     colonist.Route = new List<string>(route.Nodes);
+                    // The escort: the origin's spare warships fly the same route as the ordinary ship-transport trio, launched this
+                    // turn; the colonist records their offense, which BlockadeSystem subtracts at each node. On arrival they are
+                    // ordinary docked warships. The colonist does not depend on them (nothing in flight is attacked).
+                    if (plannedEscorts.TryGetValue((action.Origin, action.Target), out var escortPlan))
+                    {
+                        var before = orders.Count;
+                        var escortAction = new ShipAction
+                        {
+                            Origin = action.Origin,
+                            Target = action.Target,
+                            Cost   = route.Cost,
+                            Count  = escortPlan.ships,
+                            Kind   = Ship.ShipKind.WarShip,
+                        };
+                        EmitShipOrders(escortAction, orders, EscortClaimed(action.Origin));
+                        if (orders.Count > before)
+                        {
+                            colonist.EscortOffense = escortPlan.offense;
+                            _escortActions.Add(escortAction);
+                            AITuningLogger.LogEscortLaunch(turn, Player.playerID, action.Origin, action.Target, escortPlan.offense,
+                                RoutePlanner.MaxBlockadeValue(route, _blockadeView));
+                        }
+                    }
                     orders.Add(colonist);
                     if (route.IsDetour)
                         AITuningLogger.LogRouteDetour(turn, Player.playerID, action.Origin, action.Target,
@@ -1274,6 +1451,8 @@ namespace FlatSpace
                     { "Research",      1.0f },  // least useful while expanding
                     { "ColonyShip",    2.5f },  // ships useful but secondary
                     { "Warship",       1.5f },  // Updated priority
+                    { "Siegeship",     0.75f },  // planet defense line: starting point, half of Warship's
+                    { "Bunker",        0.5f },   // starting point
                 };
             private static readonly Dictionary<string, float> ConsolidateResearchWeights =
                 new Dictionary<string, float>
@@ -1284,6 +1463,8 @@ namespace FlatSpace
                     { "Research",      1.0f },  // least useful while expanding
                     { "ColonyShip",    0.5f },  // ships useful but secondary
                     { "Warship",       2.5f },  // Updated priority
+                    { "Siegeship",     2.0f },  // starting point
+                    { "Bunker",        1.5f },  // starting point
                 };
             private static readonly Dictionary<string, float> AmassResearchWeights =
                 new Dictionary<string, float>
@@ -1294,6 +1475,8 @@ namespace FlatSpace
                     { "Research",      1.0f },
                     { "ColonyShip",    0.5f },
                     { "Warship",       4.0f },  // at war: weapons first
+                    { "Siegeship",     3.0f },  // starting point
+                    { "Bunker",        2.0f },  // starting point
                 };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
@@ -1486,6 +1669,8 @@ namespace FlatSpace
                     { "ColonyShip",    2.5f },  // colony ships needed
                     { "Warship",       1.5f },  // Updated priority
                     { "WarshipUpdate", 1.5f },  // same as Warship
+                    { "Siegeship",     0.5f },  // starting point (planet defense)
+                    { "Bunker",        0.5f },  // starting point
                 };
 
             private static readonly Dictionary<string, float> ConsolidateIndustryWeights =
@@ -1498,6 +1683,8 @@ namespace FlatSpace
                     { "ColonyShip",    1.0f },  // colony ships needed as much
                     { "Warship",       2.5f },  // highest priority
                     { "WarshipUpdate", 2.5f },  // same as Warship
+                    { "Siegeship",     2.0f },  // starting point
+                    { "Bunker",        1.5f },  // starting point
                 };
             private static readonly Dictionary<string, float> AmassIndustryWeights =
                 new Dictionary<string, float>
@@ -1509,6 +1696,8 @@ namespace FlatSpace
                     { "ColonyShip",    1.0f },  // as Consolidate: 0.5 left ~10 planets unclaimed by T375 on 4p.json (arrivals -23%)
                     { "Warship",       4.0f },
                     { "WarshipUpdate", 4.0f },  // same as Warship
+                    { "Siegeship",     3.0f },  // starting point
+                    { "Bunker",        2.0f },  // starting point
                 };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
@@ -1617,6 +1806,299 @@ namespace FlatSpace
             // production turn: the first Warship choice evaluated fills it, BuildIndustryMatrix resets it.
             private float? _warshipMultiplierThisTurn;
 
+            // ── Siegeships (assault composition) ─────────────────────────────
+
+            /// <summary>Bombard of a siegeship built now: the Siegeship template at full health with my researched Siegeship improvements.</summary>
+            private float NewSiegeshipBombard(WarshipStats stats)
+            {
+                var subtype = WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip);
+                var researched = WarshipStats.ResearchedNames(ResearchCatalog != null ? ResearchCatalog.catalogItems : null, subtype);
+                return stats.Bombard(AIMap.GameAIConstants.siegeShipData, researched, subtype);
+            }
+
+            /// <summary>
+            /// The siegeships the current assault wants: those already committed to the assault target (docked + in flight) plus
+            /// AssaultPlanner.WantedSiegeships (the bombard still missing against the target's known bunkers, in new-siegeship bombard,
+            /// capped by siegeshipMaxFleetShare). The target is the one PlanShipActions would pick (blockade first, else enemy-occupied,
+            /// retreat cooldowns excluded); 0 with no target or no known bunker there. Free of Gameboard.Instance apart from the turn.
+            /// </summary>
+            public int WantedSiegeships()
+            {
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turn,
+                    AssaultWarFilter()) { ExcludedTargets = new HashSet<string>(CooldownPlanets(turn)) };
+                var target = assault.ChooseTarget();
+                if (target == null || assault.RequiredBombard(target) <= 0f) return 0;   // no bunker and no pace need: none wanted
+                return assault.CommittedSiegeships(target) + assault.WantedSiegeships(target, NewSiegeshipBombard(stats));
+            }
+
+            /// <summary>Every siegeship I own: docked anywhere plus my own in flight.</summary>
+            public int OwnedSiegeships()
+                => AIMap.PlanetList.Sum(p =>
+                    p.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip && s.Owner == Player.playerID)
+                    + p.GetIncomingShips(Ship.ShipKind.SiegeShip, Player.playerID));
+
+            /// <summary>
+            /// The Siegeship production multiplier: 0 unless the strategy is Consolidate-like and the assault wants siegeships;
+            /// otherwise the Warship shortfall shape (WarshipShortfallMultiplier with warshipShortfallBoost and warshipFleetCap) on
+            /// wanted vs owned siegeships. Unlike Warship, nothing wanted means 0, so no siegeship is built with no bunker to break.
+            /// </summary>
+            public float ComputeSiegeshipMultiplier(AIStrategy strategy)
+            {
+                if (!IsConsolidateLike(strategy)) return 0f;
+                var wanted = WantedSiegeships();
+                if (wanted <= 0) return 0f;
+                return WarshipShortfallMultiplier(wanted, OwnedSiegeships(),
+                    AIMap.GameAIConstants.warshipShortfallBoost, AIMap.GameAIConstants.warshipFleetCap);
+            }
+
+            // Like the Warship multiplier: reads every planet, so computed at most once per production turn (the first Siegeship
+            // choice fills it, BuildIndustryMatrix resets it). SiegeMultiplierBuilds counts the computations (the self-check's proof).
+            private float? _siegeMultiplierThisTurn;
+
+            public int SiegeMultiplierBuilds { get; private set; }
+
+            /// <summary>
+            /// The follower gate (AssaultPlanner.SiegeshipGate, wired by PlanShipActions): may `count` siegeships leave `origin` for
+            /// `target` this turn? ArrivalNotOutmatched with the actions already planned this turn. An unknown target allows the send.
+            /// </summary>
+            public bool CanSendSiegeship(string origin, string target, int count,
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing)
+            {
+                var planet = AIMap.GetPlanet(target);
+                return planet == null || ArrivalNotOutmatched(origin, planet, count, departing);
+            }
+
+            /// <summary>
+            /// Every in-flight order (GameAI.CurrentAIOrders), set by GameAI before ProcessResults; the arrival projection reads my
+            /// ship transports to the target from it. Null (a self-check that does not set it) means nothing is in flight.
+            /// </summary>
+            public System.Collections.Generic.IReadOnlyList<GameAI.GameAIOrder> InFlightOrders { get; set; }
+
+            /// <summary>
+            /// The fight projection (FightProjector.Project, exact: no random draw) of `count` siegeships leaving `origin` now and
+            /// landing at `target`: my ships already docked there and my ships in flight there (InFlightOrders), the ships `departing`
+            /// this turn for the target (actions planned before this one: the warship force, siegeship groups already let through)
+            /// and the group itself, each fleet carrying the real snapshots and damage of the ships that would leave (Peek, skipping
+            /// ships an earlier action from the same origin takes) and landing after the EmitShipOrders delay. A delay beyond
+            /// retreatProjectionTurns is projected as landing on that last round. Null when there is no fight to project (no war rival's
+            /// ship or bunker at the target, or diplomacy off). Pure: reads the map, writes nothing. Public for the self-check.
+            /// </summary>
+            public FightProjection ProjectArrival(string origin, Planet target, int count,
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null)
+            {
+                if (target == null || count <= 0) return null;
+                var constants = AIMap.GameAIConstants;
+                var stats = new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
+                var orders = new List<GameAI.GameAIOrder>();
+                if (InFlightOrders != null)
+                    orders.AddRange(InFlightOrders.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport
+                                                              && o.PlayerId == Player.playerID && o.Target == target.PlanetName));
+
+                // Ships leaving earlier in the same turn claim their origin's first ships of their kind (as in ProcessShipActions).
+                var claimed = new Dictionary<(string origin, Ship.ShipKind kind), int>();
+                void Leave(string from, Ship.ShipKind kind, int ships, float cost, bool toTarget)
+                {
+                    claimed.TryGetValue((from, kind), out var skip);
+                    claimed[(from, kind)] = skip + ships;
+                    if (!toTarget) return;
+                    var fleet = HypotheticalFleet(from, kind, ships, skip, cost, target.PlanetName, constants);
+                    if (fleet != null) orders.Add(fleet);
+                }
+                if (departing != null)
+                    foreach (var action in departing)
+                        Leave(action.Origin, action.Kind, action.Count, action.Cost, action.Target == target.PlanetName);
+
+                var originPlanet = AIMap.GetPlanet(origin);
+                if (originPlanet == null || !originPlanet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var path)) return null;
+                Leave(origin, Ship.ShipKind.SiegeShip, count, path.Cost, true);
+                return FightProjector.Project(AIMap, target, Player.playerID, stats, constants, orders);
+            }
+
+            /// <summary>
+            /// The follower gate's rule: the arrival projection (ProjectArrival) shows the arriving group not wiped and losing less than
+            /// followerMaxLossFraction of its strength. With no fight to project (no war rival there) the group may go. Deterministic
+            /// and free of side effects (the planner consults it twice a turn).
+            /// </summary>
+            public bool ArrivalNotOutmatched(string origin, Planet target, int count,
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null)
+                => ArrivalVerdict(ProjectArrival(origin, target, count, departing), out _);
+
+            // The gate's reading of an arrival projection; `reason` is the SiegeHeld reason when it refuses (null when it allows).
+            private bool ArrivalVerdict(FightProjection projection, out string reason)
+            {
+                reason = null;
+                if (projection == null) return true;
+                if (projection.MyGroupWiped) reason = SiegeFollowerTracker.ReasonWiped;
+                else if (!(projection.PerceivedLossFraction < AIMap.GameAIConstants.followerMaxLossFraction))
+                    reason = SiegeFollowerTracker.ReasonOutmatched;
+                return reason == null;
+            }
+
+            // A ship transport order as EmitShipOrders would emit it (same snapshots, damage and delay), never queued: the projection's
+            // stand-in for ships that leave this turn. Null when too few such ships are docked (EmitShipOrders would skip the fleet).
+            private GameAI.GameAIOrder HypotheticalFleet(string origin, Ship.ShipKind kind, int count, int skip, float cost, string target,
+                GameAIConstants constants)
+            {
+                var planet = AIMap.GetPlanet(origin);
+                if (planet == null) return null;
+                var snapshots = planet.PeekShipSnapshots(kind, Player.playerID, count, skip);
+                if (snapshots.Count < count) return null;
+                var delay = Math.Min(TravelDelay(cost), Math.Max(1, constants.retreatProjectionTurns));
+                return new GameAI.GameAIOrder
+                {
+                    Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                    TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                    TimingDelay = delay, TotalDelay = delay, Data = count, Origin = origin, Target = target, PlayerId = Player.playerID,
+                    Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                    {
+                        Kind = kind, Snapshots = snapshots, Damage = planet.PeekShipDamage(kind, Player.playerID, count, skip),
+                    },
+                };
+            }
+
+            /// <summary>A ship transport's delay in turns: path cost / defaultTravelSpeed, at least 1 (see EmitShipOrders).</summary>
+            private int TravelDelay(float cost) => Math.Max(1, Convert.ToInt32(cost / AIMap.GameAIConstants.defaultTravelSpeed));
+
+            // Log-only: the follower-gate decisions, reported on change only (SiegeFollow / SiegeHeld).
+            private readonly SiegeFollowerTracker _siegeFollowers = new SiegeFollowerTracker();
+
+            /// <summary>The SiegeFollow / SiegeHeld entries the last PlanShipActions reported (log-only; public for the self-check).</summary>
+            public List<SiegeFollowerTracker.Entry> LastSiegeFollowerChanges { get; private set; } = new List<SiegeFollowerTracker.Entry>();
+
+            // Re-projects each gate call of the real plan (same inputs, so the same verdict) for its loss and reason, and logs the changes.
+            private void LogSiegeFollowers(int turnNumber, List<AssaultPlanner.SiegeGateCall> calls)
+            {
+                var entries = new List<SiegeFollowerTracker.Entry>();
+                foreach (var call in calls)
+                {
+                    var target = AIMap.GetPlanet(call.Target);
+                    var projection = ProjectArrival(call.Origin, target, call.Count, call.Departing);
+                    ArrivalVerdict(projection, out var reason);
+                    entries.Add(new SiegeFollowerTracker.Entry
+                    {
+                        Origin = call.Origin, Target = call.Target, Ships = call.Count,
+                        Kind = call.Allowed ? SiegeFollowerTracker.KindFollow : SiegeFollowerTracker.KindHeld,
+                        Reason = call.Allowed ? string.Empty : reason ?? SiegeFollowerTracker.ReasonOutmatched,
+                        LossFraction = projection != null ? projection.PerceivedLossFraction : 0f,
+                    });
+                }
+                LastSiegeFollowerChanges = _siegeFollowers.Update(entries);
+                foreach (var entry in LastSiegeFollowerChanges)
+                {
+                    if (entry.Kind == SiegeFollowerTracker.KindFollow)
+                        AITuningLogger.LogSiegeFollow(turnNumber, Player.playerID, entry.Origin, entry.Target, entry.Ships, entry.LossFraction);
+                    else
+                        AITuningLogger.LogSiegeHeld(turnNumber, Player.playerID, entry.Origin, entry.Target, entry.Reason);
+                }
+            }
+
+            // Log-only: the last SiegeSized state logged (null = nothing logged or no bunkered target), so the line fires on change only.
+            private string _lastSiegeSized;
+
+            /// <summary>
+            /// SiegeSized|target|bunkerDefense|bombardNeeded|siegeships|cap on change only, for an assault target with known bunkers.
+            /// siegeships is the sized siegeship fleet (committed + still wanted, the production figure), cap the share cap.
+            /// </summary>
+            private void LogSiegeSizing(int turnNumber, AssaultPlanner assault, Planet target, WarshipStats stats)
+            {
+                var defense = target != null ? assault.KnownBunkerDefense(target) : 0f;
+                if (defense <= 0f)
+                {
+                    _lastSiegeSized = null;
+                    return;
+                }
+                var needed = assault.RequiredBombard(target);
+                var sized = assault.CommittedSiegeships(target) + assault.WantedSiegeships(target, NewSiegeshipBombard(stats));
+                var cap = assault.SiegeshipCap(target);
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                var key = string.Join("|", target.PlanetName, defense.ToString("0.#", ci), needed.ToString("0.#", ci),
+                    sized.ToString(ci), cap.ToString(ci));
+                if (key == _lastSiegeSized) return;
+                _lastSiegeSized = key;
+                AITuningLogger.LogSiegeSized(turnNumber, Player.playerID, target.PlanetName, defense, needed, sized, cap);
+            }
+
+            // The per-turn part of the Bunker weight (my war rivals, whether a known rival planet exists, the garrison categories). It
+            // reads many planets, so it is built once per production turn: the first Bunker choice evaluated fills it,
+            // BuildIndustryMatrix resets it. BunkerThreatContextBuilds counts the builds (the self-check's once-per-turn proof).
+            private sealed class BunkerThreatContext
+            {
+                public System.Collections.Generic.ISet<int> Rivals;
+                public bool HasKnownEnemyPlanet;
+                public ShipTransportPlanner Planner;
+            }
+
+            private BunkerThreatContext _bunkerThreatThisTurn;
+
+            public int BunkerThreatContextBuilds { get; private set; }
+
+            private BunkerThreatContext BunkerContext()
+            {
+                if (_bunkerThreatThisTurn != null) return _bunkerThreatThisTurn;
+                BunkerThreatContextBuilds++;
+                _bunkerThreatThisTurn = new BunkerThreatContext
+                {
+                    Rivals = WarRivals(),
+                    HasKnownEnemyPlanet = new AssaultPlanner(AIMap, Player.playerID, warRivals: AssaultWarFilter()).HasKnownEnemyPlanet(),
+                    Planner = new ShipTransportPlanner(AIMap, Player.playerID, Strategy),
+                };
+                return _bunkerThreatThisTurn;
+            }
+
+            private static bool HoldsRivalShip(Planet planet, System.Collections.Generic.ISet<int> rivals)
+                => planet != null && planet.DockedShips.Exists(s =>
+                    (s.Kind == Ship.ShipKind.WarShip || s.Kind == Ship.ShipKind.SiegeShip) && s.Owner >= 0 && rivals.Contains(s.Owner));
+
+            /// <summary>
+            /// The situational Bunker production weight: 0 when the strategy is not Consolidate-like (Expand and None never build
+            /// bunkers) or the planet cannot take another bunker (the cap); otherwise BunkerWeight.
+            /// </summary>
+            private float BunkerThreatMultiplier(string planetName)
+            {
+                if (!IsConsolidateLike(Strategy)) return 0f;
+                var planet = AIMap.GetPlanet(planetName);
+                if (planet == null || !planet.CanBuildBunker()) return 0f;
+                return BunkerWeight(planet);
+            }
+
+            /// <summary>
+            /// The threat weight for a Consolidate-like player: 0 unless an at-war rival is known nearby (its warship or siegeship docked
+            /// on the planet or a direct neighbour, or an outer/chokepoint planet while a known at-war rival planet exists), else
+            /// base x category factor (outer or chokepoint) x blockaded boost x rival-adjacent boost.
+            /// </summary>
+            private float BunkerWeight(Planet planet)
+            {
+                var ctx = BunkerContext();
+                var constants = AIMap.GameAIConstants;
+                var special = ctx.Planner.IsOuter(planet) || ctx.Planner.IsChokepoint(planet);
+                var rivalBeside = HoldsRivalShip(planet, ctx.Rivals)
+                                  || AIMap.GetNeighbours(planet.PlanetName).Any(n => HoldsRivalShip(AIMap.GetPlanet(n), ctx.Rivals));
+                if (!rivalBeside && !(special && ctx.HasKnownEnemyPlanet)) return 0f;
+
+                var weight = constants.bunkerBaseWeight;
+                if (special) weight *= constants.bunkerOuterFactor;
+                if (IsBlockaded(planet.PlanetName)) weight *= constants.bunkerBlockadedBoost;
+                if (rivalBeside) weight *= constants.bunkerRivalAdjacentBoost;
+                return weight;
+            }
+
+            /// <summary>
+            /// Logs BunkerBuilt for a Bunker production that just completed on a planet of mine: the bunker count after it, the cap
+            /// (MaxPopulation) and the threat weight now (0 under Expand/None). A bunker refused at the cap shows count == cap.
+            /// </summary>
+            public void LogBunkerBuilt(int turn, string planetName)
+            {
+                var planet = AIMap.GetPlanet(planetName);
+                if (planet == null) return;
+                _bunkerThreatThisTurn = null;   // the cache may be a turn old; BuildIndustryMatrix resets it again
+                var weight = IsConsolidateLike(Strategy) ? BunkerWeight(planet) : 0f;
+                _bunkerThreatThisTurn = null;
+                AITuningLogger.LogBunkerBuilt(turn, Player.playerID, planetName, planet.BunkerCount(Player.playerID),
+                    planet.MaxPopulation, weight);
+            }
+
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
             {
@@ -1632,6 +2114,17 @@ namespace FlatSpace
                         return ColonyShipUrgentBoost;    // ready to colonize — strongly favour
                     if (IsConsolidateLike(Strategy))
                         return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
+                }
+                if (item.subType == "Bunker")
+                    return BunkerThreatMultiplier(planetName);   // 0 at the cap, under Expand/None, or with no rival nearby
+                if (item.subType == "Siegeship")
+                {
+                    if (_siegeMultiplierThisTurn == null)
+                    {
+                        SiegeMultiplierBuilds++;
+                        _siegeMultiplierThisTurn = ComputeSiegeshipMultiplier(Strategy);
+                    }
+                    return _siegeMultiplierThisTurn.Value;   // 0 under Expand/None or with no known bunker to break
                 }
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
@@ -1737,6 +2230,8 @@ namespace FlatSpace
                     (new ScoreMatrixMultipleDecisionComparer());
 
                 _warshipMultiplierThisTurn = null;   // recomputed lazily by GetIndustrySituationalWeightMultiplier
+                _bunkerThreatThisTurn = null;        // likewise the Bunker threat context
+                _siegeMultiplierThisTurn = null;     // and the Siegeship multiplier
 
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())
@@ -1816,13 +2311,36 @@ namespace FlatSpace
                 var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
 
                 // Nothing is undocked until the orders execute, so a second fleet leaving the same
-                // origin this turn (home defence + assault) must skip the ships the first one takes.
-                var claimedByOrigin = new Dictionary<string, int>();
-                foreach (var action in PlanShipActions(turn, results))
+                // origin this turn (home defence + assault) must skip the ships the first one takes. Claims are per kind: the
+                // skip counts docked ships of the fleet's own kind, so a siegeship fleet never skips past warships.
+                // Escorts launched by ProcessColonizers earlier this turn (Task 15) are the first claims: the planners were already
+                // told about them (PlanShipActions passes them as Reserved / PreDeparting), so their actions never count those ships,
+                // and the emitted fleets skip past them. Nothing is trimmed here; the check below only reports a planner that
+                // overcommitted an escort origin (it should never fire; EmitShipOrders still skips a fleet with too few ships).
+                var escorts = new List<ShipAction>(_escortActions);
+                var claimedByOrigin = new Dictionary<(string origin, Ship.ShipKind kind), int>();
+                foreach (var escort in escorts)
                 {
-                    claimedByOrigin.TryGetValue(action.Origin, out var claimed);
+                    var escortKey = (escort.Origin, escort.Kind);
+                    claimedByOrigin.TryGetValue(escortKey, out var escortClaimed);
+                    claimedByOrigin[escortKey] = escortClaimed + escort.Count;
+                }
+                var actions = PlanShipActions(turn, results);
+                _escortActions.Clear();
+                foreach (var action in actions)
+                {
+                    var key = (action.Origin, action.Kind);
+                    claimedByOrigin.TryGetValue(key, out var claimed);
+                    if (escorts.Exists(e => e.Origin == action.Origin && e.Kind == action.Kind))
+                    {
+                        var origin = AIMap.GetPlanet(action.Origin);
+                        var docked = origin != null ? origin.DockedShips.Count(s => s.Kind == action.Kind && s.Owner == Player.playerID) : 0;
+                        if (docked - claimed < action.Count)
+                            Debug.LogWarning($"Escort reservation overcommitted at {action.Origin}: {action.Count} {action.Kind} planned " +
+                                             $"to {action.Target}, {docked - claimed} left after the escort and earlier claims.");
+                    }
                     EmitShipOrders(action, orders, claimed);
-                    claimedByOrigin[action.Origin] = claimed + action.Count;
+                    claimedByOrigin[key] = claimed + action.Count;
                 }
             }
 
@@ -1995,7 +2513,7 @@ namespace FlatSpace
                 if (!IsConsolidateLike(Strategy))
                 {
                     actions.AddRange(new ShipTransportPlanner(AIMap, Player.playerID)
-                        { Retreating = retreat.Retreating, RefillBlocked = CooldownPlanets(turnNumber) }.Plan());
+                        { Retreating = retreat.Retreating, RefillBlocked = CooldownPlanets(turnNumber), Reserved = EscortReserved() }.Plan());
                     return actions;
                 }
 
@@ -2003,7 +2521,11 @@ namespace FlatSpace
                 var excluded = new HashSet<string>(CooldownPlanets(turnNumber));
                 excluded.UnionWith(retreat.Retreating);
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
-                    AssaultWarFilter()) { ExcludedTargets = excluded };
+                    AssaultWarFilter())
+                {
+                    ExcludedTargets = excluded, SiegeshipGate = CanSendSiegeship,
+                    PreDeparting = new List<ShipAction>(_escortActions),   // escorts leave first (Task 15)
+                };
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
@@ -2027,10 +2549,14 @@ namespace FlatSpace
                     ConversionKeep = conversionKeep,
                     Retreating  = retreat.Retreating,
                     RefillBlocked = CooldownPlanets(turnNumber),
+                    Reserved = EscortReserved(),   // the escorts' ships are already leaving (Task 15)
                 };
                 var homeActions = transport.Plan();
                 actions.AddRange(homeActions);
                 actions.AddRange(assault.Plan(target, transport.LastStates, homeActions));
+                LogSiegeSizing(turnNumber, assault, target, stats);
+                // Read before the conversion-hold audit below runs Plan again (and replaces the planner's gate calls).
+                LogSiegeFollowers(turnNumber, assault.LastSiegeGateCalls);
 
                 var force = assault.LastBlockadeForce;
                 if (blockadeTarget != null && force.Ships > 0)
@@ -2093,7 +2619,7 @@ namespace FlatSpace
                 };
                 // At least 1: a Delayed order with TimingDelay <= 0 is both queued AND executed
                 // immediately by ProcessNewOrders, which would dock the fleet twice.
-                var delay = Math.Max(1, Convert.ToInt32(action.Cost / AIMap.GameAIConstants.defaultTravelSpeed));
+                var delay = TravelDelay(action.Cost);
 
                 var transport = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
                     GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,

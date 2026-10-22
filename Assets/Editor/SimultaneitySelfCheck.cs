@@ -19,6 +19,7 @@ public static class SimultaneitySelfCheck
         ok &= RunLossOrderIndependenceCheck();
         ok &= RunRetreatOrderIndependenceCheck();
         ok &= RunConversionOrderIndependenceCheck();
+        ok &= RunBombardmentOrderIndependenceCheck();
         Debug.Log(ok
             ? "[SimultaneitySelfCheck] ALL PASSED"
             : "[SimultaneitySelfCheck] FAILURES (see errors above)");
@@ -38,11 +39,13 @@ public static class SimultaneitySelfCheck
         public string StrategyAfterRound;                   // before the next turn's ApplyWarState
         public string StrategyNextTurn;                     // after it
         public string Hostility;                            // every pair's hostility after the round (the conversion charge is read through it)
+        public int BombardLosses;                           // WarshipsLost results the bombardment step gave player 0 (attacker 1)
     }
 
     // A(0,0) B C D E F(500,0) in a line. Players 0, 1 and 2 hold A+B, C+D and E+F; each has a food shortage on its first planet
     // and a surplus on its second. Players 0 and 1 are at hostility 100 toward each other (both will declare); player 2 is calm.
-    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false, bool withRetreat = false, bool withConversion = false)
+    private static Dictionary<int, Outcome> RunRound(bool reversed, bool withLosses = false, bool withRetreat = false, bool withConversion = false,
+        bool withBombardment = false)
     {
         var template = WarshipSelfCheck.MakeTemplate();
         var constants = WarshipSelfCheck.MakeConstants(template);
@@ -58,6 +61,7 @@ public static class SimultaneitySelfCheck
             constants.surrenderSteepness = 0.01f;
         }
         var research = WarshipSelfCheck.MakeResearch();
+        ShipData bunkerTemplate = null;
         var mapGo = new GameObject("SimultaneityMap");
         var gos = new List<GameObject> { mapGo };
         try
@@ -153,6 +157,24 @@ public static class SimultaneitySelfCheck
                     ConversionSystem.Resolve(map, conversionStats, constants, t, new List<Planet.UpdateResult>());
                 }
             }
+            if (withBombardment)
+            {
+                // Player 0's two warships sit at D, player 1's planet, guarded only by two bunkers: the bombardment step runs in the
+                // engine step BEFORE any player decides, and its ship losses reach every player through the shared results list.
+                map.Diplomacy.SetStance(0, 1, Stance.War, 0);
+                map.Diplomacy.SetStance(1, 0, Stance.War, 0);
+                bunkerTemplate = ScriptableObject.CreateInstance<ShipData>();
+                bunkerTemplate.shipHealth = 150f; bunkerTemplate.shipHealthMax = 150f;
+                bunkerTemplate.shipDefense = 8f; bunkerTemplate.shipDefenseMax = 8f;
+                bunkerTemplate.shipOffense = 12f; bunkerTemplate.shipOffenseMax = 12f;
+                constants.bunkerData = bunkerTemplate;
+                var d = map.GetPlanet("D");
+                d.DockShipFromSave(Ship.ShipKind.Bunker, 1, new List<string>());
+                d.DockShipFromSave(Ship.ShipKind.Bunker, 1, new List<string>());
+                WarshipSelfCheck.DockWarships(d, 0, 2);
+                map.Knowledge.Update(map, 3, 8);
+                BombardmentSystem.Resolve(map, new WarshipStats(research), constants, results);
+            }
             // Only 0 -> 1: player 1's war is FORCED on it (it never declares), so it can only show up through the committed
             // stance. A design where a stance is written the moment it is decided makes player 1's strategy depend on whether it
             // ran after player 0, which is exactly what this check must catch.
@@ -193,6 +215,8 @@ public static class SimultaneitySelfCheck
                     StrategyNextTurn = ais[p].Strategy.ToString(),
                     Hostility = string.Join(",", Enumerable.Range(0, 3).SelectMany(a => Enumerable.Range(0, 3).Where(r => r != a)
                         .Select(r => $"{a}{r}:{map.Diplomacy.Get(a, r).Hostility:0.###}"))),
+                    BombardLosses = results.Count(x => x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost
+                                                       && x.PlayerID == 0 && x.Data is CombatLoss loss && loss.Attacker == 1),
                 };
             }
             return outcome;
@@ -203,6 +227,7 @@ public static class SimultaneitySelfCheck
             foreach (var go in gos) Object.DestroyImmediate(go);
             Object.DestroyImmediate(constants);
             Object.DestroyImmediate(template);
+            if (bunkerTemplate != null) Object.DestroyImmediate(bunkerTemplate);
         }
     }
 
@@ -262,6 +287,54 @@ public static class SimultaneitySelfCheck
             ok &= Check(forward[p].Stances == reverse[p].Stances, $"with a conversion, player {p}: the same stances");
             ok &= Check(forward[p].Hostility == reverse[p].Hostility, $"with a conversion, player {p}: the same hostility");
         }
+        return ok;
+    }
+
+    // The bombardment runs in the engine step before the players decide: the ship losses it reports must give every player the same
+    // orders, stances and hostility whatever order the players run in. The step itself must not depend on the attackers' dock order.
+    public static bool RunBombardmentOrderIndependenceCheck()
+    {
+        var ok = true;
+        var forward = RunRound(reversed: false, withBombardment: true);
+        var reverse = RunRound(reversed: true, withBombardment: true);
+        ok &= Check(forward[0].BombardLosses == 1 && reverse[0].BombardLosses == 1,
+            "precondition: the bunkers' fire on player 0's ships is in the shared results in both player orders");
+        for (var p = 0; p < 3; ++p)
+        {
+            ok &= Check(forward[p].Orders.SequenceEqual(reverse[p].Orders),
+                $"with a bombardment, player {p}: the same orders whatever the player order\n  forward: {string.Join("; ", forward[p].Orders)}\n  reverse: {string.Join("; ", reverse[p].Orders)}");
+            ok &= Check(forward[p].Stances == reverse[p].Stances, $"with a bombardment, player {p}: the same stances");
+            ok &= Check(forward[p].Hostility == reverse[p].Hostility, $"with a bombardment, player {p}: the same hostility");
+        }
+
+        // Two attackers (players 0 and 2, both at war with 1) docked in either order: the same damage on every unit.
+        string Bombarded(bool swapped)
+        {
+            using (var f = PlanetDefenseSelfCheck.Fixture.Line())
+            {
+                f.Bunkers("A", 1, 2);
+                foreach (var p in swapped ? new[] { 2, 0 } : new[] { 0, 2 })
+                {
+                    f.Ships("A", p, 1);
+                    f.Siege("A", p, 1);
+                }
+                f.War(0, 1);
+                f.War(2, 1);
+                var reports = BombardmentSystem.Resolve(f.Map, f.Stats, f.Constants, new List<Planet.UpdateResult>());
+                var units = f.P("A").DockedShips.GroupBy(s => (s.Owner, s.Kind))
+                    .Select(g => $"{g.Key.Owner}{g.Key.Kind}:{string.Join("/", g.Select(s => s.Damage.ToString("0.####")))}")
+                    .OrderBy(x => x);
+                var lines = reports.Select(r => $"{r.Attacker}->{r.Victim}:{r.BombardDealt:0.####}:{r.ShipDamage:0.####}:{r.BunkersLeft}")
+                    .OrderBy(x => x);
+                return string.Join(";", units) + "|" + string.Join(";", lines);
+            }
+        }
+        var straight = Bombarded(false);
+        var swappedResult = Bombarded(true);
+        ok &= Check(straight.Contains("0->1:") && straight.Contains("2->1:"),
+            "precondition: both attackers bombard the bunker owner");
+        ok &= Check(straight == swappedResult,
+            $"the bombardment is the same whichever attacker docked first\n  straight: {straight}\n  swapped: {swappedResult}");
         return ok;
     }
 

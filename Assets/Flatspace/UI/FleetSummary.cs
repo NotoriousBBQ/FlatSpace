@@ -12,25 +12,41 @@ public static class FleetSummary
     public struct Group
     {
         public int Owner;                 // player id; negative = ownerless
-        public int Count;                 // every docked ship of that owner, warships and colony ships
-        public Ship.ShipKind IconKind;    // WarShip if the owner has any warship here, else ColonyShip
+        public int Count;                 // every docked ship of that owner except bunkers
+        public Ship.ShipKind IconKind;    // WarShip if the owner has any warship here, else SiegeShip if any siegeship, else ColonyShip
     }
 
     /// <summary>One group per owner with ships docked here, ordered by player id with ownerless ships last.</summary>
     public static List<Group> ForPlanet(Planet planet)
     {
         return planet.DockedShips
+            .Where(s => Ship.CountsAsShip(s.Kind))   // bunkers are planetary defenses, not part of any fleet
             .GroupBy(s => s.Owner)
             .Select(g => new Group
             {
                 Owner    = g.Key,
                 Count    = g.Count(),
-                IconKind = g.Any(s => s.Kind == Ship.ShipKind.WarShip)
-                    ? Ship.ShipKind.WarShip : Ship.ShipKind.ColonyShip,
+                IconKind = g.Any(s => s.Kind == Ship.ShipKind.WarShip) ? Ship.ShipKind.WarShip
+                    : g.Any(s => s.Kind == Ship.ShipKind.SiegeShip) ? Ship.ShipKind.SiegeShip
+                    : Ship.ShipKind.ColonyShip,
             })
             .OrderBy(g => g.Owner < 0 ? 1 : 0)
             .ThenBy(g => g.Owner)
             .ToList();
+    }
+
+    /// <summary>The icon sprite for a fleet group's IconKind (or any ship kind); null when that kind has no template.</summary>
+    public static Sprite IconFor(GameAIConstants constants, Ship.ShipKind kind)
+    {
+        ShipData data;
+        switch (kind)
+        {
+            case Ship.ShipKind.WarShip: data = constants.warShipData; break;
+            case Ship.ShipKind.SiegeShip: data = constants.siegeShipData; break;
+            case Ship.ShipKind.Bunker: data = constants.bunkerData; break;
+            default: data = constants.colonyShipData; break;
+        }
+        return data != null ? data.shipIcon : null;
     }
 
     /// <summary>The owning player's color; the neutral color for ownerless or out-of-range owners.</summary>

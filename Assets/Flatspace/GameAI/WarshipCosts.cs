@@ -23,12 +23,19 @@ namespace FlatSpace.AI
         /// items; `baseWarshipCost` is the Warship production item's catalog cost.
         /// </summary>
         public static float ProductionCost(CatalogItem item, Planet planet, int owner,
-            IEnumerable<CatalogItem> research, float baseWarshipCost, float factor)
+            IEnumerable<CatalogItem> research, float baseWarshipCost, float factor,
+            float siegeshipRatio = 1.5f, float bunkerRatio = 1.5f)
         {
             switch (item.subType)
             {
                 case "Warship":
                     return BuildCost(item.cost, factor, WarshipStats.ResearchedNames(research).Count);
+                case "Siegeship":
+                    return BuildCost(baseWarshipCost * siegeshipRatio, factor,
+                        WarshipStats.ResearchedNames(research, "Siegeship").Count);
+                case "Bunker":
+                    return BuildCost(baseWarshipCost * bunkerRatio, factor,
+                        WarshipStats.ResearchedNames(research, "Bunker").Count);
                 case "WarshipUpdate":
                 {
                     var researched = WarshipStats.ResearchedNames(research);

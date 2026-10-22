@@ -55,6 +55,19 @@ namespace FlatSpace
             /// </summary>
             public ISet<string> ExcludedTargets { get; set; }
 
+            /// <summary>
+            /// Ship actions already decided this turn before this plan (escorts launched with a colonist, Task 15). Their ships are not
+            /// spare (ShipTransportPlanner.Reserved takes them out of the states this planner is given); here they are the first ships
+            /// claimed at their origin when the force picks its exact ships (PeekShipSnapshots skip), and they lead the actions the
+            /// siegeship gate is told are departing. Empty (the default) changes nothing.
+            /// </summary>
+            public List<ShipAction> PreDeparting { get; set; } = new List<ShipAction>();
+
+            // Warships of PreDeparting leaving `origin` (claimed before any planned action there).
+            private int PreDepartingWarships(string origin)
+                => PreDeparting == null ? 0
+                    : PreDeparting.Where(a => a.Origin == origin && a.Kind == Ship.ShipKind.WarShip).Sum(a => a.Count);
+
             private bool IsExcluded(string planetName) => ExcludedTargets != null && ExcludedTargets.Contains(planetName);
 
             private bool IsRival(int player) => player != _playerId && (_warRivals == null || _warRivals.Contains(player));
@@ -182,7 +195,7 @@ namespace FlatSpace
             public float HeldOffense(Planet planet) => DockedOffense(planet);
 
             /// <summary>
-            /// Planets I dominate (my warships docked with offense, no warship of a player at war with me) and convert, or could: an
+            /// Planets I dominate (my warships or siegeships docked with bombard, none of a player at war with me) and convert, or could: an
             /// at-war holder still has inhabitants there, or my own conversion session is running with inhabitants of others left (the
             /// non-war tail has no assault target, so only this hold keeps the fleet). Stateless; empty without warship stats and in
             /// legacy mode (nothing converts there). The home plan never strips these planets, so the dominance, and with it the
@@ -194,8 +207,9 @@ namespace FlatSpace
                 if (_stats == null || !_map.Diplomacy.Enabled) return holds;
                 foreach (var planet in _map.PlanetList)
                 {
-                    if (DockedOffense(planet) <= 0f) continue;
+                    if (ConversionSystem.DockedBombard(planet, _playerId, _stats) <= 0f) continue;   // dominance is by bombard
                     if (ConversionSystem.Dominator(planet, _map, _stats) != _playerId) continue;
+                    if (ConversionSystem.HasStuckBunker(planet, _playerId, _map.Diplomacy)) continue;   // conversion can never run here
                     var session = planet.ConversionBy == _playerId && planet.Population.Exists(p => p.Player != _playerId);
                     var atWarHolder = planet.Population.Exists(p => p.Player != _playerId && _map.Diplomacy.IsAtWar(_playerId, p.Player, true));
                     if (session || atWarHolder) holds.Add(planet.PlanetName);
@@ -430,19 +444,210 @@ namespace FlatSpace
                 return sources.OrderBy(s => s.Cost).ThenBy(s => s.Name, StringComparer.Ordinal).ToList();
             }
 
+            // ── Siegeships (assault composition) ─────────────────────────────
+
+            /// <summary>
+            /// The follower gate: may `count` siegeships leave `origin` for `target` now? The fourth argument is every ship action
+            /// already planned this turn before this one (home actions, the warship force, siegeship groups already let through), so
+            /// the gate can count the ships leaving with them. Null (the default) allows every send. PlayerAI sets it to
+            /// PlayerAI.CanSendSiegeship (the arrival projection, PlayerAI.ArrivalNotOutmatched). A refused source is skipped; the next
+            /// source is tried. It must be free of side effects: Plan runs twice a turn (PlayerAI.AuditConversionHolds).
+            /// </summary>
+            public Func<string, string, int, IReadOnlyList<ShipAction>, bool> SiegeshipGate { get; set; }
+
+            /// <summary>One SiegeshipGate call of the last Plan: a siegeship group that was let through (Allowed) or kept where it is.</summary>
+            public struct SiegeGateCall
+            {
+                public string Origin;
+                public string Target;
+                public int Count;
+                public bool Allowed;
+                public List<ShipAction> Departing;   // the actions the gate was given (a copy)
+            }
+
+            /// <summary>The SiegeshipGate calls of the last Plan call, in order (empty without a gate). Log-only reading for PlayerAI.</summary>
+            public List<SiegeGateCall> LastSiegeGateCalls { get; private set; } = new List<SiegeGateCall>();
+
+            /// <summary>A war rival's (any other player's without a war set) bunker is docked here.</summary>
+            private bool HoldsRivalBunker(Planet planet)
+                => planet.DockedShips.Exists(s => s.Kind == Ship.ShipKind.Bunker && s.Owner >= 0 && IsRival(s.Owner));
+
+            /// <summary>
+            /// The summed Defense stat (WarshipStats, the bunker's own research line) of the war rivals' bunkers on the target, as far as I
+            /// can see it: the target must be a planet I know, the way the force sizing sees docked warships. 0 for an unknown planet, with
+            /// no bunkers, or without warship stats.
+            /// </summary>
+            public float KnownBunkerDefense(Planet target)
+            {
+                if (_stats == null || target == null || !_map.Knowledge.IsKnown(_playerId, target.PlanetName)) return 0f;
+                var sum = 0f;
+                foreach (var ship in target.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.Bunker && ship.Owner >= 0 && IsRival(ship.Owner))
+                        sum += _stats.Defense(ship);
+                return sum;
+            }
+
+            /// <summary>
+            /// Bombard the assault wants at the target: the larger of KnownBunkerDefense x siegeBombardMargin and, for a known
+            /// enemy-occupied target, the conversion pace term (siegePaceFraction x conversionBombardReference).
+            /// </summary>
+            public float RequiredBombard(Planet target)
+            {
+                var need = KnownBunkerDefense(target) * _constants.siegeBombardMargin;
+                if (_constants.siegePaceFraction > 0f && target != null && IsEnemyOccupied(target)
+                    && _map.Knowledge.IsKnown(_playerId, target.PlanetName))
+                    need = Math.Max(need, _constants.siegePaceFraction * _constants.conversionBombardReference);
+                return need;
+            }
+
+            private int CountSiegeships(Planet planet)
+                => planet.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip && s.Owner == _playerId);
+
+            /// <summary>My siegeships docked at the target plus those in flight there.</summary>
+            public int CommittedSiegeships(Planet target)
+                => CountSiegeships(target) + target.GetIncomingShips(Ship.ShipKind.SiegeShip, _playerId);
+
+            /// <summary>My siegeships' effective bombard at the target: docked (health-scaled) plus in flight (GetIncomingBombard). 0 without stats.</summary>
+            public float CommittedSiegeBombard(Planet target)
+            {
+                if (_stats == null) return 0f;
+                var sum = target.GetIncomingBombard(Ship.ShipKind.SiegeShip, _playerId);
+                foreach (var ship in target.DockedShips)
+                    if (ship.Kind == Ship.ShipKind.SiegeShip && ship.Owner == _playerId)
+                        sum += _stats.EffectiveBombard(ship);
+                return sum;
+            }
+
+            /// <summary>
+            /// The most siegeships the assault fleet at the target may hold, so they are at most siegeshipMaxFleetShare of warships +
+            /// siegeships: floor(share x W / (1 - share)), W = max(RequiredForce, my warships docked + in flight there). A share of 0 or
+            /// less gives 0, 1 or more no cap (int.MaxValue). The small epsilon keeps a product that is whole in decimal from flooring
+            /// one short.
+            /// </summary>
+            public int SiegeshipCap(Planet target)
+            {
+                var share = _constants.siegeshipMaxFleetShare;
+                if (share <= 0f) return 0;
+                if (share >= 1f) return int.MaxValue;
+                var warships = Math.Max(RequiredForce(),
+                    CountWarships(target) + target.GetIncomingShips(Ship.ShipKind.WarShip, _playerId));
+                return (int)Math.Floor(share * warships / (1f - share) + 1e-4f);
+            }
+
+            /// <summary>
+            /// Siegeships still to send to the target: ceil((RequiredBombard - CommittedSiegeBombard) / bombardPerSiegeship), at most the
+            /// room left under SiegeshipCap (cap - CommittedSiegeships), never below 0. 0 when nothing is needed or a siegeship adds no
+            /// bombard. Production wants CommittedSiegeships + this (PlayerAI.WantedSiegeships).
+            /// </summary>
+            public int WantedSiegeships(Planet target, float bombardPerSiegeship)
+            {
+                if (target == null || bombardPerSiegeship <= 0f) return 0;
+                var remaining = RequiredBombard(target) - CommittedSiegeBombard(target);
+                if (remaining <= 0f) return 0;
+                var need = (int)Math.Ceiling(remaining / bombardPerSiegeship - 1e-4f);
+                var room = Math.Max(0, SiegeshipCap(target) - CommittedSiegeships(target));
+                return Math.Min(need, room);
+            }
+
+            /// <summary>
+            /// The siegeship part of the assault: siegeships docked on my other planets (none from a planet where a war rival's bunker
+            /// stands: they are bombarding it; none from a conversion hold: their bombard sets its conversion pace), cheapest usable path first, each ship counted at its own effective bombard, until the
+            /// bombard still needed is covered or the cap's room is used. Each source is one action of Kind SiegeShip; SiegeshipGate
+            /// may refuse a source (it is given `planned`, the actions planned before, plus the siegeship groups already let through).
+            /// Never waits for anything: with no siegeship available it returns nothing.
+            /// </summary>
+            private List<ShipAction> PlanSiegeships(Planet target, List<ShipAction> planned)
+            {
+                var actions = new List<ShipAction>();
+                if (_stats == null) return actions;
+                var remaining = RequiredBombard(target) - CommittedSiegeBombard(target);
+                var room = Math.Max(0, SiegeshipCap(target) - CommittedSiegeships(target));
+                if (remaining <= 0f || room <= 0) return actions;
+
+                var template = _constants.siegeShipData;
+                var subtype = WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip);
+                // Siegeships at a conversion hold drive its conversion pace (bombard-scaled): they stay. Computed once per call.
+                var conversionHolds = new HashSet<string>(ConversionHolds());
+                var sources = new List<Source>();
+                foreach (var planet in _map.PlanetList)
+                {
+                    if (planet == target) continue;
+                    var docked = CountSiegeships(planet);
+                    if (docked <= 0 || HoldsRivalBunker(planet) || conversionHolds.Contains(planet.PlanetName)) continue;
+                    if (!planet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var entry) || !IsUsablePath(entry)) continue;
+                    sources.Add(new Source { Name = planet.PlanetName, Remaining = docked, Cost = entry.Cost });
+                }
+
+                foreach (var source in sources.OrderBy(s => s.Cost).ThenBy(s => s.Name, StringComparer.Ordinal))
+                {
+                    if (remaining <= 0f || room <= 0) break;
+                    var sourcePlanet = _map.GetPlanet(source.Name);
+                    var available = Math.Min(source.Remaining, room);
+                    var snapshots = sourcePlanet.PeekShipSnapshots(Ship.ShipKind.SiegeShip, _playerId, available);
+                    var damages = sourcePlanet.PeekShipDamage(Ship.ShipKind.SiegeShip, _playerId, available);
+                    var taken = 0;
+                    var bombard = 0f;
+                    for (var i = 0; i < snapshots.Count && remaining - bombard > 0f; i++)
+                    {
+                        bombard += _stats.EffectiveBombard(template, snapshots[i], damages[i], subtype);
+                        taken++;
+                    }
+                    if (taken == 0) continue;
+                    if (SiegeshipGate != null)
+                    {
+                        var departing = new List<ShipAction>(planned);
+                        departing.AddRange(actions);
+                        var allowed = SiegeshipGate(source.Name, target.PlanetName, taken, departing);
+                        LastSiegeGateCalls.Add(new SiegeGateCall
+                        {
+                            Origin = source.Name, Target = target.PlanetName, Count = taken, Allowed = allowed, Departing = departing,
+                        });
+                        if (!allowed) continue;
+                    }
+
+                    actions.Add(new ShipAction
+                    {
+                        Origin = source.Name,
+                        Target = target.PlanetName,
+                        Cost   = source.Cost,
+                        Count  = taken,
+                        Kind   = Ship.ShipKind.SiegeShip,
+                    });
+                    remaining -= bombard;
+                    room -= taken;
+                }
+                return actions;
+            }
+
             /// <summary>
             /// Sends spare ships to the target, cheapest path first. An ordinary target is sized by ship count until the
             /// deficit is met; a blockaded target is sized by real offense until NeededOffense is covered (or every spare
             /// ship is sent). A source's spare is its state's Spare minus what the home actions already send from it.
+            /// Then the siegeship part (PlanSiegeships) is appended as separate actions of Kind SiegeShip: the warships leave
+            /// with what exists whether or not any siegeship is available (no stall), and siegeships that exist go the same turn.
             /// </summary>
             public List<ShipAction> Plan(Planet target, List<ShipTransportPlanner.PlanetState> states,
                 List<ShipAction> homeActions)
             {
                 LastBlockadeForce = default;
-                var actions = new List<ShipAction>();
-                if (target == null) return actions;
+                LastSiegeGateCalls = new List<SiegeGateCall>();
+                if (target == null) return new List<ShipAction>();
+                var actions = PlanWarships(target, states, homeActions);
+                // The siegeship gate sees every ship planned to leave before it: home defence, then the warship force.
+                var planned = new List<ShipAction>(PreDeparting ?? new List<ShipAction>());
+                planned.AddRange(homeActions ?? new List<ShipAction>());
+                planned.AddRange(actions);
+                actions.AddRange(PlanSiegeships(target, planned));
+                return actions;
+            }
 
+            private List<ShipAction> PlanWarships(Planet target, List<ShipTransportPlanner.PlanetState> states,
+                List<ShipAction> homeActions)
+            {
+                var actions = new List<ShipAction>();
+                // A source's warship spare is reduced by the warships already leaving it (siegeship actions do not claim warships).
                 var sentByOrigin = homeActions
+                    .Where(a => a.Kind != Ship.ShipKind.SiegeShip)
                     .GroupBy(a => a.Origin)
                     .ToDictionary(g => g.Key, g => g.Sum(a => a.Count));
 
@@ -485,7 +690,8 @@ namespace FlatSpace
                 foreach (var source in SpareSources(target, states, sentByOrigin))
                 {
                     if (needed <= 0f) break;
-                    sentByOrigin.TryGetValue(source.Name, out var skip);
+                    sentByOrigin.TryGetValue(source.Name, out var sent);
+                    var skip = sent + PreDepartingWarships(source.Name);   // escorts leave first (ProcessShipActions' claims)
                     var sourcePlanet = _map.GetPlanet(source.Name);
                     var snapshots = sourcePlanet.PeekShipSnapshots(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
                     var damages = sourcePlanet.PeekShipDamage(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);

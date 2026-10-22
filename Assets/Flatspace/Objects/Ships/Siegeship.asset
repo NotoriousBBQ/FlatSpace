@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ebcb0eb244e73be40996030808c356ef, type: 3}
+  m_Name: Siegeship
+  m_EditorClassIdentifier: Assembly-CSharp::ShipData
+  shipName: Siegeship
+  shipSpeed: 120
+  shipHealth: 100
+  shipHealthMax: 200
+  shipDefense: 3
+  shipDefenseMax: 9
+  shipOffense: 3
+  shipOffenseMax: 9
+  shipBombard: 20
+  shipBombardMax: 60
+  shipIcon: {fileID: -121797934, guid: 8a7eaf1f6f21bc04b81b8cecf959e874, type: 3}

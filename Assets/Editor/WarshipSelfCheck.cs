@@ -46,6 +46,7 @@ public static class WarshipSelfCheck
         t.shipHealth = 100f; t.shipHealthMax = 200f;
         t.shipDefense = 5f; t.shipDefenseMax = 15f;
         t.shipOffense = 10f; t.shipOffenseMax = 30f;
+        t.shipBombard = 1f; t.shipBombardMax = 3f;
         return t;
     }
 
@@ -229,6 +230,11 @@ public static class WarshipSelfCheck
         constants.warShipData = warship;
         constants.chokepointPercentile = 2f;            // chokepoints off: older checks keep their meaning
         constants.colonizationChokepointWeight = 0f;
+        // Conversion pace scales with docked bombard (default reference 60). The fixture warship has bombard 1, so a reference of 1
+        // keeps the pre-bombard pace (factor 1) for every older conversion check; the bombard checks set their own reference.
+        constants.conversionBombardReference = 1f;
+        constants.dominanceRivalRatio = -1f;   // the old any-rival-ship rule: older checks keep their meaning; the ratio has its own check
+        constants.conversionCarryTurns = 0;   // the carry has its own check; older conversion checks start every session at 0
         return constants;
     }
 
