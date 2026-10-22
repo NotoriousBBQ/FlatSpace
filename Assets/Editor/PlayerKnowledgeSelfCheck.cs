@@ -567,27 +567,31 @@ public static class PlayerKnowledgeSelfCheck
         {
             { "Food", 3.0f }, { "Industry", 2.0f }, { "Grotsits", 1.0f },
             { "Research", 1.0f }, { "ColonyShip", 2.5f }, { "Warship", 1.5f },
+            { "Siegeship", 0.75f }, { "Bunker", 0.5f },
         };
         var consolidateResearch = new Dictionary<string, float>
         {
             { "Food", 1.0f }, { "Industry", 3.0f }, { "Grotsits", 2.0f },
             { "Research", 1.0f }, { "ColonyShip", 0.5f }, { "Warship", 2.5f },
+            { "Siegeship", 2.0f }, { "Bunker", 1.5f },
         };
         var expandIndustry = new Dictionary<string, float>
         {
             { "Food", 2.5f }, { "Industry", 1.5f }, { "Grotsits", 1.0f },
             { "Research", 1.0f }, { "ColonyShip", 2.5f }, { "Warship", 1.5f },
+            { "Siegeship", 0.5f }, { "Bunker", 0.5f },
         };
         var consolidateIndustry = new Dictionary<string, float>
         {
             { "Food", 1.0f }, { "Industry", 2.0f }, { "Grotsits", 1.5f },
             { "Research", 1.0f }, { "ColonyShip", 1.0f }, { "Warship", 2.5f },
+            { "Siegeship", 2.0f }, { "Bunker", 1.5f },
         };
 
         var item = ScriptableObject.CreateInstance<CatalogItem>();
         try
         {
-            foreach (var subType in new[] { "Food", "Industry", "Grotsits", "Research", "ColonyShip", "Warship" })
+            foreach (var subType in new[] { "Food", "Industry", "Grotsits", "Research", "ColonyShip", "Warship", "Siegeship", "Bunker" })
             {
                 item.subType = subType;
                 ok &= Check(

@@ -364,7 +364,8 @@ public static class DiplomacySelfCheck
         {
             CatalogItem I(string subType) { var i = Item(subType); items.Add(i); return i; }
             var research = new (string subType, float weight)[]
-                { ("Food", 1.0f), ("Industry", 2.5f), ("Grotsits", 2.0f), ("Research", 1.0f), ("ColonyShip", 0.5f), ("Warship", 4.0f) };
+                { ("Food", 1.0f), ("Industry", 2.5f), ("Grotsits", 2.0f), ("Research", 1.0f), ("ColonyShip", 0.5f), ("Warship", 4.0f),
+                  ("Siegeship", 3.0f), ("Bunker", 2.0f) };
             foreach (var (subType, weight) in research)
                 ok &= Check(Near(PlayerAI.GetResearchWeight(I(subType), PlayerAI.AIStrategy.AIStrategyAmass), weight),
                     $"Amass research weight for {subType} is {weight}");
@@ -372,7 +373,7 @@ public static class DiplomacySelfCheck
             var industry = new (string subType, float weight)[]
             {
                 ("Food", 1.0f), ("Industry", 1.5f), ("Grotsits", 1.5f), ("Research", 0.5f), ("ColonyShip", 1.0f),
-                ("Warship", 4.0f), ("WarshipUpdate", 4.0f),
+                ("Warship", 4.0f), ("WarshipUpdate", 4.0f), ("Siegeship", 3.0f), ("Bunker", 2.0f),
             };
             foreach (var (subType, weight) in industry)
                 ok &= Check(Near(PlayerAI.GetIndustryStrategyWeight(I(subType), PlayerAI.AIStrategy.AIStrategyAmass), weight),

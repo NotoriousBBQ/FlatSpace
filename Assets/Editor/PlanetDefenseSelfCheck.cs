@@ -24,6 +24,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunConversionGateCheck();
         ok &= RunProjectionBunkerFireCheck();
         ok &= RunSaveRoundTripCheck();
+        ok &= RunNewSubtypeWeightsCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -294,6 +295,73 @@ public static class PlanetDefenseSelfCheck
                         && item.requiredTech == requires && Near(item.cost, 150f),
                 $"{name}: type Ship, subType/effect {subType}, requires {requires}, cost 150");
             ok &= Check(byName.ContainsKey(item.requiredTech), $"{name}: requiredTech exists in the research catalog");
+        }
+        return ok;
+    }
+
+    // Task 11: Siegeship and Bunker have explicit entries in every strategy's industry and research table (a missing key falls
+    // back silently to 1, so the explicit values are asserted and the fallback value is never what is expected), and a choice's
+    // industry weight is the strategy weight times the situational multiplier (Bunker's 0 at the cap is the Task 4 gate).
+    public static bool RunNewSubtypeWeightsCheck()
+    {
+        var ok = true;
+        var strategies = new[] { PlayerAI.AIStrategy.AIStrategyExpand, PlayerAI.AIStrategy.AIStrategyConsolidate, PlayerAI.AIStrategy.AIStrategyAmass };
+        // order: Expand, Consolidate, Amass
+        var table = new (string subType, float[] industry, float[] research)[]
+        {
+            ("Siegeship", new[] { 0.5f, 2.0f, 3.0f }, new[] { 0.75f, 2.0f, 3.0f }),
+            ("Bunker",    new[] { 0.5f, 1.5f, 2.0f }, new[] { 0.5f, 1.5f, 2.0f }),
+        };
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        var playerGo = new GameObject("WeightsCheckPlayer");
+        using var f = Fixture.Line();
+        try
+        {
+            foreach (var (subType, industry, research) in table)
+            {
+                item.subType = subType;
+                for (var i = 0; i < strategies.Length; i++)
+                {
+                    ok &= Check(Near(PlayerAI.GetIndustryStrategyWeight(item, strategies[i]), industry[i]),
+                        $"{strategies[i]} industry weight for {subType} is {industry[i]}");
+                    ok &= Check(Near(PlayerAI.GetResearchWeight(item, strategies[i]), research[i]),
+                        $"{strategies[i]} research weight for {subType} is {research[i]}");
+                }
+            }
+
+            f.Colonize("A", 0);
+            var a = f.P("A");
+            var player = playerGo.AddComponent<Player>();
+            var ai = playerGo.AddComponent<PlayerAI>();
+            ai.Player = player;
+            ai.AIMap = f.Map;
+            player.playerID = 0;
+
+            foreach (var (subType, industry, _) in table)
+            {
+                item.subType = subType;
+                for (var i = 0; i < strategies.Length; i++)
+                {
+                    ai.Strategy = strategies[i];
+                    var situational = ai.GetIndustrySituationalWeightMultiplier(item, "A");
+                    ok &= Check(Near(PlayerAI.GetIndustryStrategyWeight(item, strategies[i]) * situational, industry[i] * situational),
+                        $"{subType} choice weight is strategy weight x situational multiplier at {strategies[i]}");
+                }
+            }
+
+            // The Task 4 gate stays: at the bunker cap the situational multiplier is 0, so the choice weight is 0.
+            item.subType = "Bunker";
+            ai.Strategy = PlayerAI.AIStrategy.AIStrategyAmass;
+            f.Bunkers("A", 0, a.MaxPopulation);
+            ok &= Check(!a.CanBuildBunker()
+                        && Near(PlayerAI.GetIndustryStrategyWeight(item, PlayerAI.AIStrategy.AIStrategyAmass)
+                                * ai.GetIndustrySituationalWeightMultiplier(item, "A"), 0f),
+                "a Bunker at the cap keeps weight 0 whatever the strategy weight");
+        }
+        finally
+        {
+            Object.DestroyImmediate(item);
+            Object.DestroyImmediate(playerGo);
         }
         return ok;
     }

@@ -1275,6 +1275,8 @@ namespace FlatSpace
                     { "Research",      1.0f },  // least useful while expanding
                     { "ColonyShip",    2.5f },  // ships useful but secondary
                     { "Warship",       1.5f },  // Updated priority
+                    { "Siegeship",     0.75f },  // planet defense line: starting point, half of Warship's
+                    { "Bunker",        0.5f },   // starting point
                 };
             private static readonly Dictionary<string, float> ConsolidateResearchWeights =
                 new Dictionary<string, float>
@@ -1285,6 +1287,8 @@ namespace FlatSpace
                     { "Research",      1.0f },  // least useful while expanding
                     { "ColonyShip",    0.5f },  // ships useful but secondary
                     { "Warship",       2.5f },  // Updated priority
+                    { "Siegeship",     2.0f },  // starting point
+                    { "Bunker",        1.5f },  // starting point
                 };
             private static readonly Dictionary<string, float> AmassResearchWeights =
                 new Dictionary<string, float>
@@ -1295,6 +1299,8 @@ namespace FlatSpace
                     { "Research",      1.0f },
                     { "ColonyShip",    0.5f },
                     { "Warship",       4.0f },  // at war: weapons first
+                    { "Siegeship",     3.0f },  // starting point
+                    { "Bunker",        2.0f },  // starting point
                 };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> ResearchWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
@@ -1487,6 +1493,8 @@ namespace FlatSpace
                     { "ColonyShip",    2.5f },  // colony ships needed
                     { "Warship",       1.5f },  // Updated priority
                     { "WarshipUpdate", 1.5f },  // same as Warship
+                    { "Siegeship",     0.5f },  // starting point (planet defense)
+                    { "Bunker",        0.5f },  // starting point
                 };
 
             private static readonly Dictionary<string, float> ConsolidateIndustryWeights =
@@ -1499,6 +1507,8 @@ namespace FlatSpace
                     { "ColonyShip",    1.0f },  // colony ships needed as much
                     { "Warship",       2.5f },  // highest priority
                     { "WarshipUpdate", 2.5f },  // same as Warship
+                    { "Siegeship",     2.0f },  // starting point
+                    { "Bunker",        1.5f },  // starting point
                 };
             private static readonly Dictionary<string, float> AmassIndustryWeights =
                 new Dictionary<string, float>
@@ -1510,6 +1520,8 @@ namespace FlatSpace
                     { "ColonyShip",    1.0f },  // as Consolidate: 0.5 left ~10 planets unclaimed by T375 on 4p.json (arrivals -23%)
                     { "Warship",       4.0f },
                     { "WarshipUpdate", 4.0f },  // same as Warship
+                    { "Siegeship",     3.0f },  // starting point
+                    { "Bunker",        2.0f },  // starting point
                 };
             private static readonly Dictionary<AIStrategy, Dictionary<string, float>> IndustryWeightTable =
                 new Dictionary<AIStrategy, Dictionary<string, float>>
