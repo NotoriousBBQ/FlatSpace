@@ -20,4 +20,6 @@ MonoBehaviour:
   shipDefenseMax: 15
   shipOffense: 10
   shipOffenseMax: 30
+  shipBombard: 1
+  shipBombardMax: 3
   shipIcon: {fileID: -121797934, guid: 8a7eaf1f6f21bc04b81b8cecf959e874, type: 3}
