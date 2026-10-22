@@ -333,6 +333,14 @@ public static class AITuningLogger
             value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>A Bunker production completed: T&lt;turn&gt;|P&lt;id&gt;|BunkerBuilt|planet|count (bunkers of the owner after it)|cap (MaxPopulation)|weight (threat weight now).</summary>
+    public static void LogBunkerBuilt(int turnNumber, int playerId, string planetName, int count, int cap, float weight)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "BunkerBuilt", planetName,
+            count.ToString(), cap.ToString(), weight.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)) });
+    }
+
     /// <summary>An order was cut by a blockade: T&lt;turn&gt;|P&lt;order owner&gt;|OrderBlocked|orderType|planet|amountRemaining (0 = removed).</summary>
     public static void LogOrderBlocked(int turnNumber, int playerId, string orderType, string planetName, float remaining)
     {

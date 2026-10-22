@@ -25,6 +25,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunProjectionBunkerFireCheck();
         ok &= RunSaveRoundTripCheck();
         ok &= RunNewSubtypeWeightsCheck();
+        ok &= RunBunkerThreatWeightCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -362,6 +363,143 @@ public static class PlanetDefenseSelfCheck
         {
             Object.DestroyImmediate(item);
             Object.DestroyImmediate(playerGo);
+        }
+        return ok;
+    }
+
+    // A PlayerAI for player 0 on a fixture's map (a research catalog so RefreshBlockadeView works); destroyed on dispose.
+    private sealed class ThreatAi : System.IDisposable
+    {
+        private readonly GameObject _go = new GameObject("BunkerThreatCheckPlayer");
+        public readonly PlayerAI Ai;
+        public readonly CatalogItem Item = ScriptableObject.CreateInstance<CatalogItem>();
+
+        public ThreatAi(Fixture f, PlayerAI.AIStrategy strategy)
+        {
+            var player = _go.AddComponent<Player>();
+            Ai = _go.AddComponent<PlayerAI>();
+            Ai.Player = player;
+            Ai.AIMap = f.Map;
+            player.playerID = 0;
+            Ai.ResearchCatalog = _go.AddComponent<Catalog>();
+            Ai.ResearchCatalog.catalogItems = f.Research;
+            Ai.Strategy = strategy;
+            Item.subType = "Bunker";
+        }
+
+        public float Weight(string planet) => Ai.GetIndustrySituationalWeightMultiplier(Item, planet);
+
+        public void Dispose()
+        {
+            Object.DestroyImmediate(Item);
+            Object.DestroyImmediate(_go);
+        }
+    }
+
+    // Task 12: the threat-weighted Bunker situational multiplier (defaults: base 1, outer/chokepoint factor 2, blockaded boost 3,
+    // rival-adjacent boost 2). Line map A-B-C-D, player 0 colonizes A, B, C (D empty): C is outer, A and B are interior; the
+    // chokepoint percentile is set above 1 so no planet is a chokepoint.
+    public static bool RunBunkerThreatWeightCheck()
+    {
+        var ok = true;
+        var consolidate = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+        using (var f = Fixture.Line())
+        {
+            ok &= Check(Near(f.Constants.bunkerBaseWeight, 1f) && Near(f.Constants.bunkerOuterFactor, 2f)
+                        && Near(f.Constants.bunkerBlockadedBoost, 3f) && Near(f.Constants.bunkerRivalAdjacentBoost, 2f),
+                "the bunker tunables default to 1, 2, 3 and 2");
+        }
+
+        // Rival warships docked on B and C, at war: A (beside B) and B (on it) are interior, C is outer.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 2f;
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0);
+            f.Ships("B", 1, 1); f.Ships("C", 1, 1);
+            f.War(0, 1);
+
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                ok &= Check(Near(t.Weight("A"), 2f), "interior planet beside a rival ship: 1 x 1 x 2 = 2");
+                ok &= Check(Near(t.Weight("B"), 2f), "interior planet holding a rival ship: 1 x 1 x 2 = 2");
+                ok &= Check(Near(t.Weight("C"), 4f), "outer planet holding a rival ship: 1 x 2 x 2 = 4");
+                ok &= Check(t.Weight("C") > t.Weight("B"), "an outer planet outweighs an interior one under the same threat");
+                ok &= Check(t.Ai.BunkerThreatContextBuilds == 1, "the per-turn threat context is built once for three planets");
+            }
+            using (var t = new ThreatAi(f, PlayerAI.AIStrategy.AIStrategyAmass))
+                ok &= Check(Near(t.Weight("C"), 4f), "Amass is Consolidate-like: the same weight");
+            foreach (var strategy in new[] { PlayerAI.AIStrategy.AIStrategyExpand, PlayerAI.AIStrategy.AIStrategyNone })
+            {
+                using var t = new ThreatAi(f, strategy);
+                ok &= Check(t.Weight("A") == 0f && t.Weight("B") == 0f && t.Weight("C") == 0f,
+                    $"{strategy} never builds bunkers: weight 0 even with rivals beside");
+            }
+
+            // At the cap: C is full (cap = MaxPopulation), the others are not.
+            var cap = f.P("C").MaxPopulation;
+            f.Bunkers("C", 0, cap);
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                ok &= Check(!f.P("C").CanBuildBunker() && t.Weight("C") == 0f, "a planet at the bunker cap has weight 0");
+                ok &= Check(Near(t.Weight("B"), 2f), "a planet below the cap keeps its weight");
+            }
+        }
+
+        // No war: nothing is nearby. At war but no rival ship or planet known: still 0, even on the outer planet.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 2f;
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0);
+            f.Ships("B", 1, 1); f.Ships("C", 1, 1);   // rival ships, but no stance toward them
+            using (var t = new ThreatAi(f, consolidate))
+                ok &= Check(t.Weight("A") == 0f && t.Weight("B") == 0f && t.Weight("C") == 0f,
+                    "rival ships we are not at war with are no threat: weight 0");
+        }
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 2f;
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0);
+            f.War(0, 1);
+            f.Map.Knowledge.Update(f.Map, 2);
+            using (var t = new ThreatAi(f, consolidate))
+                ok &= Check(t.Weight("A") == 0f && t.Weight("B") == 0f && t.Weight("C") == 0f,
+                    "at war but no rival ship or planet known: weight 0 everywhere");
+        }
+
+        // A known rival planet beside the outer planet C: only outer (or chokepoint) planets get a weight, with no adjacent boost.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 2f;
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0); f.Colonize("D", 1);
+            f.War(0, 1);
+            f.Map.Knowledge.Update(f.Map, 2);
+            ok &= Check(f.Map.Knowledge.IsKnown(0, "D"), "precondition: player 0 knows the rival's planet D");
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                ok &= Check(Near(t.Weight("C"), 2f), "outer planet with a known rival planet and no ship beside: 1 x 2 = 2");
+                ok &= Check(t.Weight("B") == 0f && t.Weight("A") == 0f, "interior planets with no rival ship nearby: 0");
+            }
+        }
+
+        // Blockaded: two rival warships on C against none of mine. Without the view 1 x 2 x 2 = 4; blockaded the boost x3 = 12.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 2f;
+            f.Colonize("B", 0); f.Colonize("C", 0);
+            f.Ships("C", 1, 2);
+            f.War(0, 1);
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                ok &= Check(Near(t.Weight("C"), 4f), "precondition: before the blockade view exists the weight is 4");
+            }
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                t.Ai.RefreshBlockadeView(0);
+                ok &= Check(t.Ai.CurrentBlockadeView.IsBlockaded("C"), "precondition: C is blockaded against player 0");
+                ok &= Check(Near(t.Weight("C"), 12f), "a blockaded outer planet with a rival ship: 1 x 2 x 3 x 2 = 12");
+                ok &= Check(t.Weight("C") > 4f, "the blockade boosts the bunker weight");
+            }
         }
         return ok;
     }

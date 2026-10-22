@@ -1630,6 +1630,85 @@ namespace FlatSpace
             // production turn: the first Warship choice evaluated fills it, BuildIndustryMatrix resets it.
             private float? _warshipMultiplierThisTurn;
 
+            // The per-turn part of the Bunker weight (my war rivals, whether a known rival planet exists, the garrison categories). It
+            // reads many planets, so it is built once per production turn: the first Bunker choice evaluated fills it,
+            // BuildIndustryMatrix resets it. BunkerThreatContextBuilds counts the builds (the self-check's once-per-turn proof).
+            private sealed class BunkerThreatContext
+            {
+                public ISet<int> Rivals;
+                public bool HasKnownEnemyPlanet;
+                public ShipTransportPlanner Planner;
+            }
+
+            private BunkerThreatContext _bunkerThreatThisTurn;
+
+            public int BunkerThreatContextBuilds { get; private set; }
+
+            private BunkerThreatContext BunkerContext()
+            {
+                if (_bunkerThreatThisTurn != null) return _bunkerThreatThisTurn;
+                BunkerThreatContextBuilds++;
+                _bunkerThreatThisTurn = new BunkerThreatContext
+                {
+                    Rivals = WarRivals(),
+                    HasKnownEnemyPlanet = new AssaultPlanner(AIMap, Player.playerID, warRivals: AssaultWarFilter()).HasKnownEnemyPlanet(),
+                    Planner = new ShipTransportPlanner(AIMap, Player.playerID, Strategy),
+                };
+                return _bunkerThreatThisTurn;
+            }
+
+            private static bool HoldsRivalShip(Planet planet, ISet<int> rivals)
+                => planet != null && planet.DockedShips.Exists(s =>
+                    (s.Kind == Ship.ShipKind.WarShip || s.Kind == Ship.ShipKind.SiegeShip) && s.Owner >= 0 && rivals.Contains(s.Owner));
+
+            /// <summary>
+            /// The situational Bunker production weight: 0 when the strategy is not Consolidate-like (Expand and None never build
+            /// bunkers) or the planet cannot take another bunker (the cap); otherwise BunkerWeight.
+            /// </summary>
+            private float BunkerThreatMultiplier(string planetName)
+            {
+                if (!IsConsolidateLike(Strategy)) return 0f;
+                var planet = AIMap.GetPlanet(planetName);
+                if (planet == null || !planet.CanBuildBunker()) return 0f;
+                return BunkerWeight(planet);
+            }
+
+            /// <summary>
+            /// The threat weight for a Consolidate-like player: 0 unless an at-war rival is known nearby (its warship or siegeship docked
+            /// on the planet or a direct neighbour, or an outer/chokepoint planet while a known at-war rival planet exists), else
+            /// base x category factor (outer or chokepoint) x blockaded boost x rival-adjacent boost.
+            /// </summary>
+            private float BunkerWeight(Planet planet)
+            {
+                var ctx = BunkerContext();
+                var constants = AIMap.GameAIConstants;
+                var special = ctx.Planner.IsOuter(planet) || ctx.Planner.IsChokepoint(planet);
+                var rivalBeside = HoldsRivalShip(planet, ctx.Rivals)
+                                  || AIMap.GetNeighbours(planet.PlanetName).Any(n => HoldsRivalShip(AIMap.GetPlanet(n), ctx.Rivals));
+                if (!rivalBeside && !(special && ctx.HasKnownEnemyPlanet)) return 0f;
+
+                var weight = constants.bunkerBaseWeight;
+                if (special) weight *= constants.bunkerOuterFactor;
+                if (IsBlockaded(planet.PlanetName)) weight *= constants.bunkerBlockadedBoost;
+                if (rivalBeside) weight *= constants.bunkerRivalAdjacentBoost;
+                return weight;
+            }
+
+            /// <summary>
+            /// Logs BunkerBuilt for a Bunker production that just completed on a planet of mine: the bunker count after it, the cap
+            /// (MaxPopulation) and the threat weight now (0 under Expand/None). A bunker refused at the cap shows count == cap.
+            /// </summary>
+            public void LogBunkerBuilt(int turn, string planetName)
+            {
+                var planet = AIMap.GetPlanet(planetName);
+                if (planet == null) return;
+                _bunkerThreatThisTurn = null;   // the cache may be a turn old; BuildIndustryMatrix resets it again
+                var weight = IsConsolidateLike(Strategy) ? BunkerWeight(planet) : 0f;
+                _bunkerThreatThisTurn = null;
+                AITuningLogger.LogBunkerBuilt(turn, Player.playerID, planetName, planet.BunkerCount(Player.playerID),
+                    planet.MaxPopulation, weight);
+            }
+
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
             public float GetIndustrySituationalWeightMultiplier(CatalogItem item, string planetName)
             {
@@ -1646,8 +1725,8 @@ namespace FlatSpace
                     if (IsConsolidateLike(Strategy))
                         return ColonyShipUrgentBoost;    // targets remain: keep expanding even before the planet is ready
                 }
-                if (item.subType == "Bunker" && !AIMap.GetPlanet(planetName).CanBuildBunker())
-                    return 0f;                           // at the bunker cap (MaxPopulation) or no owner — do not offer it
+                if (item.subType == "Bunker")
+                    return BunkerThreatMultiplier(planetName);   // 0 at the cap, under Expand/None, or with no rival nearby
                 if (item.type == "Improvement" && !AIMap.GetPlanet(planetName).CanAffordImprovement(item))
                     return 0f;                           // its upkeep would sink the planet's grotsits — do not offer it
                 var blockaded = IsBlockaded(planetName);
@@ -1752,6 +1831,7 @@ namespace FlatSpace
                     (new ScoreMatrixMultipleDecisionComparer());
 
                 _warshipMultiplierThisTurn = null;   // recomputed lazily by GetIndustrySituationalWeightMultiplier
+                _bunkerThreatThisTurn = null;        // likewise the Bunker threat context
 
                 var decisionIndex = 0;
                 foreach (var planetName in productionCompleteResults.Select(x => x.Name).Distinct())

@@ -154,6 +154,7 @@ namespace FlatSpace
                 RunFightProjections(planetUpdateResults);
                 UpdateAllPlanets(planetUpdateResults);
                 AITuningLogger.LogPlanetEvents(Gameboard.Instance.TurnNumber, planetUpdateResults);
+                LogBunkersBuilt(Gameboard.Instance.TurnNumber, planetUpdateResults);
                 LogGrotsitsShortChanges(Gameboard.Instance.TurnNumber);
                 LogEconomySummary(Gameboard.Instance.TurnNumber, Gameboard.Instance.players.Count);
                 GameAIMap.Knowledge.Update(GameAIMap, Gameboard.Instance.players.Count,
@@ -276,6 +277,21 @@ namespace FlatSpace
                             results.Add(new Planet.UpdateResult(planet.PlanetName,
                                 Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection, projection, owner));
                     }
+                }
+            }
+
+            // One BunkerBuilt line per completed Bunker production (it fires once per completion, so no tracker is needed).
+            private void LogBunkersBuilt(int turnNumber, List<Planet.UpdateResult> results)
+            {
+                foreach (var result in results)
+                {
+                    if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete) continue;
+                    if (result.PlayerID < 0 || result.PlayerID >= Gameboard.Instance.players.Count) continue;
+                    var ai = Gameboard.Instance.players[result.PlayerID].playerAI;
+                    var itemName = result.Data as string;
+                    if (ai == null || ai.ProductionCatalog == null || itemName == null) continue;
+                    var item = ai.ProductionCatalog.catalogItems.Find(x => x.itemName == itemName);
+                    if (item != null && item.subType == "Bunker") ai.LogBunkerBuilt(turnNumber, result.Name);
                 }
             }
 

@@ -67,6 +67,18 @@ public class GameAIConstants : ScriptableObject
     // (nothing to upgrade) stays 0.
     public float blockadedWarshipBoost = 3f;
 
+    [Header("Bunker building (Consolidate and Amass)")]
+    // Base of the situational Bunker production weight (it multiplies the strategy table's Bunker value). The weight is 0 unless an
+    // at-war rival is known nearby: its warship/siegeship docked on or beside the planet, or an outer/chokepoint planet while a
+    // known at-war rival planet exists. Expand and None never build bunkers.
+    public float bunkerBaseWeight = 1f;
+    // Multiplier for an outer planet or a colonized chokepoint (the garrison planner's categories); other planets use 1.
+    public float bunkerOuterFactor = 2f;
+    // Multiplier on a planet that is blockaded against its owner (a bunker raises the cost of staying put).
+    public float bunkerBlockadedBoost = 3f;
+    // Multiplier when an at-war rival's docked warship or siegeship is on the planet or on a direct neighbour.
+    public float bunkerRivalAdjacentBoost = 2f;
+
     [Header("Blockade breaking (Consolidate)")]
     // A planet that cut one of my orders within this many turns ranks first among blockade-breaking targets (after the
     // planet where I already have the most offense committed). Read from the player's BlockadeMemory.
