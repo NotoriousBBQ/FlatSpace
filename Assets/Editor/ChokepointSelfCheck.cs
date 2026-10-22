@@ -263,6 +263,9 @@ public static class ChokepointSelfCheck
             "the Chokepoints field is name=betweenness%percentile joined by commas");
         ok &= Check(AITuningLogger.FormatChokepointList(new (string, int, float)[0]) == "-",
             "an empty list is logged as -");
+        ok &= Check(AITuningLogger.FormatChokepointAssault(40, 0, "Ocean 2", 100f, 1f, "Normal 4", 80f)
+                    == "T40|P0|ChokepointAssault|Ocean 2|100|1.00|Normal 4|80",
+            "ChokepointAssault is target|pathCost|percentile|nearestTarget|nearestCost with costs as 0.# and the percentile as 0.00");
         return ok;
     }
 

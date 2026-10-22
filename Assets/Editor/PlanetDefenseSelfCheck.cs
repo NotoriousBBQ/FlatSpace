@@ -26,6 +26,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunSaveRoundTripCheck();
         ok &= RunNewSubtypeWeightsCheck();
         ok &= RunBunkerThreatWeightCheck();
+        ok &= RunBunkerChokepointCheck();
         ok &= RunSiegeSizingCheck();
         ok &= RunSiegeshipWeightCheck();
         ok &= RunAssaultCompositionCheck();
@@ -403,7 +404,63 @@ public static class PlanetDefenseSelfCheck
         }
     }
 
-    // Task 12: the threat-weighted Bunker situational multiplier (defaults: base 1, outer/chokepoint factor 2, blockaded boost 3,
+    // Chokepoint weighting: on the line A-B-C-D, B and C tie at percentile 0.67 (A and D are leaves), so 0.6 makes exactly B and C
+    // chokepoints; C is also outer (D is empty), B interior. Rival warships docked on B and C, at war.
+    public static bool RunBunkerChokepointCheck()
+    {
+        var ok = true;
+        var consolidate = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 0.6f;
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0);
+            f.Ships("B", 1, 1); f.Ships("C", 1, 1);
+            f.War(0, 1);
+            ok &= Check(f.Map.IsChokepoint("B") && f.Map.IsChokepoint("C") && !f.Map.IsChokepoint("A"),
+                "precondition: B and C are chokepoints, A is not");
+
+            using (var t = new ThreatAi(f, consolidate))
+            {
+                ok &= Check(Near(t.Weight("A"), 2f), "a non-chokepoint interior planet beside a rival ship is unchanged: 1 x 1 x 2 = 2");
+                ok &= Check(Near(t.Weight("B"), 6f), "an interior chokepoint holding a rival ship: 1 x 3 x 2 = 6");
+                ok &= Check(Near(t.Weight("C"), 6f), "an outer chokepoint takes the larger factor (3 over 2), not the product: 1 x 3 x 2 = 6");
+            }
+
+            f.Constants.bunkerChokepointFactor = 2f;
+            using (var t = new ThreatAi(f, consolidate))
+                ok &= Check(Near(t.Weight("B"), 4f), "chokepoint factor 2: 1 x 2 x 2 = 4 (the factor is flat, not scaled by percentile)");
+            f.Constants.bunkerChokepointFactor = 1f;
+            using (var t = new ThreatAi(f, consolidate))
+                ok &= Check(Near(t.Weight("B"), 2f), "chokepoint factor 1: B is weighted as an interior planet again");
+
+            f.Constants.bunkerChokepointFactor = 3f;
+            f.Constants.bunkerOuterFactor = 5f;
+            using (var t = new ThreatAi(f, consolidate))
+                ok &= Check(Near(t.Weight("C"), 10f), "outer 5 beats chokepoint 3 on a planet that is both: 1 x 5 x 2 = 10, not 30");
+        }
+
+        // The gate is unchanged: a chokepoint with no rival ship nearby and no known enemy planet still gets nothing.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.chokepointPercentile = 0.6f;
+            f.Colonize("A", 0); f.Colonize("B", 0); f.Colonize("C", 0);
+            f.War(0, 1);
+            f.Map.Knowledge.Update(f.Map, 2);
+            using (var t = new ThreatAi(f, consolidate))
+                ok &= Check(t.Weight("B") == 0f && t.Weight("C") == 0f,
+                    "a chokepoint with no rival nearby and no known enemy planet: weight 0");
+        }
+
+        // The log line carries the chokepoint flag as the trailing field.
+        ok &= Check(AITuningLogger.FormatBunkerBuilt(12, 1, "Normal 2", 3, 7, 6f, true) == "T12|P1|BunkerBuilt|Normal 2|3|7|6|1",
+            "BunkerBuilt ends with chokepoint 1");
+        ok &= Check(AITuningLogger.FormatBunkerBuilt(12, 1, "Normal 2", 3, 7, 6f, false) == "T12|P1|BunkerBuilt|Normal 2|3|7|6|0",
+            "BunkerBuilt ends with chokepoint 0");
+        return ok;
+    }
+
+    // Task 12: the threat-weighted Bunker situational multiplier (defaults: base 1, outer factor 2, chokepoint factor 3, blockaded boost 3,
     // rival-adjacent boost 2). Line map A-B-C-D, player 0 colonizes A, B, C (D empty): C is outer, A and B are interior; the
     // chokepoint percentile is set above 1 so no planet is a chokepoint.
     public static bool RunBunkerThreatWeightCheck()
@@ -414,8 +471,9 @@ public static class PlanetDefenseSelfCheck
         using (var f = Fixture.Line())
         {
             ok &= Check(Near(f.Constants.bunkerBaseWeight, 1f) && Near(f.Constants.bunkerOuterFactor, 2f)
-                        && Near(f.Constants.bunkerBlockadedBoost, 3f) && Near(f.Constants.bunkerRivalAdjacentBoost, 2f),
-                "the bunker tunables default to 1, 2, 3 and 2");
+                        && Near(f.Constants.bunkerBlockadedBoost, 3f) && Near(f.Constants.bunkerRivalAdjacentBoost, 2f)
+                        && Near(f.Constants.bunkerChokepointFactor, 3f),
+                "the bunker tunables default to 1, 2, 3 and 2, with a chokepoint factor of 3");
         }
 
         // Rival warships docked on B and C, at war: A (beside B) and B (on it) are interior, C is outer.

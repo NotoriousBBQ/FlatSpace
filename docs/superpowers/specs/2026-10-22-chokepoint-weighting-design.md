@@ -76,7 +76,7 @@ Minimizing: the sticky rule is untouched; the weight starts moderate; both tunab
 - `assaultChokepointWeight` (0.5 start, <= 0 off)
 - `bunkerChokepointFactor` (3 start; a non-chokepoint outer planet keeps `bunkerOuterFactor` 2)
 
-Owner decision 2026-10-22: the sticky rule stays first (reading (a)); the assault tilt only decides among targets with equal committed ships, so expect a modest effect and
+Owner decision 2026-10-22: the sticky rule stays first (reading (a)); the assault tilt only decides among targets with no ships of mine committed, so expect a modest effect and
 a rare `ChokepointAssault` line. Letting a chokepoint outrank a target with some committed ships is not built; revisit if the logs show too little effect.
 
 ## Tuning log output
