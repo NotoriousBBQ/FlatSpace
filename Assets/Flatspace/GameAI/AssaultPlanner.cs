@@ -512,7 +512,7 @@ namespace FlatSpace
 
             /// <summary>
             /// The siegeship part of the assault: siegeships docked on my other planets (none from a planet where a war rival's bunker
-            /// stands: they are bombarding it), cheapest usable path first, each ship counted at its own effective bombard, until the
+            /// stands: they are bombarding it; none from a conversion hold: their bombard sets its conversion pace), cheapest usable path first, each ship counted at its own effective bombard, until the
             /// bombard still needed is covered or the cap's room is used. Each source is one action of Kind SiegeShip; SiegeshipGate
             /// may refuse a source. Never waits for anything: with no siegeship available it returns nothing.
             /// </summary>
@@ -526,12 +526,14 @@ namespace FlatSpace
 
                 var template = _constants.siegeShipData;
                 var subtype = WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip);
+                // Siegeships at a conversion hold drive its conversion pace (bombard-scaled): they stay. Computed once per call.
+                var conversionHolds = new HashSet<string>(ConversionHolds());
                 var sources = new List<Source>();
                 foreach (var planet in _map.PlanetList)
                 {
                     if (planet == target) continue;
                     var docked = CountSiegeships(planet);
-                    if (docked <= 0 || HoldsRivalBunker(planet)) continue;
+                    if (docked <= 0 || HoldsRivalBunker(planet) || conversionHolds.Contains(planet.PlanetName)) continue;
                     if (!planet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var entry) || !IsUsablePath(entry)) continue;
                     sources.Add(new Source { Name = planet.PlanetName, Remaining = docked, Cost = entry.Cost });
                 }

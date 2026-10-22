@@ -684,6 +684,35 @@ public static class PlanetDefenseSelfCheck
                 "the Task 14 seam: a refused source is skipped, the next one sends, the warships are unaffected");
         }
 
+        // Fix round 1: siegeships at a conversion hold stay (their bombard is its conversion pace). C gets an inhabitant of player 1
+        // (at war): my 2 siegeships there dominate it (no rival ship, no bunker), so C is a ConversionHold and not a source. A is
+        // not a hold (only my inhabitants), so its 2 siegeships go (cap 3, need 130 > 40). Control: the same fixture without the
+        // rival inhabitant has no conversion holds and gives C 2 + A 1, as above.
+        using (var f = BunkeredLine(true))
+        {
+            f.Ships("B", 0, 5); f.Siege("C", 0, 2); f.Siege("A", 0, 2);
+            f.P("C").Population.Add(new Planet.Inhabitant { Player = 1 });
+            var assault = SiegePlanner(f);
+            var holds = assault.ConversionHolds();
+            ok &= Check(holds.Count == 1 && holds[0] == "C", "precondition: C (dominated, an at-war inhabitant left) is the only conversion hold");
+            var actions = PlanAt(f, assault, "D");
+            ok &= Check(actions.Count == 2
+                        && actions.Exists(a => a.Kind == Ship.ShipKind.WarShip && a.Origin == "B" && a.Count == 3)
+                        && actions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "A" && a.Count == 2)
+                        && !actions.Exists(a => a.Origin == "C"),
+                "siegeships at the conversion hold C stay; A's 2 (not a hold) go with the 3 warships");
+        }
+        using (var f = BunkeredLine(true))
+        {
+            f.Ships("B", 0, 5); f.Siege("C", 0, 2); f.Siege("A", 0, 2);
+            var assault = SiegePlanner(f);
+            ok &= Check(assault.ConversionHolds().Count == 0, "control: no conversion holds without a rival inhabitant");
+            var actions = PlanAt(f, assault, "D");
+            ok &= Check(actions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "C" && a.Count == 2)
+                        && actions.Exists(a => a.Kind == Ship.ShipKind.SiegeShip && a.Origin == "A" && a.Count == 1),
+                "control: with no conversion hold the plan is unchanged (C 2, A 1)");
+        }
+
         // No siegeship exists: the warships leave alone, the same force (no stall).
         using (var f = BunkeredLine(true))
         {
