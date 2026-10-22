@@ -6,8 +6,13 @@ public class Ship : MonoBehaviour
     public enum ShipKind
     {
         ColonyShip,
-        WarShip
+        WarShip,
+        SiegeShip,
+        Bunker
     }
+
+    // Kinds that fight in ship combat (Bunkers defend planets through their own rules).
+    public static bool IsFightingKind(ShipKind k) => k == ShipKind.WarShip || k == ShipKind.SiegeShip;
 
     public ShipKind Kind;
     public int Owner = Planet.NoOwner;

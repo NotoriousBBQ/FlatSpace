@@ -14,6 +14,13 @@ public class GameAIConstants : ScriptableObject
     public List<PlanetResourceData> resourceData;
     public ShipData colonyShipData;
     public ShipData warShipData;
+    public ShipData siegeShipData;
+    public ShipData bunkerData;
+
+    [Header("Planet defense")]
+    // Siegeship and Defense Bunker catalog cost as a multiple of the Warship catalog cost.
+    public float siegeshipCostRatio = 1.5f;
+    public float bunkerCostRatio = 1.5f;
 
     [Header("Ship transport")]
     // Longest trip (path node count) a ship transport may take.

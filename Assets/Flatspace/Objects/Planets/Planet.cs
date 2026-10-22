@@ -1010,9 +1010,15 @@ public class Planet : MonoBehaviour
 
     private Ship CreateShip(Ship.ShipKind kind, int owner)
     {
-        var template = kind == Ship.ShipKind.ColonyShip
-            ? GameAIConstants.colonyShipData
-            : GameAIConstants.warShipData;
+        ShipData template;
+        switch (kind)
+        {
+            case Ship.ShipKind.ColonyShip: template = GameAIConstants.colonyShipData; break;
+            case Ship.ShipKind.WarShip: template = GameAIConstants.warShipData; break;
+            case Ship.ShipKind.SiegeShip: template = GameAIConstants.siegeShipData; break;
+            case Ship.ShipKind.Bunker: template = GameAIConstants.bunkerData; break;
+            default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, null);
+        }
         var ship = this.AddComponent<Ship>();
         ship.Kind = kind;
         ship.Owner = owner;
