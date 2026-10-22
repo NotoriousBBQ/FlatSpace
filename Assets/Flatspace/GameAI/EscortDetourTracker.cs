@@ -14,12 +14,14 @@ namespace FlatSpace.AI
     {
         public const string ReasonNoSpare = "NoSpare";            // no spare warship at the origin
         public const string ReasonShortOffense = "ShortOffense";  // spare warships, but their offense is below the blockade x (1 + margin)
+        public const string ReasonFight = "Fight";                // the origin has a fight projection of mine this turn: a retreat may need
+                                                                  // its ships, and a retreat has priority, so it escorts nothing
 
         public struct Entry
         {
             public string Origin;
             public string Target;
-            public string Reason;   // ReasonNoSpare or ReasonShortOffense
+            public string Reason;   // ReasonNoSpare, ReasonShortOffense or ReasonFight
         }
 
         private readonly Dictionary<string, string> _state = new Dictionary<string, string>();

@@ -771,14 +771,25 @@ namespace FlatSpace
 
             // ── Escorted colonists (Task 15, escort option B) ─────────────────
 
-            // Warships an escort took this turn, per (origin, kind): ProcessColonizers fills it, ProcessShipActions (later in the same
-            // routine) starts its claims from it and clears it. Nothing undocks until the orders execute, so without it the ship planners
-            // would send the escort's ships a second time.
-            private readonly Dictionary<(string origin, Ship.ShipKind kind), int> _escortClaims
-                = new Dictionary<(string origin, Ship.ShipKind kind), int>();
-            // Per escort origin, the spare warships the escort left (its planning-time spare minus the escort): the most the ship
-            // planners may still send from there this turn. Filled and consumed like _escortClaims.
-            private readonly Dictionary<string, int> _escortSpareLeft = new Dictionary<string, int>();
+            // The escorts emitted this turn (one ShipAction each, as EmitShipOrders sent it). ProcessColonizers runs first in the routine
+            // (ProcessResultsStrategyExpand: ProcessColonizers, ..., ProcessShipActions) and fills it; PlanShipActions hands it to the
+            // planners BEFORE they plan (ShipTransportPlanner.Reserved, AssaultPlanner.PreDeparting), so sizing, the siegeship gate's
+            // projection and the emitted actions all see the escort's ships as gone; ProcessShipActions starts its claims from it and
+            // clears it. Nothing undocks until the orders execute, so without it the escort's ships would be sent a second time.
+            private readonly List<ShipAction> _escortActions = new List<ShipAction>();
+
+            /// <summary>The escorts' warships per origin (the planners' Reserved map). Empty when no escort left this turn.</summary>
+            private Dictionary<string, int> EscortReserved()
+            {
+                var reserved = new Dictionary<string, int>();
+                foreach (var escort in _escortActions)
+                {
+                    if (escort.Kind != Ship.ShipKind.WarShip) continue;
+                    reserved.TryGetValue(escort.Origin, out var count);
+                    reserved[escort.Origin] = count + escort.Count;
+                }
+                return reserved;
+            }
 
             // Log-only: declined escorts, reported on change only (EscortDetour).
             private readonly EscortDetourTracker _escortDetours = new EscortDetourTracker();
@@ -788,7 +799,7 @@ namespace FlatSpace
 
             /// <summary>The escort ships ProcessColonizers claimed this turn per origin (warships), not yet consumed by ProcessShipActions. Public for the self-check.</summary>
             public int EscortClaimed(string origin)
-                => _escortClaims.TryGetValue((origin, Ship.ShipKind.WarShip), out var claimed) ? claimed : 0;
+                => EscortReserved().TryGetValue(origin, out var claimed) ? claimed : 0;
 
             /// <summary>
             /// Spare warships per planet for an escort: the garrison planner's states built the way PlanShipActions builds them (the
@@ -849,8 +860,7 @@ namespace FlatSpace
                 List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
-                _escortClaims.Clear();   // a new turn's escorts (ProcessShipActions consumes them later in this routine)
-                _escortSpareLeft.Clear();
+                _escortActions.Clear();   // a new turn's escorts (ProcessShipActions consumes them later in this routine)
                 var colonizers = results.FindAll(
                     x => x.PlayerID == Player.playerID
                          && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady);
@@ -926,7 +936,16 @@ namespace FlatSpace
                         if (shortest != null && (dominated || shortestBlockade > 0f))
                         {
                             escortStats = escortStats ?? new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null);
-                            escortSpares = escortSpares ?? EscortSpareShips(turn, escortStats);
+                            if (escortSpares == null)
+                            {
+                                escortSpares = EscortSpareShips(turn, escortStats);
+                                // A retreat has priority over an escort: retreats only leave planets with a fight projection of mine
+                                // this turn (RetreatPlanner reads those, later in this routine), so such an origin has no spare for an
+                                // escort, and no ship is ever both retreated and escorted.
+                                foreach (var fight in results.Where(r => r.PlayerID == Player.playerID
+                                             && r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection))
+                                    escortSpares[fight.Name] = 0;
+                            }
                             if (shortestBlockade <= 0f)
                             {
                                 // A dominated target on a clean route: the planned route already is the shortest; one ship escorts.
@@ -942,11 +961,14 @@ namespace FlatSpace
                                 else
                                 {
                                     escortSpares.TryGetValue(colonizer.Name, out var spareHere);
+                                    var inFight = results.Exists(r => r.PlayerID == Player.playerID && r.Name == colonizer.Name
+                                        && r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection);
                                     declinedEscorts.Add(new EscortDetourTracker.Entry
                                     {
                                         Origin = colonizer.Name,
                                         Target = t.PlanetName,
-                                        Reason = spareHere <= 0 ? EscortDetourTracker.ReasonNoSpare : EscortDetourTracker.ReasonShortOffense,
+                                        Reason = inFight ? EscortDetourTracker.ReasonFight
+                                            : spareHere <= 0 ? EscortDetourTracker.ReasonNoSpare : EscortDetourTracker.ReasonShortOffense,
                                     });
                                     // Too few spare ships to cover the blockade: the detour (if any). A dominated target still
                                     // gets its one-ship escort along the clean detour.
@@ -1035,24 +1057,19 @@ namespace FlatSpace
                     if (plannedEscorts.TryGetValue((action.Origin, action.Target), out var escortPlan))
                     {
                         var before = orders.Count;
-                        EmitShipOrders(new ShipAction
+                        var escortAction = new ShipAction
                         {
                             Origin = action.Origin,
                             Target = action.Target,
                             Cost   = route.Cost,
                             Count  = escortPlan.ships,
                             Kind   = Ship.ShipKind.WarShip,
-                        }, orders);
+                        };
+                        EmitShipOrders(escortAction, orders, EscortClaimed(action.Origin));
                         if (orders.Count > before)
                         {
                             colonist.EscortOffense = escortPlan.offense;
-                            var claimKey = (action.Origin, Ship.ShipKind.WarShip);
-                            _escortClaims.TryGetValue(claimKey, out var alreadyClaimed);
-                            _escortClaims[claimKey] = alreadyClaimed + escortPlan.ships;
-                            var spareBefore = _escortSpareLeft.TryGetValue(action.Origin, out var leftBefore)
-                                ? leftBefore
-                                : escortSpares != null && escortSpares.TryGetValue(action.Origin, out var plannedSpare) ? plannedSpare : 0;
-                            _escortSpareLeft[action.Origin] = Math.Max(0, spareBefore - escortPlan.ships);
+                            _escortActions.Add(escortAction);
                             AITuningLogger.LogEscortLaunch(turn, Player.playerID, action.Origin, action.Target, escortPlan.offense,
                                 RoutePlanner.MaxBlockadeValue(route, _blockadeView));
                         }
@@ -2296,24 +2313,32 @@ namespace FlatSpace
                 // Nothing is undocked until the orders execute, so a second fleet leaving the same
                 // origin this turn (home defence + assault) must skip the ships the first one takes. Claims are per kind: the
                 // skip counts docked ships of the fleet's own kind, so a siegeship fleet never skips past warships.
-                // Escorts launched by ProcessColonizers earlier this turn are claims too (Task 15): the planners still count those
-                // ships as docked and spare, so warship actions from such an origin share only the spare the escort left (trimmed,
-                // dropped at none), and skip past the escort's ships.
-                var claimedByOrigin = new Dictionary<(string origin, Ship.ShipKind kind), int>(_escortClaims);
-                var spareLeft = new Dictionary<string, int>(_escortSpareLeft);
-                _escortClaims.Clear();
-                _escortSpareLeft.Clear();
-                foreach (var planned in PlanShipActions(turn, results))
+                // Escorts launched by ProcessColonizers earlier this turn (Task 15) are the first claims: the planners were already
+                // told about them (PlanShipActions passes them as Reserved / PreDeparting), so their actions never count those ships,
+                // and the emitted fleets skip past them. Nothing is trimmed here; the check below only reports a planner that
+                // overcommitted an escort origin (it should never fire; EmitShipOrders still skips a fleet with too few ships).
+                var escorts = new List<ShipAction>(_escortActions);
+                var claimedByOrigin = new Dictionary<(string origin, Ship.ShipKind kind), int>();
+                foreach (var escort in escorts)
                 {
-                    var action = planned;
-                    if (action.Kind == Ship.ShipKind.WarShip && spareLeft.TryGetValue(action.Origin, out var left))
-                    {
-                        if (left <= 0) continue;
-                        if (left < action.Count) action.Count = left;
-                        spareLeft[action.Origin] = left - action.Count;
-                    }
+                    var escortKey = (escort.Origin, escort.Kind);
+                    claimedByOrigin.TryGetValue(escortKey, out var escortClaimed);
+                    claimedByOrigin[escortKey] = escortClaimed + escort.Count;
+                }
+                var actions = PlanShipActions(turn, results);
+                _escortActions.Clear();
+                foreach (var action in actions)
+                {
                     var key = (action.Origin, action.Kind);
                     claimedByOrigin.TryGetValue(key, out var claimed);
+                    if (escorts.Exists(e => e.Origin == action.Origin && e.Kind == action.Kind))
+                    {
+                        var origin = AIMap.GetPlanet(action.Origin);
+                        var docked = origin != null ? origin.DockedShips.Count(s => s.Kind == action.Kind && s.Owner == Player.playerID) : 0;
+                        if (docked - claimed < action.Count)
+                            Debug.LogWarning($"Escort reservation overcommitted at {action.Origin}: {action.Count} {action.Kind} planned " +
+                                             $"to {action.Target}, {docked - claimed} left after the escort and earlier claims.");
+                    }
                     EmitShipOrders(action, orders, claimed);
                     claimedByOrigin[key] = claimed + action.Count;
                 }
@@ -2488,7 +2513,7 @@ namespace FlatSpace
                 if (!IsConsolidateLike(Strategy))
                 {
                     actions.AddRange(new ShipTransportPlanner(AIMap, Player.playerID)
-                        { Retreating = retreat.Retreating, RefillBlocked = CooldownPlanets(turnNumber) }.Plan());
+                        { Retreating = retreat.Retreating, RefillBlocked = CooldownPlanets(turnNumber), Reserved = EscortReserved() }.Plan());
                     return actions;
                 }
 
@@ -2496,7 +2521,11 @@ namespace FlatSpace
                 var excluded = new HashSet<string>(CooldownPlanets(turnNumber));
                 excluded.UnionWith(retreat.Retreating);
                 var assault = new AssaultPlanner(AIMap, Player.playerID, _blockadeView, stats, _blockadeMemory, turnNumber,
-                    AssaultWarFilter()) { ExcludedTargets = excluded, SiegeshipGate = CanSendSiegeship };
+                    AssaultWarFilter())
+                {
+                    ExcludedTargets = excluded, SiegeshipGate = CanSendSiegeship,
+                    PreDeparting = new List<ShipAction>(_escortActions),   // escorts leave first (Task 15)
+                };
                 var blockadeTarget = assault.ChooseBlockadeTarget(out var blockadeReason);
                 var target = blockadeTarget ?? assault.ChooseEnemyTarget();
 
@@ -2520,6 +2549,7 @@ namespace FlatSpace
                     ConversionKeep = conversionKeep,
                     Retreating  = retreat.Retreating,
                     RefillBlocked = CooldownPlanets(turnNumber),
+                    Reserved = EscortReserved(),   // the escorts' ships are already leaving (Task 15)
                 };
                 var homeActions = transport.Plan();
                 actions.AddRange(homeActions);

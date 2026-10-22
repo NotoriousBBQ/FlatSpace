@@ -391,7 +391,8 @@ public static class AITuningLogger
 
     /// <summary>
     /// An escort was declined for a colonization candidate (on change only): T&lt;turn&gt;|P&lt;id&gt;|EscortDetour|origin-&gt;target|reason
-    /// (NoSpare: no spare warship at the origin; ShortOffense: the spare offense is below the blockade x (1 + blockadeBreakMargin)).
+    /// (NoSpare: no spare warship at the origin; ShortOffense: the spare offense is below the blockade x (1 + blockadeBreakMargin);
+    /// Fight: the origin has a fight projection of mine this turn, so its ships are left to a possible retreat).
     /// The colonist takes the detour if one exists.
     /// </summary>
     public static void LogEscortDetour(int turnNumber, int playerId, string origin, string target, string reason)

@@ -62,6 +62,20 @@ namespace FlatSpace
             private int KeepOf(string planetName)
                 => !IsHeld(planetName) && ConversionKeep != null && ConversionKeep.TryGetValue(planetName, out var keep) ? keep : 0;
 
+            /// <summary>
+            /// Warships already leaving a planet this turn before this plan (escorts launched with a colonist, Task 15): planet to ship
+            /// count. They are not counted as docked there (neither spare nor garrison), so the plan never sends them a second time.
+            /// Empty (the default) leaves every count as before.
+            /// </summary>
+            public IDictionary<string, int> Reserved { get; set; } = new Dictionary<string, int>();
+
+            // My docked warships at the planet minus the ones Reserved there (never below 0).
+            private int AvailableWarships(Planet planet)
+            {
+                var reserved = Reserved != null && Reserved.TryGetValue(planet.PlanetName, out var r) ? r : 0;
+                return Math.Max(0, CountWarships(planet) - reserved);
+            }
+
             public ShipTransportPlanner(GameAIMap map, int playerId,
                 PlayerAI.AIStrategy strategy = PlayerAI.AIStrategy.AIStrategyExpand)
             {
@@ -218,7 +232,7 @@ namespace FlatSpace
                         Category = NoCategory,
                         Rank     = NoCategory,
                         Garrison = 0,
-                        Docked   = CountWarships(planet),
+                        Docked   = AvailableWarships(planet),
                         Keep     = KeepOf(planet.PlanetName),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });
@@ -235,7 +249,7 @@ namespace FlatSpace
                             Category = NoCategory,
                             Rank     = NoCategory,
                             Garrison = 0,
-                            Docked   = CountWarships(planet),
+                            Docked   = AvailableWarships(planet),
                             Keep     = KeepOf(planet.PlanetName),
                             Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                         });
@@ -250,7 +264,7 @@ namespace FlatSpace
                         Category = categories.Count == 0 ? NoCategory : categories.Min(),
                         Rank     = TargetRank(planet),
                         Garrison = IsRefillBlocked(planet.PlanetName) ? 0 : GarrisonOf(categories),
-                        Docked   = CountWarships(planet),
+                        Docked   = AvailableWarships(planet),
                         Keep     = KeepOf(planet.PlanetName),
                         Incoming = planet.GetIncomingShips(Ship.ShipKind.WarShip, _playerId),
                     });

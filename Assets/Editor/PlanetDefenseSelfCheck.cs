@@ -31,6 +31,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunAssaultCompositionCheck();
         ok &= RunFollowerGateCheck();
         ok &= RunEscortCheck();
+        ok &= RunEscortReservationCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -1101,6 +1102,188 @@ public static class PlanetDefenseSelfCheck
                         && tracker.Update(new[] { E(EscortDetourTracker.ReasonShortOffense) }).Count == 1,
                 "tracker: a route that left the list is reported again when it returns");
         }
+        return ok;
+    }
+
+    private static List<GameAI.GameAIOrder> Transports(List<GameAI.GameAIOrder> orders, string origin, Ship.ShipKind kind)
+        => orders.FindAll(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport && o.Origin == origin
+                               && o.Fleet != null && o.Fleet.Kind == kind);
+
+    private static int Departing(List<GameAI.GameAIOrder> orders, string origin, Ship.ShipKind kind)
+        => orders.Where(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture && o.Origin == origin
+                             && o.Fleet != null && o.Fleet.Kind == kind)
+            .Sum(o => System.Convert.ToInt32(o.Data));
+
+    private static List<Planet.UpdateResult> ColonizerReady(string planet) => new List<Planet.UpdateResult>
+    {
+        new Planet.UpdateResult(planet, Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady, 1, 0),
+    };
+
+    // Task 15 fix round 1: the escort's reservation is visible to the ship planners BEFORE they plan (ShipTransportPlanner.Reserved,
+    // AssaultPlanner.PreDeparting), so the assault force, the siegeship gate's projection and the emitted actions agree; a retreat has
+    // priority (no escort from an origin with a fight projection of mine); with no escort everything is as before.
+    public static bool RunEscortReservationCheck()
+    {
+        var ok = true;
+        var consolidate = PlayerAI.AIStrategy.AIStrategyConsolidate;
+
+        // (a) and (d): blockade force from an escort origin. Line A-B-C-D, Consolidate, garrisons 0. Player 0 colonizes A and B (B the
+        // ready colonizer, food 100); player 1's one warship at C (offense 10) blockades it (no war needed); C carries an inbound flag
+        // so D (empty, two hops) is the only target. B holds 4 warships in dock order: 2 at full health (offense 10), 2 with damage 50
+        // (effective offense 10 x 50 / 100 = 5). B is outer: garrison 0, all 4 spare.
+        Fixture BlockadeLine()
+        {
+            var f = Fixture.Line();
+            f.Constants.garrisonOuter = 0;
+            f.Colonize("A", 0); f.Colonize("B", 0);
+            f.P("B").Food = 100f;
+            f.Ships("C", 1, 1);
+            f.P("C").SetPopulationTransferInProgress(0);
+            f.Ships("B", 0, 2); f.Ships("B", 0, 2, 50f);
+            f.Map.Knowledge.Update(f.Map, 2, 8);
+            return f;
+        }
+
+        // (a) The colonist B>C>D (no detour on a line) needs 10 x 1.1 = 11: the escort takes B's first 2 ships (10 + 10 = 20). The
+        // blockade force for C (needed 11) is then planned from B's remaining spare, 2, skipping the escort's ships: the 2 damaged ones,
+        // 5 + 5 = 10 (still 1 short, every spare ship sent). Planned = emitted: B->C 2 ships, damage 50 and 50; 4 ships leave B in all.
+        using (var f = BlockadeLine())
+        {
+            using var t = new ThreatAi(f, consolidate);
+            t.Ai.RefreshBlockadeView(1);
+            var orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(ColonizerReady("B"), orders);
+            var colonist = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+            ok &= Check(colonist != null && colonist.Target == "D" && Near(colonist.EscortOffense, 20f) && t.Ai.EscortClaimed("B") == 2,
+                "reservation: the colonist B->D leaves with a 2-ship escort (offense 20)");
+            var escort = Transports(orders, "B", Ship.ShipKind.WarShip);
+            ok &= Check(escort.Count == 1 && escort[0].Target == "D" && escort[0].Fleet.Damage.All(d => Near(d, 0f)),
+                "the escort is B's first 2 ships (full health)");
+
+            var planned = t.Ai.PlanShipActions(0, new List<Planet.UpdateResult>());
+            var plannedToC = planned.Where(a => a.Origin == "B" && a.Target == "C" && a.Kind == Ship.ShipKind.WarShip).ToList();
+            ok &= Check(plannedToC.Count == 1 && plannedToC[0].Count == 2,
+                "the blockade force is planned from B's spare after the escort: 2 ships (4 docked - 2 reserved)");
+
+            t.Ai.ProcessShipActions(orders, new List<Planet.UpdateResult>());
+            var fleets = Transports(orders, "B", Ship.ShipKind.WarShip);
+            var toC = fleets.Find(o => o.Target == "C");
+            ok &= Check(toC != null && System.Convert.ToInt32(toC.Data) == 2 && toC.Fleet.Snapshots.Count == 2
+                        && toC.Fleet.Damage.Count == 2 && toC.Fleet.Damage.All(d => Near(d, 50f)),
+                "emitted = planned: B->C 2 ships, the 2 damaged ones the planner sized (5 + 5 = 10 offense), not trimmed");
+            ok &= Check(fleets.Count == 2 && Departing(orders, "B", Ship.ShipKind.WarShip) == 4,
+                "the escort (2) and the force (2) leave B: 4 departures for 4 docked ships, none sent twice");
+            ok &= Check(t.Ai.EscortClaimed("B") == 0, "ProcessShipActions consumed the escort reservation");
+        }
+
+        // (d) The same board with no colonizer ready: no escort, so B's 4 spare ships feed the force, first in dock order: the 2 full
+        // ships (10 + 10 = 20 >= 11) go, as before the escort existed (Reserved and PreDeparting empty change nothing).
+        using (var f = BlockadeLine())
+        {
+            using var t = new ThreatAi(f, consolidate);
+            t.Ai.RefreshBlockadeView(1);
+            var orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(new List<Planet.UpdateResult>(), orders);
+            ok &= Check(orders.Count == 0 && t.Ai.EscortClaimed("B") == 0, "no colonizer: no escort, nothing reserved");
+            t.Ai.ProcessShipActions(orders, new List<Planet.UpdateResult>());
+            var fleets = Transports(orders, "B", Ship.ShipKind.WarShip);
+            ok &= Check(fleets.Count == 1 && fleets[0].Target == "C" && System.Convert.ToInt32(fleets[0].Data) == 2
+                        && fleets[0].Fleet.Damage.All(d => Near(d, 0f)),
+                "no escort: the force is B's first 2 ships at full health (20 >= 11), unchanged behaviour");
+        }
+
+        // (b) The siegeship gate sees the escort. FollowerLine (A, B, C mine; D player 1's with 2 bunkers, at war; garrisons 0) plus my
+        // 4 warships docked at D (they dominate it: bunkers do not block dominance) and, at C (the ready colonizer, food 100), 2
+        // siegeships and 1 warship. D is a dominated target with a clean route C>D (no warship blockade): the escort is the minimum
+        // one ship, C's only (spare) warship, offense 10. The assault target is D (sticky: my ships there; 4 docked >= the force of 3,
+        // so no warship goes), and C's 2 siegeships ask the gate. The gate's departing list now starts with the escort, which lands
+        // with them (cost 100, speed 100: round 1): MyShips 4, InboundShips 3, strength 4 x 1050 + 1050 + 2 x 309 = 5868 (without the
+        // escort: InboundShips 2, 4818, loss 0.2278, see RunFollowerGateCheck).
+        using (var f = FollowerLine())
+        {
+            f.Ships("D", 0, 4); f.Siege("C", 0, 2); f.Ships("C", 0, 1);
+            f.P("C").Food = 100f;
+            using var t = new ThreatAi(f, consolidate);
+            t.Ai.RefreshBlockadeView(1);
+            var d = f.P("D");
+            ok &= Check(t.Ai.IsConversionTarget(d), "precondition: D is dominated (4 warships with bombard, only bunkers against them)");
+            var orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(ColonizerReady("C"), orders);
+            var colonist = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+            ok &= Check(colonist != null && colonist.Target == "D" && Near(colonist.EscortOffense, 10f) && t.Ai.EscortClaimed("C") == 1,
+                "the colonist C->D leaves with C's one warship as escort (offense 10)");
+
+            var escortAction = new ShipAction { Origin = "C", Target = "D", Cost = 100f, Count = 1, Kind = Ship.ShipKind.WarShip };
+            var withEscort = t.Ai.ProjectArrival("C", d, 2, new List<ShipAction> { escortAction });
+            var withoutEscort = t.Ai.ProjectArrival("C", d, 2);
+            ok &= Check(withEscort != null && withEscort.MyShips == 4 && withEscort.InboundShips == 3 && Near(withEscort.MyStrength, 5868f),
+                "projection with the escort departing: 4 docked + 3 inbound (the escort and 2 siegeships), strength 5868");
+            ok &= Check(withoutEscort != null && withoutEscort.InboundShips == 2 && Near(withoutEscort.MyStrength, 4818f)
+                        && Mathf.Abs(withEscort.PerceivedLossFraction - withoutEscort.PerceivedLossFraction) > 0.001f,
+                "without it: 2 inbound, strength 4818, a different loss");
+
+            t.Ai.ProcessShipActions(orders, new List<Planet.UpdateResult>());
+            var follow = t.Ai.LastSiegeFollowerChanges;
+            ok &= Check(follow.Count == 1 && follow[0].Kind == SiegeFollowerTracker.KindFollow && follow[0].Origin == "C" && follow[0].Ships == 2
+                        && Mathf.Abs(follow[0].LossFraction - withEscort.PerceivedLossFraction) < 0.0001f,
+                "the gate's call (SiegeFollow) used the projection that includes the escort: same loss as withEscort");
+            ok &= Check(Transports(orders, "C", Ship.ShipKind.SiegeShip).Exists(o => System.Convert.ToInt32(o.Data) == 2 && o.Target == "D")
+                        && Transports(orders, "C", Ship.ShipKind.WarShip).Count == 1
+                        && Departing(orders, "C", Ship.ShipKind.WarShip) == 1,
+                "emitted: the 2 siegeships and only the escort's warship leave C (1 warship docked, 1 departure)");
+        }
+
+        // (c) A retreat has priority. Line A-B-C-D, Expand (so C is no contested hold and its 2 ships are spare: garrison 0), at war;
+        // player 0 colonizes B and C (C the ready colonizer, food 100); player 1 has an inhabitant on D, where my one warship dominates
+        // it (a dominated target, so C escorts with one ship). At C my 2 warships share the planet with player 1's 1 (10 - 20 < 0: not
+        // blockaded). Control: with no fight result the escort leaves (1 ship, offense 10). With a hand-made projection saying my group
+        // is wiped (a retreat at my own colony needs a wipe; steepness 0.001 makes the roll certain) the escort is refused at C (its
+        // spare counts as 0), the colonist goes unescorted, and the retreat takes both ships C->B (tier 1, my colony), whole.
+        using (var f = Fixture.Line())
+        {
+            f.Constants.garrisonOuter = 0;
+            f.Constants.retreatSteepness = 0.001f;
+            f.Colonize("B", 0); f.Colonize("C", 0); f.Colonize("D", 1);
+            f.P("C").Food = 100f;
+            f.P("A").SetPopulationTransferInProgress(0);
+            f.Ships("C", 0, 2); f.Ships("C", 1, 1); f.Ships("D", 0, 1);
+            f.War(0, 1);
+            f.Map.Knowledge.Update(f.Map, 2, 8);
+            using var t = new ThreatAi(f, PlayerAI.AIStrategy.AIStrategyExpand);
+            t.Ai.RefreshBlockadeView(1);
+            ok &= Check(t.Ai.IsConversionTarget(f.P("D")) && !t.Ai.CurrentBlockadeView.IsBlockaded("C"),
+                "precondition: D is a dominated target and C is not blockaded");
+            var control = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(ColonizerReady("C"), control);
+            var controlColonist = control.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+            ok &= Check(controlColonist != null && Near(controlColonist.EscortOffense, 10f) && t.Ai.EscortClaimed("C") == 1,
+                "control: with no fight at C the colonist leaves with a one-ship escort (offense 10)");
+
+            var fight = new FightProjection
+            {
+                Planet = "C", Player = 0, MyShips = 2, MyStrength = 2100f, MyStrengthLeft = 0f,
+                RivalStrength = 3000f, RivalStrengthLeft = 2500f, RivalSurvives = true, Turns = 5, Rivals = new List<int> { 1 },
+            };
+            var results = ColonizerReady("C");
+            results.Add(new Planet.UpdateResult("C", Planet.UpdateResult.UpdateResultType.UpdateResultTypeFightProjection, fight, 0));
+
+            var orders = new List<GameAI.GameAIOrder>();
+            t.Ai.ProcessColonizers(results, orders);
+            var colonist = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport);
+            ok &= Check(colonist != null && colonist.Target == "D" && Near(colonist.EscortOffense, 0f) && t.Ai.EscortClaimed("C") == 0
+                        && Transports(orders, "C", Ship.ShipKind.WarShip).Count == 0,
+                "a fight at C: no escort leaves C, the colonist to D goes unescorted");
+
+            GameAI.Rand = new System.Random(11);
+            t.Ai.ProcessShipActions(orders, results);
+            var fleets = Transports(orders, "C", Ship.ShipKind.WarShip);
+            ok &= Check(fleets.Count == 1 && fleets[0].Target == "B" && System.Convert.ToInt32(fleets[0].Data) == 2
+                        && Departing(orders, "C", Ship.ShipKind.WarShip) == 2,
+                "the retreat takes both ships C->B, untrimmed; 2 departures for 2 docked ships, none also escorted");
+        }
+
+        // The decline reason for a blockaded route from an origin in a fight is Fight (log-only tracker reason).
+        ok &= Check(EscortDetourTracker.ReasonFight == "Fight", "EscortDetour reason Fight exists");
         return ok;
     }
 

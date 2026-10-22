@@ -55,6 +55,19 @@ namespace FlatSpace
             /// </summary>
             public ISet<string> ExcludedTargets { get; set; }
 
+            /// <summary>
+            /// Ship actions already decided this turn before this plan (escorts launched with a colonist, Task 15). Their ships are not
+            /// spare (ShipTransportPlanner.Reserved takes them out of the states this planner is given); here they are the first ships
+            /// claimed at their origin when the force picks its exact ships (PeekShipSnapshots skip), and they lead the actions the
+            /// siegeship gate is told are departing. Empty (the default) changes nothing.
+            /// </summary>
+            public List<ShipAction> PreDeparting { get; set; } = new List<ShipAction>();
+
+            // Warships of PreDeparting leaving `origin` (claimed before any planned action there).
+            private int PreDepartingWarships(string origin)
+                => PreDeparting == null ? 0
+                    : PreDeparting.Where(a => a.Origin == origin && a.Kind == Ship.ShipKind.WarShip).Sum(a => a.Count);
+
             private bool IsExcluded(string planetName) => ExcludedTargets != null && ExcludedTargets.Contains(planetName);
 
             private bool IsRival(int player) => player != _playerId && (_warRivals == null || _warRivals.Contains(player));
@@ -611,7 +624,8 @@ namespace FlatSpace
                 if (target == null) return new List<ShipAction>();
                 var actions = PlanWarships(target, states, homeActions);
                 // The siegeship gate sees every ship planned to leave before it: home defence, then the warship force.
-                var planned = new List<ShipAction>(homeActions ?? new List<ShipAction>());
+                var planned = new List<ShipAction>(PreDeparting ?? new List<ShipAction>());
+                planned.AddRange(homeActions ?? new List<ShipAction>());
                 planned.AddRange(actions);
                 actions.AddRange(PlanSiegeships(target, planned));
                 return actions;
@@ -666,7 +680,8 @@ namespace FlatSpace
                 foreach (var source in SpareSources(target, states, sentByOrigin))
                 {
                     if (needed <= 0f) break;
-                    sentByOrigin.TryGetValue(source.Name, out var skip);
+                    sentByOrigin.TryGetValue(source.Name, out var sent);
+                    var skip = sent + PreDepartingWarships(source.Name);   // escorts leave first (ProcessShipActions' claims)
                     var sourcePlanet = _map.GetPlanet(source.Name);
                     var snapshots = sourcePlanet.PeekShipSnapshots(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
                     var damages = sourcePlanet.PeekShipDamage(Ship.ShipKind.WarShip, _playerId, source.Remaining, skip);
