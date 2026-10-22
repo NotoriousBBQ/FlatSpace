@@ -46,6 +46,7 @@ public static class WarshipSelfCheck
         t.shipHealth = 100f; t.shipHealthMax = 200f;
         t.shipDefense = 5f; t.shipDefenseMax = 15f;
         t.shipOffense = 10f; t.shipOffenseMax = 30f;
+        t.shipBombard = 1f; t.shipBombardMax = 3f;
         return t;
     }
 

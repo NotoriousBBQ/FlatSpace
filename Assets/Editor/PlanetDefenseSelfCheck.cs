@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using FlatSpace.AI;
+using Flatspace.Objects.Production;
 
 public static class PlanetDefenseSelfCheck
 {
@@ -11,6 +12,7 @@ public static class PlanetDefenseSelfCheck
     public static bool RunChecks()
     {
         var ok = RunKindsAndDefaultsCheck();
+        ok &= RunBombardStatsCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -42,6 +44,114 @@ public static class PlanetDefenseSelfCheck
         ok &= Check(Ship.IsFightingKind(Ship.ShipKind.SiegeShip), "SiegeShip is a fighting kind");
         ok &= Check(!Ship.IsFightingKind(Ship.ShipKind.ColonyShip), "ColonyShip is not a fighting kind");
         ok &= Check(!Ship.IsFightingKind(Ship.ShipKind.Bunker), "Bunker is not a fighting kind");
+        return ok;
+    }
+
+    private static bool Near(float a, float b) => Mathf.Abs(a - b) < 0.001f;
+
+    private static CatalogItem Line(string name, string subType, string effect, int tier)
+    {
+        var item = ScriptableObject.CreateInstance<CatalogItem>();
+        item.itemName = name; item.name = name;
+        item.type = "Ship Improvement"; item.subType = subType;
+        item.tier = tier; item.effect = effect; item.researched = true;
+        return item;
+    }
+
+    public static bool RunBombardStatsCheck()
+    {
+        var ok = true;
+        using (var f = Fixture.Line())
+        {
+            // Extra research lines on top of the warship Off/Hp/Def fixture: Siegeship Bombard (5 tiers),
+            // Siegeship Health (5 tiers) and Bunker Defense (5 tiers).
+            var extra = new List<CatalogItem>();
+            for (var t = 1; t <= 5; t++)
+            {
+                extra.Add(Line("SBomb " + t, "Siegeship", "Siegeship Bombard", t));
+                extra.Add(Line("SHp " + t, "Siegeship", "Siegeship Health", t));
+                extra.Add(Line("BDef " + t, "Bunker", "Bunker Defense", t));
+            }
+            try
+            {
+                var all = new List<CatalogItem>(f.Research);
+                all.AddRange(extra);
+                var stats = new WarshipStats(all);
+
+                ok &= Check(WarshipStats.SubtypeOf(Ship.ShipKind.WarShip) == "Warship"
+                            && WarshipStats.SubtypeOf(Ship.ShipKind.SiegeShip) == "Siegeship"
+                            && WarshipStats.SubtypeOf(Ship.ShipKind.Bunker) == "Bunker"
+                            && WarshipStats.SubtypeOf(Ship.ShipKind.ColonyShip) == "ColonyShip",
+                    "SubtypeOf maps each kind to its catalog subtype string");
+
+                // Siegeship carrying 2 bombard tiers: base + 2 x (max - base) / 5 = 20 + 2 x 40 / 5 = 36.
+                var twoBombard = new List<string> { "SBomb 1", "SBomb 2" };
+                ok &= Check(Near(stats.Bombard(f.SiegeTemplate, twoBombard, "Siegeship"), 36f),
+                    "a siegeship with 2 of 5 bombard tiers has base + 2 x (max - base) / 5");
+                ok &= Check(Near(stats.Bombard(f.SiegeTemplate, new List<string>(), "Siegeship"), 20f),
+                    "a siegeship with no tiers has the base bombard");
+                ok &= Check(Near(stats.Bombard(f.SiegeTemplate, null, "Siegeship"), 20f),
+                    "a null snapshot is the base bombard");
+
+                // A warship has no "Warship Bombard" line: the template base, whatever it carries.
+                ok &= Check(Near(stats.Bombard(f.Template, new List<string> { "SBomb 1", "Off 1" }), 1f),
+                    "a warship with no Warship Bombard line returns the template base bombard (1)");
+                ok &= Check(stats.TierCount("Warship Bombard") == 0 && stats.TierCount("Siegeship Bombard", "Siegeship") == 5,
+                    "TierCount counts a line per subtype");
+                ok &= Check(Near(stats.Bombard(null, twoBombard, "Siegeship"), 0f), "a null template has 0 bombard");
+
+                // Warship offense is unchanged by the new lines: 2 Off tiers add 2 x (30 - 10) / 5.
+                var warshipOff = new List<string> { "Off 1", "Off 2" };
+                ok &= Check(Near(stats.Offense(f.Template, warshipOff), 18f)
+                            && Near(stats.Offense(f.Template, warshipOff, "Warship"), 18f),
+                    "warship offense with 2 Off tiers is 10 + 2 x 20 / 5 = 18, with or without the subtype");
+
+                // Subtypes do not leak: siegeship tiers count only Siegeship items, a bunker snapshot only Bunker items.
+                ok &= Check(Near(stats.Health(f.SiegeTemplate, new List<string> { "SHp 1", "Hp 1" }, "Siegeship"), 120f),
+                    "a siegeship's Health counts Siegeship Health items only (100 + 1 x 100 / 5)");
+                var bunkerSnapshot = new List<string> { "BDef 1", "BDef 2", "Off 1", "Hp 1", "SHp 1" };
+                ok &= Check(Near(stats.Defense(f.BunkerTemplate, bunkerSnapshot, "Bunker"), 8f + 2f * (20f - 8f) / 5f),
+                    "a bunker snapshot only counts Bunker items");
+                ok &= Check(Near(stats.Health(f.BunkerTemplate, bunkerSnapshot, "Bunker"), 150f)
+                            && Near(stats.Offense(f.BunkerTemplate, bunkerSnapshot, "Bunker"), 12f),
+                    "other warship/siegeship items in a bunker snapshot add nothing");
+
+                // Ship-based overloads and effective bombard.
+                var planet = f.P("A");
+                planet.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, twoBombard, 0f);
+                planet.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, twoBombard, 50f);
+                planet.DockShipFromSave(Ship.ShipKind.WarShip, 0, warshipOff, 0f);
+                planet.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 100f);
+                var healthy = planet.DockedShips[0];
+                var hurt = planet.DockedShips[1];
+                var warship = planet.DockedShips[2];
+                var dead = planet.DockedShips[3];
+
+                ok &= Check(Near(stats.EffectiveBombard(healthy), 36f), "an undamaged siegeship's effective bombard is its bombard");
+                // Siege health 100 (no health tiers carried), damage 50: half health, half bombard.
+                ok &= Check(Near(stats.EffectiveBombard(hurt), 18f),
+                    "a damaged siegeship's effective bombard scales with remaining health (36 x 50 / 100)");
+                ok &= Check(Near(stats.EffectiveBombard(dead), 0f), "a ship at 0 health has 0 effective bombard");
+                ok &= Check(Near(stats.Offense(healthy), 3f) && Near(stats.Health(healthy), 100f) && Near(stats.Defense(healthy), 3f),
+                    "Ship overloads use the siegeship template");
+                ok &= Check(Near(stats.CurrentHealth(hurt), 50f) && Near(stats.EffectiveOffense(hurt), 1.5f),
+                    "Ship CurrentHealth/EffectiveOffense use the kind's subtype and the ship's damage");
+                ok &= Check(Near(stats.Offense(warship), stats.Offense(f.Template, warshipOff))
+                            && Near(stats.EffectiveBombard(warship), 1f),
+                    "a WarShip through the Ship overloads equals the Warship template path");
+
+                // ResearchedNames filters by subtype.
+                var names = WarshipStats.ResearchedNames(all, "Siegeship");
+                ok &= Check(names.Count == 10 && names.Contains("SBomb 3") && !names.Contains("Off 1"),
+                    "ResearchedNames(subtype) lists only that subtype's researched items");
+                ok &= Check(WarshipStats.ResearchedNames(all).Count == 0 && !WarshipStats.ResearchedNames(all).Contains("SBomb 1"),
+                    "ResearchedNames defaults to Warship (the fixture's warship items are unresearched)");
+            }
+            finally
+            {
+                WarshipSelfCheck.DestroyAll(extra);
+            }
+        }
         return ok;
     }
 
