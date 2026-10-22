@@ -16,11 +16,11 @@ namespace FlatSpace.AI
         public int InboundShips;            // my own ships that join within the projection
         public float MyStrength;            // strength of every ship of mine that takes part (docked + inbound), at its entry state
         public float MyStrengthLeft;        // strength of my survivors at the end (damage lowers it: a wounded survivor counts as partly lost)
-        public float RivalStrength;         // war rivals' strength at the start
+        public float RivalStrength;         // war rivals' strength at the start (their fighting ships and their bunkers)
         public float RivalStrengthLeft;
-        public bool RivalSurvives;          // a player I am at war with still has a warship at the end
+        public bool RivalSurvives;          // a player I am at war with still has a fighting ship or a bunker at the end
         public int Turns;                   // rounds projected
-        public List<int> Rivals = new List<int>();   // war rivals with warships at the planet, ascending
+        public List<int> Rivals = new List<int>();   // war rivals with fighting ships or bunkers at the planet, ascending
 
         /// <summary>The same fight with the rival seen at `Factor` of its offense and health (imperfect intel).</summary>
         public struct Sample
@@ -47,8 +47,10 @@ namespace FlatSpace.AI
 
     /// <summary>
     /// Plays a planet's fight forward round by round with the same core real combat uses (CombatSystem.Round), on a copy of the
-    /// start-of-turn state: every docked warship at the planet, my own in-flight ships landing there on their known arrival turn.
-    /// Rival in-flight ships and repair (which never happens while an at-war warship is present) are not modeled. Pure.
+    /// start-of-turn state: every docked warship and siegeship at the planet, my own in-flight ships landing there on their known
+    /// arrival turn. Each projected turn the ship-to-ship round is followed by the real bombardment step (BombardmentSystem.Step: same
+    /// trigger, same arithmetic) against the docked bunkers, whose damage carries across the projected turns. Rival in-flight ships
+    /// and repair (ships and bunkers) are not modeled. My group may be inbound only (nothing of mine docked yet). Pure.
     /// </summary>
     public static class FightProjector
     {
@@ -80,32 +82,49 @@ namespace FlatSpace.AI
             return exact;
         }
 
-        /// <summary>`rivalFactor` scales the offense and health of every war rival's ship (damage scales with it, so health fractions are unchanged).</summary>
+        /// <summary>`rivalFactor` scales the offense, bombard and health of every war rival's ship and bunker (damage scales with it, so health fractions are unchanged).</summary>
         public static FightProjection Project(GameAIMap map, Planet planet, int player, WarshipStats stats,
             GameAIConstants constants, IEnumerable<GameAI.GameAIOrder> orders, float rivalFactor = 1f)
         {
             if (map == null || planet == null || stats == null || !map.Diplomacy.Enabled) return null;
 
+            // Fighting ships (warships/siegeships, with their bombard) and bunkers (Class 2) as separate unit lists: bunkers take no part
+            // in the ship-to-ship round, only in the bombardment step. Ids come from one counter, so they never collide across the two.
             var units = new List<CombatUnit>();
+            var bunkers = new List<CombatUnit>();
             var nextId = 0;
             for (var i = 0; i < planet.DockedShips.Count; i++)
             {
                 var ship = planet.DockedShips[i];
-                if (!Ship.IsFightingKind(ship.Kind) || ship.Owner == Planet.NoOwner) continue;
+                if (ship.Owner == Planet.NoOwner) continue;
+                if (ship.Kind == Ship.ShipKind.Bunker)
+                {
+                    if (stats.CurrentHealth(ship) <= 0f) continue;
+                    bunkers.Add(CombatUnit.Make(nextId++, ship.Owner, i, stats.Offense(ship), stats.Health(ship), stats.Defense(ship), ship.Damage, 2));
+                    continue;
+                }
+                if (!Ship.IsFightingKind(ship.Kind)) continue;
                 if (stats.CurrentHealth(ship) <= 0f) continue;
                 units.Add(CombatUnit.Make(nextId++, ship.Owner, i, stats.Offense(ship), stats.Health(ship), stats.Defense(ship), ship.Damage,
-                    ship.Kind == Ship.ShipKind.SiegeShip ? 1 : 0));
+                    ship.Kind == Ship.ShipKind.SiegeShip ? 1 : 0, stats.Bombard(ship.Template, ship.ResearchSnapshot, WarshipStats.SubtypeOf(ship.Kind))));
             }
 
             Func<int, int, bool> atWar = (a, b) => map.Diplomacy.IsAtWar(a, b, true);
-            var rivals = units.Select(u => u.Owner).Distinct().Where(o => o != player && atWar(player, o)).OrderBy(o => o).ToList();
-            if (rivals.Count == 0 || !units.Any(u => u.Owner == player)) return null;
+            var rivals = units.Select(u => u.Owner).Concat(bunkers.Select(b => b.Owner)).Distinct()
+                .Where(o => o != player && atWar(player, o)).OrderBy(o => o).ToList();
+            if (rivals.Count == 0) return null;
 
-            // Imperfect intel: the rival seen at `rivalFactor` of its offense and health (the same health fraction, the same Defense).
+            // Imperfect intel: the rival seen at `rivalFactor` of its offense, bombard and health (the same health fraction, the same
+            // Defense), its bunkers included.
             if (rivalFactor != 1f)
-                units = units.Select(u => rivals.Contains(u.Owner)
-                    ? CombatUnit.Make(u.Id, u.Owner, u.Index, u.BaseOffense * rivalFactor, u.Max * rivalFactor, u.Defense, (u.Max - u.Health) * rivalFactor, u.Class)
-                    : u).ToList();
+            {
+                CombatUnit Scaled(CombatUnit u) => rivals.Contains(u.Owner)
+                    ? CombatUnit.Make(u.Id, u.Owner, u.Index, u.BaseOffense * rivalFactor, u.Max * rivalFactor, u.Defense,
+                        (u.Max - u.Health) * rivalFactor, u.Class, u.BaseBombard * rivalFactor)
+                    : u;
+                units = units.Select(Scaled).ToList();
+                bunkers = bunkers.Select(Scaled).ToList();
+            }
 
             // My own fleets heading here: they join before the combat of the projected round equal to their delay.
             var inbound = new List<(int round, CombatUnit unit)>();
@@ -123,17 +142,21 @@ namespace FlatSpace.AI
                 {
                     var snapshot = order.Fleet.Snapshots[i];
                     var unit = CombatUnit.Make(nextId++, player, index++, stats.Offense(template, snapshot, subtype),
-                        stats.Health(template, snapshot, subtype), stats.Defense(template, snapshot, subtype), order.Fleet.DamageAt(i), siege ? 1 : 0);
+                        stats.Health(template, snapshot, subtype), stats.Defense(template, snapshot, subtype), order.Fleet.DamageAt(i), siege ? 1 : 0,
+                        stats.Bombard(template, snapshot, subtype));
                     if (unit.Health > 0f) inbound.Add((round, unit));
                 }
             }
+            // No group of mine: nothing docked that can fight and nothing landing within the projection.
+            if (!units.Any(u => u.Owner == player) && inbound.Count == 0) return null;
 
+            bool IsRival(CombatUnit u) => rivals.Contains(u.Owner);
             var projection = new FightProjection
             {
                 Planet = planet.PlanetName, Player = player, Rivals = rivals,
                 MyShips = units.Count(u => u.Owner == player),
                 MyStrength = units.Where(u => u.Owner == player).Sum(u => u.Strength),
-                RivalStrength = units.Where(u => rivals.Contains(u.Owner)).Sum(u => u.Strength),
+                RivalStrength = units.Where(IsRival).Sum(u => u.Strength) + bunkers.Where(IsRival).Sum(b => b.Strength),
             };
 
             Func<int, int, float> hostility = (a, b) => map.Diplomacy.Hostility(a, b);
@@ -145,19 +168,33 @@ namespace FlatSpace.AI
                     projection.InboundShips++;
                     projection.MyStrength += arrival.unit.Strength;
                 }
-                if (!units.Any(u => u.Owner == player) || !units.Any(u => rivals.Contains(u.Owner))) break;
+                if (!units.Any(u => u.Owner == player) || !(units.Any(IsRival) || bunkers.Any(IsRival))) break;
 
-                var outcome = CombatSystem.Round(units, atWar, hostility, constants.combatDamageK);
-                if (outcome.Damage.Count == 0 && outcome.Destroyed.Count == 0) break;   // nobody can hurt anybody: the fight is over
-                units = units.Where(u => !outcome.Destroyed.Contains(u.Id))
-                    .Select(u => outcome.Damage.TryGetValue(u.Id, out var damage) ? u.WithDamage(damage) : u).ToList();
+                // The ship-to-ship round, then (as in the real turn) the bombardment step on the state it left: bunkers whose owner
+                // has no fighting ship left fire at the at-war ships and take their bombard. With no bunkers the step never runs.
+                var fight = CombatSystem.Round(units, atWar, hostility, constants.combatDamageK);
+                units = Apply(units, fight);
+                var bombard = bunkers.Count == 0 ? null : BombardmentSystem.Step(units, bunkers, atWar, hostility, constants.combatDamageK);
+                if (bombard != null)
+                {
+                    units = Apply(units, bombard.ShipHits);
+                    bunkers = Apply(bunkers, bombard.BunkerHits);
+                }
+                if (Idle(fight) && (bombard == null || Idle(bombard.ShipHits) && Idle(bombard.BunkerHits))) break;   // nobody can hurt anybody: the fight is over
                 projection.Turns = round;
             }
 
             projection.MyStrengthLeft = units.Where(u => u.Owner == player).Sum(u => u.Strength);
-            projection.RivalStrengthLeft = units.Where(u => rivals.Contains(u.Owner)).Sum(u => u.Strength);
-            projection.RivalSurvives = units.Any(u => rivals.Contains(u.Owner));
+            projection.RivalStrengthLeft = units.Where(IsRival).Sum(u => u.Strength) + bunkers.Where(IsRival).Sum(b => b.Strength);
+            projection.RivalSurvives = units.Any(IsRival) || bunkers.Any(IsRival);
             return projection;
         }
+
+        private static bool Idle(RoundOutcome outcome) => outcome.Damage.Count == 0 && outcome.Destroyed.Count == 0;
+
+        // A round's outcome applied to a unit list: destroyed units removed, damaged ones advanced (Ids it does not name are untouched).
+        private static List<CombatUnit> Apply(List<CombatUnit> units, RoundOutcome outcome)
+            => units.Where(u => !outcome.Destroyed.Contains(u.Id))
+                .Select(u => outcome.Damage.TryGetValue(u.Id, out var damage) ? u.WithDamage(damage) : u).ToList();
     }
 }

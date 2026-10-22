@@ -96,6 +96,25 @@ namespace FlatSpace.AI
             return outcome;
         }
 
+        /// <summary>
+        /// The bombardment step on a projection's own unit state (FightProjector), pure: the same trigger as Triggers (a bunker owner with
+        /// bunkers, no fighting ship of its own and a fighting ship of a player at war with it) and the same participants as the real
+        /// step (the bunkers of every such owner; every fighting ship whose owner is at war with one of them), then Round. `ships` are
+        /// the fighting units (warships/siegeships, Bombard set), `bunkers` the Class 2 units; Ids distinct across both. Empty outcome
+        /// when nothing triggers.
+        /// </summary>
+        public static BombardOutcome Step(List<CombatUnit> ships, List<CombatUnit> bunkers, Func<int, int, bool> atWar,
+            Func<int, int, float> hostility, float k)
+        {
+            if (ships == null || bunkers == null || ships.Count == 0 || bunkers.Count == 0) return new BombardOutcome();
+            var exposed = bunkers.Select(b => b.Owner).Distinct()
+                .Where(o => !ships.Any(s => s.Owner == o) && ships.Any(s => s.Owner != o && atWar(s.Owner, o))).ToList();
+            if (exposed.Count == 0) return new BombardOutcome();
+            var targets = bunkers.Where(b => exposed.Contains(b.Owner)).ToList();
+            var attackers = ships.Where(s => exposed.Any(o => atWar(s.Owner, o))).ToList();
+            return Round(attackers, targets, atWar, hostility, k);
+        }
+
         // Returns the bunkers that took damage this turn (destroyed ones are gone), for the repair rule.
         private static HashSet<Ship> BombardAt(Planet planet, GameAIMap map, WarshipStats stats, GameAIConstants constants,
             List<Planet.UpdateResult> results, List<BombardReport> reports)

@@ -244,7 +244,7 @@ namespace FlatSpace
             }
 
             // After combat: one FightProjection result per (planet, player) where that player's warships share a planet with a
-            // war rival's, so every player decides about leaving against the same projection (see FightProjector, RetreatPlanner).
+            // war rival's warships or bunkers, so every player decides about leaving against the same projection (see FightProjector, RetreatPlanner).
             private void RunFightProjections(List<Planet.UpdateResult> results)
             {
                 var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
@@ -263,7 +263,12 @@ namespace FlatSpace
                 {
                     var owners = planet.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner)
                         .Select(s => s.Owner).Distinct().OrderBy(o => o).ToList();
-                    if (owners.Count < 2) continue;
+                    // Another player's bunkers count as a side too (the projection includes bunker fire), so a warship group facing
+                    // only a rival's bunkers is projected and can retreat. With no bunkers this is the warship-owner count, as before.
+                    var sides = planet.DockedShips.Where(s => (s.Kind == Ship.ShipKind.WarShip || s.Kind == Ship.ShipKind.Bunker)
+                                                              && s.Owner != Planet.NoOwner)
+                        .Select(s => s.Owner).Distinct().Count();
+                    if (owners.Count == 0 || sides < 2) continue;
                     foreach (var owner in owners)
                     {
                         var projection = FightProjector.ProjectPerceived(map, planet, owner, stats, constants, orders, rand);

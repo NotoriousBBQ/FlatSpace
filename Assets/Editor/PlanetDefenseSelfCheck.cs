@@ -22,6 +22,7 @@ public static class PlanetDefenseSelfCheck
         ok &= RunSiegeshipCombatCheck();
         ok &= RunBombardmentCheck();
         ok &= RunConversionGateCheck();
+        ok &= RunProjectionBunkerFireCheck();
         Debug.Log(ok
             ? "[PlanetDefenseSelfCheck] ALL PASSED"
             : "[PlanetDefenseSelfCheck] FAILURES (see errors above)");
@@ -881,6 +882,108 @@ public static class PlanetDefenseSelfCheck
             f.Ships("A", 0, 1); f.Bunkers("A", 1, 1); f.Ships("A", 1, 1); f.War(0, 1);
             ok &= Check(!BombardmentSystem.Dominated(f.P("A"), 1, f.Map, f.Stats) && ConversionSystem.Dominator(f.P("A"), f.Map, f.Stats) == Planet.NoOwner,
                 "Dominated and Dominator agree: an at-war defender warship means nobody dominates");
+        }
+        return ok;
+    }
+
+    private static FightProjection Project(Fixture f, string planet, int player, params GameAI.GameAIOrder[] orders)
+        => FightProjector.Project(f.Map, f.P(planet), player, f.Stats, f.Constants, orders);
+
+    // Task 9: the fight projection runs the bombardment step after its ship-to-ship round each projected turn. Templates as in
+    // RunBombardmentCheck: warship 10 / 100 / 5, bombard 1; siegeship 3 / 100 / 3, bombard 20; bunker 12 / 150 / 8; K 20.
+    public static bool RunProjectionBunkerFireCheck()
+    {
+        var ok = true;
+
+        // A warship-only group against three bunkers: its bombard 3 barely scratches them, their 36 x 0.8 a turn wipes it out (it
+        // needs 300 / 0.8 = 375 of pool; the pool stays above 32 since the first bunker takes at most 2.14 a turn, so by turn 12).
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 0, 3);
+            f.Bunkers("A", 1, 3);
+            f.War(0, 1);
+            var p = Project(f, "A", 0);
+            ok &= Check(p != null && p.Rivals.SequenceEqual(new[] { 1 }) && p.MyShips == 3,
+                "a warship group against bunkers alone is projected (rival 1 holds only bunkers)");
+            ok &= Check(p != null && p.MyGroupWiped && Near(p.ProjectedLossFraction, 1f) && p.RivalSurvives && p.Turns > 0 && p.Turns <= 12,
+                "the bunkers wipe the warship-only group out within 12 turns and survive");
+            ok &= Check(p != null && Near(p.RivalStrength, 3f * 12f * 158f), "the rival's strength is its bunkers': 3 x 12 x (150 + 8) = 5688");
+            var perceived = FightProjector.ProjectPerceived(f.Map, f.P("A"), 0, f.Stats, f.Constants, new GameAI.GameAIOrder[0], new System.Random(5));
+            ok &= Check(perceived.Samples.Count == 8 && perceived.Samples.All(s => s.Wiped && s.RivalSurvives),
+                "every sample (bunkers seen at 0.75 to 1.25) is a wipe-out too");
+            var results = new List<Planet.UpdateResult>();
+            GameAI.AppendFightProjections(f.Map, f.Stats, f.Constants, new List<GameAI.GameAIOrder>(), results, new System.Random(3));
+            ok &= Check(results.Count == 1 && results[0].PlayerID == 0 && results[0].Data is FightProjection fp && fp.MyGroupWiped,
+                "the engine step appends the projection for the warship owner facing only bunkers (none for the bunker owner)");
+        }
+        using (var f = Fixture.Line())    // bunkers of a player I am not at war with: no rival, no projection
+        {
+            f.Ships("A", 0, 3);
+            f.Bunkers("A", 1, 3);
+            ok &= Check(Project(f, "A", 0) == null, "bunkers of a player at peace: nothing to project");
+        }
+
+        // Hand-computed: eleven siegeships against one bunker. Bombard 220 >= 150 / (20 / 28) = 210 destroys it in the first turn,
+        // and it fires back 12 x 20 / 23 = 10.435 on one siegeship (health 89.565, offense 2.687, strength 2.687 x 92.565 = 248.72).
+        // My strength 11 x 3 x 103 = 3399, left 10 x 309 + 248.72 = 3338.72: a loss of 60.28 / 3399 = 0.01774.
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("A", 1, 1);
+            f.Siege("A", 0, 11);
+            f.War(0, 1);
+            var p = Project(f, "A", 0);
+            ok &= Check(p != null && !p.RivalSurvives && !p.MyGroupWiped && p.Turns == 1 && Near(p.RivalStrengthLeft, 0f),
+                "eleven siegeships destroy the bunker in the first projected turn");
+            ok &= Check(p != null && Near(p.MyStrength, 3399f) && Near(p.RivalStrength, 1896f) && Near(p.ProjectedLossFraction, 60.2813f / 3399f),
+                "strength 3399 against 1896; the bunker's last shot costs 0.01774 of my strength");
+        }
+
+        // A siegeship-heavy group against two bunkers over several turns: bombard 120 a turn (85.7 after K / (K + 8)) kills the first
+        // bunker in turn 2 and the second in turn 4, while the bunkers' fire (24, then less) only wounds the first siegeship.
+        using (var f = Fixture.Line())
+        {
+            f.Bunkers("A", 1, 2);
+            f.Siege("A", 0, 6);
+            f.War(0, 1);
+            var p = Project(f, "A", 0);
+            ok &= Check(p != null && !p.RivalSurvives && !p.MyGroupWiped && p.Turns == 4 && p.ProjectedLossFraction < 0.1f,
+                "six siegeships destroy both bunkers by the fourth projected turn and keep every ship");
+        }
+
+        // A bunker owner's ship protects its bunkers in the projection as in the real step: the bunkers only fire after it dies.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 1, 1);
+            f.Bunkers("A", 1, 3);
+            f.Ships("A", 0, 3);
+            f.War(0, 1);
+            var guarded = Project(f, "A", 0);
+            ok &= Check(guarded != null && guarded.RivalSurvives && guarded.MyGroupWiped,
+                "my three warships kill the guard, then the three bunkers wipe them out: the rival survives");
+        }
+
+        // An inbound siegeship alone, landing at a planet whose defender holds two warships: my group exists only in flight.
+        // Hand-computed strength: one siegeship, 3 x (100 + 3) = 309. The defenders' 20 a turn at 20 / 23 kill it by turn 6.
+        using (var f = Fixture.Line())
+        {
+            f.Ships("A", 1, 2);
+            f.War(0, 1);
+            ok &= Check(Project(f, "A", 0) == null, "nothing of mine docked or inbound: no projection");
+            var follower = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, PlayerId = 0, Origin = "B", Target = "A", TimingDelay = 1, Data = 1,
+                Fleet = new GameAI.GameAIOrder.ShipFleetPayload
+                {
+                    Kind = Ship.ShipKind.SiegeShip,
+                    Snapshots = new List<List<string>> { new List<string>() },
+                    Damage = new List<float>(),
+                },
+            };
+            var p = Project(f, "A", 0, follower);
+            ok &= Check(p != null && p.MyShips == 0 && p.InboundShips == 1 && Near(p.MyStrength, 309f),
+                "the inbound siegeship is the whole group: 0 docked, 1 inbound, strength 309");
+            ok &= Check(p != null && p.MyGroupWiped && Near(p.ProjectedLossFraction, 1f) && p.RivalSurvives,
+                "it is projected to be destroyed by the defenders' warships (the follower gate reads this as a loss)");
         }
         return ok;
     }

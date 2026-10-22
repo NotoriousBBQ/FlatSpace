@@ -10,8 +10,8 @@ namespace FlatSpace.AI
     /// wipe-out), the best tiered destination, then RetreatMatrix weighs Stay against Retreat. Tiers (first non-empty wins,
     /// cheapest path inside a tier): 1 a planet I populate; 2 a known empty planet, or one populated only by players I am not at
     /// war with; 3 a known planet of a war rival whose REMEMBERED blockade value is under my group's offense / (1 + margin)
-    /// (it may be stale by arrival). Tiers 1 and 2 must hold no war-rival warship and not be blockaded by a war rival; the route
-    /// avoids planets blockaded by a war rival (RoutePlanner). Pure (no Gameboard.Instance).
+    /// (it may be stale by arrival). Tiers 1 and 2 must hold no war-rival warship and not be blockaded by a war rival, and no tier
+    /// holds a war rival's bunker; the route avoids planets blockaded by a war rival (RoutePlanner). Pure (no Gameboard.Instance).
     /// </summary>
     public class RetreatPlanner
     {
@@ -182,6 +182,9 @@ namespace FlatSpace.AI
         // 0 = not a destination.
         private int TierOf(Planet planet, float groupOffense)
         {
+            // A war rival's bunkers fire at a group docked there once no ship of that rival protects them (the bombardment step), so
+            // a planet holding them is never a destination, in any tier.
+            if (planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.Bunker && s.Owner != Planet.NoOwner && _warRivals.Contains(s.Owner))) return 0;
             var warRivalShips = planet.DockedShips.Any(s => s.Kind == Ship.ShipKind.WarShip && s.Owner != Planet.NoOwner && _warRivals.Contains(s.Owner));
             var blockadedByWar = _warView.IsBlockaded(planet.PlanetName);
             if (planet.Owner == _me && planet.Population.Count > 0) return !warRivalShips && !blockadedByWar ? 1 : 0;
