@@ -69,6 +69,17 @@ namespace FlatSpace
             private PlanetDetailUIController _planetDetailUIController;
             private FleetUIController _fleetUIController;
             public int TurnNumber { get; private set; }= 1;
+            // The match reached MatchSettings.TurnLimit (0 = Unlimited never does); no further turns run.
+            public bool TurnLimitReached { get; private set; }
+
+            // Human player mode: which events stop the timer, the event list builder, and the last turn's events (for the message list).
+            public FlatSpace.Human.HumanPauseSettings HumanPause { get; private set; } = FlatSpace.Human.HumanPauseSettings.Defaults();
+            private FlatSpace.Human.HumanTurnEvents _humanEvents = new FlatSpace.Human.HumanTurnEvents();
+            public List<FlatSpace.Human.HumanEvent> LastHumanEvents { get; private set; } = new List<FlatSpace.Human.HumanEvent>();
+            // The event that stopped the timer on the last turn, null when nothing did.
+            public FlatSpace.Human.HumanEvent? PausedByEvent { get; private set; }
+            private bool _defeatReported;
+            private bool _turnLimitReported;
             private float orthoChange;
             // Frame on which a UI panel handled a click (e.g. the Planet Detail fleet icon opening
             // the Fleet UI). Update() polls the raw mouse independently of the EventSystem, so
@@ -143,6 +154,59 @@ namespace FlatSpace
 
             }
 
+            /// <summary>The human player's id, -1 when the match has none.</summary>
+            public int HumanPlayerId => MatchSettings.HumanPlayerId;
+
+            /// <summary>
+            /// Makes the player the human one. Player components are recreated on every init, so this runs after each
+            /// InitGame of a human match (ApplyMatchHumanChoice).
+            /// </summary>
+            public void SetHumanPlayer(int playerId, bool freshMatch = true)
+            {
+                if (playerId < 0 || playerId >= players.Count) return;
+                foreach (var player in players)
+                    player.isHuman = player.playerID == playerId;
+                // Planets change hands under this rule from now on (manual for the human, automatic otherwise), and the human's
+                // planets already held start manual. A loaded save keeps its own flags (GameAIMap.SetPlanetSimulationStats).
+                Planet.HumanOwnerTest = id => id == MatchSettings.HumanPlayerId;
+                if (freshMatch)
+                    foreach (var planet in GameAI.GameAIMap.PlanetList)
+                        if (planet.Owner == playerId)
+                            planet.ManualDevelopment = true;
+                MatchSettings.HumanRequested = true;
+                MatchSettings.HumanPlayerId = playerId;
+                owningPlayerId = playerId;
+                AITuningLogger.LogMatchSetup(playerId, MatchSettings.TurnLimit);
+                // The human sees the board as that player does: its fog, its notifications. The debug fog views are locked.
+                SetFogViewMode(FlatSpace.Fog.FogViewMode.Player, playerId);
+                GetComponentInChildren<GameButtonHandler>()?.RefreshFogView();
+            }
+
+            // After a board is initialised: a chosen human (a loaded save, or a pick already made) is applied at once, a requested
+            // but not yet chosen one opens the picker. A match with no human requested is left exactly as it was.
+            private void ApplyMatchHumanChoice()
+            {
+                AITuningLogger.LogMatchSetup(-1, MatchSettings.TurnLimit);
+                if (!MatchSettings.HumanRequested) return;
+                if (MatchSettings.HumanPlayerId >= 0)
+                {
+                    SetHumanPlayer(MatchSettings.HumanPlayerId, freshMatch: false);   // a loaded save: its planet flags stand
+                    return;
+                }
+                var canvas = GetComponentInParent<Canvas>();
+                if (canvas == null) canvas = FindAnyObjectByType<Canvas>();
+                if (canvas == null)
+                {
+                    Debug.LogError("[Gameboard] no Canvas found for the human player picker; the match runs without a human");
+                    MatchSettings.HumanRequested = false;
+                    return;
+                }
+                var choices = new List<(int id, string homePlanet)>();
+                for (var i = 0; i < players.Count; i++)
+                    choices.Add((i, GetPlayerCapitol(i)?.PlanetName));
+                HumanPlayerPicker.Show(canvas.rootCanvas, choices, id => SetHumanPlayer(id));
+            }
+
             private void CreatePlayerData()
             {
                 // InitGame can run more than once for a single match (Awake seeds from
@@ -177,6 +241,7 @@ namespace FlatSpace
                 _boardDesignPath = filePath;
                 ClearExistingGameState();
                 InitGame(boardData);
+                ApplyMatchHumanChoice();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
 
@@ -236,6 +301,7 @@ namespace FlatSpace
             private void SetSimulationStatus(SaveLoadSystem.GameSave gameSave)
             {
                 TurnNumber = gameSave.turnNumber;
+                HumanPause = FlatSpace.Human.HumanPauseSettings.FromSave(gameSave.hasPauseEvents, gameSave.pauseEvents);
                 foreach (var playerSave in gameSave.players)
                 {
                     players[playerSave.playerId].SetStrategy(playerSave.strategy);
@@ -255,9 +321,12 @@ namespace FlatSpace
                         playerSave.rememberedBlockades?.ConvertAll(b => b.ToEntry()));
                     GameAI.GameAIMap.Diplomacy.Restore(playerSave.playerId,
                         playerSave.stances?.ConvertAll(s => s.ToEntry()));
+                    players[playerSave.playerId].playerAI.SetResearchQueue(playerSave.researchQueue);
+                    players[playerSave.playerId].playerAI.ShipmentsAutomated = playerSave.shipmentsAutomated;
 
                 }
                 GameAI.SetSimulationStats(gameSave);
+                ApplyMatchHumanChoice();   // MatchSettings already hold the save's human and turn limit (SaveLoadSystem.LoadSavedGame)
 
                 if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
                 {
@@ -319,6 +388,14 @@ namespace FlatSpace
                 // repeated run here -- or a designer-board reload mid-session -- would carry over the
                 // previous match's turn count instead of starting over.
                 TurnNumber = 1;
+                TurnLimitReached = false;
+                Planet.HumanOwnerTest = null;   // no human until SetHumanPlayer; planets start automatic
+                HumanPause = FlatSpace.Human.HumanPauseSettings.Defaults();
+                _humanEvents = new FlatSpace.Human.HumanTurnEvents();
+                LastHumanEvents = new List<FlatSpace.Human.HumanEvent>();
+                PausedByEvent = null;
+                _defeatReported = false;
+                _turnLimitReported = false;
                 AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
                 // The scene's BoardConfiguration asset, or (InitGameFromDesignerConfig clears that first) the
                 // designer JSON's file name, so a log can be tied back to the board it ran on.
@@ -714,15 +791,110 @@ namespace FlatSpace
 
             public void SingleUpdate()
             {
+                if (TurnLimitReached)
+                    return;
+                // A human was asked for but not picked yet: no turn runs, or the AI would play the player they are about to choose.
+                if (MatchSettings.HumanRequested && MatchSettings.HumanPlayerId < 0)
+                    return;
                 // add Ai Actions here
                 _playerNotifications.Clear();
                 GameAI.GameAIUpdate();
                 TurnNumber++;
+                if (MatchSettings.TurnLimit > 0 && TurnNumber == MatchSettings.TurnLimit)
+                    TurnLimitReached = true;
+                CollectHumanEvents();
+                ReportTurnLimit();
                 if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
                     _fogOfWarSystem.Recompute();
                 PlanetaryUIUpdate();
                 BoardUIUpdate();
 
+            }
+
+            // The temporary command channel (see HumanCommandFile): whatever commands.json holds when a turn steps is applied against
+            // the state the human is looking at, and its orders join this turn's (GameAI.PendingHumanOrders). Outcomes go to results.json
+            // and the tuning log.
+            public void RunHumanCommands()
+            {
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count) return;
+                var humanAI = players[HumanPlayerId].playerAI;
+                if (humanAI == null) return;
+                var directory = FlatSpace.Human.HumanCommandFile.Directory();
+                if (!FlatSpace.Human.HumanCommandFile.TryTake(directory, out var json)) return;
+
+                var processor = new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, humanAI, TurnNumber) { PauseSettings = HumanPause };
+                var results = processor.ApplyJson(json, GameAI.PendingHumanOrders);
+                foreach (var result in results)
+                {
+                    if (result.applied)
+                        AITuningLogger.LogHumanCommand(TurnNumber, HumanPlayerId, result.type, "", "", result.detail);
+                    else
+                        AITuningLogger.LogHumanCommandRefused(TurnNumber, HumanPlayerId, result.type, result.reason);
+                }
+                FlatSpace.Human.HumanCommandFile.WriteResults(directory, TurnNumber, results);
+            }
+
+            // The human has no populated planet, no colony ship and no colonist in flight: said once, the timer stops, the match goes on to watch.
+            private void CheckHumanDefeat()
+            {
+                if (_defeatReported) return;
+                if (!FlatSpace.Human.HumanStatus.IsDefeated(GameAI.GameAIMap, GameAI.CurrentAIOrders, HumanPlayerId,
+                        out var populated, out var colonyShips, out var colonists))
+                    return;
+                _defeatReported = true;
+                AITuningLogger.LogHumanDefeat(TurnNumber, HumanPlayerId, populated, colonyShips, colonists);
+                StopTimedUpdate();
+                ShowMatchEnd("Defeat", "You have no populated planets and no way to found a colony. The match goes on without you.");
+            }
+
+            // The match reached its turn limit: logged once for every match, a popup only when a human plays. No winner (scoring is a later feature).
+            private void ReportTurnLimit()
+            {
+                if (!TurnLimitReached || _turnLimitReported) return;
+                _turnLimitReported = true;
+                AITuningLogger.LogTurnLimitReached(TurnNumber, MatchSettings.TurnLimit);
+                if (HumanPlayerId < 0)
+                    return;   // TimedUpdate stops a watch-only run at the limit itself, or starts the next repeat run
+                StopTimedUpdate();
+                ShowMatchEnd("Turn limit reached", $"The match ended at turn {TurnNumber}. There is no winner yet.");
+            }
+
+            private void ShowMatchEnd(string title, string message)
+            {
+                var canvas = GetComponentInParent<Canvas>();
+                if (canvas == null) canvas = FindAnyObjectByType<Canvas>();
+                if (canvas != null) MatchEndPopup.Show(canvas.rootCanvas, title, message);
+            }
+
+            // The turn just played, as the human sees it. An enabled pause event stops the timer (stepping is unaffected); the event
+            // that did is kept in PausedByEvent and logged.
+            private void CollectHumanEvents()
+            {
+                PausedByEvent = null;
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count) return;
+                var humanAI = players[HumanPlayerId].playerAI;
+                if (humanAI == null) return;
+                CheckHumanDefeat();
+
+                var input = new FlatSpace.Human.HumanTurnInput
+                {
+                    Results = GameAI.LastTurnResults,
+                    Executed = GameAI.LastExecutedOrders,
+                    NewOrders = GameAI.LastNewOrders,
+                    Cuts = GameAI.LastBlockadeCuts,
+                    Conversions = GameAI.LastConversionReports,
+                    BlockadedPlanets = humanAI.CurrentBlockadeView != null
+                        ? new List<string>(humanAI.CurrentBlockadeView.BlockadedNames) : new List<string>(),
+                    ResearchCompleted = humanAI.TakeResearchCompleted(),
+                    ShipmentsAutomated = humanAI.ShipmentsAutomated,
+                };
+                LastHumanEvents = _humanEvents.Collect(GameAI.GameAIMap, humanAI, input);
+                if (HumanPause.ShouldPause(LastHumanEvents, out var first))
+                {
+                    PausedByEvent = first;
+                    AITuningLogger.LogHumanPause(TurnNumber, HumanPlayerId, first.Kind.ToString(), first.Planet);
+                    StopTimedUpdate();
+                }
             }
 
             private void PlanetaryUIUpdate()
@@ -819,8 +991,14 @@ namespace FlatSpace
                 {
                     SingleUpdate();
                     yield return new WaitForSeconds(waitTime);
-                    if (Gameboard.Instance.TurnNumber == 400)
+                    if (MatchSettings.TurnLimit > 0 && Gameboard.Instance.TurnNumber == MatchSettings.TurnLimit)
                     {
+                        // A human match never restarts itself: the repeat runs are for unattended AI tuning.
+                        if (HumanPlayerId >= 0)
+                        {
+                            Gameboard.Instance.StopTimedUpdate();
+                            continue;
+                        }
                         // Continue the SAME coroutine loop for the next run rather than starting a new
                         // one, so there's never a risk of two TimedUpdate coroutines running at once.
                         if (_repeatRunThreeTimes && _repeatRunsStarted < RepeatRunCount && _lastInitPlanetSpawnData != null)

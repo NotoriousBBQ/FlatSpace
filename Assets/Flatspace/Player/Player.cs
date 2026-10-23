@@ -21,6 +21,8 @@ public class Player : MonoBehaviour
     public static Color32 NoPlayerColor = new Color32(0, 0, 255, 137);
     public int score;
     public bool aiDriven = true;
+    // The one player a human controls (see PlayerAI.HumanControlled). It keeps its PlayerAI for catalogs and research accounting.
+    public bool isHuman = false;
     public PlayerAI playerAI = null;
     public int playerID = 0;
     public void Clear()

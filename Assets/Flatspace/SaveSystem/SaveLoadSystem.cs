@@ -84,6 +84,9 @@ public class SaveLoadSystem : MonoBehaviour
             public int conversionBy;
             public float conversionProgress;
             public int conversionWarMask;
+            // Human player mode: the human builds on this planet by hand. Stored this way round so that an older save, which has no
+            // key and reads false, still has the AI developing every planet.
+            public bool manualDevelopment;
         }
 
         [Serializable]
@@ -169,6 +172,10 @@ public class SaveLoadSystem : MonoBehaviour
             public List<RememberedBlockadeSave> rememberedBlockades;
             // Null in older saves: every stance is Peace at 0 hostility.
             public List<StanceSave> stances;
+            // Human player mode: the research queue (null in older saves and for AI players = empty).
+            public List<string> researchQueue;
+            // Human player mode: the shipments switch (false in older saves and for AI players, which never read it).
+            public bool shipmentsAutomated;
         }
 
         [Serializable]
@@ -189,6 +196,15 @@ public class SaveLoadSystem : MonoBehaviour
         }
         
         public int turnNumber;
+        // Human player mode. An older save has none of these keys and reads them as false/0, so the flags say whether the
+        // values below mean anything: no flag, and the match loads as before (no human, the default turn limit).
+        public bool hasMatchSettings;
+        public int turnLimit;
+        public bool hasHuman;
+        public int humanPlayerId;
+        // Which events stop the timer (HumanPauseSettings.ToSave); hasPauseEvents false (an older save) restores the defaults.
+        public bool hasPauseEvents;
+        public List<int> pauseEvents;
         public string initialBoardStatePath;
         public string boardDesignDataPath;
         public float cameraOrtho = 5f;
@@ -199,6 +215,12 @@ public class SaveLoadSystem : MonoBehaviour
         public GameSave(GameAI gameAI)
         {
             turnNumber = Gameboard.Instance.TurnNumber;
+            hasMatchSettings = true;
+            turnLimit = MatchSettings.TurnLimit;
+            hasHuman = MatchSettings.HumanPlayerId >= 0;
+            humanPlayerId = hasHuman ? MatchSettings.HumanPlayerId : 0;
+            hasPauseEvents = hasHuman;
+            pauseEvents = hasHuman ? Gameboard.Instance.HumanPause.ToSave() : null;
             initialBoardStatePath = Gameboard.Instance.IntialBoardState != null ? Gameboard.Instance.IntialBoardState.name : null;
             boardDesignDataPath = Gameboard.Instance._boardDesignPath;
             cameraOrtho = Gameboard.Instance.CameraOrtho;
@@ -225,6 +247,8 @@ public class SaveLoadSystem : MonoBehaviour
                             .RememberedBlockades(Gameboard.Instance.TurnNumber)
                             .ConvertAll(RememberedBlockadeSave.From),
                         stances = gameAI.GameAIMap.Diplomacy.Snapshot(i).ConvertAll(StanceSave.From),
+                        researchQueue = new List<string>(Gameboard.Instance.players[i].playerAI.ResearchQueue),
+                        shipmentsAutomated = Gameboard.Instance.players[i].playerAI.ShipmentsAutomated,
                     });
             }
             
@@ -252,7 +276,8 @@ public class SaveLoadSystem : MonoBehaviour
                     completedImprovements = planet.CompletedImprovements.ConvertAll(c => c.Item1),
                     conversionBy = planet.SavedConversionBy,
                     conversionProgress = planet.ConversionProgress,
-                    conversionWarMask = planet.ConversionWarMask
+                    conversionWarMask = planet.ConversionWarMask,
+                    manualDevelopment = planet.ManualDevelopment
                 };
 
                 foreach (var ship in planet.DockedShips)
@@ -313,6 +338,23 @@ public class SaveLoadSystem : MonoBehaviour
         File.WriteAllText(filePath, temp);
     }
 
+    /// <summary>
+    /// Puts a save's match setup (turn limit, human player) into MatchSettings. A save without the keys (older than human
+    /// mode) restores the defaults: no human, the default turn limit. Public for the self-check.
+    /// </summary>
+    public static void ApplyMatchSettings(GameSave save)
+    {
+        MatchSettings.Reset();
+        if (save == null) return;
+        if (save.hasMatchSettings)
+            MatchSettings.TurnLimit = save.turnLimit;
+        if (save.hasHuman)
+        {
+            MatchSettings.HumanRequested = true;
+            MatchSettings.HumanPlayerId = save.humanPlayerId;
+        }
+    }
+
     private static bool LoadSavedGame(string filePath)
     {
         if (!File.Exists(filePath)) return false;
@@ -320,6 +362,7 @@ public class SaveLoadSystem : MonoBehaviour
         var saveConfig = JsonUtility.FromJson<SaveLoadSystem.GameSave>(readText);
         if (saveConfig == null)
             return false;
+        ApplyMatchSettings(saveConfig);
         var gameScene = SceneManager.GetSceneByName("Flatspace");
         if (!gameScene.isLoaded)
         {

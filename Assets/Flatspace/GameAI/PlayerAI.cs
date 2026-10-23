@@ -34,6 +34,13 @@ namespace FlatSpace
 
             public AIStrategy Strategy { get; set; } = AIStrategy.AIStrategyExpand;
             public Player      Player  { get; set; }
+
+            /// <summary>
+            /// True while a human controls this player (Player.isHuman). It is read from the Player, not stored here, because
+            /// Gameboard recreates its Player components on every init and the PlayerAI is only attached on their first frame.
+            /// A human player runs ProcessResultsHuman instead of the AI routine; every other player is unchanged.
+            /// </summary>
+            public bool HumanControlled => Player != null && Player.isHuman;
             public GameAIMap   AIMap   { get; set; }
 
             public Catalog ProductionCatalog { get; set; }
@@ -162,6 +169,12 @@ namespace FlatSpace
                 List<Planet.UpdateResult> results,
                 List<GameAI.GameAIOrder>        orders)
             {
+                if (HumanControlled)
+                {
+                    ProcessResultsHuman(results, orders);
+                    return;
+                }
+
                 // Self-checks (e.g. PlayerAIResourceSelfCheck) call this with no Gameboard in the scene.
                 TryEnterConsolidate(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0);
                 // Stances committed by last turn's orders: the Consolidate/Amass switch and the forced-war lines read them here,
@@ -185,6 +198,38 @@ namespace FlatSpace
                 // After the routine and the blockade view. The stance decision is an order, executed with the rest in
                 // ProcessNewOrders after every player has decided.
                 UpdateDiplomacy(Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0, orders);
+            }
+
+            /// <summary>
+            /// The human's switch for resource shipping (food and grotsits, distribution centers included). Off by default: the human
+            /// orders shipments. On, this player's shipments are planned exactly as an AI player's are. Saved with the player.
+            /// </summary>
+            public bool ShipmentsAutomated { get; set; }
+
+            /// <summary>
+            /// The reduced routine of a human-controlled player: the human gives the orders, so nothing here chooses ship moves,
+            /// colonists or stances. What does run is the bookkeeping the human cannot do (research accounting, the strategy tables the
+            /// automated parts read, combat memory, the blockade view), shipping while ShipmentsAutomated, and production for the
+            /// planets switched to automatic (a manual planet is skipped in BuildIndustryMatrix).
+            /// </summary>
+            private void ProcessResultsHuman(
+                List<Planet.UpdateResult> results,
+                List<GameAI.GameAIOrder>        orders)
+            {
+                var turn = Gameboard.Instance != null ? Gameboard.Instance.TurnNumber : 0;
+                TryEnterConsolidate(turn);
+                ApplyWarState(turn);
+                RecordLosses(results, turn);
+                RefreshBlockadeView();
+
+                if (ShipmentsAutomated)
+                {
+                    UpdateDistributionCenters(results, turn);
+                    ProcessFoodShortage(results, orders);
+                    ProcessGrotsitsShortage(results, orders);
+                }
+                ProcessResearch(results, orders);
+                ProcessIndustry(results, orders);
             }
 
             /// <summary>
@@ -1062,10 +1107,7 @@ namespace FlatSpace
                             route.Cost, nearTarget.target ?? action.Target, nearTarget.target == null ? route.Cost : nearTarget.cost);
                     }
 
-                    var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
-                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                        delay, delay, amount, action.Origin, action.Target);
-                    colonist.Route = new List<string>(route.Nodes);
+                    var escortOffense = 0f;
                     // The escort: the origin's spare warships fly the same route as the ordinary ship-transport trio, launched this
                     // turn; the colonist records their offense, which BlockadeSystem subtracts at each node. On arrival they are
                     // ordinary docked warships. The colonist does not depend on them (nothing in flight is attacked).
@@ -1083,43 +1125,60 @@ namespace FlatSpace
                         EmitShipOrders(escortAction, orders, EscortClaimed(action.Origin));
                         if (orders.Count > before)
                         {
-                            colonist.EscortOffense = escortPlan.offense;
+                            escortOffense = escortPlan.offense;
                             _escortActions.Add(escortAction);
                             AITuningLogger.LogEscortLaunch(turn, Player.playerID, action.Origin, action.Target, escortPlan.offense,
                                 RoutePlanner.MaxBlockadeValue(route, _blockadeView));
                         }
                     }
-                    orders.Add(colonist);
+                    EmitColonistOrders(action.Origin, action.Target, amount, delay, route, escortOffense, orders);
                     if (route.IsDetour)
                         AITuningLogger.LogRouteDetour(turn, Player.playerID, action.Origin, action.Target,
                             route.Nodes, route.Cost);
+                }
+            }
 
-                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationChange,
-                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
-                        0, 0, amount * -1.0f, action.Origin, action.Origin));
+            /// <summary>
+            /// Emits the orders of one colonization launch: the delayed colonist (carrying its planned route and any escort offense), the
+            /// immediate deduction at the origin, the target's "colonist incoming" flag, the colony ship's removal and, when the target
+            /// cannot feed a colonist, the food rider pair. Shared by ProcessColonizers and the human Colonize command; the caller
+            /// decides the delay (the AI keeps its own rounding) and any escort.
+            /// </summary>
+            public void EmitColonistOrders(string origin, string target, int amount, int delay,
+                RoutePlanner.PlannedRoute route, float escortOffense, List<GameAI.GameAIOrder> orders)
+            {
+                var colonist = MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                    delay, delay, amount, origin, target);
+                colonist.Route = new List<string>(route.Nodes);
+                colonist.EscortOffense = escortOffense;
+                orders.Add(colonist);
 
-                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransferInProgress,
-                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
-                        0, 0, amount, action.Origin, action.Target));
-                                    
-                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeRemoveShip,
-                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
-                        0, 0, 1, action.Origin, action.Origin));
+                orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationChange,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, amount * -1.0f, origin, origin));
 
-                    // A target that cannot feed a colonist gets a food rider as its own order: paid by the origin
-                    // now (an existing food change), delivered with the colonist (same delay), and unrelated to the
-                    // food shipping system. It bridges the gap until a shortage can be answered; it does not
-                    // guarantee survival.
-                    if (AIMap.GetPlanet(action.Target).NeedsColonyFoodRider)
-                    {
-                        var rider = AIMap.GameAIConstants.colonyFoodRider;
-                        orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider,
-                            GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
-                            delay, delay, rider, action.Origin, action.Target));
-                        orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
-                            GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
-                            0, 0, rider * -1.0f, action.Origin, action.Origin));
-                    }
+                orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransferInProgress,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, amount, origin, target));
+
+                orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeRemoveShip,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, 1, origin, origin));
+
+                // A target that cannot feed a colonist gets a food rider as its own order: paid by the origin
+                // now (an existing food change), delivered with the colonist (same delay), and unrelated to the
+                // food shipping system. It bridges the gap until a shortage can be answered; it does not
+                // guarantee survival.
+                if (AIMap.GetPlanet(target).NeedsColonyFoodRider)
+                {
+                    var rider = AIMap.GameAIConstants.colonyFoodRider;
+                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider,
+                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeDelayed,
+                        delay, delay, rider, origin, target));
+                    orders.Add(MakeOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodChange,
+                        GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                        0, 0, rider * -1.0f, origin, origin));
                 }
             }
 
@@ -1414,7 +1473,8 @@ namespace FlatSpace
             /// Emits the three standard orders (transport, deduct, in-progress) for a resource shipment
             /// action, for a caller-computed amount (already capped at the target's remaining need).
             /// </summary>
-            private void EmitResourceOrders(
+            // Public: the human's shipResource command emits the same three orders.
+            public void EmitResourceOrders(
                 ResourceAction               action,
                 float                        amount,
                 GameAI.GameAIOrder.OrderType transportType,
@@ -1523,7 +1583,8 @@ namespace FlatSpace
                         0, 0, (float)r.Data * -1.0f, r.Name, r.Name));
             }
 
-            private void UpdateResearch(float researchThisTurn, List<GameAI.GameAIOrder> orders)
+            // Public for the human-mode self-check (Assets/Editor is a separate assembly).
+            public void UpdateResearch(float researchThisTurn, List<GameAI.GameAIOrder> orders)
             {
                 researchTotal += researchThisTurn;
                 if (currentResearch == null)
@@ -1543,17 +1604,26 @@ namespace FlatSpace
                 if (currentResearch == null)
                     return;
                 var completedResearchName = currentResearch.name;
+                _researchCompletedThisTurn = currentResearch.itemName;
                 currentResearch.researched = true;
                 foreach( var dependentItem in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == currentResearch.itemName))
                 {
                     dependentItem.researched  = true;
                 }
-                Gameboard.Instance.CreateNotificationsForCompletedResearch(completedResearchName, Player.playerID);
-                AITuningLogger.LogResearchComplete(Gameboard.Instance.TurnNumber, Player.playerID, completedResearchName);
+                if (Gameboard.Instance != null)
+                {
+                    Gameboard.Instance.CreateNotificationsForCompletedResearch(completedResearchName, Player.playerID);
+                    AITuningLogger.LogResearchComplete(Gameboard.Instance.TurnNumber, Player.playerID, completedResearchName);
+                }
 
             }
             private void ChooseNewResearch(List<GameAI.GameAIOrder> orders)
             {
+                if (HumanControlled)
+                {
+                    ChooseNextQueuedResearch(orders);
+                    return;
+                }
                 var researchChoices = ResearchCatalog.catalogItems.FindAll(x => !x.researched).ToList();
                 researchChoices = researchChoices.FindAll(x =>
                     (string.IsNullOrEmpty(x.requiredTech) || ResearchCatalog.GetItem(x.requiredTech).researched)).ToList();   
@@ -1572,7 +1642,7 @@ namespace FlatSpace
                 if (offenseBoost > 1f)
                     AITuningLogger.LogOffenseResearchBoost(Gameboard.Instance.TurnNumber, Player.playerID,
                         currentResearch.itemName, offenseBoost);
-                if (Player.playerID == 0)
+                if (Player.playerID == 0 && Gameboard.Instance != null)
                 {
                     Debug.Log("Turn: " + Gameboard.Instance.TurnNumber + " New Research: " + currentResearch.name);
                 }
@@ -1583,6 +1653,63 @@ namespace FlatSpace
                     0, 0, 0f, currentResearch.itemName, currentResearch.itemName));
                 Gameboard.Instance.CreateNotificationsForNewResearch(currentResearch?.itemName, Player.playerID);
                 AITuningLogger.LogResearchStart(Gameboard.Instance.TurnNumber, Player.playerID, currentResearch?.itemName);
+            }
+
+            // ── Human research queue ─────────────────────────────────────────
+
+            /// <summary>The human's research queue, worked through in order (item names). Unused by AI players.</summary>
+            public List<string> ResearchQueue { get; private set; } = new List<string>();
+
+            private string _researchCompletedThisTurn;
+
+            /// <summary>The research that completed since the last call (null when none); clears it. Read once per turn by the human's event list.</summary>
+            public string TakeResearchCompleted()
+            {
+                var name = _researchCompletedThisTurn;
+                _researchCompletedThisTurn = null;
+                return name;
+            }
+
+            /// <summary>A human player with nothing to research: points keep accumulating in researchTotal until something is queued.</summary>
+            public bool ResearchIdle => HumanControlled && currentResearch == null;
+
+            public void SetResearchQueue(IEnumerable<string> names)
+            {
+                ResearchQueue = names != null ? new List<string>(names) : new List<string>();
+            }
+
+            /// <summary>
+            /// Starts the first queued item that can still be researched, dropping entries that cannot (unknown, researched meanwhile,
+            /// prerequisite not researched). Leaves currentResearch null when the queue holds none.
+            /// </summary>
+            private void ChooseNextQueuedResearch(List<GameAI.GameAIOrder> orders)
+            {
+                currentResearch = null;
+                while (ResearchQueue.Count > 0)
+                {
+                    var name = ResearchQueue[0];
+                    ResearchQueue.RemoveAt(0);
+                    var item = ResearchCatalog.GetItem(name);
+                    if (item == null || item.researched) continue;
+                    if (!string.IsNullOrEmpty(item.requiredTech))
+                    {
+                        var prerequisite = ResearchCatalog.GetItem(item.requiredTech);
+                        if (prerequisite != null && !prerequisite.researched) continue;
+                    }
+                    currentResearch = item;
+                    break;
+                }
+                if (currentResearch == null) return;
+
+                orders.Add(MakeOrder(
+                    GameAI.GameAIOrder.OrderType.OrderTypeResearchSet,
+                    GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                    0, 0, 0f, currentResearch.itemName, currentResearch.itemName));
+                if (Gameboard.Instance != null)
+                {
+                    Gameboard.Instance.CreateNotificationsForNewResearch(currentResearch.itemName, Player.playerID);
+                    AITuningLogger.LogResearchStart(Gameboard.Instance.TurnNumber, Player.playerID, currentResearch.itemName);
+                }
             }
 
             /// <summary>
@@ -2448,14 +2575,17 @@ namespace FlatSpace
             /// Matrix-building logic for any production decisions.
             /// Returns null if there is nothing to do.
             /// </summary>
-            private ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction> BuildIndustryMatrix(
+            // Public for the human-mode self-check (Assets/Editor is a separate assembly).
+            public ScoreMatrix<ScoreMatrixMultipleDecisionElement, IndustryChoiceElement, IndustryAction> BuildIndustryMatrix(
                 List<Planet.UpdateResult>                  results,
                 AIStrategy        strategy)
             {
 
+                // A planet the human develops by hand (Planet.ManualDevelopment) is never given a production decision here.
                 var productionCompleteResults = results.FindAll(x => x.PlayerID == Player.playerID
-                    && (x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete 
-                        or Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty))
+                    && (x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete
+                        or Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty)
+                    && !AIMap.GetPlanet(x.Name).ManualDevelopment)
                     .OrderBy(x => x.Name).ThenBy(x => x.GetType()).ToList();
                 var surplusResults = productionCompleteResults.FindAll(x => x.PlayerID == Player.playerID
                     && x.Result is Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustrySurplus);

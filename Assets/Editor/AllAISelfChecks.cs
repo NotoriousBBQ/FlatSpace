@@ -27,6 +27,7 @@ public static class AllAISelfChecks
             ("Conversion", ConversionSelfCheck.RunChecks),
             ("Planet Defense", PlanetDefenseSelfCheck.RunChecks),
             ("Blockade Initiation", BlockadeInitiateSelfCheck.RunChecks),
+            ("Human Mode", HumanModeSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

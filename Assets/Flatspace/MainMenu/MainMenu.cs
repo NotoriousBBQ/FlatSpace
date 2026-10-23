@@ -33,6 +33,7 @@ public class MainMenu : MonoBehaviour
             }
             _startPopup = RandomBoardPopup.Create(canvas.rootCanvas, _randomBoardSettings);
         }
+        MatchSettings.Reset();
         _startPopup.Show();
     }
 

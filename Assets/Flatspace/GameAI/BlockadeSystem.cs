@@ -25,6 +25,7 @@ namespace FlatSpace.AI
             public string Planet;
             public float Value;
             public int BlockerId;   // the player whose docked offense set Value (see Value(...)'s `blocker`)
+            public GameAI.GameAIOrder.OrderType Type;   // the cut order's type (a colonist, a food shipment ...)
         }
 
         private const float Epsilon = 0.0001f;
@@ -235,7 +236,7 @@ namespace FlatSpace.AI
                 if (value - order.EscortOffense <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
-                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker });
+                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker, Type = order.Type });
                 // Only this colonist and ITS rider (matched on player, origin, target and the colonist's own delay) go: a
                 // diverted colonist can share origin and target with another one, which must survive this cut.
                 orders.Remove(order);
@@ -269,7 +270,7 @@ namespace FlatSpace.AI
                 if (value <= 0f) continue;
 
                 AITuningLogger.LogBlockade(turnNumber, order.PlayerId, node.Name, blocker, value);
-                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker });
+                cuts.Add(new BlockadeCut { PlayerId = order.PlayerId, Planet = node.Name, Value = value, BlockerId = blocker, Type = order.Type });
                 var remaining = System.Convert.ToSingle(order.Data) - value;
                 AITuningLogger.LogOrderBlocked(turnNumber, order.PlayerId, order.Type.ToString(), node.Name,
                     System.Math.Max(0f, remaining));

@@ -123,6 +123,16 @@ namespace Game.UI.MainGameScreenUI
         public void RefreshFogView()
         {
             if (_fogViewDropdown == null) return;
+            // A human plays: the view is that player's fog and the debug choices are locked.
+            var humanId = FlatSpace.Game.Gameboard.Instance != null ? FlatSpace.Game.Gameboard.Instance.HumanPlayerId : -1;
+            if (humanId >= 0)
+            {
+                _fogViewDropdown.choices = new System.Collections.Generic.List<string> { $"Player {humanId}" };
+                _fogViewDropdown.SetValueWithoutNotify($"Player {humanId}");
+                _fogViewDropdown.SetEnabled(false);
+                return;
+            }
+            _fogViewDropdown.SetEnabled(true);
             var choices = new System.Collections.Generic.List<string> { "No Fog", "All Players" };
             var n = FlatSpace.Game.Gameboard.Instance != null
                 ? FlatSpace.Game.Gameboard.Instance.NumPlayers : 0;

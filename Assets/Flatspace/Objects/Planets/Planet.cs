@@ -42,7 +42,9 @@ public class Planet : MonoBehaviour
             // Appended last: serialized as an int. Data is a FightProjection (FightProjector); PlayerID is the player it is about.
             UpdateResultTypeFightProjection,
             // Appended last: serialized as an int. Data is a ConversionEvent (ConversionSystem); PlayerID is the victim.
-            UpdateResultTypeConversion
+            UpdateResultTypeConversion,
+            // Appended last: serialized as an int. Data is the item name; a manual planet dropped a queued item that was no longer buildable.
+            UpdateResultTypeProductionDropped
         }
 
         public enum UpdateResultPriority
@@ -75,6 +77,7 @@ public class Planet : MonoBehaviour
                 case ResultType.UpdateResultTypeIndustrySurplus:
                 case ResultType.UpdateResultTypeResearchProduced:
                 case ResultType.UpdateResultTypeIndustryProductionQueueEmpty:
+                case ResultType.UpdateResultTypeProductionDropped:
                     Priority = ResultPriority.UpdateResultPriorityMedium;
                     break;
                 case ResultType.UpdateResultTypePopulationLoss:
@@ -844,8 +847,21 @@ public class Planet : MonoBehaviour
 
     private void SetPlanetOwnership()
     {
+        var before = Owner;
         Owner = PlayerWithMostPopulation();
+        // A planet takes its new owner's default: manual for the human player, automatic (the AI chooses) for anyone else.
+        if (Owner != before)
+            ManualDevelopment = Owner != NoOwner && HumanOwnerTest != null && HumanOwnerTest(Owner);
     }
+
+    /// <summary>
+    /// True when the human, not the AI, chooses what this planet builds. False (the default, and what an older save reads back)
+    /// means the AI fills the production queue whenever it runs empty, as it always has.
+    /// </summary>
+    public bool ManualDevelopment;
+
+    /// <summary>Tells a planet whether a player id is the human one. Set by Gameboard while a human plays; null (the default) means nobody is.</summary>
+    public static System.Func<int, bool> HumanOwnerTest;
 
     private void GetPopulationDistribution(out Dictionary<int, int> popDistribution)
     {
@@ -906,10 +922,38 @@ public class Planet : MonoBehaviour
             UpdateProduction();
         }
     }
+    /// <summary>
+    /// Whether a production item can still be built here: unlocked, not already built, not a tier below the best built, and (for a
+    /// bunker) under the population cap. The hard rules both the human's queue and a manual planet's build use; the AI's grotsits
+    /// affordability (CanAffordImprovement) is a preference and is not part of it.
+    /// </summary>
+    public bool IsProductionItemValid(CatalogItem item)
+    {
+        if (item == null || !item.researched) return false;
+        if (CompletedImprovements.Exists(c => c.Item1 == item.itemName)) return false;
+        if (IsImprovementSuperseded(item)) return false;
+        if (item.subType == "Bunker" && !CanBuildBunker()) return false;
+        return true;
+    }
+
+    /// <summary>Advances the queue as a turn would (starting the next item when nothing is in production). Public for the self-check.</summary>
+    public void StartNextProduction(List<UpdateResult> resultList = null)
+    {
+        UpdateProductionQueue(resultList);
+    }
+
     private bool UpdateProductionQueue(List<UpdateResult> resultList = null)
     {
         if (CurrentProduction == null)
         {
+            // A queue the human fills can hold an item that stopped being buildable (a tier superseded since, a bunker over the cap):
+            // it is dropped and reported rather than built. The AI's own queue is never touched.
+            while (ManualDevelopment && ProductionQueue.Count > 0 && !IsProductionItemValid(ProductionQueue[0].Item))
+            {
+                resultList?.Add(new UpdateResult(PlanetName, ResultType.UpdateResultTypeProductionDropped,
+                    ProductionQueue[0].Item.itemName, Owner));
+                ProductionQueue.RemoveAt(0);
+            }
             if (ProductionQueue.Count > 0)
             {
                 var nextProduction = ProductionQueue.First();
@@ -1135,6 +1179,25 @@ public class Planet : MonoBehaviour
             .Take(count)
             .Select(s => s.Damage)
             .ToList();
+    }
+
+    // Puts the given ships first among this owner's docked ships of the kind (in the order given), keeping every other ship in
+    // its slot. UndockShips and the Peek* methods take ships from the front, so this is how a human picks which ships leave.
+    // Ships in `first` that are not docked here, or are not of that kind and owner, are ignored.
+    public void PrioritizeShips(Ship.ShipKind kind, int owner, IEnumerable<Ship> first)
+    {
+        var slots = new List<int>();
+        var members = new List<Ship>();
+        for (var i = 0; i < DockedShips.Count; i++)
+        {
+            if (DockedShips[i].Kind != kind || DockedShips[i].Owner != owner) continue;
+            slots.Add(i);
+            members.Add(DockedShips[i]);
+        }
+        var ordered = first.Where(members.Contains).Distinct().ToList();
+        ordered.AddRange(members.Where(m => !ordered.Contains(m)));
+        for (var i = 0; i < slots.Count; i++)
+            DockedShips[slots[i]] = ordered[i];
     }
 
     // Removes one specific docked ship (a ship destroyed in combat).

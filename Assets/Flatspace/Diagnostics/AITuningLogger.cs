@@ -755,6 +755,51 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(0, -1, "BoardConfig", boardName) });
     }
 
+    /// <summary>The match setup: T0|P-1|MatchSetup|human=&lt;id or none&gt;|turnLimit=&lt;n, 0 = unlimited&gt;. The LAST one of a log is the real one, like BoardConfig.</summary>
+    public static void LogMatchSetup(int humanPlayerId, int turnLimit)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string>
+        {
+            FormatLine(0, -1, "MatchSetup", "human=" + (humanPlayerId >= 0 ? humanPlayerId.ToString() : "none"), "turnLimit=" + turnLimit)
+        });
+    }
+
+    /// <summary>A human command that was applied: T&lt;turn&gt;|P&lt;id&gt;|HumanCommand|type|origin|target|detail.</summary>
+    public static void LogHumanCommand(int turnNumber, int playerId, string type, string origin, string target, string detail)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanCommand", type, origin ?? "", target ?? "", detail ?? "") });
+    }
+
+    /// <summary>A human command that was refused: T&lt;turn&gt;|P&lt;id&gt;|HumanCommandRefused|type|reason.</summary>
+    public static void LogHumanCommandRefused(int turnNumber, int playerId, string type, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanCommandRefused", type ?? "", reason ?? "") });
+    }
+
+    /// <summary>The timer paused itself on an event: T&lt;turn&gt;|P&lt;id&gt;|HumanPause|event|planet.</summary>
+    public static void LogHumanPause(int turnNumber, int playerId, string eventName, string planet)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanPause", eventName, planet ?? "") });
+    }
+
+    /// <summary>The human was defeated: T&lt;turn&gt;|P&lt;id&gt;|HumanDefeat|populatedPlanets|colonyShips|colonistsInFlight.</summary>
+    public static void LogHumanDefeat(int turnNumber, int playerId, int populatedPlanets, int colonyShips, int colonistsInFlight)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanDefeat", populatedPlanets.ToString(), colonyShips.ToString(), colonistsInFlight.ToString()) });
+    }
+
+    /// <summary>The match reached its turn limit: T&lt;turn&gt;|P-1|TurnLimitReached|limit.</summary>
+    public static void LogTurnLimitReached(int turnNumber, int limit)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, -1, "TurnLimitReached", limit.ToString()) });
+    }
+
     private static string FormatLine(int turnNumber, int playerId, string eventCode, params string[] fields)
     {
         var parts = new List<string> { $"T{turnNumber}", $"P{playerId}", eventCode };
