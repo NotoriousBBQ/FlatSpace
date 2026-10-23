@@ -522,6 +522,10 @@ namespace FlatSpace
             /// </summary>
             public void UpdateDistributionCenters(List<Planet.UpdateResult> results, int turnNumber)
             {
+                // Keep the lists as they stood before this turn's update, so another player's decision this turn can read them (below).
+                _dcBeforeUpdate = new List<string>(FoodDistributionCenters);
+                _dcBeforeUpdate.AddRange(GrotsitsDistributionCenters);
+                _dcUpdatedTurn = turnNumber;
                 LastFoodSurplusPlanets = results
                     .Where(x => x.PlayerID == Player.playerID
                              && x.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus)
@@ -534,6 +538,17 @@ namespace FlatSpace
                 UpdateDistributionCentersForResource(turnNumber, "Food", LastFoodSurplusPlanets, FoodDistributionCenters);
                 UpdateDistributionCentersForResource(turnNumber, "Grotsits", LastGrotsitsSurplusPlanets, GrotsitsDistributionCenters);
             }
+
+            private List<string> _dcBeforeUpdate = new List<string>();
+            private int _dcUpdatedTurn = -1;
+
+            /// <summary>
+            /// Every DC (food and grotsits) as it stood at the start of `turnNumber`: the pre-update lists when this player's update has
+            /// already run this turn, else the current ones. Another player's decision reads this, so the result does not depend on
+            /// who is processed first (nothing one player writes this turn is read by another's decision the same turn).
+            /// </summary>
+            public IEnumerable<string> DistributionCentersAtTurnStart(int turnNumber)
+                => _dcUpdatedTurn == turnNumber ? _dcBeforeUpdate : FoodDistributionCenters.Concat(GrotsitsDistributionCenters);
 
             private void UpdateDistributionCentersForResource(
                 int turnNumber, string resource, List<string> producers, List<string> current)
@@ -1753,7 +1768,8 @@ namespace FlatSpace
 
                 // Bounded by my economy: the assault force follows the enemies' fleets, which follow mine.
                 var ceiling = (int)(AIMap.GameAIConstants.warshipsPerColonizedPlanet * ColonizedPlanetCount());
-                return Math.Min(unbounded, ceiling);
+                // Plus the ships last turn's initiated blockades wanted (bounded per blockade), after the economy ceiling.
+                return Math.Min(unbounded, ceiling) + _initiated.WantedShipsLastTurn;
             }
 
             /// <summary>
@@ -1886,7 +1902,7 @@ namespace FlatSpace
             /// ship or bunker at the target, or diplomacy off). Pure: reads the map, writes nothing. Public for the self-check.
             /// </summary>
             public FightProjection ProjectArrival(string origin, Planet target, int count,
-                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null)
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null, Ship.ShipKind groupKind = Ship.ShipKind.SiegeShip)
             {
                 if (target == null || count <= 0) return null;
                 var constants = AIMap.GameAIConstants;
@@ -1912,7 +1928,7 @@ namespace FlatSpace
 
                 var originPlanet = AIMap.GetPlanet(origin);
                 if (originPlanet == null || !originPlanet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var path)) return null;
-                Leave(origin, Ship.ShipKind.SiegeShip, count, path.Cost, true);
+                Leave(origin, groupKind, count, path.Cost, true);
                 return FightProjector.Project(AIMap, target, Player.playerID, stats, constants, orders);
             }
 
@@ -1922,8 +1938,8 @@ namespace FlatSpace
             /// and free of side effects (the planner consults it twice a turn).
             /// </summary>
             public bool ArrivalNotOutmatched(string origin, Planet target, int count,
-                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null)
-                => ArrivalVerdict(ProjectArrival(origin, target, count, departing), out _);
+                System.Collections.Generic.IReadOnlyList<ShipAction> departing = null, Ship.ShipKind groupKind = Ship.ShipKind.SiegeShip)
+                => ArrivalVerdict(ProjectArrival(origin, target, count, departing, groupKind), out _);
 
             // The gate's reading of an arrival projection; `reason` is the SiegeHeld reason when it refuses (null when it allows).
             private bool ArrivalVerdict(FightProjection projection, out string reason)
@@ -2018,6 +2034,225 @@ namespace FlatSpace
                 if (key == _lastSiegeSized) return;
                 _lastSiegeSized = key;
                 AITuningLogger.LogSiegeSized(turnNumber, Player.playerID, target.PlanetName, defense, needed, sized, cap);
+            }
+
+            // ── Initiated blockades (docs/superpowers/specs/2026-10-22-ai-initiated-blockades-design.md) ──────────
+
+            private readonly InitiatedBlockadeTracker _initiated = new InitiatedBlockadeTracker();
+
+            /// <summary>The initiated blockades this player holds (state only; public for the self-check).</summary>
+            public InitiatedBlockadeTracker InitiatedBlockades => _initiated;
+
+            /// <summary>The last initiate pass's transitions and every skip it met (not only the changed ones); for the self-check.</summary>
+            public List<InitiatedBlockadeTracker.Change> LastInitiatedChanges { get; private set; } = new List<InitiatedBlockadeTracker.Change>();
+            public List<InitiatedBlockadeTracker.Skip> LastInitiatedSkips { get; private set; } = new List<InitiatedBlockadeTracker.Skip>();
+
+            /// <summary>
+            /// The planets a valid rival currently has as a Distribution Center. Null (the default) reads every rival's PlayerAI through
+            /// Gameboard.Instance (empty without one); a self-check sets it.
+            /// </summary>
+            public Func<int, IEnumerable<string>> RivalDistributionCenters { get; set; }
+
+            private IEnumerable<string> RivalDcs(int rival, int turnNumber)
+            {
+                if (RivalDistributionCenters != null) return RivalDistributionCenters(rival);
+                var board = Gameboard.Instance;
+                if (board == null || rival < 0 || rival >= board.players.Count) return Enumerable.Empty<string>();
+                var ai = board.players[rival].playerAI;
+                return ai == null ? Enumerable.Empty<string>() : ai.DistributionCentersAtTurnStart(turnNumber);
+            }
+
+            /// <summary>
+            /// A planet I could actually colonize: one of my populated planets is within maxPathNodesForColonization nodes and can
+            /// support the colonist (CanSupportColony). A Colony hold needs this to start and to stay (it is not a target otherwise).
+            /// </summary>
+            public bool ColonizableFromMyPlanets(Planet target)
+            {
+                var limit = AIMap.GameAIConstants.maxPathNodesForColonization;
+                foreach (var origin in AIMap.PlanetList)
+                {
+                    if (origin == target || origin.Owner != Player.playerID || origin.Population.Count == 0) continue;
+                    if (origin.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var entry)
+                        && entry.NumNodes >= 2 && entry.NumNodes <= limit && CanSupportColony(origin, target)) return true;
+                }
+                return false;
+            }
+
+            /// <summary>
+            /// A colony ship of mine can already get to the planet: a colonist of mine is in flight there, or a colony ship is docked on a
+            /// planet with a usable path of at most maxPathNodesForColonization nodes. A Colony blockade is only started when this is false.
+            /// </summary>
+            public bool ColonyShipCanReach(Planet target)
+            {
+                var me = Player.playerID;
+                if (InFlightOrders != null)
+                    foreach (var order in InFlightOrders)
+                        if (order.Type == GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport && order.PlayerId == me
+                            && order.Target == target.PlanetName) return true;
+                var limit = AIMap.GameAIConstants.maxPathNodesForColonization;
+                foreach (var planet in AIMap.PlanetList)
+                {
+                    if (planet == target || !planet.DockedShips.Exists(s => s.Kind == Ship.ShipKind.ColonyShip && s.Owner == me)) continue;
+                    if (planet.DistanceMapToPathingList.TryGetValue(target.PlanetName, out var entry)
+                        && entry.NumNodes >= 2 && entry.NumNodes <= limit) return true;
+                }
+                return false;
+            }
+
+            private float NewWarshipOffense(WarshipStats stats)
+                => stats.Offense(AIMap.GameAIConstants.warShipData,
+                    WarshipStats.ResearchedNames(ResearchCatalog != null ? ResearchCatalog.catalogItems : null, WarshipStats.WarshipSubtype));
+
+            /// <summary>
+            /// The initiate pass, run last in PlanShipActions on the ships everything else left spare: picks the blockades to hold
+            /// (BlockadeInitiator), sends spare warships at each through AssaultPlanner.PlanHoldForce behind the arrival projection, and
+            /// keeps the tracker, the give-up counters, the log lines and next turn's wanted-ship total. `alreadyPlanned` is every ship
+            /// action planned so far this turn. Returns only the new warship actions.
+            /// </summary>
+            public List<ShipAction> PlanInitiatedBlockades(int turnNumber, AssaultPlanner assault,
+                List<ShipTransportPlanner.PlanetState> states, List<ShipAction> alreadyPlanned)
+            {
+                var result = new List<ShipAction>();
+                var me = Player.playerID;
+                var constants = AIMap.GameAIConstants;
+                var contact = AIMap.Knowledge.ContactPlayers(AIMap, me);
+                var count = Gameboard.Instance != null ? Gameboard.Instance.players.Count : Math.Max(contact.Count + 1, me + 1);
+                var rivals = BlockadeInitiator.ValidRivals(me, AIMap.Diplomacy, contact,
+                    Enumerable.Range(0, count).Where(i => i != me), constants);
+
+                var dcOwner = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var rival in rivals)
+                    foreach (var name in RivalDcs(rival, turnNumber)) dcOwner[name] = rival;
+                var selection = BlockadeInitiator.Select(AIMap, me, new BlockadeInitiator.Inputs
+                {
+                    Rivals = rivals,
+                    DcOwner = dcOwner,
+                    Lanes = BlockadeInitiator.LaneCounts(AIMap, InFlightOrders ?? new List<GameAI.GameAIOrder>(), rivals),
+                    ColonyStartAllowed = p => !ColonyShipCanReach(p) && IsValidColonizationTarget(p) && ColonizableFromMyPlanets(p),
+                    ColonyHoldValid = ColonizableFromMyPlanets,
+                    Tracker = _initiated,
+                    Turn = turnNumber,
+                });
+
+                var sentByOrigin = new Dictionary<string, int>(StringComparer.Ordinal);
+                var planned = new List<ShipAction>(alreadyPlanned);
+                foreach (var action in alreadyPlanned.Where(a => a.Kind == Ship.ShipKind.WarShip))
+                {
+                    sentByOrigin.TryGetValue(action.Origin, out var n);
+                    sentByOrigin[action.Origin] = n + action.Count;
+                }
+
+                var held = new List<InitiatedBlockadeTracker.Held>();
+                var skips = new List<InitiatedBlockadeTracker.Skip>();
+                var gaveUp = new Dictionary<string, string>(StringComparer.Ordinal);
+                var wantedShips = 0;
+                var perShip = Math.Max(0.01f, NewWarshipOffense(new WarshipStats(ResearchCatalog != null ? ResearchCatalog.catalogItems : null)));
+                // Walk the whole ranking: a candidate that cannot be sent a ship does not take one of the max-active slots (unless it
+                // is already held), so the next one gets the chance.
+                foreach (var candidate in selection.Ranked)
+                {
+                    if (held.Count >= constants.blockadeInitiateMaxActive)
+                    {
+                        skips.Add(new InitiatedBlockadeTracker.Skip { Planet = candidate.Planet, Kind = candidate.Kind, Reason = "OverCap" });
+                        continue;
+                    }
+                    var planet = AIMap.GetPlanet(candidate.Planet);
+                    if (planet == null) continue;
+                    var needed = candidate.Kind == BlockadeKind.Colony
+                        ? rivals.Max(r => assault.HoldNeededOffense(planet, r))
+                        : assault.HoldNeededOffense(planet, candidate.Rival);
+
+                    // Warships the ordinary assault (or an escort) already sent here this turn are not incoming yet: they count as sent.
+                    needed = Math.Max(0f, needed - planned.Where(a => a.Kind == Ship.ShipKind.WarShip && a.Target == candidate.Planet)
+                        .Sum(a => a.Count) * perShip);
+                    // Ships docked at another hold are that hold's force, not spare: two holds do not pass ships back and forth.
+                    var holdNames = new HashSet<string>(_initiated.ActivePlanets, StringComparer.Ordinal);
+                    foreach (var other in held) holdNames.Add(other.Planet);
+                    var sourceStates = states.Where(st => !holdNames.Contains(st.Planet.PlanetName)).ToList();
+                    var proposed = assault.PlanHoldForce(planet, needed, sourceStates, sentByOrigin);
+                    var stillNeeded = assault.LastBlockadeForce.StillNeeded;
+                    var sent = 0;
+                    var refused = 0;
+                    foreach (var action in proposed)
+                    {
+                        if (!ArrivalNotOutmatched(action.Origin, planet, action.Count, planned, action.Kind)) { refused++; continue; }
+                        result.Add(action);
+                        planned.Add(action);
+                        sentByOrigin.TryGetValue(action.Origin, out var n);
+                        sentByOrigin[action.Origin] = n + action.Count;
+                        sent += action.Count;
+                    }
+
+                    string cause = null;
+                    if (needed > 0f && sent == 0)
+                    {
+                        var mineThere = planet.DockedShips.Exists(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == me)
+                                        || planet.GetIncomingShips(Ship.ShipKind.WarShip, me) > 0;
+                        if (refused > 0) cause = "Outmatched";
+                        else if (!states.Any(st => st.Planet != planet
+                                                   && st.Planet.DistanceMapToPathingList.TryGetValue(planet.PlanetName, out var e)
+                                                   && e.NumNodes >= 2 && e.NumNodes <= constants.maxPathNodesForShipTransport))
+                            cause = "NoPath";
+                        else if (!mineThere) cause = "NoSpare";
+                    }
+                    if (cause != null)
+                    {
+                        skips.Add(new InitiatedBlockadeTracker.Skip { Planet = candidate.Planet, Kind = candidate.Kind, Reason = cause });
+                        if (!_initiated.IsActive(candidate.Planet)) continue;
+                        if (_initiated.BumpGiveUp(candidate.Planet, cause) >= constants.blockadeInitiateGiveUpTurns)
+                        {
+                            gaveUp[candidate.Planet] = cause == "NoPath" ? "Unreachable" : cause;
+                            _initiated.StartCooldown(candidate.Planet, turnNumber + constants.blockadeInitiateCooldownTurns);
+                            continue;
+                        }
+                    }
+                    else if (needed > 0f && (stillNeeded > 0f || refused > 0))
+                    {
+                        // Ships are being sent (or are there) but the force still does not cover the need: a hold that stays short for
+                        // the give-up turns is released like one that cannot be sent anything (a rival too strong, or no effect at peace).
+                        if (_initiated.IsActive(candidate.Planet)
+                            && _initiated.BumpGiveUp(candidate.Planet, "Outmatched") >= constants.blockadeInitiateGiveUpTurns)
+                        {
+                            gaveUp[candidate.Planet] = "Outmatched";
+                            _initiated.StartCooldown(candidate.Planet, turnNumber + constants.blockadeInitiateCooldownTurns);
+                            continue;
+                        }
+                    }
+                    else _initiated.ClearGiveUp(candidate.Planet);
+
+                    wantedShips += Math.Min(constants.blockadeInitiateMaxShips, Math.Max(1, (int)Math.Ceiling(needed / perShip)));
+                    held.Add(new InitiatedBlockadeTracker.Held
+                    {
+                        Planet = candidate.Planet, Kind = candidate.Kind, Rival = candidate.Rival, Score = candidate.Score,
+                        Stance = AIMap.Diplomacy.IsAtWar(me, candidate.Rival, contact.Contains(candidate.Rival)) ? "War" : "Peace",
+                        Needed = needed, Ships = sent,
+                    });
+                }
+
+                LastInitiatedSkips = new List<InitiatedBlockadeTracker.Skip>(skips);
+                LastInitiatedChanges = _initiated.Update(turnNumber, held, last =>
+                {
+                    if (gaveUp.TryGetValue(last.Planet, out var why)) return why;
+                    var planet = AIMap.GetPlanet(last.Planet);
+                    if (last.Kind == BlockadeKind.Colony)
+                        return planet != null && planet.Population.Count > 0 ? "Colonized" : rivals.Count == 0 ? "WarEnded" : "NoLongerTarget";
+                    if (!rivals.Contains(last.Rival)) return "WarEnded";
+                    return last.Kind == BlockadeKind.Dc ? "LostDc" : "LaneCooled";
+                });
+                foreach (var change in LastInitiatedChanges)
+                {
+                    if (change.Started)
+                        AITuningLogger.LogBlockadeInitiateStart(turnNumber, me, change.Planet, change.Kind.ToString(), change.Held.Rival,
+                            change.Held.Stance, change.Held.Score, change.Held.Needed, change.Held.Ships);
+                    else
+                        AITuningLogger.LogBlockadeInitiateEnd(turnNumber, me, change.Planet, change.Kind.ToString(), change.EndReason,
+                            change.TurnsHeld);
+                }
+                foreach (var skip in _initiated.UpdateSkips(skips))
+                    AITuningLogger.LogBlockadeInitiateSkipped(turnNumber, me, skip.Planet, skip.Kind.ToString(), skip.Reason);
+
+                _initiated.RecordWantedShips(wantedShips);
+                return result;
             }
 
             // The per-turn part of the Bunker weight (my war rivals, whether a known rival planet exists, the garrison categories). It
@@ -2580,6 +2815,8 @@ namespace FlatSpace
                              retreat, actions, conversionKeep)))
                     AITuningLogger.LogConversionHoldSpare(turnNumber, Player.playerID, entry.Planet, entry.HeldShips, entry.HeldOffense,
                         entry.Wanted, entry.Call, entry.CallTarget, entry.RivalNearby, entry.Progress, entry.Keep, entry.Released);
+                // Last: initiated blockades take only the ships every plan above left spare.
+                actions.AddRange(PlanInitiatedBlockades(turnNumber, assault, transport.LastStates, actions));
                 return actions;
             }
 

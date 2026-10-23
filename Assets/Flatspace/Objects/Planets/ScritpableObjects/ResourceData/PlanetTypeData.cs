@@ -23,5 +23,8 @@ public class PlanetResourceData : ScriptableObject
     // GetGrotsitsCapacity(), i.e. how much of its upkeep this type may cover by importing grotsits rather than
     // producing all of it itself. 0 (the default) means fully self-funding. See Planet.CanAffordImprovement.
     public float _grotsitsImportAllowance;
+    // How much this planet type is worth as a specialised producer, 0..1 (Verdant 1, Desolate 1, Farm 0.5; types whose output is
+    // local-only today stay 0). Read by the AI's initiated blockades (colony target value); see GameAIMap.ProducerValue.
+    public float _producerValue;
 }
  

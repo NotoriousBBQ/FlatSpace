@@ -91,7 +91,7 @@ added after the existing economy-ceiling minimum and bounded per blockade by `bl
 | Line | When | Fields | Question | Repeat guard |
 |---|---|---|---|---|
 | `T<t>\|P<id>\|BlockadeInitiateStart\|planet\|kind(Dc, Lane or Colony)\|rival\|stance(War or Peace)\|score\|neededOffense\|ships` | a target becomes active | | what is held and why, was it a peace-time blockade? | new tracker `InitiatedBlockadeTracker` (state change only) |
-| `...\|BlockadeInitiateEnd\|planet\|kind\|reason(ReasonEnded, Colonized, LostDc, WarEnded, NeededElsewhere, Unreachable)\|turnsHeld` | a target stops being active | | how long do holds last, why do they end? | same tracker |
+| `...\|BlockadeInitiateEnd\|planet\|kind\|reason(Colonized, LostDc, LaneCooled, WarEnded, Outmatched, Unreachable, NoSpare)\|turnsHeld` | a target stops being active | | how long do holds last, why do they end? | same tracker |
 | `...\|BlockadeInitiateSkipped\|planet\|kind\|reason(NoSpare, NoPath, OverCap)` | on change only | | are targets starved of ships? | tracker |
 | `WarshipBoost` unchanged | existing line | wanted now includes the blockade ships | did the cap rise? | existing |
 

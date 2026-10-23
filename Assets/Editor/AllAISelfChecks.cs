@@ -26,6 +26,7 @@ public static class AllAISelfChecks
             ("Retreat", RetreatSelfCheck.RunChecks),
             ("Conversion", ConversionSelfCheck.RunChecks),
             ("Planet Defense", PlanetDefenseSelfCheck.RunChecks),
+            ("Blockade Initiation", BlockadeInitiateSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

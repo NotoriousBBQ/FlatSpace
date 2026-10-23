@@ -46,6 +46,30 @@ public class GameAIConstants : ScriptableObject
     // tilt off; only real chokepoints (IsChokepoint) tilt, and a target with ships already committed never does.
     public float assaultChokepointWeight = 0.5f;
 
+    [Header("Initiated blockades (Consolidate and Amass)")]
+    // The most blockades the AI holds on purpose at once (Distribution Centers, shipment lanes, valuable uncolonized planets), all
+    // using only warships left spare by garrison, conversion holds, blockade-breaking and assault. 0 switches the feature off.
+    public int blockadeInitiateMaxActive = 2;
+    // A rival at peace is a valid target once my hostility toward it is at least this (a rival at war always is). Above 100 means
+    // no peace-time blockades. A blockade cuts the victim's orders, which feeds its hostility toward me, by design.
+    public float blockadeInitiateHostility = 60f;
+    // Lane target: a planet becomes one when at least this many of a rival's in-flight food/grotsits transport orders pass through
+    // it (endpoints included), and stays one until fewer than blockadeLaneEndCount do for blockadeLaneEndTurns turns in a row.
+    public int blockadeLaneStartCount = 4;
+    public int blockadeLaneEndCount = 2;
+    public int blockadeLaneEndTurns = 5;
+    // Colony target value = chokepoint percentile x blockadeColonyChokepointWeight + producer value x blockadeColonyProducerWeight;
+    // an uncolonized planet is worth holding when it reaches blockadeColonyMinValue.
+    public float blockadeColonyMinValue = 1f;
+    public float blockadeColonyChokepointWeight = 1f;
+    public float blockadeColonyProducerWeight = 1f;
+    // A hold is released after this many consecutive turns it cannot be sustained (Outmatched, no path, or no spare ship reaches it).
+    public int blockadeInitiateGiveUpTurns = 10;
+    // After a hold is given up, the same planet cannot be chosen again for this many turns (without it the same target restarted at once).
+    public int blockadeInitiateCooldownTurns = 20;
+    // Each active initiated blockade adds at most this many ships to the wanted warship fleet (see PlayerAI.WantedWarships).
+    public int blockadeInitiateMaxShips = 4;
+
     [Header("Assault (Consolidate)")]
     // Force committed to a known enemy-occupied planet: ceil(enemy known docked warships x this)...
     public float assaultRatio = 1.5f;

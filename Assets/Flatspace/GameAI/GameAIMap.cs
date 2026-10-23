@@ -260,6 +260,9 @@ namespace FlatSpace
             /// <summary>The planet's betweenness percentile, 0..1 (see PlanetCentrality); 0 when unknown.</summary>
             public float Chokepoint(string planetName) => _centrality?.Percentile(planetName) ?? 0f;
 
+            /// <summary>The planet type's authored producer value (Verdant 1, Desolate 1, Farm 0.5, others 0); 0 for an unknown name.</summary>
+            public float ProducerValue(string planetName) => GetPlanet(planetName)?.ProducerValue ?? 0f;
+
             /// <summary>
             /// A chokepoint: on at least one stored path and at or above GameAIConstants.chokepointPercentile.
             /// </summary>

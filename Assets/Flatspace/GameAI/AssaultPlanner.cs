@@ -154,14 +154,30 @@ namespace FlatSpace
                 => _view != null && planet != null && _view.IsBlockaded(planet.PlanetName);
 
             /// <summary>My real warship offense docked at the planet (0 without WarshipStats).</summary>
-            private float DockedOffense(Planet planet)
+            private float DockedOffense(Planet planet) => DockedOffenseOf(planet, _playerId);
+
+            /// <summary>The real (health-scaled) warship offense `owner` has docked at the planet (0 without WarshipStats).</summary>
+            public float DockedOffenseOf(Planet planet, int owner)
             {
                 if (_stats == null) return 0f;
                 var sum = 0f;
                 foreach (var ship in planet.DockedShips)
-                    if (ship.Kind == Ship.ShipKind.WarShip && ship.Owner == _playerId)
+                    if (ship.Kind == Ship.ShipKind.WarShip && ship.Owner == owner)
                         sum += _stats.EffectiveOffense(ship);
                 return sum;
+            }
+
+            /// <summary>
+            /// The offense I still need docked at `target` to blockade `rival` there: a blockade value is my offense minus the rival's own
+            /// docked offense, so it is the rival's docked offense x (1 + blockadeBreakMargin) less my docked and incoming offense, 0 when
+            /// covered. 0.001 (so that one ship is sent) when nothing of mine is docked or incoming and the rival has nothing there.
+            /// </summary>
+            public float HoldNeededOffense(Planet target, int rival)
+            {
+                var mine = DockedOffense(target) + target.GetIncomingOffense(Ship.ShipKind.WarShip, _playerId);
+                var needed = DockedOffenseOf(target, rival) * (1f + _constants.blockadeBreakMargin) - mine;
+                if (needed > 0f) return needed;
+                return CountWarships(target) + target.GetIncomingShips(Ship.ShipKind.WarShip, _playerId) > 0 ? 0f : 0.001f;
             }
 
             /// <summary>
@@ -717,9 +733,19 @@ namespace FlatSpace
             // counts 0, so every spare ship is sent.
             private List<ShipAction> PlanBlockadeForce(Planet target, List<ShipTransportPlanner.PlanetState> states,
                 Dictionary<string, int> sentByOrigin)
+                => PlanHoldForce(target, NeededOffense(target), states, sentByOrigin);
+
+            /// <summary>
+            /// Sends spare warships at `target` until `neededOffense` is covered (or every spare ship is sent): the sizing used to break a
+            /// blockade, reused to hold one on purpose. `sentByOrigin` is what the plans so far already take from each origin. Sets
+            /// LastBlockadeForce.
+            /// </summary>
+            public List<ShipAction> PlanHoldForce(Planet target, float neededOffense,
+                List<ShipTransportPlanner.PlanetState> states, Dictionary<string, int> sentByOrigin)
             {
+                LastBlockadeForce = default;
                 var actions = new List<ShipAction>();
-                var needed = NeededOffense(target);
+                var needed = neededOffense;
                 if (needed <= 0f) return actions;
 
                 var template = _constants.warShipData;
