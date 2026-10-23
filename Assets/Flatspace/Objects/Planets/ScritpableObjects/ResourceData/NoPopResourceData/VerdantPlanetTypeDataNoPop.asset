@@ -25,3 +25,4 @@ MonoBehaviour:
   _maxPopulation: 15
   _initialStrategy: 3
   _grotsitsImportAllowance: 30
+  _producerValue: 1

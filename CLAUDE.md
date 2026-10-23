@@ -350,7 +350,7 @@ changing any of those systems; `FUTURE_FEATURES.md` and the session configuratio
 `AITuningLogger` (`Assets/Flatspace/Diagnostics/AITuningLogger.cs`, global namespace, plain static class) writes a durable, plain-text,
 pipe-delimited log of outcome-level AI events, `T<turn>|P<playerId>|<EventCode>|<fields...>`, for reviewing AI behavior after a match (the in-game
 notification panel is transient). **The event codes and their fields are defined at the `AITuningLogger.Log*` call sites and in the `tuning-log`
-skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `BunkerBuilt` (ends with a chokepoint flag since 2026-10-22), `ChokepointAssault`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`); read those, not this file.** Rules that are not derivable from the code:
+skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `BunkerBuilt` (ends with a chokepoint flag since 2026-10-22), `ChokepointAssault`, `BlockadeInitiateStart`/`BlockadeInitiateEnd`/`BlockadeInitiateSkipped`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`); read those, not this file.** Rules that are not derivable from the code:
 
 - Every new feature adds its log lines (see the plan rule in the session configuration); keep `.claude/skills/tuning-log/SKILL.md` in step with any
   new log line or invariant. Lines that fire on a state change only go through a tracker class (`GrotsitsShortTracker`, `BlockadeTargetTracker`,

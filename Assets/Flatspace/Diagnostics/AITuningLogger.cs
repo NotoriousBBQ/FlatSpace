@@ -283,6 +283,43 @@ public static class AITuningLogger
             turnsHeld.ToString(System.Globalization.CultureInfo.InvariantCulture)) });
     }
 
+    /// <summary>An initiated blockade became active: T&lt;turn&gt;|P&lt;id&gt;|BlockadeInitiateStart|planet|kind (Dc, Lane or Colony)|rival|stance (War or Peace)|score|neededOffense|ships sent this turn.</summary>
+    public static void LogBlockadeInitiateStart(int turnNumber, int playerId, string planet, string kind, int rival, string stance,
+        float score, float needed, int ships)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatBlockadeInitiateStart(turnNumber, playerId, planet, kind, rival, stance, score, needed, ships) });
+    }
+
+    public static string FormatBlockadeInitiateStart(int turnNumber, int playerId, string planet, string kind, int rival, string stance,
+        float score, float needed, int ships)
+    {
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        return FormatLine(turnNumber, playerId, "BlockadeInitiateStart", planet, kind, rival.ToString(ci), stance,
+            score.ToString("0.##", ci), needed.ToString("0.##", ci), ships.ToString(ci));
+    }
+
+    /// <summary>An initiated blockade stopped: T&lt;turn&gt;|P&lt;id&gt;|BlockadeInitiateEnd|planet|kind|Colonized, LostDc, LaneCooled, WarEnded, Outmatched, Unreachable or NoSpare|turnsHeld.</summary>
+    public static void LogBlockadeInitiateEnd(int turnNumber, int playerId, string planet, string kind, string reason, int turnsHeld)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatBlockadeInitiateEnd(turnNumber, playerId, planet, kind, reason, turnsHeld) });
+    }
+
+    public static string FormatBlockadeInitiateEnd(int turnNumber, int playerId, string planet, string kind, string reason, int turnsHeld)
+        => FormatLine(turnNumber, playerId, "BlockadeInitiateEnd", planet, kind, reason,
+            turnsHeld.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>A candidate blockade target was passed over, on change only: T&lt;turn&gt;|P&lt;id&gt;|BlockadeInitiateSkipped|planet|kind|NoSpare, NoPath, Outmatched or OverCap.</summary>
+    public static void LogBlockadeInitiateSkipped(int turnNumber, int playerId, string planet, string kind, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatBlockadeInitiateSkipped(turnNumber, playerId, planet, kind, reason) });
+    }
+
+    public static string FormatBlockadeInitiateSkipped(int turnNumber, int playerId, string planet, string kind, string reason)
+        => FormatLine(turnNumber, playerId, "BlockadeInitiateSkipped", planet, kind, reason);
+
     /// <summary>A blockaded planet the assault passed over, on change only: T&lt;turn&gt;|P&lt;id&gt;|BlockadeSkipped|planet|NoPath or Outranked|value|winner|winnerCommitted. Winner is - and winnerCommitted 0 for NoPath.</summary>
     public static void LogBlockadeSkipped(int turnNumber, int playerId, string planet, string reason, float value,
         string winner, float winnerCommitted)

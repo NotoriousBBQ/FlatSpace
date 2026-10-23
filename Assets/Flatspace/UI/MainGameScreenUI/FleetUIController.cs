@@ -64,6 +64,9 @@ public class FleetUIController : MonoBehaviour
             {
                 pickingMode = PickingMode.Ignore
             };
+            // A long row (a damaged ship's current/max values, the Bomb figure) wraps instead of running under the scroll bar.
+            row.style.whiteSpace = WhiteSpace.Normal;
+            row.style.paddingRight = 12;
             _shipListContainer.Add(row);
         }
     }
