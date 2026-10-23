@@ -13,8 +13,8 @@ volumes of enemy shipments pass through, 3 uncolonized high value planets until 
 rivals at war or contact players over a tunable hostility, with the fleet cap raised per active blockade and producer value by planet type built here.
 A late-game slowdown profile was also done and shelved (see Open items).
 
-**Done and merged to `main` locally (not pushed):** merge commit `cde929b`, which brings in `d496488` (the feature) and `dfae925` (siege ship icon asset, wider
-fleet panel with wrapping rows). The branch `ai-initiated-blockades` still exists locally.
+**Done, merged to `main` and pushed:** merge commit `cde929b`, which brings in `d496488` (the feature) and `dfae925` (siege ship icon asset, wider
+fleet panel with wrapping rows).
 
 What it does: `PlayerAI.PlanInitiatedBlockades` runs last in `PlanShipActions`. `BlockadeInitiator` (pure) picks Dc, Lane and Colony targets in strict priority,
 held ones first; `InitiatedBlockadeTracker` (pure) holds the state (active holds, lane hysteresis, give-up counters, skips, cooldown, last turn's wanted ships);
@@ -39,8 +39,7 @@ held ones first; `InitiatedBlockadeTracker` (pure) holds the state (active holds
 
 ### What was not verified
 
-- **The fleet panel layout and the siege ship icon in mixed fleets as drawn:** you confirmed the icon shows; the wider panel and wrapping rows were changed
-  after the review and not seen in a Play run by the session. Check with a damaged siege ship.
+- **The siege ship icon and the fleet panel layout (checked later, 2026-10-22):** you confirmed the icon shows and that the wider panel works.
 - **Fix I5 (the assault's ships to the same planet count against a hold's need)** has no self-check of its own; it showed only indirectly (the old fleet-term
   expectation of exactly 5 became a 2 to 5 range).
 - My fleet-cap invariant script (multiplier 0 against warship starts) reports "violations" in the baseline too, so it is a script artifact, not a signal.
@@ -55,8 +54,7 @@ held ones first; `InitiatedBlockadeTracker` (pure) holds the state (active holds
   `GameAI/CLAUDE.md`, `CLAUDE.md`, `FUTURE_FEATURES.md`, the `tuning-log` skill, the spec and the plan.
 - `dfae925`: `Siegeship.asset` (new icon), `FleetUI.uxml` (560px wide), `FleetUIController.cs` (rows wrap, right padding).
 - Merge `cde929b` on `main`. Earlier today: chokepoint weighting `b23f378` / merge `7a3b506`, spec `ba769c3`.
-- **Uncommitted (from the close-out):** `FUTURE_FEATURES.md` and `completed_features.md` (see below), and this handoff. `ProfilerCaptures/` is untracked and was
-  never staged. Nothing is pushed.
+- Close-out commit `b4a2bfa` (`FUTURE_FEATURES.md`, `completed_features.md`, this handoff, `.gitignore` now ignores `ProfilerCaptures/`); `main` is pushed.
 
 ## Decisions made and why
 
@@ -77,11 +75,10 @@ held ones first; `InitiatedBlockadeTracker` (pure) holds the state (active holds
 ## Open items and next steps
 
 1. **Human player mode** is the next roadmap item.
-2. Commit the close-out files (`FUTURE_FEATURES.md`, `completed_features.md`, this handoff), on request. Push `main` when you ask (it has not been pushed).
-3. Look at the fleet panel in a Play run (damaged siege ship).
-4. **ship_combat_refinements** in `FUTURE_FEATURES.md` holds everything left over, including the blockade items (0-ship Starts, Colony holds that rarely
+2. Nothing is uncommitted; `main` is pushed.
+3. **ship_combat_refinements** in `FUTURE_FEATURES.md` holds everything left over, including the blockade items (0-ship Starts, Colony holds that rarely
    blockade, tuning) and the deferred minors.
-5. Local branches `profiling`, `chokepoint-weighting`, `planet-defense`, `ai-initiated-blockades` still exist (not deleted).
+4. Local branches: `profiling` (shelved slowdown markers) and `conversion-surge-reach` (the removed colony ship surge) are kept on purpose; the merged ones were deleted.
 
 ## Gotchas
 
