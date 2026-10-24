@@ -579,17 +579,36 @@ public class Planet : MonoBehaviour
         }
     }
 
+    private float ComputeFoodProduced()
+        => (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction * ImprovementYieldModifier["Food"])) * (Morale/100.0f);
+
+    private float ComputeGrotsitsProduced()
+        => (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitsProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
+
+    /// <summary>
+    /// Works out what the planet would produce this turn (FoodProduced, GrotsitsProduced) without running a turn: workers are assigned as
+    /// UpdatePlanet would assign them, but no stock changes. For displays that need the rate in a new or loaded game before any turn has run;
+    /// the next UpdatePlanet assigns the workers again, so it changes nothing the simulation reads.
+    /// </summary>
+    public void ProjectProduction()
+    {
+        if (Population.Count == 0) return;
+        AssignWorkForStrategy();
+        FoodProduced = ComputeFoodProduced();
+        GrotsitsProduced = ComputeGrotsitsProduced();
+    }
+
     public void UpdatePlanet(List<UpdateResult> resultList)
     {
         if (Population.Count == 0)
             return;
         AssignWorkForStrategy();
         // grow food
-        FoodProduced = (_resourceData._baseFoodProduction + (FoodWorkers * _resourceData._foodProduction * ImprovementYieldModifier["Food"])) * (Morale/100.0f);
+        FoodProduced = ComputeFoodProduced();
         Food += FoodProduced;
         Food = Math.Clamp(Food, 0.0f, MaxFoodStorage);
         // produce grotsits
-        GrotsitsProduced = (_resourceData._baseGrotsitsProduction + (GrotsitsWorkers * _resourceData._grotsitsProduction * ImprovementYieldModifier["Grotsits"])) * (Morale/100.0f);
+        GrotsitsProduced = ComputeGrotsitsProduced();
         Grotsits += GrotsitsProduced;
         Grotsits = Math.Clamp(Grotsits, 0.0f, MaxGrotsitsStorage);
         // produce industry
@@ -957,7 +976,7 @@ public class Planet : MonoBehaviour
             if (ProductionQueue.Count > 0)
             {
                 var nextProduction = ProductionQueue.First();
-                nextProduction.Progress = Industry;
+                nextProduction.Progress += Industry;   // a queued item starts at 0; one displaced by the human keeps what it had made
                 Industry = 0f;
                 CurrentProduction = nextProduction;
                 ProductionQueue.RemoveAt(0);
@@ -1136,15 +1155,35 @@ public class Planet : MonoBehaviour
     {
         var ship = CreateShip(kind, owner);
         ship.ResearchSnapshot = BuildResearchSnapshot(kind, owner);
+        ship.FleetId = LowestFleetId(owner);   // a built ship joins the owner's lowest-numbered fleet here
         DockedShips.Add(ship);
     }
 
-    public void DockShipFromSave(Ship.ShipKind kind, int owner, List<string> researchSnapshot, float damage = 0f)
+    public void DockShipFromSave(Ship.ShipKind kind, int owner, List<string> researchSnapshot, float damage = 0f, int fleetId = 0)
     {
         var ship = CreateShip(kind, owner);
         ship.ResearchSnapshot = new List<string>(researchSnapshot);
         ship.Damage = damage;
+        ship.FleetId = fleetId;
         DockedShips.Add(ship);
+    }
+
+    // The fleet id a new fleet of `owner` takes here: one above the highest id in use (0 when the owner has no ship here).
+    public int NextFleetId(int owner)
+    {
+        var next = 0;
+        foreach (var ship in DockedShips)
+            if (ship.Owner == owner && Ship.CountsAsShip(ship.Kind) && ship.FleetId + 1 > next) next = ship.FleetId + 1;
+        return next;
+    }
+
+    // The lowest fleet id the owner has a ship in here (0 when none).
+    public int LowestFleetId(int owner)
+    {
+        var lowest = -1;
+        foreach (var ship in DockedShips)
+            if (ship.Owner == owner && Ship.CountsAsShip(ship.Kind) && (lowest < 0 || ship.FleetId < lowest)) lowest = ship.FleetId;
+        return lowest < 0 ? 0 : lowest;
     }
 
     public bool UndockShip(Ship.ShipKind kind)

@@ -34,8 +34,99 @@ public static class HumanUiSelfCheck
         ok &= RunBuildListChecks();
         ok &= RunPlanetViewChecks();
         ok &= RunResearchTreeChecks();
+        ok &= RunHoverTextChecks();
+        ok &= RunLinePickChecks();
+        ok &= RunFleetListChecks();
         return ok;
     }
+
+    #region Stage 2 task 3: hover text, line pick, fleet list
+
+    private static GameAI.GameAIOrder ShipOrder(int count, int turns, int player = 0, string origin = "P0", string target = "P1")
+    {
+        var fleet = new GameAI.GameAIOrder.ShipFleetPayload { Kind = Ship.ShipKind.WarShip };
+        for (var i = 0; i < count; i++) fleet.Snapshots.Add(new List<string>());
+        return new GameAI.GameAIOrder
+        {
+            Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+            Data = count, Origin = origin, Target = target, PlayerId = player, TimingDelay = turns, Fleet = fleet,
+        };
+    }
+
+    private static GameAI.GameAIOrder TypedOrder(GameAI.GameAIOrder.OrderType type, object data, int turns, int player = 0)
+        => new GameAI.GameAIOrder { Type = type, Data = data, Origin = "P0", Target = "P1", PlayerId = player, TimingDelay = turns };
+
+    public static bool RunHoverTextChecks()
+    {
+        var ok = true;
+        ok &= Check(HumanHoverText.Ships(new[] { Ship.ShipKind.WarShip, Ship.ShipKind.SiegeShip, Ship.ShipKind.WarShip, Ship.ShipKind.WarShip })
+                    == "3 WarShip, 1 SiegeShip", "ship text lists counts per kind in enum order");
+        ok &= Check(HumanHoverText.Ships(new[] { Ship.ShipKind.ColonyShip }) == "1 ColonyShip", "a single ship reads '1 ColonyShip'");
+        ok &= Check(HumanHoverText.Ships(new Ship.ShipKind[0]) == "no ships", "no ships reads 'no ships'");
+
+        ok &= Check(HumanHoverText.Order(ShipOrder(2, 3)) == "2 WarShip to P1, arrives in 3 turns", "ship order text: ships, destination, turns");
+        ok &= Check(HumanHoverText.Order(ShipOrder(1, 1)) == "1 WarShip to P1, arrives in 1 turn", "one turn is singular");
+        ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 7, 3)) == "7 Food to P1, arrives in 3 turns", "food shipment text");
+        ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport, 7.5f, 2)) == "7.5 Grotsits to P1, arrives in 2 turns", "grotsits shipment text keeps one decimal");
+        ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport, 1, 4)) == "Colonist to P1, arrives in 4 turns", "colonist text");
+        ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypeColonyFoodRider, 10, 4)) == "10 Food (colony rider) to P1, arrives in 4 turns", "food rider text");
+        ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypeShipDeparture, 2, 0)) == null, "an order type that draws no line has no text");
+
+        var own = ShipOrder(1, 2, 0);
+        var rival = ShipOrder(1, 2, 1, "P2", "P3");
+        ok &= Check(HumanHoverText.CanSee(own, 0, name => false), "the human's own order is always visible");
+        ok &= Check(HumanHoverText.CanSee(rival, 0, name => true), "a rival's order with both ends visible shows");
+        ok &= Check(!HumanHoverText.CanSee(rival, 0, name => name == "P2"), "a rival's order with one end hidden does not show");
+        ok &= Check(!HumanHoverText.CanSee(rival, 0, name => false), "a rival's order with both ends hidden does not show");
+
+        ok &= Check(HumanHoverText.RefusalSentence("OutOfRange").Length > 0 && HumanHoverText.RefusalSentence("OutOfRange") != "OutOfRange",
+            "a known refusal reason has a sentence");
+        ok &= Check(HumanHoverText.RefusalSentence("SomethingNew") == "SomethingNew", "an unknown reason falls back to its own text");
+        return ok;
+    }
+
+    public static bool RunLinePickChecks()
+    {
+        var ok = true;
+        var lines = new List<(string, IReadOnlyList<Vector2>)>
+        {
+            ("near", new List<Vector2> { new Vector2(0, 0), new Vector2(100, 0) }),
+            ("far", new List<Vector2> { new Vector2(0, 30), new Vector2(100, 30) }),
+            ("bent", new List<Vector2> { new Vector2(200, 0), new Vector2(200, 50), new Vector2(300, 50) }),
+            ("dot", new List<Vector2> { new Vector2(50, 4), new Vector2(50, 4) }),
+            ("empty", new List<Vector2>()),
+        };
+        var picked = HumanHoverText.Pick(lines, new Vector2(50, 2), 10f);
+        ok &= Check(picked.SequenceEqual(new[] { "near", "dot" }), "only lines within tolerance are picked, nearest first (near 2px, dot 2px: input order breaks the tie)");
+        ok &= Check(HumanHoverText.Pick(lines, new Vector2(50, 20), 10f).SequenceEqual(new[] { "far" }), "a pointer 10 px from one line and 20 from another picks the closer in tolerance");
+        ok &= Check(HumanHoverText.Pick(lines, new Vector2(250, 55), 10f).SequenceEqual(new[] { "bent" }), "a later segment of a bent line is tested");
+        ok &= Check(HumanHoverText.Pick(lines, new Vector2(500, 500), 10f).Count == 0, "nothing in tolerance picks nothing");
+        return ok;
+    }
+
+    public static bool RunFleetListChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(3))
+        {
+            f.P(2).DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 0f, 0);
+            f.P(0).DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 0f, 0);
+            f.P(0).DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 0f, 0);
+            f.P(0).DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f, 1);
+            f.P(1).DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());   // a rival's ship: never listed
+            var orders = new List<GameAI.GameAIOrder> { ShipOrder(2, 3, 0, "P1", "P2"), ShipOrder(4, 1, 1, "P1", "P0") };
+            var rows = HumanFleetList.Build(new[] { f.P(0), f.P(1), f.P(2) }, orders, 0);
+            ok &= Check(rows.Count == 4, "three docked fleets and one fleet in flight make four rows, the rival's none");
+            ok &= Check(rows[0].PlanetToShow == "P0" && !rows[0].InFlight && rows[0].Detail == "2 WarShip", "first row: the 2-warship fleet at P0");
+            ok &= Check(rows[1].PlanetToShow == "P0" && rows[1].Detail == "1 SiegeShip", "second row: the siegeship fleet at P0");
+            ok &= Check(rows[2].PlanetToShow == "P2" && rows[2].Detail == "1 WarShip", "third row: the fleet at P2");
+            ok &= Check(rows[3].InFlight && rows[3].PlanetToShow == "P2" && rows[3].TurnsLeft == 3 && rows[3].Where == "P1 -> P2" && rows[3].Detail == "2 WarShip",
+                "the last row is the flight, showing its destination and turns left");
+        }
+        return ok;
+    }
+
+    #endregion
 
     private static bool Check(bool condition, string label)
     {
@@ -131,11 +222,14 @@ public static class HumanUiSelfCheck
             f.Own(0, 2);
             f.Own(1, 1, player: 1);
             f.P(0).Food = 120f;
-            f.P(0).FoodProduced = 1f;        // two inhabitants eat 2 a turn
-            f.P(0).GrotsitsProduced = 5f;    // upkeep is the inhabitants (2) plus improvements (none)
-            var net = HumanPlanetView.NetPerTurn(f.P(0));
-            ok &= Check(net.food == -1f, "food net is the food produced minus one per inhabitant, whatever the stock (a full store does not read as a loss)");
-            ok &= Check(net.grotsits == 3f, "grotsits net is the grotsits produced minus the planet's maintenance cost");
+            var net = HumanPlanetView.NetPerTurn(f.P(0));   // projects the production itself, so it needs no turn to have run
+            ok &= Check(net.food == f.P(0).FoodProduced - 2f, "food net is the food produced minus one per inhabitant (two here)");
+            ok &= Check(net.grotsits == f.P(0).GrotsitsProduced - f.P(0).GetMaintenanceCost(), "grotsits net is the grotsits produced minus the planet's maintenance cost");
+            f.P(0).Food = 0f;
+            ok &= Check(HumanPlanetView.NetPerTurn(f.P(0)).food == net.food, "the net rate does not depend on the stock (a full store does not read as a loss)");
+            ok &= Check(HumanPlanetView.StockCovers(10f, -3f) && HumanPlanetView.StockCovers(3f, -3f) && !HumanPlanetView.StockCovers(2f, -3f),
+                "a stock covers a loss when it holds at least a turn's worth of it");
+            ok &= Check(HumanPlanetView.StockCovers(0f, 1f) && HumanPlanetView.StockCovers(0f, 0f), "with no loss an empty stock still covers it");
             ok &= Check(HumanPlanetView.OwnsPlanet(f.P(0), 0) && !HumanPlanetView.OwnsPlanet(f.P(1), 0) && !HumanPlanetView.OwnsPlanet(null, 0),
                 "OwnsPlanet is true only for the planet the human owns");
             ok &= Check(HumanPlanetView.CanOrder(f.P(0), 0), "the human can order on a planet they populate");
@@ -651,7 +745,7 @@ public static class HumanUiSelfCheck
             ok &= Check(processor.Check(HumanModeSelfCheck.QueueResearch("UiRB")) == "PrerequisiteMissing", "Check: research without its prerequisite is PrerequisiteMissing");
             ok &= Check(processor.Check(HumanModeSelfCheck.QueueResearch("UiRA")) == null, "Check: a valid research is null");
             ok &= Check(f.Human.ResearchQueue.Count == 0, "Check queued nothing");
-            ok &= Check(processor.Check(HumanModeSelfCheck.Move("P0", "P1", "Warship", 1)) == "CheckNotSupported", "Check: a command type it does not cover is CheckNotSupported");
+            ok &= Check(processor.Check(HumanModeSelfCheck.Cmd("setShipments")) == "CheckNotSupported", "Check: a command type it does not cover is CheckNotSupported");
 
             // Claims must not leak: ten checks of the same colonize still pass, and the real batch still has its one colony ship.
             for (var i = 0; i < 10; i++)

@@ -52,6 +52,7 @@ public class SaveLoadSystem : MonoBehaviour
             public int owner;
             public List<string> researchSnapshot;
             public float damage;   // damage taken, 0 = full health (older saves have no key and load at full health)
+            public int fleetId;    // the human's fleet at the planet; 0 = the default fleet (older saves have no key)
         }
 
         [Serializable]
@@ -287,7 +288,8 @@ public class SaveLoadSystem : MonoBehaviour
                         kind = ship.Kind,
                         owner = ship.Owner,
                         researchSnapshot = new List<string>(ship.ResearchSnapshot),
-                        damage = ship.Damage
+                        damage = ship.Damage,
+                        fleetId = ship.FleetId
                     });
                 }
 

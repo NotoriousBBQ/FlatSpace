@@ -80,12 +80,9 @@ namespace Game.UI.MainGameScreenUI
             var scroll = _scroll.contentContainer;
 
             var net = HumanPlanetView.NetPerTurn(planet);
-            // Red when the rate is negative, and also when the planet reported a shortage this turn (its store can run short with a positive rate).
-            var thisTurn = board.LastHumanEvents;
-            var foodShort = thisTurn.Exists(e => e.Kind == HumanEventKind.ShortageFood && e.Planet == name && !e.Rival);
-            var grotsitsShort = thisTurn.Exists(e => e.Kind == HumanEventKind.ShortageGrotsits && e.Planet == name && !e.Rival);
-            scroll.Add(RateLine("Food", planet.Food, net.food, foodShort));
-            scroll.Add(RateLine("Grotsits", planet.Grotsits, net.grotsits, grotsitsShort));
+            // Red when the rate is negative; the stock itself only when it cannot cover that loss (see RateLine).
+            scroll.Add(RateLine("Food", planet.Food, net.food));
+            scroll.Add(RateLine("Grotsits", planet.Grotsits, net.grotsits));
             scroll.Add(HumanUiKit.Text($"Industry +{planet.IndustryProduced:0.#}   Research +{planet.ResearchProduced:0.#}"));
 
             if (owned)
@@ -109,7 +106,7 @@ namespace Game.UI.MainGameScreenUI
                 var line = HumanUiKit.Row();
                 line.Add(HumanUiKit.Cell($"{i + 1}. {queued.Item.itemName}{TurnsText(estimates, estimateIndex + i)}", 250));
                 var up = HumanUiKit.Btn("Up", () => Send("Production", new HumanCommand { type = "moveProduction", origin = name, index = index, toIndex = index - 1 }));
-                up.SetEnabled(index > 0);
+                up.SetEnabled(index > 0 || planet.CurrentProduction.HasValue);   // the first item moved up replaces the current production
                 var down = HumanUiKit.Btn("Down", () => Send("Production", new HumanCommand { type = "moveProduction", origin = name, index = index, toIndex = index + 1 }));
                 down.SetEnabled(index < planet.ProductionQueue.Count - 1);
                 line.Add(up);
@@ -154,11 +151,15 @@ namespace Game.UI.MainGameScreenUI
             Gameboard.Instance.PlanetDetail?.UpdatePlanetDetail();   // show the refusal
         }
 
-        private static Label RateLine(string label, float stock, float perTurn, bool short_)
+        // The overall loss stays red, but the stock itself only reads red when it cannot cover that loss: a shipment that just landed on a
+        // planet that reported a shortage no longer paints the whole line.
+        private static VisualElement RateLine(string label, float stock, float perTurn)
         {
-            var text = HumanUiKit.Text($"{label} {stock:0.#}  ({perTurn:+0.#;-0.#;0} per turn)" + (short_ ? "  SHORT" : ""),
-                perTurn < 0f || short_ ? HumanUiKit.Bad : (Color?)null);
-            return text;
+            var covered = HumanPlanetView.StockCovers(stock, perTurn);
+            var line = HumanUiKit.Row();
+            line.Add(HumanUiKit.Text($"{label} {stock:0.#}", covered ? (Color?)null : HumanUiKit.Bad));
+            line.Add(HumanUiKit.Text($"  ({perTurn:+0.#;-0.#;0} per turn)", perTurn < 0f ? HumanUiKit.Bad : (Color?)null));
+            return line;
         }
 
         private static string TurnsText(System.Collections.Generic.List<int?> estimates, int index)

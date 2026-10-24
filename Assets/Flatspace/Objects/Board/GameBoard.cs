@@ -97,6 +97,7 @@ namespace FlatSpace
             // UpdatePlanet is called once per frame
             void Update()
             {
+                UpdateLineHover();
                 if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
                     return;
 
@@ -106,6 +107,10 @@ namespace FlatSpace
                     return;
 
                 var mousePosition = Mouse.current.position.ReadValue();
+
+                // The fleet summary is a HUD screen of its own: a press on it must leave the open planet or fleet panel alone.
+                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition))
+                    return;
 
                 if (FleetUIShowing())
                 {
@@ -125,6 +130,191 @@ namespace FlatSpace
                     // Add item button, a row of a dialog) must never count as a click outside. LateUpdate decides.
                     _closePlanetDetailRequestFrame = Time.frameCount;
                 }
+            }
+
+            // ── Hover popups (human match) ──────────────────────────────────
+
+            private const float LineHoverTolerancePixels = 10f;
+            private Vector2 _hoverPointer = new Vector2(float.NaN, float.NaN);
+            private int _hoverTurn = -1;
+            private LineDrawObject _hoverLine;
+            private float _hoverLineWidth = 1f;
+            private bool _iconHoverActive;   // a fleet icon's popup is up: the line hover leaves the popup alone
+
+            /// <summary>Shows the hover popup for a fleet icon at the pointer (the human's own and rivals' icons alike).</summary>
+            public void ShowIconHover(Vector2 screenPosition, IReadOnlyList<string> blocks)
+            {
+                _iconHoverActive = true;
+                SetHoverLine(null);
+                HumanHoverPopup.Show(_mainScreenUIController != null ? _mainScreenUIController.uiDocument.rootVisualElement : null, screenPosition, blocks);
+            }
+
+            public void HideIconHover()
+            {
+                _iconHoverActive = false;
+                _hoverPointer = new Vector2(float.NaN, float.NaN);   // re-evaluate the lines at the next frame
+                HumanHoverPopup.Hide();
+            }
+
+            // The popup for the order lines under the pointer: the human's own, and a rival's whose two end planets the human sees right now.
+            // Re-evaluated only when the pointer moved or a turn passed; lines are LineRenderers with no colliders, so it is a screen-space test.
+            private void UpdateLineHover()
+            {
+                if (HumanPlayerId < 0 || Mouse.current == null || _iconHoverActive) return;
+                var pointer = Mouse.current.position.ReadValue();
+                if (pointer == _hoverPointer && TurnNumber == _hoverTurn) return;
+                _hoverPointer = pointer;
+                _hoverTurn = TurnNumber;
+
+                var root = _mainScreenUIController != null ? _mainScreenUIController.uiDocument.rootVisualElement : null;
+                var overPanel = (PlanetDetailShowing() && _planetDetailUIController.ContainsScreenPoint(pointer))
+                                || (FleetUIShowing() && _fleetUIController.ContainsScreenPoint(pointer));
+                if (root == null || _camera == null || overPanel)
+                {
+                    SetHoverLine(null);
+                    HumanHoverPopup.Hide();
+                    return;
+                }
+
+                var candidates = new List<(GameAI.GameAIOrder item, IReadOnlyList<Vector2> points)>();
+                foreach (var pair in _orderLines)
+                {
+                    var line = pair.Value;
+                    if (!line || !line.lineRenderer || !line.lineRenderer.enabled || !line.gameObject.activeInHierarchy) continue;
+                    if (FlatSpace.Human.HumanHoverText.Order(pair.Key) == null || !FlatSpace.Human.HumanHoverText.CanSee(pair.Key, HumanPlayerId, HumanSeesPlanet)) continue;
+                    var renderer = line.lineRenderer;
+                    var points = new List<Vector2>(renderer.positionCount);
+                    for (var i = 0; i < renderer.positionCount; i++)
+                    {
+                        var position = renderer.GetPosition(i);
+                        var world = renderer.useWorldSpace ? position : renderer.transform.TransformPoint(position);
+                        points.Add(_camera.WorldToScreenPoint(world));
+                    }
+                    candidates.Add((pair.Key, points));
+                }
+
+                var picked = FlatSpace.Human.HumanHoverText.Pick(candidates, pointer, LineHoverTolerancePixels);
+                if (picked.Count == 0)
+                {
+                    SetHoverLine(null);
+                    HumanHoverPopup.Hide();
+                    return;
+                }
+                SetHoverLine(_orderLines[picked[0]]);
+                HumanHoverPopup.Show(root, pointer, picked.Select(FlatSpace.Human.HumanHoverText.Order).ToList());
+            }
+
+            // Thickens the nearest line while it is the one hovered, and restores the width it had when the hover leaves it.
+            private void SetHoverLine(LineDrawObject line)
+            {
+                if (line == _hoverLine) return;
+                if (_hoverLine && _hoverLine.lineRenderer) _hoverLine.lineRenderer.widthMultiplier = _hoverLineWidth;
+                _hoverLine = line;
+                if (!_hoverLine || !_hoverLine.lineRenderer) return;
+                _hoverLineWidth = _hoverLine.lineRenderer.widthMultiplier;
+                _hoverLine.lineRenderer.widthMultiplier = _hoverLineWidth * 2f;
+            }
+
+            // ── Fleet drag (human match) ────────────────────────────────────
+
+            private LineDrawObject _dragLine;
+            private string _dragOrigin;
+            private int _dragFleet;
+            private string _dragCheckedTarget;
+            private Color32 _dragCheckColor;
+
+            private static string PlanetUnderPointer(Vector2 screenPosition)
+            {
+                if (EventSystem.current == null) return null;
+                var results = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = screenPosition }, results);
+                foreach (var result in results)
+                {
+                    var planet = result.gameObject.GetComponentInParent<PlanetUIObject>();
+                    if (planet != null) return planet._planetName;
+                }
+                return null;
+            }
+
+            private FlatSpace.Human.HumanCommand FleetMoveCommand(string origin, int fleetId, string target)
+            {
+                var planet = GetPlanet(origin);
+                return new FlatSpace.Human.HumanCommand
+                {
+                    type = "move", origin = origin, target = target,
+                    ships = planet == null ? new List<int>() : FlatSpace.Human.HumanFleetView.ShipIndices(planet, HumanPlayerId, fleetId),
+                };
+            }
+
+            /// <summary>Whether sending a whole fleet to a planet would be accepted now (null) or why not; nothing is applied.</summary>
+            public string CheckFleetDrag(string origin, int fleetId, string targetPlanet)
+            {
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count || players[HumanPlayerId].playerAI == null) return "NotYourPlanet";
+                var command = FleetMoveCommand(origin, fleetId, targetPlanet);
+                if (command.ships.Count == 0) return "UnknownFleet";
+                var processor = new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, players[HumanPlayerId].playerAI, TurnNumber) { PauseSettings = HumanPause };
+                return processor.Check(command);
+            }
+
+            /// <summary>Sends a whole fleet to a planet: null when applied, else the refusal reason. The usual ship-transport orders result.</summary>
+            public string TryDragFleet(string origin, int fleetId, string targetPlanet)
+            {
+                var command = FleetMoveCommand(origin, fleetId, targetPlanet);
+                if (command.ships.Count == 0) return "UnknownFleet";
+                var results = SubmitHumanCommands(new[] { command }, "FleetDrag");
+                if (results.Count == 0) return "NotYourPlanet";
+                return results[0].applied ? null : results[0].reason;
+            }
+
+            public void BeginFleetDrag(string origin, int fleetId)
+            {
+                if (HumanPlayerId < 0 || !_lineDrawObjectPrefab) return;
+                HideIconHover();
+                _dragOrigin = origin;
+                _dragFleet = fleetId;
+                _dragCheckedTarget = null;
+                _dragLine = Instantiate<LineDrawObject>(_lineDrawObjectPrefab, transform);
+            }
+
+            public void UpdateFleetDrag(Vector2 screenPosition)
+            {
+                if (!_dragLine || _camera == null) return;
+                var origin = _planetUIObjects.Find(p => p._planetName == _dragOrigin);
+                if (origin == null) return;
+
+                // Green when the planet under the pointer would take the fleet, red when not; the check runs only when that planet changes.
+                var target = PlanetUnderPointer(screenPosition);
+                if (target != _dragCheckedTarget)
+                {
+                    _dragCheckedTarget = target;
+                    _dragCheckColor = target == null || target == _dragOrigin
+                        ? new Color32(255, 255, 255, 255)
+                        : CheckFleetDrag(_dragOrigin, _dragFleet, target) == null ? new Color32(80, 255, 80, 255) : new Color32(255, 70, 70, 255);
+                }
+
+                var from = origin.transform.position;
+                var to = _camera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, _camera.WorldToScreenPoint(from).z));
+                var renderer = _dragLine.lineRenderer;
+                var a = renderer.useWorldSpace ? from : _dragLine.transform.InverseTransformPoint(from);
+                var b = renderer.useWorldSpace ? to : _dragLine.transform.InverseTransformPoint(to);
+                _dragLine.SetPath(new List<Vector3> { a, b }, 1f);
+                _dragLine.SetColor(_dragCheckColor);
+            }
+
+            /// <summary>Ends a fleet drag at the pointer: sends the fleet to the planet under it. Returns null when sent, "" when released on no planet
+            /// (nothing happens), else the refusal reason, which is also shown as a message.</summary>
+            public string EndFleetDrag(Vector2 screenPosition)
+            {
+                if (_dragLine) Destroy(_dragLine.gameObject);
+                _dragLine = null;
+                var origin = _dragOrigin;
+                _dragOrigin = null;
+                var target = PlanetUnderPointer(screenPosition);
+                if (origin == null || target == null) return "";
+                var reason = TryDragFleet(origin, _dragFleet, target);
+                if (reason != null && _mainScreenUIController != null)
+                    HumanUiKit.Toast(_mainScreenUIController.uiDocument.rootVisualElement, FlatSpace.Human.HumanHoverText.RefusalSentence(reason));
+                return reason;
             }
 
             private int _closePlanetDetailRequestFrame = -1;
@@ -870,6 +1060,16 @@ namespace FlatSpace
                 if (entry != null) GoToPlanet(entry.Planet);
             }
 
+            /// <summary>
+            /// A row of the fleet summary: the board centres on the planet (the destination for a fleet in flight) and nothing opens.
+            /// </summary>
+            public void GoToFleet(string planetName)
+            {
+                if (string.IsNullOrEmpty(planetName) || GetPlanet(planetName) == null) return;
+                _panelClickFrame = Time.frameCount;
+                ViewPlanet(planetName);
+            }
+
             /// <summary>Centres the board on a planet and opens its panel (the pause banner and the notification list use it).</summary>
             public void GoToPlanet(string planetName)
             {
@@ -932,29 +1132,6 @@ namespace FlatSpace
                 PlanetaryUIUpdate();
                 BoardUIUpdate();   // also redraws the order lines and refreshes an open planet or fleet panel
                 return results;
-            }
-
-            // The temporary command channel (see HumanCommandFile): whatever commands.json holds when a turn steps is applied against
-            // the state the human is looking at, and its orders join this turn's (GameAI.PendingHumanOrders). Outcomes go to results.json
-            // and the tuning log.
-            public void RunHumanCommands()
-            {
-                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count) return;
-                var humanAI = players[HumanPlayerId].playerAI;
-                if (humanAI == null) return;
-                var directory = FlatSpace.Human.HumanCommandFile.Directory();
-                if (!FlatSpace.Human.HumanCommandFile.TryTake(directory, out var json)) return;
-
-                var processor = new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, humanAI, TurnNumber) { PauseSettings = HumanPause };
-                var results = processor.ApplyJson(json, GameAI.PendingHumanOrders);
-                foreach (var result in results)
-                {
-                    if (result.applied)
-                        AITuningLogger.LogHumanCommand(TurnNumber, HumanPlayerId, result.type, "", "", result.detail);
-                    else
-                        AITuningLogger.LogHumanCommandRefused(TurnNumber, HumanPlayerId, result.type, result.reason);
-                }
-                FlatSpace.Human.HumanCommandFile.WriteResults(directory, TurnNumber, results);
             }
 
             // The human has no populated planet, no colony ship and no colonist in flight: said once, the timer stops, the match goes on to watch.

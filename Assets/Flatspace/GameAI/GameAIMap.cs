@@ -445,7 +445,7 @@ namespace FlatSpace
                     {
                         foreach (var shipSave in planetStatus.dockedShips)
                         {
-                            planet.DockShipFromSave(shipSave.kind, shipSave.owner, shipSave.researchSnapshot, shipSave.damage);
+                            planet.DockShipFromSave(shipSave.kind, shipSave.owner, shipSave.researchSnapshot, shipSave.damage, shipSave.fleetId);
                         }
                     }
                 }

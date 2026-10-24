@@ -25,4 +25,7 @@ public class Ship : MonoBehaviour
     // Damage taken (0 = full health). Stored, not current health: an older save loads at full health, and the Health stat
     // (from the research snapshot) is fixed per ship. Current health is WarshipStats.CurrentHealth.
     public float Damage;
+    // Which of its owner's fleets at the planet the ship belongs to (human fleet panel). 0 is an ordinary fleet; only the human's ships are
+    // grouped by it, so the AI never reads it. Not meaningful across planets: a ship that lands by an order gets a fresh id there.
+    public int FleetId;
 }

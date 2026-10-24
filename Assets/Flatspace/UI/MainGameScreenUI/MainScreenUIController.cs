@@ -19,6 +19,7 @@ namespace Game.UI.MainGameScreenUI
         private Label _currentResearchLabel;
         private Label _grotsitsLabel;
         private Button _researchButton;
+        private Button _fleetsButton;
         private Button _pauseBanner;
         private string _pauseBannerPlanet;
 
@@ -40,6 +41,15 @@ namespace Game.UI.MainGameScreenUI
             _researchButton.style.display = DisplayStyle.None;
             HumanUiKit.StyleButton(_researchButton);
             root.Add(_researchButton);
+
+            // The fleet summary opens from the button beside it, under the Research button.
+            _fleetsButton = new Button(() => FleetSummaryScreen.Toggle(root)) { text = "Fleets" };
+            _fleetsButton.style.position = Position.Absolute;
+            _fleetsButton.style.top = 76;
+            _fleetsButton.style.right = 10;
+            _fleetsButton.style.display = DisplayStyle.None;
+            HumanUiKit.StyleButton(_fleetsButton);
+            root.Add(_fleetsButton);
 
             // Why the timer stopped, shown at once and clickable to go there; hidden otherwise.
             _pauseBanner = new Button(() => { if (!string.IsNullOrEmpty(_pauseBannerPlanet)) Gameboard.Instance.GoToPlanet(_pauseBannerPlanet); });
@@ -100,6 +110,13 @@ namespace Game.UI.MainGameScreenUI
                 _researchButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
                 if (!human) ResearchScreen.Close();
                 else ResearchScreen.Refresh();
+            }
+            if (_fleetsButton != null)
+            {
+                var human = Gameboard.Instance != null && Gameboard.Instance.HumanPlayerId >= 0;
+                _fleetsButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
+                if (!human) FleetSummaryScreen.Close();
+                else FleetSummaryScreen.Refresh();
             }
         }
 

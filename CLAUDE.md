@@ -387,11 +387,10 @@ rules and a temporary JSON command channel; the UI rework (project 2) is separat
   every refusal has a reason from a closed set, nothing throws) and turned into the AI's own orders: `EmitShipOrders` for fleets (ships picked by dock index, or a count per kind
   healthiest first; `Planet.PrioritizeShips` puts the chosen ships first), `PlayerAI.EmitColonistOrders` (extracted from `ProcessColonizers`) for Colonize incl. the food rider,
   `OrderTypeIndustrySetProduction` for the production queue (`Planet.ProductionQueue`), the stance orders for diplomacy. Queued research is `PlayerAI.ResearchQueue`.
-  Commands are read from `HumanCommands/commands.json` (project root in the editor, `persistentDataPath` in a build; gitignored) each time a turn steps, renamed `commands.done.json`,
-  and the outcomes written to `results.json`. They are applied inside `GameAI.GameAIUpdate` after combat, bombardment and conversion and after every player has decided
-  (`Gameboard.RunHumanCommands`), so they are checked against the board the AI sees and execute in the same step (`GameAI.PendingHumanOrders`). Ship indices in a batch name the dock list as
+  The temporary `HumanCommands/commands.json` channel is gone (UI stage 2): the UI sends commands through `Gameboard.SubmitHumanCommands` and they execute between turns;
+  `HumanCommandProcessor.ApplyJson` stays for the self-checks. Ship indices in a batch name the dock list as
   it stood when the batch began; colonize and shipResource commands in one batch share the origin's people, food and stock. Command types: move, colonize, shipResource,
-  queueProduction, removeProduction, moveProduction, setDevelopment, queueResearch, removeResearch, setShipments, declareWar, makePeace, surrender, setPause.
+  queueProduction, removeProduction, moveProduction, setDevelopment, queueResearch, removeResearch, moveResearch, setShipments, declareWar, makePeace, surrender, setPause, setFleet, mergeFleets.
 - **Events and pausing:** `HumanTurnEvents.Collect` turns the turn's results into `HumanEvent`s (the message list of project 2); `HumanPauseSettings` (default on: attacked, blockaded,
   lost, contact, war, peace, fleet arrived, both shortages) decides which stop the timer; a rival's event never pauses. `Gameboard.CollectHumanEvents` runs at the end of each turn.
 - **Match end:** defeat (no populated planet, docked colony ship or colonist in flight) and the turn limit show a `MatchEndPopup`; the limit ends the match with no winner (scoring is a
@@ -403,8 +402,7 @@ rules and a temporary JSON command channel; the UI rework (project 2) is separat
 Spec `docs/superpowers/specs/2026-10-23-human-player-ui-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-ui-stage1.md`.
 - **One entry point:** every button builds `HumanCommand`s and calls `Gameboard.SubmitHumanCommands(commands, screen)`: the `HumanCommandProcessor` applies them
   and `GameAI.ApplyOrdersNow` executes the orders at once (between turns, equivalent to how the AI's orders are timed), then the board and panels refresh. Where a screen
-  needs to know if a command would be accepted it calls `HumanCommandProcessor.Check` (queueProduction, queueResearch, colonize, shipResource; it applies nothing).
-  The JSON file still works until stage 2.
+  needs to know if a command would be accepted it calls `HumanCommandProcessor.Check` (queueProduction, queueResearch, colonize, shipResource, move; it applies nothing, and a checked move leaves the dock order alone).
 - **Pure list builders** in `Assets/Flatspace/Player/Human/` (self-check `Assets/Editor/HumanUiSelfCheck.cs`, in `Run All AI Self-Checks`): `HumanNotificationList` + `HumanOngoing`
   (one entry per planet and kind; state kinds shortage, blockade, conversion, queue empty and idle live while true and count turns; one-shots stay until clicked; a click dismisses
   an episode; not saved; the timer pauses only on the fresh events it returns), `HumanShipmentList` (sources: the human's planets in range with last turn's surplus result x population
@@ -414,6 +412,19 @@ Spec `docs/superpowers/specs/2026-10-23-human-player-ui-design.md`, plan `docs/s
   panel), `ShipResourcesDialog`, `AddItemDialog`, `ColonizeDialog`, `ResearchScreen` (opened from the HUD Research button). Dialogs are shown through `PlanetDetailUIController.ShowDialog`,
   which also makes a click inside them count as inside the planet panel for `Gameboard.Update()`'s click-outside rule. A notification click calls `Gameboard.GoToNotification`
   (dismiss, centre the board, open the panel; it sets `_panelClickFrame` like a fleet icon does so the same click is not read as an outside click).
+
+#### The human UI (project 2, stage 2: fleets)
+
+Spec `docs/superpowers/specs/2026-10-23-human-player-ui-stage2-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-ui-stage2.md`.
+- **Fleets are a label on ships:** `Ship.FleetId` (saved as `ShipSave.fleetId`, 0 = as before). A fleet is the owner's non-bunker ships at a planet sharing an id; only the human's ships are grouped by it
+  (`FleetSummary.ForPlanet(planet, humanId)`), the AI never reads it. A new fleet takes `Planet.NextFleetId(owner)` (highest + 1); ships arriving by an order (`GameAI.ApplyShipArrival`) dock together in a fresh
+  id; built ships join `Planet.LowestFleetId(owner)`. Commands `setFleet` (dock indices into a fleet id, negative = new) and `mergeFleets` are instant and create no orders.
+- **Fleet panel:** `FleetUIController` shows the human's ships as fleet boxes plus a "+ New fleet" box; dragging a ship row to a box is `setFleet`, a box title onto a box is `mergeFleets`.
+- **Board:** one icon per human fleet (`FleetIconHandle` on each icon). A press-drag from an own icon draws a line (green/red from `Gameboard.CheckFleetDrag`, checked only when the planet under the pointer changes)
+  and on release `Gameboard.TryDragFleet` sends a `move` of that fleet's `HumanFleetView.ShipIndices`; a refusal shows a toast (`HumanHoverText.RefusalSentence`). A rival's icon only hovers.
+- **Hover popups:** one popup (`HumanHoverPopup`) fed by the pure `HumanHoverText` (ship text, `Order` text for ship, food, grotsits, colonist and rider lines, `CanSee`: a rival's line only with both ends visible, `Pick`:
+  10 px screen-space test against the order lines; the order-to-line link is `Gameboard._orderLines`). `Gameboard.UpdateLineHover` runs while a human plays.
+- **Fleet summary:** `FleetSummaryScreen` (HUD Fleets button) lists `HumanFleetList.Build` rows; a row click centres the board on the planet (the destination in flight), opens nothing, and closes the screen.
 
 ### Input
 

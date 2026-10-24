@@ -29,6 +29,8 @@ public static class HumanModeSelfCheck
         ok &= RunHumanFlagChecks();
         ok &= RunCommandParsingChecks();
         ok &= RunFleetCommandChecks();
+        ok &= RunFleetIdChecks();
+        ok &= RunFleetBoxCommandChecks();
         ok &= RunColonizeCommandChecks();
         ok &= RunProductionCommandChecks();
         ok &= RunResearchQueueChecks();
@@ -246,6 +248,135 @@ public static class HumanModeSelfCheck
 
     #endregion
 
+    #region Stage 2 task 1: fleet ids
+
+    public static bool RunFleetIdChecks()
+    {
+        var ok = true;
+        using (var f = new Fixture(3))
+        {
+            var p0 = f.P(0);
+            ok &= Check(p0.NextFleetId(Fixture.HumanId) == 0 && p0.LowestFleetId(Fixture.HumanId) == 0, "no ships: next fleet id 0, lowest 0");
+            p0.DockShipFromSave(Ship.ShipKind.WarShip, Fixture.HumanId, new List<string>(), 0f, 0);
+            ok &= Check(p0.NextFleetId(Fixture.HumanId) == 1, "ships only in fleet 0: next fleet id is 1");
+            p0.DockShipFromSave(Ship.ShipKind.WarShip, Fixture.HumanId, new List<string>(), 0f, 2);
+            ok &= Check(p0.NextFleetId(Fixture.HumanId) == 3 && p0.LowestFleetId(Fixture.HumanId) == 0, "ids {0,2}: next 3, lowest 0");
+            p0.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>(), 0f, 9);
+            p0.DockShipFromSave(Ship.ShipKind.Bunker, Fixture.HumanId, new List<string>(), 0f, 8);
+            ok &= Check(p0.NextFleetId(Fixture.HumanId) == 3, "a rival's ships and bunkers do not take fleet ids");
+            ok &= Check(p0.DockedShips[1].FleetId == 2, "DockShipFromSave stores the fleet id on the ship");
+
+            // Arrival by an order: all ships of the order share one fresh id, apart from the ships already waiting.
+            var fleet = new GameAI.GameAIOrder.ShipFleetPayload
+            {
+                Kind = Ship.ShipKind.WarShip,
+                Snapshots = new List<List<string>> { new List<string>(), new List<string>() },
+            };
+            var arrival = new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport,
+                Data = 2, Origin = "P1", Target = "P0", PlayerId = Fixture.HumanId, Fleet = fleet,
+            };
+            GameAI.ApplyShipArrival(p0, arrival);
+            var arrived = p0.DockedShips.Skip(p0.DockedShips.Count - 2).ToList();
+            ok &= Check(arrived.All(s => s.FleetId == 3), "arriving ships dock together in a fresh fleet (id 3)");
+        }
+
+        var shipSave = new SaveLoadSystem.GameSave.ShipSave
+        {
+            kind = Ship.ShipKind.WarShip, owner = 0, researchSnapshot = new List<string> { "a" }, damage = 2f, fleetId = 4,
+        };
+        var loaded = JsonUtility.FromJson<SaveLoadSystem.GameSave.ShipSave>(JsonUtility.ToJson(shipSave));
+        ok &= Check(loaded.fleetId == 4 && loaded.damage == 2f, "a saved ship keeps its fleet id through JsonUtility");
+        var old = JsonUtility.FromJson<SaveLoadSystem.GameSave.ShipSave>("{\"kind\":1,\"owner\":0,\"researchSnapshot\":[\"w\"]}");
+        ok &= Check(old.fleetId == 0, "an older save with no fleetId key loads every ship in fleet 0");
+        return ok;
+    }
+
+    #endregion
+
+    #region Stage 2 task 2: setFleet, mergeFleets, Check(move)
+
+    internal static HumanCommand SetFleet(string origin, int fleetId, params int[] ships)
+        => new HumanCommand { type = "setFleet", origin = origin, index = fleetId, ships = new List<int>(ships) };
+
+    internal static HumanCommand Merge(string origin, int from, int into)
+        => new HumanCommand { type = "mergeFleets", origin = origin, index = from, toIndex = into };
+
+    public static bool RunFleetBoxCommandChecks()
+    {
+        var ok = true;
+        using (var f = new Fixture(4))
+        {
+            var p0 = f.P(0);
+            Dock(p0, Ship.ShipKind.WarShip, Fixture.HumanId, 5);   // dock 0..4, fleet 0
+            Dock(p0, Ship.ShipKind.WarShip, 1, 1);                  // dock 5, a rival's
+            Dock(p0, Ship.ShipKind.Bunker, Fixture.HumanId, 1);     // dock 6
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 3);
+            var orders = new List<GameAI.GameAIOrder>();
+
+            var made = processor.Apply(new[] { SetFleet("P0", -1, 0, 1) }, orders)[0];
+            ok &= Check(made.applied && orders.Count == 0, "setFleet with a negative index makes a new fleet and creates no orders: " + made.reason);
+            ok &= Check(p0.DockedShips[0].FleetId == 1 && p0.DockedShips[1].FleetId == 1 && p0.DockedShips[2].FleetId == 0,
+                "the two ships moved into new fleet 1; the rest stay in 0");
+            var fleets = HumanFleetView.Fleets(p0, Fixture.HumanId);
+            ok &= Check(fleets.Count == 2 && fleets[0].FleetId == 0 && fleets[0].Ships.Count == 3 && fleets[1].FleetId == 1 && fleets[1].Ships.Count == 2,
+                "the fleets view lists fleet 0 (3 ships) and fleet 1 (2 ships), bunkers and rivals excluded");
+            ok &= Check(HumanFleetView.ShipIndices(p0, Fixture.HumanId, 1).SequenceEqual(new[] { 0, 1 }), "ShipIndices names the dock indices of a fleet");
+
+            ok &= Check(processor.Apply(new[] { SetFleet("P0", 1, 2) }, orders)[0].applied && p0.DockedShips[2].FleetId == 1,
+                "setFleet into an existing fleet moves the ship there");
+            ok &= Check(Refusal(processor, SetFleet("P0", 7, 3)) == "UnknownFleet", "setFleet into a fleet that does not exist is UnknownFleet");
+            ok &= Check(Refusal(processor, SetFleet("P0", -1, 6)) == "UnknownKind", "a bunker cannot be put in a fleet: UnknownKind");
+            ok &= Check(Refusal(processor, SetFleet("P0", -1, 5)) == "NotYourShips", "a rival's ship is NotYourShips");
+            ok &= Check(Refusal(processor, SetFleet("P0", -1, 9)) == "BadShipIndex", "an index outside the dock is BadShipIndex");
+            ok &= Check(Refusal(processor, SetFleet("P2", -1, 0)) == "NotYourPlanet", "a planet the human has no part in is NotYourPlanet");
+
+            ok &= Check(Refusal(processor, Merge("P0", 1, 1)) == "SameFleet", "merging a fleet into itself is SameFleet");
+            ok &= Check(Refusal(processor, Merge("P0", 5, 0)) == "UnknownFleet" && Refusal(processor, Merge("P0", 0, 5)) == "UnknownFleet",
+                "merging from or into a fleet that does not exist is UnknownFleet");
+            ok &= Check(Refusal(processor, Merge("P0", 1, 0)) == "" && p0.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == Fixture.HumanId).All(s => s.FleetId == 0),
+                "mergeFleets 1 into 0 puts every ship back in fleet 0");
+            ok &= Check(HumanFleetView.Fleets(p0, Fixture.HumanId).Count == 1, "an emptied fleet no longer exists");
+
+            // A ship already sent by a move in the same batch cannot be re-grouped.
+            var batch = processor.Apply(new[] { Move("P0", "P1", ships: new[] { 0 }), SetFleet("P0", -1, 0) }, new List<GameAI.GameAIOrder>());
+            ok &= Check(batch[0].applied && !batch[1].applied && batch[1].reason == "NotEnoughShips",
+                "setFleet on a ship an earlier move of the batch claimed is NotEnoughShips");
+        }
+
+        using (var f = new Fixture(4, c => c.maxPathNodesForShipTransport = 3))
+        {
+            var p0 = f.P(0);
+            Dock(p0, Ship.ShipKind.WarShip, Fixture.HumanId, 4);
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 3);
+            processor.Apply(new[] { SetFleet("P0", -1, 2, 3) }, new List<GameAI.GameAIOrder>());
+            var before = p0.DockedShips.Select(s => s.FleetId).ToList();
+
+            ok &= Check(processor.Check(Move("P0", "P1", ships: new[] { 2, 3 })) == null, "Check accepts a valid move");
+            ok &= Check(p0.DockedShips.Select(s => s.FleetId).SequenceEqual(before) && p0.DockedShips.Count == 4,
+                "Check leaves the dock list untouched");
+            ok &= Check(processor.Check(Move("P0", "P3", ships: new[] { 2, 3 })) == "OutOfRange", "Check gives OutOfRange like Apply");
+            ok &= Check(processor.Check(Move("P0", "P0", ships: new[] { 2, 3 })) == "SameDestination", "Check gives SameDestination");
+            ok &= Check(processor.Check(Move("P0", "Nowhere", ships: new[] { 2, 3 })) == "UnknownPlanet", "Check gives UnknownPlanet");
+            ok &= Check(processor.Check(Move("P0", "P1", ships: new[] { 2, 3 })) == null, "Check is repeatable: it claimed nothing");
+            var checkBatch = processor.CheckBatch(new[] { Move("P0", "P1", ships: new[] { 2, 3 }), Move("P0", "P2", ships: new[] { 2 }) });
+            ok &= Check(checkBatch[0].applied && !checkBatch[1].applied && checkBatch[1].reason == "NotEnoughShips",
+                "CheckBatch sees the first move's claim");
+
+            // A fleet drag sends exactly that fleet's ships.
+            var orders = new List<GameAI.GameAIOrder>();
+            var indices = HumanFleetView.ShipIndices(p0, Fixture.HumanId, 1);
+            var sent = processor.Apply(new[] { new HumanCommand { type = "move", origin = "P0", target = "P1", ships = indices } }, orders)[0];
+            var transport = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport);
+            ok &= Check(sent.applied && transport != null && System.Convert.ToInt32(transport.Data) == 2 && indices.SequenceEqual(new[] { 2, 3 }),
+                "a move built from a fleet's ShipIndices sends exactly its two ships");
+        }
+        return ok;
+    }
+
+    #endregion
+
 
     #region Task 5: colonize
 
@@ -425,6 +556,42 @@ public static class HumanModeSelfCheck
                 "a manual planet skips an invalid queue head and starts the next valid item");
             ok &= Check(dropResults.Exists(r => r.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeProductionDropped && r.Data.ToString() == "QBuilt"),
                 "the dropped item is reported as a ProductionDropped result");
+        }
+
+        // Moving the first queued item up replaces the current production; the displaced item keeps its progress and resumes with it.
+        using (var f = new Fixture(2))
+        {
+            f.Own(0, 2);
+            var a = MakeItem("RA", "Ship Type", "Warship");
+            var b = MakeItem("RB", "Ship Type", "Warship");
+            var c = MakeItem("RC", "Ship Type", "Warship");
+            f.Human.ProductionCatalog.catalogItems.AddRange(new[] { a, b, c });
+            var running = new Planet.ProductionItem(a) { Progress = 40f };
+            f.P(0).CurrentProduction = running;
+            f.P(0).ProductionQueue.Add(new Planet.ProductionItem(b));
+            f.P(0).ProductionQueue.Add(new Planet.ProductionItem(c));
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 4);
+            var up = new HumanCommand { type = "moveProduction", origin = "P0", index = 0, toIndex = -1 };
+
+            ok &= Check(processor.Apply(new[] { up }, new List<GameAI.GameAIOrder>())[0].applied, "the first queued item can be moved up over the current production");
+            ok &= Check(f.P(0).CurrentProduction.Value.Item.itemName == "RB" && f.P(0).CurrentProduction.Value.Progress == 0f,
+                "the moved item is now in production, starting from its own progress (0)");
+            ok &= Check(f.P(0).ProductionQueue.ConvertAll(p => p.Item.itemName).SequenceEqual(new[] { "RA", "RC" })
+                        && f.P(0).ProductionQueue[0].Progress == 40f,
+                "the displaced item heads the queue and keeps its progress of 40");
+
+            // When it comes round again it resumes with that progress plus the industry stored meanwhile.
+            f.P(0).CurrentProduction = null;
+            f.P(0).Industry = 5f;
+            f.P(0).StartNextProduction();
+            ok &= Check(f.P(0).CurrentProduction.Value.Item.itemName == "RA" && f.P(0).CurrentProduction.Value.Progress == 45f,
+                "a resumed item adds the stored industry to the progress it kept");
+
+            // With nothing in production there is nothing to replace; any other index below the front is still BadIndex.
+            f.P(0).CurrentProduction = null;
+            ok &= Check(Refusal(processor, up) == "BadIndex", "moving the first item up with nothing in production is BadIndex");
+            ok &= Check(Refusal(processor, new HumanCommand { type = "moveProduction", origin = "P0", index = 1, toIndex = -1 }) == "BadIndex",
+                "only the first queued item can replace the current production");
         }
 
         // The AI keeps choosing for planets it develops, and leaves a manual planet to its owner.
@@ -1023,6 +1190,38 @@ public static class HumanModeSelfCheck
             ok &= Check(f.Human.currentResearch == c && f.Human.ResearchQueue.Count == 0,
                 "queue entries that cannot be researched are skipped and the next valid one starts");
         }
+
+        // The queue can be reordered, but never so that an item comes before the queued prerequisite it needs.
+        using (var f = new Fixture(1))
+        {
+            f.Human.ResearchCatalog.catalogItems.AddRange(new[]
+            {
+                MakeResearch("MA"), MakeResearch("MB", requiredTech: "MA"), MakeResearch("MC"), MakeResearch("MD", requiredTech: "MB"),
+            });
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 4);
+            var none = new List<GameAI.GameAIOrder>();
+            processor.Apply(new[] { QueueResearch("MA"), QueueResearch("MB"), QueueResearch("MC"), QueueResearch("MD") }, none);   // MA MB MC MD
+            HumanCommand MoveResearch(int from, int to) => new HumanCommand { type = "moveResearch", index = from, toIndex = to };
+
+            ok &= Check(processor.Apply(new[] { MoveResearch(2, 0) }, none)[0].applied && f.Human.ResearchQueue.SequenceEqual(new[] { "MC", "MA", "MB", "MD" }),
+                "an item with no queued prerequisite (MC) can move to the front");
+            ok &= Check(Refusal(processor, MoveResearch(2, 0)) == "PrerequisiteOrder" && f.Human.ResearchQueue.SequenceEqual(new[] { "MC", "MA", "MB", "MD" }),
+                "an item cannot move above its queued prerequisite (MB above MA): refused and the queue unchanged");
+            ok &= Check(Refusal(processor, MoveResearch(2, 1)) == "PrerequisiteOrder", "one step up over the prerequisite is refused too");
+            ok &= Check(Refusal(processor, MoveResearch(1, 2)) == "PrerequisiteOrder", "a prerequisite cannot move below an item that needs it (MA below MB)");
+            ok &= Check(Refusal(processor, MoveResearch(1, 3)) == "PrerequisiteOrder", "nor below the item that needs that one (MA below MD)");
+            ok &= Check(processor.Apply(new[] { MoveResearch(0, 3) }, none)[0].applied && f.Human.ResearchQueue.SequenceEqual(new[] { "MA", "MB", "MD", "MC" }),
+                "an unrelated item can move to the end");
+            ok &= Check(Refusal(processor, MoveResearch(0, 9)) == "BadIndex" && Refusal(processor, MoveResearch(-1, 1)) == "BadIndex", "an index outside the queue is BadIndex");
+            ok &= Check(Refusal(processor, MoveResearch(1, 1)) == "", "moving an item to where it already is changes nothing and is accepted");
+
+            // Whether a button should be offered is the same question: a move that would be refused is not offered.
+            var catalog = f.Human.ResearchCatalog;
+            ok &= Check(HumanResearchTree.MoveKeepsPrerequisites(f.Human.ResearchQueue, n => catalog.GetItem(n)?.requiredTech, 3, 2),
+                "the pure rule allows MC up one place (it needs nothing)");
+            ok &= Check(!HumanResearchTree.MoveKeepsPrerequisites(f.Human.ResearchQueue, n => catalog.GetItem(n)?.requiredTech, 1, 0),
+                "the pure rule refuses MB above MA");
+        }
         return ok;
     }
 
@@ -1089,6 +1288,19 @@ public static class HumanModeSelfCheck
     public static bool RunSaveSettingsChecks()
     {
         var ok = true;
+        // The planet panel's "per turn" figures are production minus use. Production used to be known only after a turn had run, so a new or
+        // loaded game showed every planet losing its whole population until the first turn: the figure now projects production itself.
+        using (var f = new Fixture(1))
+        {
+            f.Own(0, 2);
+            var before = HumanPlanetView.NetPerTurn(f.P(0));
+            ok &= Check(before.food > -f.P(0).Population.Count, "before any turn has run the net food is not just minus the population: " + before.food);
+            // The fixture's planet type has no per-worker food rate, so production is the base rate scaled by morale (UpdatePlanet itself divides by it).
+            ok &= Check(Mathf.Approximately(f.P(0).FoodProduced, f.P(0).Morale / 100f), "the projection set the planet's food production from its base rate and morale");
+            var again = HumanPlanetView.NetPerTurn(f.P(0));
+            ok &= Check(Mathf.Approximately(before.food, again.food) && Mathf.Approximately(before.grotsits, again.grotsits), "projecting again gives the same rates");
+        }
+
         // A save from before human mode has none of the keys: it must load as a zero-human, 400-turn match.
         MatchSettings.Reset();
         MatchSettings.TurnLimit = 100;   // proves the restore overwrites rather than leaves what was there

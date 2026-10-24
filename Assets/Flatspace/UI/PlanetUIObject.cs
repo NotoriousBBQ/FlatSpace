@@ -9,7 +9,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
+public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveHandler, IPointerExitHandler,
+    IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     [SerializeField] public TextMeshProUGUI _nameTextField;
     [SerializeField] public TextMeshProUGUI _populationTextField;
@@ -36,6 +37,8 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         public Image Sprite;
         public TextMeshProUGUI Count;
         public int Owner;
+        public int FleetId;
+        public FleetIconHandle Handle;
     }
     private readonly List<FleetIconView> _fleetIcons = new List<FleetIconView>();
     public string _planetName;
@@ -73,7 +76,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
             ownerAI != null && ownerAI.GrotsitsDistributionCenters.Contains(_planetName));
         if (_fleetIconRect)
         {
-            var groups = FleetSummary.ForPlanet(planet);
+            var groups = FleetSummary.ForPlanet(planet, Gameboard.Instance.HumanPlayerId);
             while (_fleetIcons.Count < groups.Count) _fleetIcons.Add(CreateFleetIconView());
             for (var i = 0; i < _fleetIcons.Count; i++)
             {
@@ -85,6 +88,10 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
                 }
                 var group = groups[i];
                 view.Owner = group.Owner;
+                view.FleetId = group.FleetId;
+                view.Handle.PlanetName = _planetName;
+                view.Handle.Owner = group.Owner;
+                view.Handle.FleetId = group.FleetId;
                 view.Sprite.sprite = FleetSummary.IconFor(planet.GameAIConstants, group.IconKind);
                 view.Background.color = FleetSummary.ColorFor(group.Owner);
                 view.Count.text = group.Count.ToString();
@@ -237,6 +244,71 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         Gameboard.Instance.ShowPlanetDetail(_planetName);
     }
 
+    // The planet's collider and an icon's Image compete for the raycast (see OnPointerClick), so an icon over the planet body may never receive
+    // its own hover or drag events: they arrive here instead, and are handed to the icon under the pointer by the same screen-rect test.
+    private FleetIconHandle IconAt(Vector2 screenPosition)
+    {
+        if (_fleetIconRect == null || !_fleetIconRect.gameObject.activeSelf) return null;
+        var iconCamera = _statsCanvas.worldCamera ? _statsCanvas.worldCamera : Camera.main;
+        foreach (var view in _fleetIcons)
+        {
+            if (view.Rect.gameObject.activeSelf && RectTransformUtility.RectangleContainsScreenPoint(view.Rect, screenPosition, iconCamera))
+                return view.Handle;
+        }
+        return null;
+    }
+
+    private FleetIconHandle _hoverIcon;
+    private FleetIconHandle _dragIcon;   // the icon a drag started on; null = the drag belongs to the board's ScrollRect
+    private ScrollRect _scrollRect;
+
+    private ScrollRect Scroll => _scrollRect != null ? _scrollRect : _scrollRect = GetComponentInParent<ScrollRect>();
+
+    public void OnPointerMove(PointerEventData eventData)
+    {
+        var icon = IconAt(eventData.position);
+        if (icon == _hoverIcon) return;
+        if (_hoverIcon != null) _hoverIcon.OnPointerExit(eventData);
+        _hoverIcon = icon;
+        if (_hoverIcon != null) _hoverIcon.OnPointerEnter(eventData);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (_hoverIcon != null) _hoverIcon.OnPointerExit(eventData);
+        _hoverIcon = null;
+    }
+
+    public void OnInitializePotentialDrag(PointerEventData eventData)
+    {
+        if (Scroll != null) Scroll.OnInitializePotentialDrag(eventData);
+    }
+
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        _dragIcon = IconAt(eventData.pressPosition);
+        if (_dragIcon != null && _dragIcon.CanDrag)
+        {
+            _dragIcon.OnBeginDrag(eventData);
+            return;
+        }
+        _dragIcon = null;
+        if (Scroll != null) Scroll.OnBeginDrag(eventData);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        if (_dragIcon != null) _dragIcon.OnDrag(eventData);
+        else if (Scroll != null) Scroll.OnDrag(eventData);
+    }
+
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        if (_dragIcon != null) _dragIcon.OnEndDrag(eventData);
+        else if (Scroll != null) Scroll.OnEndDrag(eventData);
+        _dragIcon = null;
+    }
+
     private void CreateFleetIcon()
     {
         // Container: holds the shared position/size used for zoom-tracking (UIUpdateForScroll)
@@ -260,6 +332,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler
         var iconObject = new GameObject("FleetIconView");
         iconObject.transform.SetParent(_fleetIconRect.transform, false);
         view.Rect = iconObject.AddComponent<RectTransform>();
+        view.Handle = iconObject.AddComponent<FleetIconHandle>();   // hover popup and drag; the Sprite image below is its raycast target
         view.Rect.anchorMin = view.Rect.anchorMax = view.Rect.pivot = new Vector2(0.5f, 0.5f);
         view.Rect.sizeDelta = new Vector2(FleetIconSize, FleetIconSize);
 
