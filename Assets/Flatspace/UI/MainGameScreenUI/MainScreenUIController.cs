@@ -18,6 +18,9 @@ namespace Game.UI.MainGameScreenUI
         private Label _researchLabel;
         private Label _currentResearchLabel;
         private Label _grotsitsLabel;
+        private Button _researchButton;
+        private Button _pauseBanner;
+        private string _pauseBannerPlanet;
 
         void OnEnable()
         {
@@ -28,6 +31,30 @@ namespace Game.UI.MainGameScreenUI
             _researchLabel = root.Q<Label>("ResearchLabel");
             _currentResearchLabel = root.Q<Label>("CurrentResearchLabel");
             _grotsitsLabel = root.Q<Label>("GrotsitsLabel");
+
+            // The human's research screen opens from here. Built in code and only shown while a human plays.
+            _researchButton = new Button(() => ResearchScreen.Toggle(root)) { text = "Research" };
+            _researchButton.style.position = Position.Absolute;
+            _researchButton.style.top = 40;
+            _researchButton.style.right = 10;
+            _researchButton.style.display = DisplayStyle.None;
+            HumanUiKit.StyleButton(_researchButton);
+            root.Add(_researchButton);
+
+            // Why the timer stopped, shown at once and clickable to go there; hidden otherwise.
+            _pauseBanner = new Button(() => { if (!string.IsNullOrEmpty(_pauseBannerPlanet)) Gameboard.Instance.GoToPlanet(_pauseBannerPlanet); });
+            _pauseBanner.style.position = Position.Absolute;
+            _pauseBanner.style.top = 40;
+            _pauseBanner.style.left = Length.Percent(22);
+            _pauseBanner.style.width = Length.Percent(56);
+            _pauseBanner.style.minHeight = 40;
+            _pauseBanner.style.whiteSpace = WhiteSpace.Normal;
+            _pauseBanner.style.fontSize = 18;
+            _pauseBanner.style.unityFontStyleAndWeight = FontStyle.Bold;
+            HumanUiKit.StyleButton(_pauseBanner);
+            _pauseBanner.style.backgroundColor = new StyleColor(new Color(0.45f, 0.08f, 0.08f));
+            _pauseBanner.style.display = DisplayStyle.None;
+            root.Add(_pauseBanner);
 
             _notificationListController = GetComponent<NotificationListController>();
             if (!_notificationListController)
@@ -44,6 +71,15 @@ namespace Game.UI.MainGameScreenUI
             
         }
 
+        /// <summary>Shows why the timer stopped (and where, on click), or hides the banner when text is null or empty.</summary>
+        public void SetPauseBanner(string text, string planet)
+        {
+            if (_pauseBanner == null) return;
+            _pauseBannerPlanet = planet;
+            _pauseBanner.text = text ?? "";
+            _pauseBanner.style.display = string.IsNullOrEmpty(text) ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+
         public void SetNotifications(List<PlayerNotification> notifications)
         {
             _notificationListController?.SetNotifications(notifications);
@@ -58,6 +94,13 @@ namespace Game.UI.MainGameScreenUI
             if (_researchLabel != null) _researchLabel.text = $"Research: {research:0.#}";
             if (_currentResearchLabel != null) _currentResearchLabel.text = string.IsNullOrEmpty(currentResearch) ? "None" : currentResearch;  
             if (_grotsitsLabel != null) _grotsitsLabel.text = $"Grotsits: {grotsits:0.#}";
+            if (_researchButton != null)
+            {
+                var human = Gameboard.Instance != null && Gameboard.Instance.HumanPlayerId >= 0;
+                _researchButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
+                if (!human) ResearchScreen.Close();
+                else ResearchScreen.Refresh();
+            }
         }
 
     }

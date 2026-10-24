@@ -119,6 +119,17 @@ namespace FlatSpace
             }
             public GameAIMap GameAIMap { get; private set; }
             public List<GameAIOrder> CurrentAIOrders { get; private set; } = new List<GameAIOrder>();
+            // Orders the human gave since the last turn (HumanCommandProcessor). GameAIUpdate appends them after every player's
+            // ProcessResults, so no AI decision of this turn sees them, and then clears the list.
+            public List<GameAIOrder> PendingHumanOrders { get; } = new List<GameAIOrder>();
+
+            // What the turn just played produced, for the human's event list (HumanTurnEvents). Cleared at the start of each GameAIUpdate;
+            // read-only for everything else, so they change nothing a player decides.
+            public List<Planet.UpdateResult> LastTurnResults { get; private set; } = new List<Planet.UpdateResult>();
+            public List<GameAIOrder> LastNewOrders { get; private set; } = new List<GameAIOrder>();
+            public List<GameAIOrder> LastExecutedOrders { get; } = new List<GameAIOrder>();
+            public List<BlockadeSystem.BlockadeCut> LastBlockadeCuts { get; } = new List<BlockadeSystem.BlockadeCut>();
+            public List<ConversionReport> LastConversionReports { get; } = new List<ConversionReport>();
             public static Random Rand = new Random();   // not readonly: SimultaneitySelfCheck re-seeds it per player
 
             public void InitGameAI(List<PlanetSpawnData> spawnDataList, GameAIConstants gameAIConstants)
@@ -144,6 +155,7 @@ namespace FlatSpace
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
+                PendingHumanOrders.Clear();
                 _grotsitsShort.Clear();
                 _redirectFailedLogged.Clear();
                 _conversions.Clear();
@@ -156,6 +168,11 @@ namespace FlatSpace
                 GameAIMap.Diplomacy.Turn = Gameboard.Instance.TurnNumber;   // the truce is tested against it
                 var gameAIOrders = new List<GameAIOrder>();
                 var planetUpdateResults = new List<Planet.UpdateResult>();
+                LastExecutedOrders.Clear();
+                LastBlockadeCuts.Clear();
+                LastConversionReports.Clear();
+                LastTurnResults = planetUpdateResults;
+                LastNewOrders = gameAIOrders;
                 ProcessCurrentOrders();
                 planetUpdateResults.Clear();
                 RunCombat(planetUpdateResults);
@@ -173,6 +190,11 @@ namespace FlatSpace
                 GameAIMap.RecomputeIncomingOffense(CurrentAIOrders,
                     new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players)));
                 ProcessResults(planetUpdateResults, gameAIOrders);
+                // The human's commands run now, after combat, bombardment and conversion: they are checked against the board as it stands
+                // and execute in this same step, so a ship that fell in combat cannot be sent and no snapshot goes stale before it leaves.
+                Gameboard.Instance.RunHumanCommands();
+                gameAIOrders.AddRange(PendingHumanOrders);
+                PendingHumanOrders.Clear();
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
@@ -205,7 +227,9 @@ namespace FlatSpace
             {
                 var stats = new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players));
                 var turn = Gameboard.Instance.TurnNumber;
-                LogConversion(turn, ConversionSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results));
+                var conversionReports = ConversionSystem.Resolve(GameAIMap, stats, GameAIMap.GameAIConstants, turn, results);
+                LastConversionReports.AddRange(conversionReports);
+                LogConversion(turn, conversionReports);
             }
 
             private void LogConversion(int turn, List<ConversionReport> reports)
@@ -395,6 +419,7 @@ namespace FlatSpace
                 if (research == null) return;
                 var turn = Gameboard.Instance.TurnNumber;
                 var cuts = new BlockadeSystem(GameAIMap, research).Apply(CurrentAIOrders, turn);
+                LastBlockadeCuts.AddRange(cuts);
 
                 // The order owner learns where its orders were cut, so colonization can route around it later.
                 foreach (var cut in cuts)
@@ -447,6 +472,7 @@ namespace FlatSpace
 
             private void ExecuteOrder(GameAIOrder executableOrder)
             {
+                LastExecutedOrders.Add(executableOrder);
                 var targetPlanet = GameAIMap.GetPlanet(executableOrder.Target);
                 switch (executableOrder.Type)
                 {
@@ -648,6 +674,12 @@ namespace FlatSpace
                 }
                 target.AddIncomingShips(kind, order.PlayerId, -count);
             }
+
+            /// <summary>
+            /// Queues and executes orders now, between turns: the human's UI commands take effect at once, exactly as orders the AI created
+            /// during a turn did (a delayed order's delay is first decremented by the next turn).
+            /// </summary>
+            public void ApplyOrdersNow(List<GameAIOrder> orders) => ProcessNewOrders(orders);
 
             private void ProcessNewOrders(List<GameAIOrder> newOrders)
             {

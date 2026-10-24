@@ -427,6 +427,7 @@ namespace FlatSpace
                             if (improvement != null) planet.RecordImprovement(improvement);
                         }
                     planet.Owner = planetStatus.owner;
+                    planet.ManualDevelopment = planetStatus.manualDevelopment;   // false (an older save) = the AI develops it, as before
                     planet.RestoreConversion(planetStatus.conversionBy, planetStatus.conversionProgress, planetStatus.conversionWarMask);
                     planet.FoodShipmentIncoming = planetStatus.foodTransferInProgress;
                     planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;

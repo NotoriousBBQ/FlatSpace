@@ -16,8 +16,11 @@ public class RandomBoardPopup : MonoBehaviour
     private static readonly Color ButtonColor = new Color(0.3f, 0.35f, 0.5f, 1f);
 
     private MapGenSettings _settings;
+    private GameObject _matchPanel;
     private GameObject _savedBoardPanel;
     private GameObject _randomPanel;
+    private TextMeshProUGUI _humanLabel;
+    private TextMeshProUGUI _turnLimitLabel;
     private TMP_InputField _playersField;
     private TMP_InputField _planetsField;
     private TMP_InputField _seedField;
@@ -34,16 +37,43 @@ public class RandomBoardPopup : MonoBehaviour
         return popup;
     }
 
+    // The match setup (human player, turn limit) comes first, then the board choice. A cancelled file dialog comes back
+    // here (OnYes passes Show), so the setup is shown again with the values chosen so far; they live in MatchSettings
+    // (MainMenu.StartGame resets them for a fresh start).
     public void Show()
     {
         gameObject.SetActive(true);
-        ShowSavedBoardPanel();
+        RefreshMatchLabels();
+        _randomPanel.SetActive(false);
+        _savedBoardPanel.SetActive(false);
+        _matchPanel.SetActive(true);
     }
 
     private void Hide() => gameObject.SetActive(false);
 
+    private void RefreshMatchLabels()
+    {
+        _humanLabel.text = MatchSettings.HumanRequested ? "Human player: Yes" : "Human player: No";
+        _turnLimitLabel.text = MatchSettings.TurnLimit == 0 ? "Turn limit: Unlimited" : $"Turn limit: {MatchSettings.TurnLimit}";
+    }
+
+    private void OnToggleHuman()
+    {
+        MatchSettings.HumanRequested = !MatchSettings.HumanRequested;
+        RefreshMatchLabels();
+    }
+
+    private void OnCycleTurnLimit()
+    {
+        var presets = MatchSettings.TurnLimitPresets;
+        var next = (System.Array.IndexOf(presets, MatchSettings.TurnLimit) + 1) % presets.Length;
+        MatchSettings.TurnLimit = presets[next];
+        RefreshMatchLabels();
+    }
+
     private void ShowSavedBoardPanel()
     {
+        _matchPanel.SetActive(false);
         _randomPanel.SetActive(false);
         _savedBoardPanel.SetActive(true);
     }
@@ -103,14 +133,22 @@ public class RandomBoardPopup : MonoBehaviour
 
     private void Build()
     {
-        _savedBoardPanel = MakePanel("SavedBoardPanel", 420f, 200f, out var savedBox);
+        _matchPanel = MakePanel(transform, "MatchSetupPanel", 420f, 300f, out var matchBox);
+        AddLabel(matchBox, "Match Setup", 32f, 28f);
+        _humanLabel = AddButton(AddRow(matchBox, 48f), "Human player: No", OnToggleHuman);
+        _turnLimitLabel = AddButton(AddRow(matchBox, 48f), "Turn limit: 400", OnCycleTurnLimit);
+        var matchButtons = AddRow(matchBox, 56f);
+        AddButton(matchButtons, "Next", ShowSavedBoardPanel);
+        AddButton(matchButtons, "Cancel", Hide);
+
+        _savedBoardPanel = MakePanel(transform, "SavedBoardPanel", 420f, 200f, out var savedBox);
         AddLabel(savedBox, "Use Saved Board", 32f, 28f);
         var buttons = AddRow(savedBox, 56f);
         AddButton(buttons, "Yes", OnYes);
         AddButton(buttons, "No", ShowRandomPanel);
         AddButton(buttons, "Cancel", Hide);
 
-        _randomPanel = MakePanel("RandomBoardPanel", 520f, 380f, out var randomBox);
+        _randomPanel = MakePanel(transform, "RandomBoardPanel", 520f, 380f, out var randomBox);
         AddLabel(randomBox, "Random Board", 32f, 28f);
         _playersField = AddField(randomBox, "Number of Players");
         _planetsField = AddField(randomBox, "Number of Planets");
@@ -121,10 +159,10 @@ public class RandomBoardPopup : MonoBehaviour
         AddButton(randomButtons, "OK", OnOk);
         AddButton(randomButtons, "Cancel", ShowSavedBoardPanel);
 
-        ShowSavedBoardPanel();
+        ShowSavedBoardPanel();   // Show() brings the match setup panel up first
     }
 
-    private static void Stretch(RectTransform rect)
+    internal static void Stretch(RectTransform rect)
     {
         rect.anchorMin = Vector2.zero;
         rect.anchorMax = Vector2.one;
@@ -132,12 +170,14 @@ public class RandomBoardPopup : MonoBehaviour
     }
 
     // A full-screen dimmer (it also swallows clicks meant for the menu behind) holding a centred box.
-    private GameObject MakePanel(string panelName, float width, float height, out Transform box)
+    internal static GameObject MakePanel(Transform parent, string panelName, float width, float height, out Transform box, float dimAlpha = 0.6f)
     {
         var dim = new GameObject(panelName, typeof(RectTransform), typeof(Image));
-        dim.transform.SetParent(transform, false);
+        dim.transform.SetParent(parent, false);
         Stretch((RectTransform)dim.transform);
-        dim.GetComponent<Image>().color = Dim;
+        var dimColor = Dim;
+        dimColor.a = dimAlpha;
+        dim.GetComponent<Image>().color = dimColor;
 
         var boxObject = new GameObject("Box", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
         boxObject.transform.SetParent(dim.transform, false);
@@ -155,7 +195,7 @@ public class RandomBoardPopup : MonoBehaviour
         return dim;
     }
 
-    private static TextMeshProUGUI AddLabel(Transform parent, string text, float height, float fontSize)
+    internal static TextMeshProUGUI AddLabel(Transform parent, string text, float height, float fontSize)
     {
         var go = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
         go.transform.SetParent(parent, false);
@@ -168,7 +208,7 @@ public class RandomBoardPopup : MonoBehaviour
         return label;
     }
 
-    private static Transform AddRow(Transform parent, float height)
+    internal static Transform AddRow(Transform parent, float height)
     {
         var go = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
         go.transform.SetParent(parent, false);
@@ -180,7 +220,7 @@ public class RandomBoardPopup : MonoBehaviour
         return go.transform;
     }
 
-    private static void AddButton(Transform parent, string text, UnityAction onClick)
+    internal static TextMeshProUGUI AddButton(Transform parent, string text, UnityAction onClick)
     {
         var go = new GameObject(text + "Button", typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
@@ -195,6 +235,7 @@ public class RandomBoardPopup : MonoBehaviour
         Stretch((RectTransform)label.transform);
         label.alignment = TextAlignmentOptions.Center;
         label.raycastTarget = false;
+        return label;
     }
 
     // A labelled integer field: label on the left, input on the right.

@@ -29,6 +29,20 @@ ask, rather than silently analyzing a near-empty log.
   default board, then a designer/save load), so if there are two `BoardConfig` lines, **the last one
   is the real board**. Report which one you're using.
 - **Match length:** `T<turn>` in the last line, or max turn across all lines.
+- **Human player (human player mode):** `grep MatchSetup <file>` (`T0|P-1|MatchSetup|human=<id|none>|turnLimit=<n>`, 0 = unlimited; the LAST one
+  is the real one, like `BoardConfig`). A match with `human=none` has no `Human*` lines. With a human, the lines are
+  `T<turn>|P<id>|HumanCommand|<type>|<origin>|<target>|<detail>` (a command applied), `HumanCommandRefused|<type>|<reason>` (refused; the reason is
+  from a closed set per command, see `HumanCommandProcessor`: UnknownCommand, UnknownPlanet, NotYourPlanet, TargetUnknown, OutOfRange, NotEnoughShips,
+  NoColonyShip, CannotPayRider, NotUnlocked, AlreadyBuilt, Superseded, BunkerCap, NoContact ...; `Error: ...` is a bug, not a rule),
+  `HumanPause|<event>|<planet>` (the timer stopped itself), `HumanDefeat|<populated>|<colonyShips>|<colonists>` (once) and
+  `T<turn>|P-1|TurnLimitReached|<limit>` (once, every match). Questions they answer: what the human did and in what order, which rule refuses them most,
+  whether the default pause set is too noisy (count `HumanPause` per 100 turns by event). Invariants: no `HumanCommand` line without an earlier
+  command in `HumanCommands/commands.done.json`; a human's `P<id>` never appears on `Stance`, `Retreat`, `AssaultTarget`, `ColonizeStart`-style
+  lines the AI writes for its own decisions unless the human enabled the matching automation (shipments) or a planet is switched to automatic.
+  The human UI (stage 1) adds `T<turn>|P<id>|HumanUiOrder|<screen>|<commands>|<refused>`, one per click of a commit-style button
+  (`ShipResources`, `Production`, `Colonize`, `Research`): which screens the human uses and how often a command is refused. Invariant: every
+  `HumanUiOrder` is followed, on the same turn, by `<commands>` lines that are `HumanCommand` or `HumanCommandRefused` (and `<refused>` of them
+  are the refusals); a `HumanCommand` line with no `HumanUiOrder` after it came from the JSON file.
 - **Players:** highest `P<n>` seen, plus `StrategyChange` lines (when each player left Expand for
   Consolidate, if at all — a player that never switches stays on Expand rules the whole match).
 - **Effective `improvementUpkeepScale`:** don't trust the saved asset value alone — a value changed

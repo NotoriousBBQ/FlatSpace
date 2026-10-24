@@ -123,6 +123,16 @@ namespace Game.UI.MainGameScreenUI
         public void RefreshFogView()
         {
             if (_fogViewDropdown == null) return;
+            // A human plays: the view is that player's fog and the debug choices are locked.
+            var humanId = FlatSpace.Game.Gameboard.Instance != null ? FlatSpace.Game.Gameboard.Instance.HumanPlayerId : -1;
+            if (humanId >= 0)
+            {
+                _fogViewDropdown.choices = new System.Collections.Generic.List<string> { $"Player {humanId}" };
+                _fogViewDropdown.SetValueWithoutNotify($"Player {humanId}");
+                _fogViewDropdown.SetEnabled(false);
+                return;
+            }
+            _fogViewDropdown.SetEnabled(true);
             var choices = new System.Collections.Generic.List<string> { "No Fog", "All Players" };
             var n = FlatSpace.Game.Gameboard.Instance != null
                 ? FlatSpace.Game.Gameboard.Instance.NumPlayers : 0;
@@ -162,6 +172,14 @@ namespace Game.UI.MainGameScreenUI
                 _notificationListController.enabled ? "Hide Notifications" : "Show Notifications";
         }
 
+        /// <summary>Opens the notification list (used when a human player is set, since the list is how they play).</summary>
+        public void ShowNotificationList()
+        {
+            if (!_notificationListController || _notificationListController.enabled) return;
+            _notificationListController.enabled = true;
+            if (_showNotificationsButton != null) SetShowNotificationButtonText();
+        }
+
         private void OnShowNotificationsButtonClicked()
         {
             if (!_notificationListController)
@@ -180,10 +198,15 @@ namespace Game.UI.MainGameScreenUI
 
         private void OnStopRunButtonClicked()
         {
-            _nextTurnButton.SetEnabled(true);
-            _startRunButton.SetEnabled(true);
-            _stopRunButton.SetEnabled(false);
-            Gameboard.Instance.StopTimedUpdate();
+            Gameboard.Instance.StopTimedUpdate();   // also puts the buttons back, see RunStopped
+        }
+
+        /// <summary>The run ended by itself (a pause event, the turn limit, a defeat): Next Turn and Start Run are available again without pressing Stop Run.</summary>
+        public void RunStopped()
+        {
+            _nextTurnButton?.SetEnabled(true);
+            _startRunButton?.SetEnabled(true);
+            _stopRunButton?.SetEnabled(false);
         }
 
         private static void OnSaveButtonClicked()

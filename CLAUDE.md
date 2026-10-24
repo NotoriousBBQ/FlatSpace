@@ -367,6 +367,53 @@ skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `Bunke
   `Application.persistentDataPath/AITuningLogs` (build), one timestamped file per match, gitignored.
 - The standard review is the tracked `tuning-log` skill (`/tuning-log`): newest log, board and players, the usual metrics, compared with an earlier
   run on the same board.
+- Human player mode adds `MatchSetup`, `HumanCommand`, `HumanCommandRefused`, `HumanPause`, `HumanDefeat` and `TurnLimitReached` (fields in the
+  `tuning-log` skill). They are one-off lines per command or event, so they need no tracker; the once-only ones (`HumanDefeat`, `TurnLimitReached`)
+  are guarded by `Gameboard` flags that a load does not save, so a load may log them again.
+
+### Human player mode
+
+Spec `docs/superpowers/specs/2026-10-23-human-player-mode-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-mode.md`. Project 1 of 2: the control
+rules and a temporary JSON command channel; the UI rework (project 2) is separate and not built.
+- **One human or none**, chosen at match start: `RandomBoardPopup` shows a Match Setup panel first (Human yes/no, a turn limit of 100/200/400/Unlimited, default 400)
+  into the static `MatchSettings`; after the board loads `HumanPlayerPicker` lists the players with their home planets and `Gameboard.SetHumanPlayer` records the choice
+  (`Player.isHuman`). Saves carry it (`GameSave.hasHuman/humanPlayerId/hasMatchSettings/turnLimit`); an older save has none of those keys and loads as a zero-human, 400-turn
+  match. **Every new saved flag is defined so that false/0 means "as before"** (that is why the planet flag is `manualDevelopment`, not `autoDevelopment`).
+- **`PlayerAI.HumanControlled`** is computed from `Player.isHuman` (Player components are recreated on every init). A human's `ProcessResults` runs
+  `ProcessResultsHuman`: strategy bookkeeping, `RecordLosses`, the blockade view, research accounting and, only if `ShipmentsAutomated`, the AI's resource shipping and
+  distribution-center logic; production is chosen by the AI only for planets with `Planet.ManualDevelopment == false`. It never moves ships, colonizes or issues stances.
+  Every other player runs the unchanged routine. `Planet.HumanOwnerTest` makes a planet that changes hands manual for the human and automatic for anyone else.
+- **Commands** are `FlatSpace.Human.HumanCommand` (flat, `JsonUtility` has no polymorphism) applied by the pure `HumanCommandProcessor` (never touches `Gameboard.Instance`;
+  every refusal has a reason from a closed set, nothing throws) and turned into the AI's own orders: `EmitShipOrders` for fleets (ships picked by dock index, or a count per kind
+  healthiest first; `Planet.PrioritizeShips` puts the chosen ships first), `PlayerAI.EmitColonistOrders` (extracted from `ProcessColonizers`) for Colonize incl. the food rider,
+  `OrderTypeIndustrySetProduction` for the production queue (`Planet.ProductionQueue`), the stance orders for diplomacy. Queued research is `PlayerAI.ResearchQueue`.
+  Commands are read from `HumanCommands/commands.json` (project root in the editor, `persistentDataPath` in a build; gitignored) each time a turn steps, renamed `commands.done.json`,
+  and the outcomes written to `results.json`. They are applied inside `GameAI.GameAIUpdate` after combat, bombardment and conversion and after every player has decided
+  (`Gameboard.RunHumanCommands`), so they are checked against the board the AI sees and execute in the same step (`GameAI.PendingHumanOrders`). Ship indices in a batch name the dock list as
+  it stood when the batch began; colonize and shipResource commands in one batch share the origin's people, food and stock. Command types: move, colonize, shipResource,
+  queueProduction, removeProduction, moveProduction, setDevelopment, queueResearch, removeResearch, setShipments, declareWar, makePeace, surrender, setPause.
+- **Events and pausing:** `HumanTurnEvents.Collect` turns the turn's results into `HumanEvent`s (the message list of project 2); `HumanPauseSettings` (default on: attacked, blockaded,
+  lost, contact, war, peace, fleet arrived, both shortages) decides which stop the timer; a rival's event never pauses. `Gameboard.CollectHumanEvents` runs at the end of each turn.
+- **Match end:** defeat (no populated planet, docked colony ship or colonist in flight) and the turn limit show a `MatchEndPopup`; the limit ends the match with no winner (scoring is a
+  separate, later feature). The human's view is that player's fog (`SetFogViewMode(Player, id)`, dropdown locked).
+- **Self-check:** `Assets/Editor/HumanModeSelfCheck.cs` (`FlatSpace -> Human -> Run Human Mode Self-Check`, also in `Run All AI Self-Checks`).
+
+#### The human UI (project 2, stage 1)
+
+Spec `docs/superpowers/specs/2026-10-23-human-player-ui-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-ui-stage1.md`.
+- **One entry point:** every button builds `HumanCommand`s and calls `Gameboard.SubmitHumanCommands(commands, screen)`: the `HumanCommandProcessor` applies them
+  and `GameAI.ApplyOrdersNow` executes the orders at once (between turns, equivalent to how the AI's orders are timed), then the board and panels refresh. Where a screen
+  needs to know if a command would be accepted it calls `HumanCommandProcessor.Check` (queueProduction, queueResearch, colonize, shipResource; it applies nothing).
+  The JSON file still works until stage 2.
+- **Pure list builders** in `Assets/Flatspace/Player/Human/` (self-check `Assets/Editor/HumanUiSelfCheck.cs`, in `Run All AI Self-Checks`): `HumanNotificationList` + `HumanOngoing`
+  (one entry per planet and kind; state kinds shortage, blockade, conversion, queue empty and idle live while true and count turns; one-shots stay until clicked; a click dismisses
+  an episode; not saved; the timer pauses only on the fresh events it returns), `HumanShipmentList` (sources: the human's planets in range with last turn's surplus result x population
+  fraction, plus raw stock), `HumanBuildList` (Add item options with cost via `WarshipCosts.ProductionCost`, and cumulative queue estimates), `HumanPlanetView` (net rates, `CanOrder`, colonize
+  options), `HumanResearchTree` (tree by `requiredTech`, prerequisite chains, estimates).
+- **Views** in `Assets/Flatspace/UI/HumanUI/` (UI Toolkit, built in code, dark theme via `HumanUiKit`): `HumanPlanetOrdersView` (action strip and scrolling body inside the existing planet
+  panel), `ShipResourcesDialog`, `AddItemDialog`, `ColonizeDialog`, `ResearchScreen` (opened from the HUD Research button). Dialogs are shown through `PlanetDetailUIController.ShowDialog`,
+  which also makes a click inside them count as inside the planet panel for `Gameboard.Update()`'s click-outside rule. A notification click calls `Gameboard.GoToNotification`
+  (dismiss, centre the board, open the panel; it sets `_panelClickFrame` like a fleet icon does so the same click is not read as an outside click).
 
 ### Input
 
