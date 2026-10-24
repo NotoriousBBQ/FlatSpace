@@ -54,6 +54,8 @@ namespace FlatSpace
                     case "queueProduction":
                     case "colonize":
                     case "shipResource":
+                    case "move":
+                        scratch._dryRun = true;
                         try
                         {
                             return scratch.Dispatch(command, new List<GameAI.GameAIOrder>(), out _);
@@ -74,13 +76,13 @@ namespace FlatSpace
             /// </summary>
             public List<HumanCommandResult> CheckBatch(IEnumerable<HumanCommand> commands)
             {
-                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings };
+                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings, _dryRun = true };
                 var scratchOrders = new List<GameAI.GameAIOrder>();
                 var results = new List<HumanCommandResult>();
                 foreach (var command in commands)
                 {
                     var supported = command != null
-                        && (command.type == "queueProduction" || command.type == "colonize" || command.type == "shipResource");
+                        && (command.type == "queueProduction" || command.type == "colonize" || command.type == "shipResource" || command.type == "move");
                     results.Add(supported
                         ? scratch.Apply(new[] { command }, scratchOrders)[0]
                         : new HumanCommandResult { type = command?.type ?? "", applied = false, reason = "CheckNotSupported", detail = "" });
@@ -156,6 +158,10 @@ namespace FlatSpace
                 {
                     case "move":
                         return HandleMove(command, orders, out detail);
+                    case "setFleet":
+                        return HandleSetFleet(command, out detail);
+                    case "mergeFleets":
+                        return HandleMergeFleets(command, out detail);
                     case "colonize":
                         return HandleColonize(command, orders, out detail);
                     case "shipResource":
@@ -182,6 +188,8 @@ namespace FlatSpace
                         return HandleQueueResearch(command, out detail);
                     case "removeResearch":
                         return HandleRemoveResearch(command, out detail);
+                    case "moveResearch":
+                        return HandleMoveResearch(command, out detail);
                     default:
                         return "UnknownCommand";
                 }
@@ -228,6 +236,64 @@ namespace FlatSpace
             }
 
             private static bool IsMovable(Ship.ShipKind kind) => kind != Ship.ShipKind.Bunker;
+
+            // Source of the arrival group ids of GameAIOrder.ArrivalGroup (unique within a session; a dry-run Check only burns numbers).
+            private static int _nextArrivalGroup;
+
+            // Set on the scratch processors of Check / CheckBatch: a move is validated and its claims recorded, but the real dock list is not reordered.
+            private bool _dryRun;
+
+            // setFleet: origin, ships (dock indices), index = the fleet id to put them in (it must exist), or negative for a new fleet. Instant, no orders.
+            private string HandleSetFleet(HumanCommand command, out string detail)
+            {
+                detail = "";
+                var origin = PlanetNamed(command.origin);
+                if (origin == null) return "UnknownPlanet";
+                if (!IsHumanPlanet(origin)) return "NotYourPlanet";
+                if (command.ships == null || command.ships.Count == 0) return "BadShipIndex";
+
+                var dock = DockAtBatchStart(origin);
+                var chosen = new List<Ship>();
+                foreach (var index in command.ships)
+                {
+                    if (index < 0 || index >= dock.Count) return "BadShipIndex";
+                    var ship = dock[index];
+                    if (ship.Owner != HumanId) return "NotYourShips";
+                    if (!IsMovable(ship.Kind)) return "UnknownKind";
+                    if (IsClaimed(ship) || chosen.Contains(ship)) return "NotEnoughShips";
+                    chosen.Add(ship);
+                }
+                if (command.index >= 0 && !HasFleet(origin, command.index)) return "UnknownFleet";
+
+                var fleetId = command.index >= 0 ? command.index : origin.NextFleetId(HumanId);
+                foreach (var ship in chosen) ship.FleetId = fleetId;
+                detail = $"{origin.PlanetName} {chosen.Count} ships -> fleet {fleetId}";
+                return null;
+            }
+
+            // mergeFleets: origin, index = the fleet to merge from, toIndex = the fleet it joins. Both must exist and differ. Instant, no orders.
+            private string HandleMergeFleets(HumanCommand command, out string detail)
+            {
+                detail = "";
+                var origin = PlanetNamed(command.origin);
+                if (origin == null) return "UnknownPlanet";
+                if (!IsHumanPlanet(origin)) return "NotYourPlanet";
+                if (command.index == command.toIndex) return "SameFleet";
+                if (!HasFleet(origin, command.index) || !HasFleet(origin, command.toIndex)) return "UnknownFleet";
+
+                var merged = 0;
+                foreach (var ship in origin.DockedShips)
+                {
+                    if (ship.Owner != HumanId || !IsMovable(ship.Kind) || ship.FleetId != command.index) continue;
+                    ship.FleetId = command.toIndex;
+                    merged++;
+                }
+                detail = $"{origin.PlanetName} fleet {command.index} -> fleet {command.toIndex} ({merged} ships)";
+                return null;
+            }
+
+            private bool HasFleet(Planet planet, int fleetId)
+                => planet.DockedShips.Exists(s => s.Owner == HumanId && IsMovable(s.Kind) && s.FleetId == fleetId);
 
             // ── Turn flow ────────────────────────────────────────────────────
 
@@ -322,6 +388,23 @@ namespace FlatSpace
                 return null;
             }
 
+            // moveResearch: index to toIndex within the waiting queue. An item may not come before the queued item it requires, and a
+            // prerequisite may not go below a queued item that needs it (PrerequisiteOrder); the research in progress is not part of it.
+            private string HandleMoveResearch(HumanCommand command, out string detail)
+            {
+                detail = "";
+                var count = _human.ResearchQueue.Count;
+                if (command.index < 0 || command.index >= count || command.toIndex < 0 || command.toIndex >= count) return "BadIndex";
+                if (command.index == command.toIndex) return null;
+                if (!HumanResearchTree.MoveKeepsPrerequisites(_human.ResearchQueue, n => _human.ResearchCatalog.GetItem(n)?.requiredTech, command.index, command.toIndex))
+                    return "PrerequisiteOrder";
+                var name = _human.ResearchQueue[command.index];
+                _human.ResearchQueue.RemoveAt(command.index);
+                _human.ResearchQueue.Insert(command.toIndex, name);
+                detail = $"{name} {command.index}->{command.toIndex}";
+                return null;
+            }
+
             // removeResearch: index (into the waiting queue, not the research in progress).
             private string HandleRemoveResearch(HumanCommand command, out string detail)
             {
@@ -406,6 +489,18 @@ namespace FlatSpace
                 var planet = OwnedPlanet(command.origin, out var refusal);
                 if (planet == null) return refusal;
                 var count = planet.ProductionQueue.Count;
+                // The first queued item moved up (toIndex -1) takes the place of the current production, which goes to the head of the queue
+                // with the progress it made (Planet.UpdateProductionQueue adds the stored industry to it when it resumes).
+                if (command.index == 0 && command.toIndex == -1)
+                {
+                    if (count == 0 || !planet.CurrentProduction.HasValue) return "BadIndex";
+                    var promoted = planet.ProductionQueue[0];
+                    var displaced = planet.CurrentProduction.Value;
+                    planet.ProductionQueue[0] = displaced;
+                    planet.CurrentProduction = promoted;
+                    detail = $"{planet.PlanetName} {promoted.Item.itemName} replaces {displaced.Item.itemName} ({displaced.Progress:0.#} kept)";
+                    return null;
+                }
                 if (command.index < 0 || command.index >= count || command.toIndex < 0 || command.toIndex >= count) return "BadIndex";
                 var entry = planet.ProductionQueue[command.index];
                 planet.ProductionQueue.RemoveAt(command.index);
@@ -566,11 +661,13 @@ namespace FlatSpace
                     chosen = available.Take(command.count).ToList();
                 }
 
+                var firstNewOrder = orders.Count;
                 foreach (var group in chosen.GroupBy(s => s.Kind).OrderBy(g => g.Key))
                 {
                     var claimed = ClaimedAt(origin.PlanetName, group.Key);
                     var skip = claimed.Count;
-                    origin.PrioritizeShips(group.Key, HumanId, claimed.Concat(group));
+                    // A dry run (Check) must leave the dock list alone; the order it emits is thrown away.
+                    if (!_dryRun) origin.PrioritizeShips(group.Key, HumanId, claimed.Concat(group));
                     _human.EmitShipOrders(new ShipAction
                     {
                         Origin = origin.PlanetName,
@@ -581,6 +678,10 @@ namespace FlatSpace
                     }, orders, skip);
                     claimed.AddRange(group);
                 }
+                // A fleet of several kinds leaves as one order per kind; one arrival group makes them land as one fleet.
+                var arrivalGroup = ++_nextArrivalGroup;
+                for (var i = firstNewOrder; i < orders.Count; i++)
+                    if (orders[i].Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport) orders[i].ArrivalGroup = arrivalGroup;
                 detail = $"{origin.PlanetName}->{target.PlanetName} {chosen.Count} ships";
                 return null;
             }

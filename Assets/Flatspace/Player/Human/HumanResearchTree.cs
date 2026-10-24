@@ -28,6 +28,27 @@ namespace FlatSpace
         /// </summary>
         public static class HumanResearchTree
         {
+            /// <summary>
+            /// Whether moving the queue entry at `from` to position `to` leaves every queued item after the queued item it requires (an item
+            /// whose prerequisite is researched, in progress or not queued has nothing to keep ahead of it). Indices outside the queue are false.
+            /// </summary>
+            public static bool MoveKeepsPrerequisites(IReadOnlyList<string> queue, Func<string, string> requiredTechOf, int from, int to)
+            {
+                if (from < 0 || from >= queue.Count || to < 0 || to >= queue.Count) return false;
+                var moved = queue.ToList();
+                var entry = moved[from];
+                moved.RemoveAt(from);
+                moved.Insert(to, entry);
+                for (var i = 0; i < moved.Count; i++)
+                {
+                    var required = requiredTechOf(moved[i]);
+                    if (string.IsNullOrEmpty(required)) continue;
+                    var at = moved.IndexOf(required);
+                    if (at >= i) return false;   // -1 (not queued) is fine; its own position at or after ours is not
+                }
+                return true;
+            }
+
             public static List<ResearchNode> Build(IEnumerable<CatalogItem> catalog, IEnumerable<string> queue, CatalogItem current)
             {
                 var items = catalog.ToList();

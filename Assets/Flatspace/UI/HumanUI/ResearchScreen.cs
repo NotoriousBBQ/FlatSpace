@@ -42,7 +42,7 @@ namespace Game.UI.MainGameScreenUI
 
         private static void Build(VisualElement host)
         {
-            _screen = HumanUiKit.Panel(900f);
+            _screen = HumanUiKit.Panel(960f);
             _screen.style.position = Position.Absolute;
             _screen.style.left = Length.Percent(10);
             _screen.style.top = Length.Percent(8);
@@ -70,7 +70,7 @@ namespace Game.UI.MainGameScreenUI
             body.Add(treeScroll);
 
             var right = new VisualElement { pickingMode = PickingMode.Ignore };
-            right.style.width = 300;
+            right.style.width = 360;
             right.style.marginLeft = 10;
             _queue = right;
             body.Add(right);
@@ -99,6 +99,7 @@ namespace Game.UI.MainGameScreenUI
             // ── The queue ──
             _queue.Clear();
             var queuedItems = queueNames.Select(n => human.ResearchCatalog.GetItem(n)).Where(i => i != null).ToList();
+            string RequiredTechOf(string name) => human.ResearchCatalog.GetItem(name)?.requiredTech;
             var estimates = HumanResearchTree.Estimates(human.currentResearch, human.researchTotal, queuedItems, perTurn);
             var estimateIndex = 0;
             _queue.Add(HumanUiKit.Text("In progress", HumanUiKit.Muted, bold: true));
@@ -116,7 +117,14 @@ namespace Game.UI.MainGameScreenUI
             {
                 var index = i;
                 var line = HumanUiKit.Row();
-                line.Add(HumanUiKit.Cell($"{i + 1}. {queuedItems[i].itemName}{Turns(estimates, estimateIndex + i)}", 230));
+                line.Add(HumanUiKit.Cell($"{i + 1}. {queuedItems[i].itemName}{Turns(estimates, estimateIndex + i)}", 170));
+                // A move that would put an item before its prerequisite (or a prerequisite after what needs it) is not offered.
+                var up = HumanUiKit.Btn("Up", () => Send(new HumanCommand { type = "moveResearch", index = index, toIndex = index - 1 }));
+                up.SetEnabled(HumanResearchTree.MoveKeepsPrerequisites(queueNames, RequiredTechOf, index, index - 1));
+                var down = HumanUiKit.Btn("Down", () => Send(new HumanCommand { type = "moveResearch", index = index, toIndex = index + 1 }));
+                down.SetEnabled(HumanResearchTree.MoveKeepsPrerequisites(queueNames, RequiredTechOf, index, index + 1));
+                line.Add(up);
+                line.Add(down);
                 line.Add(HumanUiKit.Btn("x", () => Send(new HumanCommand { type = "removeResearch", index = index })));
                 _queue.Add(line);
             }

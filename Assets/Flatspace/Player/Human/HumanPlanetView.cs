@@ -23,7 +23,16 @@ namespace FlatSpace
             /// not matter, so a full store does not read as a loss.
             /// </summary>
             public static (float food, float grotsits) NetPerTurn(Planet planet)
-                => (planet.FoodProduced - planet.Population.Count, planet.GrotsitsProduced - planet.GetMaintenanceCost());
+            {
+                planet.ProjectProduction();   // production is otherwise only known once a turn has run (a new or loaded game starts at 0)
+                return (planet.FoodProduced - planet.Population.Count, planet.GrotsitsProduced - planet.GetMaintenanceCost());
+            }
+
+            /// <summary>
+            /// Whether a stockpile can carry a net loss for a turn: always when the rate is not negative, else when the stock holds at least the
+            /// loss. A planet whose store covers it is not in trouble even though the rate is negative (a shipment just landed, say).
+            /// </summary>
+            public static bool StockCovers(float stock, float perTurn) => perTurn >= 0f || stock >= -perTurn;
 
             /// <summary>The planet is the human's: production, its queue and the development switch are theirs to change only here.</summary>
             public static bool OwnsPlanet(Planet planet, int humanId) => planet != null && planet.Owner == humanId;

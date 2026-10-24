@@ -91,6 +91,21 @@ namespace Game.UI.MainGameScreenUI
             return cell;
         }
 
+        /// <summary>A short message at the bottom centre of the screen that removes itself after about three seconds (a refused drop, for one).</summary>
+        public static void Toast(VisualElement root, string text)
+        {
+            if (root == null || string.IsNullOrEmpty(text)) return;
+            var toast = Panel();
+            toast.pickingMode = PickingMode.Ignore;
+            toast.style.position = Position.Absolute;
+            toast.style.bottom = 60;
+            toast.style.left = Length.Percent(30);
+            toast.style.width = Length.Percent(40);
+            toast.Add(Text(text, Warn, size: 16));
+            root.Add(toast);
+            toast.schedule.Execute(() => toast.RemoveFromHierarchy()).StartingIn(3000);
+        }
+
         /// <summary>The first line of a refusal list for a status label ("Prime 0: NotEnoughStock; ...").</summary>
         public static string RefusalSummary(System.Collections.Generic.IEnumerable<FlatSpace.Human.HumanCommandResult> results)
         {

@@ -13,6 +13,7 @@ public static class FleetSummarySelfCheck
         _checkCount = 0;
         var ok = RunGroupingCheck();
         ok &= RunColorCheck();
+        ok &= RunFleetIdGroupingCheck();
         Debug.Log(ok
             ? $"[FleetSummarySelfCheck] ALL PASSED ({_checkCount} assertions ran)"
             : $"[FleetSummarySelfCheck] FAILURES (see errors above; {_checkCount} assertions ran)");
@@ -77,6 +78,41 @@ public static class FleetSummarySelfCheck
                 "colony-ships-only fleet shows the colony ship icon");
             ok &= Check(groups[2].Count == 1 && groups[2].IconKind == Ship.ShipKind.WarShip,
                 "ownerless ships form their own group and are not merged into a player's fleet");
+        }
+        finally { Object.DestroyImmediate(go); }
+        return ok;
+    }
+
+    // Stage 2: the human's ships group per fleet id; every other owner stays one group per planet, whatever ids their ships carry.
+    public static bool RunFleetIdGroupingCheck()
+    {
+        var ok = true;
+        var go = new GameObject("FSSelfCheckMap_FleetIds");
+        try
+        {
+            var map = go.AddComponent<GameAIMap>();
+            map.GameAIMapInit(new List<PlanetSpawnData>
+            {
+                MakeSpawn("A", 0f, new[] { "B" }),
+                MakeSpawn("B", 100f),
+            }, ScriptableObject.CreateInstance<GameAIConstants>());
+            var a = map.GetPlanet("A");
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 0f, 0);
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 0f, 0);
+            a.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f, 1);
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>(), 0f, 0);
+            a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>(), 0f, 5);
+            a.DockShipFromSave(Ship.ShipKind.Bunker, 0, new List<string>(), 0f, 3);
+
+            var groups = FleetSummary.ForPlanet(a, 0);
+            ok &= Check(groups.Count == 3, "the human's two fleets plus the rival's single group make three groups");
+            ok &= Check(groups[0].Owner == 0 && groups[0].FleetId == 0 && groups[0].Count == 2, "human fleet 0 holds 2 ships");
+            ok &= Check(groups[1].Owner == 0 && groups[1].FleetId == 1 && groups[1].Count == 1
+                        && groups[1].IconKind == Ship.ShipKind.SiegeShip, "human fleet 1 holds the siegeship");
+            ok &= Check(groups[2].Owner == 1 && groups[2].Count == 2 && groups[2].FleetId == 0,
+                "a rival's ships stay one group whatever fleet ids they carry");
+            ok &= Check(FleetSummary.ForPlanet(a).Count == 2, "with no human given there is one group per owner");
+            ok &= Check(FleetSummary.ForPlanet(a, 0).TrueForAll(g => g.Count > 0), "bunkers never form a fleet");
         }
         finally { Object.DestroyImmediate(go); }
         return ok;

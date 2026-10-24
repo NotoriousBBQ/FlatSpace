@@ -78,6 +78,10 @@ namespace FlatSpace
                 // key and loads as 0.
                 public float EscortOffense;
 
+                // The orders one human move emitted (one per ship kind) share this id, so the fleet lands as one fleet instead of one per kind
+                // (Planet.FleetIdForArrival). 0 = no group. Not saved: an order in flight across a save lands the old way, one fleet per order.
+                [NonSerialized] public int ArrivalGroup;
+
                 /// <summary>A saved route of fewer than 2 nodes (older saves, non-route orders) restores as none.</summary>
                 public static List<string> RouteFromSave(List<string> saved)
                     => saved != null && saved.Count >= 2 ? new List<string>(saved) : null;
@@ -119,9 +123,6 @@ namespace FlatSpace
             }
             public GameAIMap GameAIMap { get; private set; }
             public List<GameAIOrder> CurrentAIOrders { get; private set; } = new List<GameAIOrder>();
-            // Orders the human gave since the last turn (HumanCommandProcessor). GameAIUpdate appends them after every player's
-            // ProcessResults, so no AI decision of this turn sees them, and then clears the list.
-            public List<GameAIOrder> PendingHumanOrders { get; } = new List<GameAIOrder>();
 
             // What the turn just played produced, for the human's event list (HumanTurnEvents). Cleared at the start of each GameAIUpdate;
             // read-only for everything else, so they change nothing a player decides.
@@ -155,7 +156,6 @@ namespace FlatSpace
             public void ClearGameAI()
             {
                 CurrentAIOrders.Clear();
-                PendingHumanOrders.Clear();
                 _grotsitsShort.Clear();
                 _redirectFailedLogged.Clear();
                 _conversions.Clear();
@@ -190,11 +190,6 @@ namespace FlatSpace
                 GameAIMap.RecomputeIncomingOffense(CurrentAIOrders,
                     new WarshipStats(BlockadeSystem.ResearchItemsFrom(Gameboard.Instance.players)));
                 ProcessResults(planetUpdateResults, gameAIOrders);
-                // The human's commands run now, after combat, bombardment and conversion: they are checked against the board as it stands
-                // and execute in this same step, so a ship that fell in combat cannot be sent and no snapshot goes stale before it leaves.
-                Gameboard.Instance.RunHumanCommands();
-                gameAIOrders.AddRange(PendingHumanOrders);
-                PendingHumanOrders.Clear();
                 Gameboard.Instance.CreateNotificationsForNewOrders(gameAIOrders);
                 AITuningLogger.LogNewOrders(Gameboard.Instance.TurnNumber, gameAIOrders);
                 ProcessNewOrders(gameAIOrders);
@@ -665,12 +660,17 @@ namespace FlatSpace
             {
                 var kind = FleetKind(order);
                 var count = Convert.ToInt32(order.Data);
+                // The arrivals form one fleet of their own (a fresh id), apart from ships already waiting; only the human's fleets are shown by id.
+                var fleetId = target.FleetIdForArrival(order.PlayerId, order.ArrivalGroup);
                 for (var i = 0; i < count; i++)
                 {
                     if (order.Fleet != null && i < order.Fleet.Snapshots.Count)
-                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i], order.Fleet.DamageAt(i));
+                        target.DockShipFromSave(kind, order.PlayerId, order.Fleet.Snapshots[i], order.Fleet.DamageAt(i), fleetId);
                     else
+                    {
                         target.DockShipRebuiltSnapshot(kind, order.PlayerId);
+                        target.DockedShips[target.DockedShips.Count - 1].FleetId = fleetId;
+                    }
                 }
                 target.AddIncomingShips(kind, order.PlayerId, -count);
             }

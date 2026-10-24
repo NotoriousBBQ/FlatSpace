@@ -382,6 +382,13 @@ namespace FlatSpace
                 }
             }
 
+            /// <summary>
+            /// A queued production entry as saved. It keeps its progress: an item the human moved off the front of production is queued with what it
+            /// had made (an older save, whose queued entries all had 0, restores as before).
+            /// </summary>
+            public static Planet.ProductionItem QueueEntryFromSave(SaveLoadSystem.GameSave.ProductionSave production, CatalogItem item)
+                => new Planet.ProductionItem { Progress = production.Progress, FixedCost = production.FixedCost, Item = item };
+
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
                 var catalog = Gameboard.Instance.GetComponent<Catalog>();
@@ -410,12 +417,7 @@ namespace FlatSpace
                     {
                         foreach (var production in planetStatus.productionQueue)
                         {
-                            planet.ProductionQueue.Add(new Planet.ProductionItem
-                            {
-                                Progress = 0.0f,
-                                FixedCost = production.FixedCost,
-                                Item = catalog.catalogItems.Find(x => x.itemName ==  production.Name)
-                            });
+                            planet.ProductionQueue.Add(QueueEntryFromSave(production, catalog.catalogItems.Find(x => x.itemName ==  production.Name)));
                         }
                     }
                     // Rebuild the planet's improvements (yields and upkeep) from the catalog by name; unknown names
@@ -445,7 +447,7 @@ namespace FlatSpace
                     {
                         foreach (var shipSave in planetStatus.dockedShips)
                         {
-                            planet.DockShipFromSave(shipSave.kind, shipSave.owner, shipSave.researchSnapshot, shipSave.damage);
+                            planet.DockShipFromSave(shipSave.kind, shipSave.owner, shipSave.researchSnapshot, shipSave.damage, shipSave.fleetId);
                         }
                     }
                 }
