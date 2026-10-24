@@ -52,6 +52,12 @@ public class FleetUIController : MonoBehaviour
     public void RefreshShipList()
     {
         if (_shipListContainer == null) return;
+        // A drag in progress loses its source element with the Clear below, so its release never arrives: take the ghost label with it.
+        if (_ghost != null)
+        {
+            _ghost.RemoveFromHierarchy();
+            _ghost = null;
+        }
         _shipListContainer.Clear();
         _boxes.Clear();
         if (_planet == null) return;

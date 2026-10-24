@@ -280,6 +280,23 @@ public static class HumanModeSelfCheck
             GameAI.ApplyShipArrival(p0, arrival);
             var arrived = p0.DockedShips.Skip(p0.DockedShips.Count - 2).ToList();
             ok &= Check(arrived.All(s => s.FleetId == 3), "arriving ships dock together in a fresh fleet (id 3)");
+
+            // One move of a mixed fleet is several orders (one per kind); tagged with the same arrival group they land as ONE fleet.
+            GameAI.GameAIOrder Part(Ship.ShipKind kind, int group) => new GameAI.GameAIOrder
+            {
+                Type = GameAI.GameAIOrder.OrderType.OrderTypeShipTransport, Data = 1, Origin = "P1", Target = "P0", PlayerId = Fixture.HumanId,
+                ArrivalGroup = group,
+                Fleet = new GameAI.GameAIOrder.ShipFleetPayload { Kind = kind, Snapshots = new List<List<string>> { new List<string>() } },
+            };
+            var before = p0.DockedShips.Count;
+            GameAI.ApplyShipArrival(p0, Part(Ship.ShipKind.WarShip, 7));
+            GameAI.ApplyShipArrival(p0, Part(Ship.ShipKind.SiegeShip, 7));
+            GameAI.ApplyShipArrival(p0, Part(Ship.ShipKind.WarShip, 0));
+            var grouped = p0.DockedShips.Skip(before).Take(2).ToList();
+            ok &= Check(grouped[0].FleetId == grouped[1].FleetId && grouped[0].FleetId >= 4,
+                "the warship and siegeship orders of one move (same arrival group) dock as one new fleet");
+            ok &= Check(p0.DockedShips[p0.DockedShips.Count - 1].FleetId != grouped[0].FleetId,
+                "an order with no arrival group still docks as a fleet of its own");
         }
 
         var shipSave = new SaveLoadSystem.GameSave.ShipSave
@@ -371,6 +388,18 @@ public static class HumanModeSelfCheck
             var transport = orders.Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport);
             ok &= Check(sent.applied && transport != null && System.Convert.ToInt32(transport.Data) == 2 && indices.SequenceEqual(new[] { 2, 3 }),
                 "a move built from a fleet's ShipIndices sends exactly its two ships");
+        }
+
+        using (var f = new Fixture(3))
+        {
+            Dock(f.P(0), Ship.ShipKind.WarShip, Fixture.HumanId, 2);
+            Dock(f.P(0), Ship.ShipKind.SiegeShip, Fixture.HumanId, 1);
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 3);
+            var mixed = new List<GameAI.GameAIOrder>();
+            processor.Apply(new[] { Move("P0", "P1", ships: new[] { 0, 1, 2 }) }, mixed);
+            var transports = mixed.FindAll(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport);
+            ok &= Check(transports.Count == 2 && transports[0].ArrivalGroup != 0 && transports[0].ArrivalGroup == transports[1].ArrivalGroup,
+                "a move of two kinds emits two transport orders that share one arrival group");
         }
         return ok;
     }
@@ -479,6 +508,11 @@ public static class HumanModeSelfCheck
     public static bool RunProductionCommandChecks()
     {
         var ok = true;
+        // A queued item the human displaced keeps its progress through a save and load; an older entry (0) restores as 0.
+        var savedItem = MakeItem("SavedQ", "Ship Type", "Warship");
+        var withProgress = GameAIMap.QueueEntryFromSave(new SaveLoadSystem.GameSave.ProductionSave { Name = "SavedQ", Progress = 40f, FixedCost = 150f }, savedItem);
+        ok &= Check(withProgress.Progress == 40f && withProgress.FixedCost == 150f && withProgress.Item == savedItem, "a queue entry restores its saved progress and fixed cost");
+        ok &= Check(GameAIMap.QueueEntryFromSave(new SaveLoadSystem.GameSave.ProductionSave { Name = "SavedQ" }, savedItem).Progress == 0f, "an entry saved with no progress restores at 0");
         using (var f = new Fixture(3))
         {
             f.Own(0, 2);

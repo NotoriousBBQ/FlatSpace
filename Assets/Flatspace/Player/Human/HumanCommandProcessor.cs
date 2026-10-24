@@ -237,6 +237,9 @@ namespace FlatSpace
 
             private static bool IsMovable(Ship.ShipKind kind) => kind != Ship.ShipKind.Bunker;
 
+            // Source of the arrival group ids of GameAIOrder.ArrivalGroup (unique within a session; a dry-run Check only burns numbers).
+            private static int _nextArrivalGroup;
+
             // Set on the scratch processors of Check / CheckBatch: a move is validated and its claims recorded, but the real dock list is not reordered.
             private bool _dryRun;
 
@@ -658,6 +661,7 @@ namespace FlatSpace
                     chosen = available.Take(command.count).ToList();
                 }
 
+                var firstNewOrder = orders.Count;
                 foreach (var group in chosen.GroupBy(s => s.Kind).OrderBy(g => g.Key))
                 {
                     var claimed = ClaimedAt(origin.PlanetName, group.Key);
@@ -674,6 +678,10 @@ namespace FlatSpace
                     }, orders, skip);
                     claimed.AddRange(group);
                 }
+                // A fleet of several kinds leaves as one order per kind; one arrival group makes them land as one fleet.
+                var arrivalGroup = ++_nextArrivalGroup;
+                for (var i = firstNewOrder; i < orders.Count; i++)
+                    if (orders[i].Type == GameAI.GameAIOrder.OrderType.OrderTypeShipTransport) orders[i].ArrivalGroup = arrivalGroup;
                 detail = $"{origin.PlanetName}->{target.PlanetName} {chosen.Count} ships";
                 return null;
             }

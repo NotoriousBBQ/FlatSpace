@@ -270,10 +270,19 @@ namespace FlatSpace
             {
                 if (HumanPlayerId < 0 || !_lineDrawObjectPrefab) return;
                 HideIconHover();
+                CancelFleetDrag();   // never leave an earlier line behind
                 _dragOrigin = origin;
                 _dragFleet = fleetId;
                 _dragCheckedTarget = null;
                 _dragLine = Instantiate<LineDrawObject>(_lineDrawObjectPrefab, transform);
+            }
+
+            /// <summary>Drops a fleet drag without sending anything: the line goes and the drag is forgotten.</summary>
+            public void CancelFleetDrag()
+            {
+                if (_dragLine) Destroy(_dragLine.gameObject);
+                _dragLine = null;
+                _dragOrigin = null;
             }
 
             public void UpdateFleetDrag(Vector2 screenPosition)

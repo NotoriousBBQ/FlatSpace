@@ -221,8 +221,13 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
         if (_statsCanvas) _statsCanvas.enabled = !explored;
     }
 
+    // A drag that starts on the planet is a pan (or a fleet drag), not a click. Unity only cancels the click when the dragged object differs from the
+    // pressed one, and the planet is now both, so it is told here: set when a drag begins, cleared once it ends (the click comes first on release).
+    private bool _dragStarted;
+
     public void OnPointerClick(PointerEventData eventData)
     {
+        if (_dragStarted) return;
         // The fleet icons are child graphics on the same world-space canvas, so whether the raw
         // click is picked up by the planet's collider (Physics2DRaycaster) or by an icon's
         // Image (GraphicRaycaster) depends on sorting order -- the bubbled click ends here
@@ -286,6 +291,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
 
     public void OnBeginDrag(PointerEventData eventData)
     {
+        _dragStarted = true;
         _dragIcon = IconAt(eventData.pressPosition);
         if (_dragIcon != null && _dragIcon.CanDrag)
         {
@@ -307,6 +313,7 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
         if (_dragIcon != null) _dragIcon.OnEndDrag(eventData);
         else if (Scroll != null) Scroll.OnEndDrag(eventData);
         _dragIcon = null;
+        _dragStarted = false;
     }
 
     private void CreateFleetIcon()

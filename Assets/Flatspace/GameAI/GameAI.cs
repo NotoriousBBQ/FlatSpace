@@ -78,6 +78,10 @@ namespace FlatSpace
                 // key and loads as 0.
                 public float EscortOffense;
 
+                // The orders one human move emitted (one per ship kind) share this id, so the fleet lands as one fleet instead of one per kind
+                // (Planet.FleetIdForArrival). 0 = no group. Not saved: an order in flight across a save lands the old way, one fleet per order.
+                [NonSerialized] public int ArrivalGroup;
+
                 /// <summary>A saved route of fewer than 2 nodes (older saves, non-route orders) restores as none.</summary>
                 public static List<string> RouteFromSave(List<string> saved)
                     => saved != null && saved.Count >= 2 ? new List<string>(saved) : null;
@@ -657,7 +661,7 @@ namespace FlatSpace
                 var kind = FleetKind(order);
                 var count = Convert.ToInt32(order.Data);
                 // The arrivals form one fleet of their own (a fresh id), apart from ships already waiting; only the human's fleets are shown by id.
-                var fleetId = target.NextFleetId(order.PlayerId);
+                var fleetId = target.FleetIdForArrival(order.PlayerId, order.ArrivalGroup);
                 for (var i = 0; i < count; i++)
                 {
                     if (order.Fleet != null && i < order.Fleet.Snapshots.Count)

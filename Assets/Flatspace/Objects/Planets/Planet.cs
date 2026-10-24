@@ -1168,6 +1168,18 @@ public class Planet : MonoBehaviour
         DockedShips.Add(ship);
     }
 
+    // The fleet id given to the arrivals of one human move (several orders, one per ship kind): the first order of the group takes a fresh id and
+    // the rest reuse it. Group 0 (no group) is a fresh id every time. Runtime only.
+    private readonly Dictionary<(int owner, int group), int> _arrivalGroupFleets = new Dictionary<(int, int), int>();
+
+    public int FleetIdForArrival(int owner, int group)
+    {
+        if (group == 0) return NextFleetId(owner);
+        if (!_arrivalGroupFleets.TryGetValue((owner, group), out var fleetId))
+            _arrivalGroupFleets[(owner, group)] = fleetId = NextFleetId(owner);
+        return fleetId;
+    }
+
     // The fleet id a new fleet of `owner` takes here: one above the highest id in use (0 when the owner has no ship here).
     public int NextFleetId(int owner)
     {

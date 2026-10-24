@@ -60,6 +60,8 @@ public class FleetIconHandle : MonoBehaviour, IPointerEnterHandler, IPointerExit
     // An icon that goes away under the pointer (its fleet left) never gets an exit event; without this the popup would stay up.
     private void OnDisable()
     {
+        // An icon that disappears mid-drag (its fleet was lost or left) never sends the end of the drag: the drag line would stay on the board.
+        if (_dragging && Gameboard.Instance != null) Gameboard.Instance.CancelFleetDrag();
         if (!_hovering) return;
         _hovering = false;
         _dragging = false;

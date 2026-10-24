@@ -418,7 +418,7 @@ Spec `docs/superpowers/specs/2026-10-23-human-player-ui-design.md`, plan `docs/s
 Spec `docs/superpowers/specs/2026-10-23-human-player-ui-stage2-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-ui-stage2.md`.
 - **Fleets are a label on ships:** `Ship.FleetId` (saved as `ShipSave.fleetId`, 0 = as before). A fleet is the owner's non-bunker ships at a planet sharing an id; only the human's ships are grouped by it
   (`FleetSummary.ForPlanet(planet, humanId)`), the AI never reads it. A new fleet takes `Planet.NextFleetId(owner)` (highest + 1); ships arriving by an order (`GameAI.ApplyShipArrival`) dock together in a fresh
-  id; built ships join `Planet.LowestFleetId(owner)`. Commands `setFleet` (dock indices into a fleet id, negative = new) and `mergeFleets` are instant and create no orders.
+  id (the orders of one move, one per ship kind, share `GameAIOrder.ArrivalGroup` so a mixed fleet lands as one fleet; not saved); built ships join `Planet.LowestFleetId(owner)`. Commands `setFleet` (dock indices into a fleet id, negative = new) and `mergeFleets` are instant and create no orders.
 - **Fleet panel:** `FleetUIController` shows the human's ships as fleet boxes plus a "+ New fleet" box; dragging a ship row to a box is `setFleet`, a box title onto a box is `mergeFleets`.
 - **Board:** one icon per human fleet (`FleetIconHandle` on each icon). A press-drag from an own icon draws a line (green/red from `Gameboard.CheckFleetDrag`, checked only when the planet under the pointer changes)
   and on release `Gameboard.TryDragFleet` sends a `move` of that fleet's `HumanFleetView.ShipIndices`; a refusal shows a toast (`HumanHoverText.RefusalSentence`). A rival's icon only hovers.
