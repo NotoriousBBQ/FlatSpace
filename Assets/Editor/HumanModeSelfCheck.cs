@@ -10,7 +10,7 @@ using Flatspace.Objects.Production;
 // touches Gameboard.Instance: it builds a minimal GameAIMap / Planet / PlayerAI set directly.
 public static class HumanModeSelfCheck
 {
-    private static int _checkCount;
+    internal static int _checkCount;
 
     [MenuItem("FlatSpace/Human/Run Human Mode Self-Check")]
     public static void Run()
@@ -41,7 +41,7 @@ public static class HumanModeSelfCheck
         return ok;
     }
 
-    private static bool Check(bool condition, string label)
+    internal static bool Check(bool condition, string label)
     {
         _checkCount++;
         if (!condition) Debug.LogError($"[HumanModeSelfCheck] FAIL: {label}");
@@ -50,7 +50,7 @@ public static class HumanModeSelfCheck
 
     #region Fixtures
 
-    private static PlanetSpawnData MakeSpawn(string name, float x, IEnumerable<string> connections = null, float baseFood = 1f)
+    internal static PlanetSpawnData MakeSpawn(string name, float x, IEnumerable<string> connections = null, float baseFood = 1f)
     {
         var resourceData = ScriptableObject.CreateInstance<PlanetResourceData>();
         resourceData._initialPopulation = 0;
@@ -66,7 +66,7 @@ public static class HumanModeSelfCheck
         return spawn;
     }
 
-    private static void Dock(Planet planet, Ship.ShipKind kind, int owner, int count)
+    internal static void Dock(Planet planet, Ship.ShipKind kind, int owner, int count)
     {
         for (var i = 0; i < count; i++)
             planet.DockShipFromSave(kind, owner, new List<string>());
@@ -74,7 +74,7 @@ public static class HumanModeSelfCheck
 
     // A chain P0 - P1 - ... of populated-by-nobody planets at x = 0, 100, 200 ... with a human PlayerAI for HumanId that knows
     // every planet. Dispose destroys the GameObjects.
-    private sealed class Fixture : System.IDisposable
+    internal sealed class Fixture : System.IDisposable
     {
         public const int HumanId = 0;
         public GameAIMap Map;
@@ -125,21 +125,21 @@ public static class HumanModeSelfCheck
         }
     }
 
-    private static HumanCommand Cmd(string type, string origin = null, string target = null)
+    internal static HumanCommand Cmd(string type, string origin = null, string target = null)
         => new HumanCommand { type = type, origin = origin, target = target };
 
     #endregion
 
-    private static void DockDamaged(Planet planet, Ship.ShipKind kind, int owner, params float[] damages)
+    internal static void DockDamaged(Planet planet, Ship.ShipKind kind, int owner, params float[] damages)
     {
         foreach (var damage in damages)
             planet.DockShipFromSave(kind, owner, new List<string>(), damage);
     }
 
-    private static HumanCommand Move(string origin, string target, string kind = null, int count = 0, params int[] ships)
+    internal static HumanCommand Move(string origin, string target, string kind = null, int count = 0, params int[] ships)
         => new HumanCommand { type = "move", origin = origin, target = target, kind = kind, count = count, ships = ships.Length > 0 ? new List<int>(ships) : null };
 
-    private static string Refusal(HumanCommandProcessor processor, HumanCommand command)
+    internal static string Refusal(HumanCommandProcessor processor, HumanCommand command)
     {
         var results = processor.Apply(new[] { command }, new List<GameAI.GameAIOrder>());
         return results[0].applied ? "" : results[0].reason;
@@ -249,7 +249,7 @@ public static class HumanModeSelfCheck
 
     #region Task 5: colonize
 
-    private static HumanCommand Colonize(string origin, string target)
+    internal static HumanCommand Colonize(string origin, string target)
         => new HumanCommand { type = "colonize", origin = origin, target = target };
 
     public static bool RunColonizeCommandChecks()
@@ -328,7 +328,7 @@ public static class HumanModeSelfCheck
 
     #region Task 6: production queue and the development switch
 
-    private static CatalogItem MakeItem(string name, string type, string subType, int tier = 1, bool researched = true)
+    internal static CatalogItem MakeItem(string name, string type, string subType, int tier = 1, bool researched = true)
     {
         var item = ScriptableObject.CreateInstance<CatalogItem>();
         item.itemName = name;
@@ -342,7 +342,7 @@ public static class HumanModeSelfCheck
         return item;
     }
 
-    private static HumanCommand Queue(string planet, string item)
+    internal static HumanCommand Queue(string planet, string item)
         => new HumanCommand { type = "queueProduction", origin = planet, item = item };
 
     public static bool RunProductionCommandChecks()
@@ -468,7 +468,7 @@ public static class HumanModeSelfCheck
 
     #region Final review fixes
 
-    private static HumanCommand Shipment(string origin, string target, string kind, int amount)
+    internal static HumanCommand Shipment(string origin, string target, string kind, int amount)
         => new HumanCommand { type = "shipResource", origin = origin, target = target, kind = kind, count = amount };
 
     public static bool RunReviewFixChecks()
@@ -608,14 +608,15 @@ public static class HumanModeSelfCheck
         {
             HumanEventKind.PlanetAttacked, HumanEventKind.PlanetBlockaded, HumanEventKind.PlanetLost, HumanEventKind.FirstContact,
             HumanEventKind.WarDeclared, HumanEventKind.PeaceMade, HumanEventKind.FleetArrived, HumanEventKind.ShortageFood, HumanEventKind.ShortageGrotsits,
+            HumanEventKind.ColonyShipBuilt, HumanEventKind.PlanetIdle, HumanEventKind.ResearchIdle,
         };
         var off = new[]
         {
-            HumanEventKind.ProductionComplete, HumanEventKind.ResearchComplete, HumanEventKind.ColonyShipReady, HumanEventKind.PlanetIdle, HumanEventKind.ResearchIdle,
+            HumanEventKind.ProductionComplete, HumanEventKind.ResearchComplete, HumanEventKind.ColonyShipReady,
         };
         var defaults = HumanPauseSettings.Defaults();
-        ok &= Check(on.All(defaults.IsEnabled), "the default pause events are on: attacked, blockaded, lost, contact, war, peace, fleet arrived, both shortages");
-        ok &= Check(off.All(k => !defaults.IsEnabled(k)), "production, research, colony ship, planet idle and research idle are off by default");
+        ok &= Check(on.All(defaults.IsEnabled), "the default pause events are on: attacked, blockaded, lost, contact, war, peace, fleet arrived, both shortages, colony ship built, planet idle, research idle");
+        ok &= Check(off.All(k => !defaults.IsEnabled(k)), "production complete, research complete and colony ship ready are off by default");
         ok &= Check(!defaults.IsEnabled(HumanEventKind.PopulationGained) && !defaults.IsEnabled(HumanEventKind.TransportOrdered),
             "message-only kinds can never pause");
 
@@ -660,17 +661,17 @@ public static class HumanModeSelfCheck
 
     #region Task 10: turn events
 
-    private static bool Has(List<HumanEvent> events, HumanEventKind kind, string planet = null, bool rival = false, int player = int.MinValue)
+    internal static bool Has(List<HumanEvent> events, HumanEventKind kind, string planet = null, bool rival = false, int player = int.MinValue)
         => events.Exists(e => e.Kind == kind && (planet == null || e.Planet == planet) && e.Rival == rival
                               && (player == int.MinValue || e.Player == player));
 
-    private static Planet.UpdateResult Result(string planet, Planet.UpdateResult.UpdateResultType type, int player, object data = null)
+    internal static Planet.UpdateResult Result(string planet, Planet.UpdateResult.UpdateResultType type, int player, object data = null)
         => new Planet.UpdateResult(planet, type, data, player);
 
-    private static GameAI.GameAIOrder OrderOf(GameAI.GameAIOrder.OrderType type, int player, string origin = "", string target = "", object data = null)
+    internal static GameAI.GameAIOrder OrderOf(GameAI.GameAIOrder.OrderType type, int player, string origin = "", string target = "", object data = null)
         => new GameAI.GameAIOrder { Type = type, PlayerId = player, Origin = origin, Target = target, Data = data ?? 1 };
 
-    private static HumanTurnInput Turn(
+    internal static HumanTurnInput Turn(
         List<Planet.UpdateResult> results = null, List<GameAI.GameAIOrder> executed = null, List<GameAI.GameAIOrder> newOrders = null,
         List<BlockadeSystem.BlockadeCut> cuts = null, List<ConversionReport> conversions = null,
         IEnumerable<string> blockaded = null, string researchCompleted = null, bool shipmentsAutomated = false)
@@ -723,8 +724,8 @@ public static class HumanModeSelfCheck
                 Result("P0", Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty, Fixture.HumanId),
                 Result("P1", Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty, Fixture.HumanId),
             }));
-            ok &= Check(Has(e, HumanEventKind.ProductionQueueEmpty, "P0") && Has(e, HumanEventKind.ProductionQueueEmpty, "P1"), "an empty queue is a message on both planets");
-            ok &= Check(Has(e, HumanEventKind.PlanetIdle, "P0") && !Has(e, HumanEventKind.PlanetIdle, "P1"), "an empty queue is an idle event only on the manual planet");
+            ok &= Check(Has(e, HumanEventKind.PlanetIdle, "P0") && !Has(e, HumanEventKind.ProductionQueueEmpty, "P0"), "an empty queue on a manual planet is one idle event, not two messages");
+            ok &= Check(Has(e, HumanEventKind.ProductionQueueEmpty, "P1") && !Has(e, HumanEventKind.PlanetIdle, "P1"), "on an automatic planet it is a plain queue-empty message");
 
             // Fights, rival activity and visibility.
             e = events.Collect(f.Map, f.Human, Turn(results: new List<Planet.UpdateResult>
@@ -747,6 +748,11 @@ public static class HumanModeSelfCheck
             ok &= Check(e.Count == 0, "the same events on a planet the human cannot see are not reported");
             f.Map.Knowledge.SetKnownPlanets(Fixture.HumanId, new[] { "P0", "P1", "P2", "P3" });
 
+            // A rival the human has seen on a planet in sight is met; their stance news only counts after that.
+            Dock(f.P(1), Ship.ShipKind.WarShip, rivalId, 1);
+            e = events.Collect(f.Map, f.Human, Turn());
+            ok &= Check(Has(e, HumanEventKind.FirstContact, "P1", player: rivalId), "first contact names the planet the rival was seen on");
+
             // Orders: arrivals and stance changes.
             e = events.Collect(f.Map, f.Human, Turn(executed: new List<GameAI.GameAIOrder>
             {
@@ -768,9 +774,7 @@ public static class HumanModeSelfCheck
             ok &= Check(e.Count == 0, "a war between two players the human has not met is not reported");
 
             // Contact, blockades, ownership.
-            Dock(f.P(1), Ship.ShipKind.WarShip, rivalId, 1);
             e = events.Collect(f.Map, f.Human, Turn(blockaded: new[] { "P0" }));
-            ok &= Check(Has(e, HumanEventKind.FirstContact, player: rivalId), "a rival's ship on a planet the human knows is first contact");
             ok &= Check(Has(e, HumanEventKind.PlanetBlockaded, "P0"), "a planet newly blockaded is an event");
             e = events.Collect(f.Map, f.Human, Turn(blockaded: new[] { "P0" }));
             ok &= Check(e.Count == 0, "contact and an unchanged blockade are reported once");
@@ -829,7 +833,7 @@ public static class HumanModeSelfCheck
 
     #region Task 9: diplomacy commands
 
-    private static HumanCommand Diplo(string type, int rival) => new HumanCommand { type = type, rival = rival };
+    internal static HumanCommand Diplo(string type, int rival) => new HumanCommand { type = type, rival = rival };
 
     public static bool RunDiplomacyCommandChecks()
     {
@@ -948,7 +952,7 @@ public static class HumanModeSelfCheck
 
     #region Task 7: research queue
 
-    private static CatalogItem MakeResearch(string name, string requiredTech = "", float cost = 10f)
+    internal static CatalogItem MakeResearch(string name, string requiredTech = "", float cost = 10f)
     {
         var item = ScriptableObject.CreateInstance<CatalogItem>();
         item.itemName = name;
@@ -961,7 +965,7 @@ public static class HumanModeSelfCheck
         return item;
     }
 
-    private static HumanCommand QueueResearch(string item) => new HumanCommand { type = "queueResearch", item = item };
+    internal static HumanCommand QueueResearch(string item) => new HumanCommand { type = "queueResearch", item = item };
 
     public static bool RunResearchQueueChecks()
     {

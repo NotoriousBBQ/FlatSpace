@@ -51,6 +51,18 @@ namespace Game.UI.MainGameScreenUI
         private void OnNotificationSelected(IEnumerable<object> selectedItems)
         {
             var selectedNotification = _listView.selectedItem as PlayerNotification;
+            if (selectedNotification == null) return;   // the selection was just cleared
+            if (selectedNotification.Source is FlatSpace.Human.HumanNotificationEntry humanEntry)
+            {
+                // Clear the selection and navigate after this callback: the entry is dismissed and the list refreshed, and the next entry
+                // slides into the same row, which must be selectable again.
+                _listView.schedule.Execute(() =>
+                {
+                    _listView.ClearSelection();
+                    Gameboard.Instance.GoToNotification(humanEntry);
+                });
+                return;
+            }
             Gameboard.Instance.ViewPlanet(selectedNotification?.ViewTarget ?? string.Empty);
         }
 

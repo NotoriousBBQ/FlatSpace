@@ -170,12 +170,14 @@ public class RandomBoardPopup : MonoBehaviour
     }
 
     // A full-screen dimmer (it also swallows clicks meant for the menu behind) holding a centred box.
-    internal static GameObject MakePanel(Transform parent, string panelName, float width, float height, out Transform box)
+    internal static GameObject MakePanel(Transform parent, string panelName, float width, float height, out Transform box, float dimAlpha = 0.6f)
     {
         var dim = new GameObject(panelName, typeof(RectTransform), typeof(Image));
         dim.transform.SetParent(parent, false);
         Stretch((RectTransform)dim.transform);
-        dim.GetComponent<Image>().color = Dim;
+        var dimColor = Dim;
+        dimColor.a = dimAlpha;
+        dim.GetComponent<Image>().color = dimColor;
 
         var boxObject = new GameObject("Box", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
         boxObject.transform.SetParent(dim.transform, false);

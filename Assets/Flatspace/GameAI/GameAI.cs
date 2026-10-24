@@ -675,6 +675,12 @@ namespace FlatSpace
                 target.AddIncomingShips(kind, order.PlayerId, -count);
             }
 
+            /// <summary>
+            /// Queues and executes orders now, between turns: the human's UI commands take effect at once, exactly as orders the AI created
+            /// during a turn did (a delayed order's delay is first decremented by the next turn).
+            /// </summary>
+            public void ApplyOrdersNow(List<GameAIOrder> orders) => ProcessNewOrders(orders);
+
             private void ProcessNewOrders(List<GameAIOrder> newOrders)
             {
                 CurrentAIOrders.AddRange(newOrders.FindAll(x =>

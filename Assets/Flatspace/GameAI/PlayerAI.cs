@@ -1682,6 +1682,16 @@ namespace FlatSpace
             /// Starts the first queued item that can still be researched, dropping entries that cannot (unknown, researched meanwhile,
             /// prerequisite not researched). Leaves currentResearch null when the queue holds none.
             /// </summary>
+            /// <summary>
+            /// A human who queues research while nothing is in progress sees it start at once, not on the next research turn. Does nothing
+            /// for an AI player or while something is being researched. Public for Gameboard.SubmitHumanCommands and the self-check.
+            /// </summary>
+            public void StartQueuedResearchIfIdle(List<GameAI.GameAIOrder> orders)
+            {
+                if (!HumanControlled || currentResearch != null) return;
+                ChooseNextQueuedResearch(orders);
+            }
+
             private void ChooseNextQueuedResearch(List<GameAI.GameAIOrder> orders)
             {
                 currentResearch = null;

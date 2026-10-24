@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using FlatSpace.AI;
 using Flatspace.Objects.Resource;
+using Flatspace.Objects.Production;
 
 namespace FlatSpace
 {
@@ -36,6 +37,56 @@ namespace FlatSpace
 
             /// <summary>The pause settings the setPause command edits; null (a self-check, or no human yet) refuses it.</summary>
             public HumanPauseSettings PauseSettings { get; set; }
+
+            /// <summary>
+            /// Whether a command would be accepted right now, without applying it: null when it would, else the refusal reason. Covers
+            /// the commands a screen offers a choice of (queueProduction, queueResearch, colonize, shipResource); any other type is
+            /// "CheckNotSupported". It runs the command on a scratch processor and order list, so no queue, claim or order survives it.
+            /// </summary>
+            public string Check(HumanCommand command)
+            {
+                if (command == null) return "UnknownCommand";
+                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings };
+                switch (command.type)
+                {
+                    case "queueResearch":
+                        return scratch.ValidateQueueResearch(command, out _);
+                    case "queueProduction":
+                    case "colonize":
+                    case "shipResource":
+                        try
+                        {
+                            return scratch.Dispatch(command, new List<GameAI.GameAIOrder>(), out _);
+                        }
+                        catch (Exception e)
+                        {
+                            return "Error: " + e.Message;
+                        }
+                    default:
+                        return "CheckNotSupported";
+                }
+            }
+
+            /// <summary>
+            /// Checks a whole batch the way Apply would run it, claims included (two shipments cannot together exceed a stock), without
+            /// applying any of it. Covers queueProduction, colonize and shipResource; any other command gets "CheckNotSupported". Lets a
+            /// dialog refuse a batch up front so none of it is sent when part of it would be refused.
+            /// </summary>
+            public List<HumanCommandResult> CheckBatch(IEnumerable<HumanCommand> commands)
+            {
+                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings };
+                var scratchOrders = new List<GameAI.GameAIOrder>();
+                var results = new List<HumanCommandResult>();
+                foreach (var command in commands)
+                {
+                    var supported = command != null
+                        && (command.type == "queueProduction" || command.type == "colonize" || command.type == "shipResource");
+                    results.Add(supported
+                        ? scratch.Apply(new[] { command }, scratchOrders)[0]
+                        : new HumanCommandResult { type = command?.type ?? "", applied = false, reason = "CheckNotSupported", detail = "" });
+                }
+                return results;
+            }
 
             /// <summary>Parses a commands file body. Never throws: bad input gives an empty list and a message in error.</summary>
             public static List<HumanCommand> Parse(string json, out string error)
@@ -244,10 +295,10 @@ namespace FlatSpace
 
             // queueResearch: item. Appended to the player-wide queue; an item whose prerequisite is neither researched nor queued earlier
             // would never be startable, so it is refused.
-            private string HandleQueueResearch(HumanCommand command, out string detail)
+            // The refusal for a queueResearch command, or null when it would be accepted. Changes nothing, so Check can use it.
+            private string ValidateQueueResearch(HumanCommand command, out CatalogItem item)
             {
-                detail = "";
-                var item = string.IsNullOrEmpty(command.item) ? null : _human.ResearchCatalog.GetItem(command.item);
+                item = string.IsNullOrEmpty(command.item) ? null : _human.ResearchCatalog.GetItem(command.item);
                 if (item == null) return "UnknownItem";
                 if (item.researched) return "AlreadyResearched";
                 if (_human.ResearchQueue.Contains(item.itemName) || _human.currentResearch == item) return "AlreadyQueued";
@@ -258,6 +309,14 @@ namespace FlatSpace
                         && _human.currentResearch != prerequisite && !_human.ResearchQueue.Contains(item.requiredTech))
                         return "PrerequisiteMissing";
                 }
+                return null;
+            }
+
+            private string HandleQueueResearch(HumanCommand command, out string detail)
+            {
+                detail = "";
+                var refusal = ValidateQueueResearch(command, out var item);
+                if (refusal != null) return refusal;
                 _human.ResearchQueue.Add(item.itemName);
                 detail = "+" + item.itemName;
                 return null;
@@ -268,8 +327,25 @@ namespace FlatSpace
             {
                 detail = "";
                 if (command.index < 0 || command.index >= _human.ResearchQueue.Count) return "BadIndex";
-                detail = "-" + _human.ResearchQueue[command.index];
-                _human.ResearchQueue.RemoveAt(command.index);
+                // Whatever in the queue needs a removed item (directly or through another) goes with it: it could never be started.
+                var removed = new List<string> { _human.ResearchQueue[command.index] };
+                bool grew;
+                do
+                {
+                    grew = false;
+                    foreach (var name in _human.ResearchQueue)
+                    {
+                        if (removed.Contains(name)) continue;
+                        var item = _human.ResearchCatalog.GetItem(name);
+                        if (item != null && !string.IsNullOrEmpty(item.requiredTech) && removed.Contains(item.requiredTech))
+                        {
+                            removed.Add(name);
+                            grew = true;
+                        }
+                    }
+                } while (grew);
+                _human.ResearchQueue.RemoveAll(removed.Contains);
+                detail = "-" + string.Join(", -", removed);
                 return null;
             }
 

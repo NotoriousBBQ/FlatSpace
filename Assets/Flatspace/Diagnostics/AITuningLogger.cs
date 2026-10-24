@@ -779,6 +779,13 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanCommandRefused", type ?? "", reason ?? "") });
     }
 
+    /// <summary>A screen sent commands: T&lt;turn&gt;|P&lt;id&gt;|HumanUiOrder|screen|commands|refused (the HumanCommand lines of the same turn follow).</summary>
+    public static void LogHumanUiOrder(int turnNumber, int playerId, string screen, int commands, int refused)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanUiOrder", screen ?? "", commands.ToString(), refused.ToString()) });
+    }
+
     /// <summary>The timer paused itself on an event: T&lt;turn&gt;|P&lt;id&gt;|HumanPause|event|planet.</summary>
     public static void LogHumanPause(int turnNumber, int playerId, string eventName, string planet)
     {

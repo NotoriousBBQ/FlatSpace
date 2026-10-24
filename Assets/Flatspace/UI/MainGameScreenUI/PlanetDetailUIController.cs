@@ -23,6 +23,7 @@ public class PlanetDetailUIController : MonoBehaviour
     private Label _productionItem;
     private Label _productionProgress;
     private Label _distributionCenterStatus;
+    private Game.UI.MainGameScreenUI.HumanPlanetOrdersView _orders;   // the human's order controls; built in Awake, shown only while a human plays
     public Sprite desertIcon;
     public Sprite desolateIcon;
     public Sprite farmIcon;
@@ -78,7 +79,49 @@ public class PlanetDetailUIController : MonoBehaviour
     {
         if (_panelElement == null || _panelElement.panel == null) return false;
         var panelPosition = RuntimePanelUtils.ScreenToPanel(_panelElement.panel, screenPosition);
-        return _panelElement.worldBound.Contains(panelPosition);
+        if (_panelElement.worldBound.Contains(panelPosition)) return true;
+        // The human's dialogs (ship resources, add item, colonize ...) count as part of the panel: clicking in one must not close it.
+        foreach (var dialog in _dialogs)
+            if (dialog.panel != null && dialog.worldBound.Contains(panelPosition)) return true;
+        // Whatever is under the point: a control that overflows the panel's box (the order sections grow past it) is still the panel's.
+        var picked = _panelElement.panel.Pick(panelPosition);
+        return picked != null && _element != null && _element.Contains(picked);
+    }
+
+    /// <summary>The last frame a pointer press reached an element of this panel's document.</summary>
+    public int LastPointerDownFrame { get; private set; } = -100;
+
+    private readonly System.Collections.Generic.List<VisualElement> _dialogs = new System.Collections.Generic.List<VisualElement>();
+
+    /// <summary>The element of this panel's document that screens add their own sections and dialogs to.</summary>
+    public VisualElement Root => _element;
+
+    /// <summary>Shows a dialog centred over the board. The planet panel stays open while it is, and clicks in it are not outside clicks.</summary>
+    public void ShowDialog(VisualElement dialog)
+    {
+        if (_element == null) return;
+        CloseAllDialogs();   // one dialog at a time
+        var holder = new VisualElement { name = "HumanDialogHolder", pickingMode = PickingMode.Ignore };
+        holder.style.position = Position.Absolute;
+        holder.style.left = holder.style.right = holder.style.top = holder.style.bottom = 0;
+        holder.style.alignItems = Align.Center;
+        holder.style.justifyContent = Justify.Center;
+        holder.Add(dialog);
+        _element.Add(holder);
+        _dialogs.Add(dialog);
+    }
+
+    public void CloseDialog(VisualElement dialog)
+    {
+        if (dialog == null) return;
+        _dialogs.Remove(dialog);
+        dialog.parent?.RemoveFromHierarchy();
+    }
+
+    public void CloseAllDialogs()
+    {
+        foreach (var dialog in _dialogs.ToArray())
+            CloseDialog(dialog);
     }
 
     // Each fleet icon is a real pickable element with its own ClickEvent (registered when the icon
@@ -130,6 +173,7 @@ public class PlanetDetailUIController : MonoBehaviour
 
     private void OnDisable()
     {
+        CloseAllDialogs();
         if(_element == null) return;
         _element.SetEnabled(false);
         _element.visible = false;
@@ -163,6 +207,10 @@ public class PlanetDetailUIController : MonoBehaviour
             _fleetIcon.style.width = StyleKeyword.Auto;
             _fleetIcon.style.flexDirection = FlexDirection.Row;
         }
+        // Any press that reaches an element of this panel's document (a button, a row of a dialog, a text field): Gameboard.Update must not read it
+        // as a click outside. Trickle-down on the root, so it sees the press whatever control is under the pointer.
+        _element.RegisterCallback<PointerDownEvent>(_ => LastPointerDownFrame = Time.frameCount, TrickleDown.TrickleDown);
+        _orders = new Game.UI.MainGameScreenUI.HumanPlanetOrdersView(_panelElement);
         enabled = false;
 
     }
@@ -170,6 +218,7 @@ public class PlanetDetailUIController : MonoBehaviour
     public void SetPlanet(Planet planet)
     {
         if (planet == null) return; // || _element == null) return;
+        if (_planet != planet) CloseAllDialogs();   // a dialog belongs to the planet it was opened for
         _planet = planet;
         _planetName.text = _planet.PlanetName;
         SetIconForPlanetType();
@@ -214,6 +263,7 @@ public class PlanetDetailUIController : MonoBehaviour
             else if (isGrotsitsDC) _distributionCenterStatus.text = "Distribution Center: Grotsits";
             else _distributionCenterStatus.text = "";
         }
+        _orders?.Bind(_planet);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

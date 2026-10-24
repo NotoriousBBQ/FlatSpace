@@ -39,6 +39,10 @@ ask, rather than silently analyzing a near-empty log.
   whether the default pause set is too noisy (count `HumanPause` per 100 turns by event). Invariants: no `HumanCommand` line without an earlier
   command in `HumanCommands/commands.done.json`; a human's `P<id>` never appears on `Stance`, `Retreat`, `AssaultTarget`, `ColonizeStart`-style
   lines the AI writes for its own decisions unless the human enabled the matching automation (shipments) or a planet is switched to automatic.
+  The human UI (stage 1) adds `T<turn>|P<id>|HumanUiOrder|<screen>|<commands>|<refused>`, one per click of a commit-style button
+  (`ShipResources`, `Production`, `Colonize`, `Research`): which screens the human uses and how often a command is refused. Invariant: every
+  `HumanUiOrder` is followed, on the same turn, by `<commands>` lines that are `HumanCommand` or `HumanCommandRefused` (and `<refused>` of them
+  are the refusals); a `HumanCommand` line with no `HumanUiOrder` after it came from the JSON file.
 - **Players:** highest `P<n>` seen, plus `StrategyChange` lines (when each player left Expand for
   Consolidate, if at all — a player that never switches stays on Expand rules the whole match).
 - **Effective `improvementUpkeepScale`:** don't trust the saved asset value alone — a value changed

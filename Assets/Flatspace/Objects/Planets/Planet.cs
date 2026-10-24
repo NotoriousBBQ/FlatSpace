@@ -305,7 +305,7 @@ public class Planet : MonoBehaviour
         return ResourceWorkerRequirement(populationAdjustedForPlanetType, productionRate, out foodWorkers);
     }
 
-    private float GetMaintenanceCost()
+    public float GetMaintenanceCost()
     {
         return Population.Count + GetImprovementMaintenanceCost();
     }

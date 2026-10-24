@@ -398,6 +398,23 @@ rules and a temporary JSON command channel; the UI rework (project 2) is separat
   separate, later feature). The human's view is that player's fog (`SetFogViewMode(Player, id)`, dropdown locked).
 - **Self-check:** `Assets/Editor/HumanModeSelfCheck.cs` (`FlatSpace -> Human -> Run Human Mode Self-Check`, also in `Run All AI Self-Checks`).
 
+#### The human UI (project 2, stage 1)
+
+Spec `docs/superpowers/specs/2026-10-23-human-player-ui-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-ui-stage1.md`.
+- **One entry point:** every button builds `HumanCommand`s and calls `Gameboard.SubmitHumanCommands(commands, screen)`: the `HumanCommandProcessor` applies them
+  and `GameAI.ApplyOrdersNow` executes the orders at once (between turns, equivalent to how the AI's orders are timed), then the board and panels refresh. Where a screen
+  needs to know if a command would be accepted it calls `HumanCommandProcessor.Check` (queueProduction, queueResearch, colonize, shipResource; it applies nothing).
+  The JSON file still works until stage 2.
+- **Pure list builders** in `Assets/Flatspace/Player/Human/` (self-check `Assets/Editor/HumanUiSelfCheck.cs`, in `Run All AI Self-Checks`): `HumanNotificationList` + `HumanOngoing`
+  (one entry per planet and kind; state kinds shortage, blockade, conversion, queue empty and idle live while true and count turns; one-shots stay until clicked; a click dismisses
+  an episode; not saved; the timer pauses only on the fresh events it returns), `HumanShipmentList` (sources: the human's planets in range with last turn's surplus result x population
+  fraction, plus raw stock), `HumanBuildList` (Add item options with cost via `WarshipCosts.ProductionCost`, and cumulative queue estimates), `HumanPlanetView` (net rates, `CanOrder`, colonize
+  options), `HumanResearchTree` (tree by `requiredTech`, prerequisite chains, estimates).
+- **Views** in `Assets/Flatspace/UI/HumanUI/` (UI Toolkit, built in code, dark theme via `HumanUiKit`): `HumanPlanetOrdersView` (action strip and scrolling body inside the existing planet
+  panel), `ShipResourcesDialog`, `AddItemDialog`, `ColonizeDialog`, `ResearchScreen` (opened from the HUD Research button). Dialogs are shown through `PlanetDetailUIController.ShowDialog`,
+  which also makes a click inside them count as inside the planet panel for `Gameboard.Update()`'s click-outside rule. A notification click calls `Gameboard.GoToNotification`
+  (dismiss, centre the board, open the panel; it sets `_panelClickFrame` like a fleet icon does so the same click is not read as an outside click).
+
 ### Input
 
 New Input System. `Assets/Game/Input/MapInputActions.cs` is the generated C# wrapper for the map action

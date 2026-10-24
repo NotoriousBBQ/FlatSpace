@@ -172,6 +172,14 @@ namespace Game.UI.MainGameScreenUI
                 _notificationListController.enabled ? "Hide Notifications" : "Show Notifications";
         }
 
+        /// <summary>Opens the notification list (used when a human player is set, since the list is how they play).</summary>
+        public void ShowNotificationList()
+        {
+            if (!_notificationListController || _notificationListController.enabled) return;
+            _notificationListController.enabled = true;
+            if (_showNotificationsButton != null) SetShowNotificationButtonText();
+        }
+
         private void OnShowNotificationsButtonClicked()
         {
             if (!_notificationListController)
@@ -190,10 +198,15 @@ namespace Game.UI.MainGameScreenUI
 
         private void OnStopRunButtonClicked()
         {
-            _nextTurnButton.SetEnabled(true);
-            _startRunButton.SetEnabled(true);
-            _stopRunButton.SetEnabled(false);
-            Gameboard.Instance.StopTimedUpdate();
+            Gameboard.Instance.StopTimedUpdate();   // also puts the buttons back, see RunStopped
+        }
+
+        /// <summary>The run ended by itself (a pause event, the turn limit, a defeat): Next Turn and Start Run are available again without pressing Stop Run.</summary>
+        public void RunStopped()
+        {
+            _nextTurnButton?.SetEnabled(true);
+            _startRunButton?.SetEnabled(true);
+            _stopRunButton?.SetEnabled(false);
         }
 
         private static void OnSaveButtonClicked()

@@ -10,8 +10,13 @@ public class HumanPlayerPicker : MonoBehaviour
 
     public static HumanPlayerPicker Show(Canvas canvas, IReadOnlyList<(int id, string homePlanet)> players, Action<int> onPicked)
     {
+        // Its own canvas on top of everything (the board's planet markers and the HUD would otherwise draw over a popup parented to the game canvas).
+        var canvasObject = new GameObject("HumanPlayerPickerCanvas", typeof(Canvas), typeof(UnityEngine.UI.CanvasScaler), typeof(UnityEngine.UI.GraphicRaycaster));
+        var topCanvas = canvasObject.GetComponent<Canvas>();
+        topCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        topCanvas.sortingOrder = 5000;
         var go = new GameObject("HumanPlayerPicker", typeof(RectTransform));
-        go.transform.SetParent(canvas.transform, false);
+        go.transform.SetParent(canvasObject.transform, false);
         RandomBoardPopup.Stretch((RectTransform)go.transform);
         var picker = go.AddComponent<HumanPlayerPicker>();
         picker._onPicked = onPicked;
@@ -21,7 +26,7 @@ public class HumanPlayerPicker : MonoBehaviour
 
     private void Build(IReadOnlyList<(int id, string homePlanet)> players)
     {
-        RandomBoardPopup.MakePanel(transform, "PickerPanel", 460f, 130f + players.Count * 60f, out var box);
+        RandomBoardPopup.MakePanel(transform, "PickerPanel", 460f, 130f + players.Count * 60f, out var box, dimAlpha: 1f);   // opaque: the board behind is not yet the player's
         RandomBoardPopup.AddLabel(box, "Choose your player", 36f, 28f);
         foreach (var (id, homePlanet) in players)
         {
@@ -34,7 +39,7 @@ public class HumanPlayerPicker : MonoBehaviour
 
     private void Pick(int playerId)
     {
-        Destroy(gameObject);
+        Destroy(transform.parent != null ? transform.parent.gameObject : gameObject);
         _onPicked?.Invoke(playerId);
     }
 }

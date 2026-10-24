@@ -18,7 +18,7 @@ namespace FlatSpace
                 HumanEventKind.WarDeclared, HumanEventKind.PeaceMade, HumanEventKind.FleetArrived,
                 HumanEventKind.ShortageFood, HumanEventKind.ShortageGrotsits,
                 HumanEventKind.ProductionComplete, HumanEventKind.ResearchComplete, HumanEventKind.ColonyShipReady,
-                HumanEventKind.PlanetIdle, HumanEventKind.ResearchIdle,
+                HumanEventKind.PlanetIdle, HumanEventKind.ResearchIdle, HumanEventKind.ColonyShipBuilt,
             };
 
             private readonly HashSet<HumanEventKind> _enabled = new HashSet<HumanEventKind>();
@@ -34,6 +34,8 @@ namespace FlatSpace
                              HumanEventKind.PlanetAttacked, HumanEventKind.PlanetBlockaded, HumanEventKind.PlanetLost, HumanEventKind.FirstContact,
                              HumanEventKind.WarDeclared, HumanEventKind.PeaceMade, HumanEventKind.FleetArrived,
                              HumanEventKind.ShortageFood, HumanEventKind.ShortageGrotsits,
+                             // Waiting on the human: a colony ship built, an empty production queue, nothing being researched.
+                             HumanEventKind.ColonyShipBuilt, HumanEventKind.PlanetIdle, HumanEventKind.ResearchIdle,
                          })
                     settings._enabled.Add(kind);
                 return settings;

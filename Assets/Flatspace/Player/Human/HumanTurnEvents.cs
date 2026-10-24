@@ -10,6 +10,7 @@ namespace FlatSpace
         /// <summary>
         /// Everything the human is told about, one kind per kind of message or pause trigger. The pause-event subset is chosen in
         /// HumanPauseSettings; the rest are messages only. New research and new production starts are deliberately not events.
+        /// New kinds are appended last: the pause settings are saved as ints.
         /// </summary>
         public enum HumanEventKind
         {
@@ -18,13 +19,14 @@ namespace FlatSpace
             ProductionComplete, ResearchComplete, ColonyShipReady, PlanetIdle, ResearchIdle,
             PopulationGained, PopulationLost, PlanetColonized, ProductionQueueEmpty,
             ShipmentLost, ConversionBegan, ConversionEnded, TransportOrdered,
+            ColonyShipBuilt,
         }
 
         /// <summary>One thing that happened this turn. Rival means another player did it on a planet the human can see (or between two players the human has met).</summary>
         public struct HumanEvent
         {
             public HumanEventKind Kind;
-            public string Planet;   // empty when the event has no planet (contact, stance changes, research)
+            public string Planet;   // empty when the event has no planet (stance changes, research); for first contact, where the player was seen
             public int Player;      // the player it is about (the other side for contact and stance events); -1 when none
             public bool Rival;
         }
@@ -40,18 +42,23 @@ namespace FlatSpace
             public IEnumerable<string> BlockadedPlanets;      // planets blockaded against the human right now (BlockadeView)
             public string ResearchCompleted;                  // the research that completed this turn, or null
             public bool ShipmentsAutomated;
+            // Whether a planet is in the human's sight right now (the fog view). Rival events, and who counts as met, depend on it. Null falls
+            // back to the planets the human has ever known (PlayerKnowledge), which is what a self-check without a fog system uses.
+            public Func<string, bool> IsVisible;
         }
 
         /// <summary>
         /// Turns a turn's raw results into the events the human sees, for the message list and for pausing the timer. Pure (it reads a
-        /// GameAIMap and the human's PlayerAI) and stateful only for the kinds that are a change of state: first contact, a planet
+        /// GameAIMap and the human's PlayerAI) and stateful only for the kinds that are a change of state: meeting a player, a planet
         /// changing hands, a blockade starting, research going idle. The first Collect only takes those snapshots.
+        /// A player is met when they are seen on a planet in sight, and stance news (a war declared, peace) about a player the human has not
+        /// met is not reported: the human cannot act on, or even explain, what they have not seen.
         /// </summary>
         public class HumanTurnEvents
         {
             private bool _initialized;
             private readonly Dictionary<string, int> _owners = new Dictionary<string, int>();
-            private readonly HashSet<int> _contact = new HashSet<int>();
+            private readonly HashSet<int> _met = new HashSet<int>();
             private readonly HashSet<string> _blockaded = new HashSet<string>();
             private bool _researchIdle;
 
@@ -60,7 +67,8 @@ namespace FlatSpace
                 var events = new List<HumanEvent>();
                 var me = human.Player.playerID;
 
-                bool Known(string planet) => !string.IsNullOrEmpty(planet) && map.Knowledge.IsKnown(me, planet);
+                bool Known(string planet) => !string.IsNullOrEmpty(planet)
+                    && (input.IsVisible != null ? input.IsVisible(planet) : map.Knowledge.IsKnown(me, planet));
                 bool HumanPresent(string planetName)
                 {
                     var planet = map.GetPlanet(planetName);
@@ -72,7 +80,20 @@ namespace FlatSpace
                     var e = new HumanEvent { Kind = kind, Planet = planet ?? "", Player = player, Rival = rival };
                     if (!events.Contains(e)) events.Add(e);
                 }
-                var contact = map.Knowledge.ContactPlayers(map, me);
+
+                // ── Who is in sight: a player is met the first time they are seen on a planet in sight ──
+                var present = new SortedDictionary<int, string>();
+                foreach (var planet in map.PlanetList)
+                {
+                    if (!Known(planet.PlanetName)) continue;
+                    foreach (var inhabitant in planet.Population)
+                        if (inhabitant.Player != me && inhabitant.Player >= 0 && !present.ContainsKey(inhabitant.Player)) present[inhabitant.Player] = planet.PlanetName;
+                    foreach (var ship in planet.DockedShips)
+                        if (ship.Owner != me && ship.Owner >= 0 && Ship.CountsAsShip(ship.Kind) && !present.ContainsKey(ship.Owner)) present[ship.Owner] = planet.PlanetName;
+                }
+                foreach (var seen in present)
+                    if (_met.Add(seen.Key) && _initialized)
+                        Add(HumanEventKind.FirstContact, seen.Value, seen.Key, false);
 
                 // ── This turn's planet results ──
                 foreach (var r in input.Results ?? new List<Planet.UpdateResult>())
@@ -87,14 +108,21 @@ namespace FlatSpace
                             if (mine) Add(HumanEventKind.ShortageGrotsits, r.Name, me, false);
                             break;
                         case Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionComplete:
-                            if (mine) Add(HumanEventKind.ProductionComplete, r.Name, me, false);
+                            if (mine)
+                            {
+                                Add(HumanEventKind.ProductionComplete, r.Name, me, false);
+                                var builtItem = r.Data != null && human.ProductionCatalog != null ? human.ProductionCatalog.GetItem(r.Data.ToString()) : null;
+                                if (builtItem != null && builtItem.subType == "ColonyShip") Add(HumanEventKind.ColonyShipBuilt, r.Name, me, false);
+                            }
                             else if (r.PlayerID >= 0 && Known(r.Name)) Add(HumanEventKind.ProductionComplete, r.Name, r.PlayerID, true);
                             break;
                         case Planet.UpdateResult.UpdateResultType.UpdateResultTypeIndustryProductionQueueEmpty:
                             if (!mine) break;   // another player's empty queue is not an accomplishment
-                            Add(HumanEventKind.ProductionQueueEmpty, r.Name, me, false);
+                            // A planet the human develops by hand is idle (they are waiting on it); one the AI develops just had its queue emptied.
                             if (map.GetPlanet(r.Name) != null && map.GetPlanet(r.Name).ManualDevelopment)
                                 Add(HumanEventKind.PlanetIdle, r.Name, me, false);
+                            else
+                                Add(HumanEventKind.ProductionQueueEmpty, r.Name, me, false);
                             break;
                         case Planet.UpdateResult.UpdateResultType.UpdateResultTypeColonizerReady:
                             if (mine) Add(HumanEventKind.ColonyShipReady, r.Name, me, false);
@@ -130,8 +158,11 @@ namespace FlatSpace
                             var rival = Convert.ToInt32(order.Data);
                             var kind = order.Type == GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar ? HumanEventKind.WarDeclared : HumanEventKind.PeaceMade;
                             if (order.PlayerId == me || rival == me)
-                                Add(kind, "", order.PlayerId == me ? rival : order.PlayerId, false);
-                            else if (contact.Contains(order.PlayerId) && contact.Contains(rival))
+                            {
+                                var other = order.PlayerId == me ? rival : order.PlayerId;
+                                if (_met.Contains(other)) Add(kind, "", other, false);   // news about someone the human has not seen is not news
+                            }
+                            else if (_met.Contains(order.PlayerId) && _met.Contains(rival))
                                 Add(kind, "", order.PlayerId, true);
                             break;
                         }
@@ -176,10 +207,6 @@ namespace FlatSpace
                     if (_initialized && !_blockaded.Contains(name)) Add(HumanEventKind.PlanetBlockaded, name, -1, false);
                 _blockaded.Clear();
                 _blockaded.UnionWith(blockadedNow);
-
-                foreach (var player in contact)
-                    if (_initialized && !_contact.Contains(player)) Add(HumanEventKind.FirstContact, "", player, false);
-                _contact.UnionWith(contact);
 
                 foreach (var planet in map.PlanetList)
                 {
