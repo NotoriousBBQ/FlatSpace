@@ -72,6 +72,16 @@ public class FleetUIController : MonoBehaviour
             BuildFleetBoxes(research);
             return;
         }
+        var humanId = Gameboard.Instance != null ? Gameboard.Instance.HumanPlayerId : -1;
+        if (!HumanHoverText.ShowFullFleetDetail(_owner, humanId))
+        {
+            // While a human plays, a rival's fleet is only a number of ships.
+            var count = 0;
+            foreach (var ship in _planet.DockedShips)
+                if (ship.Owner == _owner && Ship.CountsAsShip(ship.Kind)) count++;
+            _shipListContainer.Add(new Label(HumanHoverText.ShipCount(count)) { pickingMode = PickingMode.Ignore });
+            return;
+        }
         foreach (var ship in _planet.DockedShips)
         {
             if (ship.Owner != _owner || !Ship.CountsAsShip(ship.Kind)) continue;

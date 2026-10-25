@@ -424,6 +424,7 @@ Spec `docs/superpowers/specs/2026-10-23-human-player-ui-stage2-design.md`, plan 
   and on release `Gameboard.TryDragFleet` sends a `move` of that fleet's `HumanFleetView.ShipIndices`; a refusal shows a toast (`HumanHoverText.RefusalSentence`). A rival's icon only hovers.
 - **Hover popups:** one popup (`HumanHoverPopup`) fed by the pure `HumanHoverText` (ship text, `Order` text for ship, food, grotsits, colonist and rider lines, `CanSee`: a rival's line only with both ends visible, `Pick`:
   10 px screen-space test against the order lines; the order-to-line link is `Gameboard._orderLines`). `Gameboard.UpdateLineHover` runs while a human plays.
+  While a human plays, a rival's fleet (icon popup, line popup, fleet panel) shows only a ship count: `HumanHoverText.ShowFullFleetDetail(owner, humanId)` is the one rule (full detail for the human's own fleets and for every fleet when no human plays; a future debug mode, see `FUTURE_FEATURES.md`, would lift it). A rival's fleet panel opens only for a planet in sight now (`Gameboard.ShowFleetUI`), never for a dimmed one.
 - **Fleet summary:** `FleetSummaryScreen` (HUD Fleets button) lists `HumanFleetList.Build` rows; a row click centres the board on the planet (the destination in flight), opens nothing, and closes the screen.
 
 #### The human UI (project 2, stage 3: the Planets screen)

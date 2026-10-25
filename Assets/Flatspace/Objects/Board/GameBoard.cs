@@ -205,7 +205,7 @@ namespace FlatSpace
                     return;
                 }
                 SetHoverLine(_orderLines[picked[0]]);
-                HumanHoverPopup.Show(root, pointer, picked.Select(FlatSpace.Human.HumanHoverText.Order).ToList());
+                HumanHoverPopup.Show(root, pointer, picked.Select(o => FlatSpace.Human.HumanHoverText.Order(o, FlatSpace.Human.HumanHoverText.ShowFullFleetDetail(o.PlayerId, HumanPlayerId))).ToList());
             }
 
             // Thickens the nearest line while it is the one hovered, and restores the width it had when the hover leaves it.
@@ -1036,6 +1036,8 @@ namespace FlatSpace
             public void ShowFleetUI(string planetName, int owner)
             {
                 if (!_fleetUIController) return;
+                // A rival's fleet panel opens only for a planet the human sees now: a dimmed (explored) planet shows its icons, nothing more.
+                if (HumanPlayerId >= 0 && owner != HumanPlayerId && !HumanSeesPlanet(planetName)) return;
                 _panelClickFrame = Time.frameCount;
                 HidePlanetDetail();
                 _fleetUIController.SetPlanet(GetPlanet(planetName), owner);
