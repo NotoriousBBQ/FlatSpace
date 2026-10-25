@@ -195,11 +195,12 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
         strip.GetComponent<Image>().color = color;
     }
 
-    // The children of the stats canvas that were switched off to show only the fleet icons, with their state before (so they are restored exactly).
-    private readonly List<KeyValuePair<GameObject, bool>> _hiddenForShips = new List<KeyValuePair<GameObject, bool>>();
+    // What was switched off to show only the basics on an explored planet next to the human's, with its state before (so it is restored exactly).
+    private readonly List<KeyValuePair<GameObject, bool>> _hiddenForBasics = new List<KeyValuePair<GameObject, bool>>();
 
-    /// <param name="showFleets">An explored planet still shows its fleet icons (not its stats): the human sees ships on the planets next to its own.</param>
-    public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim, bool showFleets = false)
+    /// <param name="nextToHuman">An explored planet next to one of the human's occupied or crewed planets still shows its name, its owner's colour
+    /// and its fleet icons (not its population, food, grotsits or morale).</param>
+    public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim, bool nextToHuman = false)
     {
         if (state == FlatSpace.Fog.FogVisibility.Hidden)
         {
@@ -224,24 +225,36 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
 
         if (_statsCanvas)
         {
-            var shipsOnly = explored && showFleets && _fleetIconRect != null;
-            _statsCanvas.enabled = !explored || shipsOnly;
-            if (shipsOnly && _hiddenForShips.Count == 0)
+            var basicsOnly = explored && nextToHuman && _fleetIconRect != null;
+            _statsCanvas.enabled = !explored || basicsOnly;
+            if (basicsOnly && _hiddenForBasics.Count == 0)
             {
                 foreach (Transform child in _statsCanvas.transform)
                 {
                     if (child == _fleetIconRect.transform) continue;
-                    _hiddenForShips.Add(new KeyValuePair<GameObject, bool>(child.gameObject, child.gameObject.activeSelf));
-                    child.gameObject.SetActive(false);
+                    if (_nameTextField != null && _nameTextField.transform.IsChildOf(child)) continue;   // the name panel stays
+                    if (_populationTextField != null && _populationTextField.transform.IsChildOf(child))
+                    {
+                        // The stats panel carries the owner colour: it stays, its texts (population, food, grotsits, morale) go.
+                        foreach (Transform inner in child) HideForBasics(inner.gameObject);
+                        continue;
+                    }
+                    HideForBasics(child.gameObject);
                 }
             }
-            else if (!shipsOnly && _hiddenForShips.Count > 0)
+            else if (!basicsOnly && _hiddenForBasics.Count > 0)
             {
-                foreach (var pair in _hiddenForShips)
+                foreach (var pair in _hiddenForBasics)
                     if (pair.Key != null) pair.Key.SetActive(pair.Value);
-                _hiddenForShips.Clear();
+                _hiddenForBasics.Clear();
             }
         }
+    }
+
+    private void HideForBasics(GameObject target)
+    {
+        _hiddenForBasics.Add(new KeyValuePair<GameObject, bool>(target, target.activeSelf));
+        target.SetActive(false);
     }
 
     // A drag that starts on the planet is a pan (or a fleet drag), not a click. Unity only cancels the click when the dragged object differs from the

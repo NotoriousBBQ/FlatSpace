@@ -406,6 +406,29 @@ namespace FlatSpace
                     p => _humanBlockadingSince.TryGetValue(p.PlanetName, out var turn) && TurnNumber - turn <= HumanBlockadingTurns);
             }
 
+            /// <summary>
+            /// Whether the planet panel shows only name, owner and population: a human plays and the planet is neither theirs nor in their sight now
+            /// (a dimmed planet). Everything is shown when no human plays.
+            /// </summary>
+            public bool PlanetDetailIsLimited(Planet planet)
+                => HumanPlayerId >= 0 && planet != null && planet.Owner != HumanPlayerId && !HumanSeesPlanet(planet.PlanetName);
+
+            /// <summary>Whether a limited panel may show the population: the planet is next to one the human occupies or has a ship at (its owner is seen too).</summary>
+            public bool PlanetPopulationShown(Planet planet)
+                => !PlanetDetailIsLimited(planet) || HumanOwnerVisible()(planet.PlanetName);
+
+            /// <summary>"You", "Player 2", "Unowned"; out of sight the last owner seen and its age ("Player 2 (7 turns ago)"), "Unknown" if never seen.</summary>
+            public string OwnerLabel(Planet planet)
+            {
+                if (planet == null) return "";
+                if (HumanPlayerId < 0) return planet.Owner < 0 ? "Unowned" : $"Player {planet.Owner}";
+                var now = planet.Owner == HumanPlayerId || HumanOwnerVisible()(planet.PlanetName);
+                var last = default(FlatSpace.Human.PlanetSightMemory.Sighting);
+                var seen = PlanetSights.TryGet(planet.PlanetName, out last);
+                var text = FlatSpace.Human.HumanPlanetTable.OwnerText(HumanPlayerId, now ? planet.Owner : last.Owner, now, now || seen, now ? 0 : TurnNumber - last.Turn);
+                return text != "" ? text : (now || seen) ? "Unowned" : "Unknown";
+            }
+
             /// <summary>Opens or closes the Planets screen (the P key and the HUD button). Only while a human plays.</summary>
             public void TogglePlanets() => _mainScreenUIController?.TogglePlanets();
 

@@ -101,13 +101,13 @@ namespace FlatSpace
                     {
                         var ships = planet.DockedShips.Where(x => Ship.CountsAsShip(x.Kind)).ToList();
                         row.Ships = ships.Count;
+                        row.Pop = planet.Population.Count;
                         row.ShipOwners = string.Join(", ", ships.GroupBy(x => x.Owner).OrderBy(g => g.Key)
                             .Select(g => $"{(g.Key == humanId ? "You" : $"P{g.Key}")} {g.Count()}"));
                     }
 
                     if (visible)
                     {
-                        row.Pop = planet.Population.Count;
                         if (planet.Population.Count > 0)
                         {
                             var net = HumanPlanetView.NetPerTurn(planet);
