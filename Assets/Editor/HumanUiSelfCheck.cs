@@ -39,6 +39,7 @@ public static class HumanUiSelfCheck
         ok &= RunFleetListChecks();
         ok &= RunSightMemoryChecks();
         ok &= RunPlanetTableChecks();
+        ok &= RunBlockadeRelevanceChecks();
         return ok;
     }
 
@@ -158,6 +159,27 @@ public static class HumanUiSelfCheck
             ok &= Check(!copy.TryGet("P1", out _), "EmptyRestore: restoring nothing leaves nothing remembered");
             copy.Restore(null);
             ok &= Check(!copy.TryGet("P1", out _), "EmptyRestore: restoring null (an older save) is the same as nothing");
+        }
+        return ok;
+    }
+
+    public static bool RunBlockadeRelevanceChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(3))
+        {
+            f.Own(0, 3);
+            f.Own(1, 2, 1);   // a rival's planet
+            var all = new[] { "P0", "P1", "P2" };
+            var noCuts = new string[0];
+            ok &= Check(HumanTurnEvents.RelevantBlockades(f.Map, 0, all, noCuts).SequenceEqual(new[] { "P0" }),
+                "RelevantBlockades: only my own planet counts when none of my orders were cut; the rival's garrisoned planet and an empty one do not");
+            ok &= Check(HumanTurnEvents.RelevantBlockades(f.Map, 0, all, new[] { "P2" }).SequenceEqual(new[] { "P0", "P2" }),
+                "a planet where my order was cut counts too, whoever owns it");
+            ok &= Check(HumanTurnEvents.RelevantBlockades(f.Map, 0, all, new[] { "P1" }).SequenceEqual(new[] { "P0", "P1" }),
+                "a rival's planet where my order was cut counts");
+            ok &= Check(HumanTurnEvents.RelevantBlockades(f.Map, 0, null, noCuts).Count == 0 && HumanTurnEvents.RelevantBlockades(f.Map, 0, all, null).SequenceEqual(new[] { "P0" }),
+                "null inputs: no blockades, and no cuts means only my planets");
         }
         return ok;
     }

@@ -1269,8 +1269,11 @@ namespace FlatSpace
                     NewOrders = GameAI.LastNewOrders,
                     Cuts = GameAI.LastBlockadeCuts,
                     Conversions = GameAI.LastConversionReports,
+                    // Only the blockades that matter to the human: its own planets, and planets where its orders were cut.
                     BlockadedPlanets = humanAI.CurrentBlockadeView != null
-                        ? new List<string>(humanAI.CurrentBlockadeView.BlockadedNames) : new List<string>(),
+                        ? FlatSpace.Human.HumanTurnEvents.RelevantBlockades(GameAI.GameAIMap, HumanPlayerId, humanAI.CurrentBlockadeView.BlockadedNames,
+                            humanAI.RememberedBlockades(TurnNumber).Select(e => e.Planet))
+                        : new List<string>(),
                     ResearchCompleted = humanAI.TakeResearchCompleted(),
                     ShipmentsAutomated = humanAI.ShipmentsAutomated,
                     IsVisible = HumanSeesPlanet,
