@@ -23,6 +23,8 @@ public class PlanetDetailUIController : MonoBehaviour
     private Label _productionItem;
     private Label _productionProgress;
     private Label _distributionCenterStatus;
+    private Label _ownerLabel;   // built in Awake: who owns the planet, as the human knows it
+    private VisualElement[] _detailRows;   // the rows a limited panel hides: food, grotsits, industry and research, production, distribution center
     private Game.UI.MainGameScreenUI.HumanPlanetOrdersView _orders;   // the human's order controls; built in Awake, shown only while a human plays
     public Sprite desertIcon;
     public Sprite desolateIcon;
@@ -210,6 +212,14 @@ public class PlanetDetailUIController : MonoBehaviour
         // Any press that reaches an element of this panel's document (a button, a row of a dialog, a text field): Gameboard.Update must not read it
         // as a click outside. Trickle-down on the root, so it sees the press whatever control is under the pointer.
         _element.RegisterCallback<PointerDownEvent>(_ => LastPointerDownFrame = Time.frameCount, TrickleDown.TrickleDown);
+        _detailRows = new[]
+        {
+            _element.Q<VisualElement>("FoodElement"), _element.Q<VisualElement>("GrotsitsElement"), _element.Q<VisualElement>("IndustryResearchElement"),
+            _element.Q<VisualElement>("ProductionElement"), _element.Q<VisualElement>("DistributionCenterElement"),
+        };
+        _ownerLabel = new Label { pickingMode = PickingMode.Ignore };
+        _ownerLabel.style.unityTextAlign = TextAnchor.UpperCenter;
+        _panelElement.Insert(1, _ownerLabel);   // under the title row
         _orders = new Game.UI.MainGameScreenUI.HumanPlanetOrdersView(_panelElement);
         enabled = false;
 
@@ -227,8 +237,17 @@ public class PlanetDetailUIController : MonoBehaviour
 
     public void UpdatePlanetDetail()
     {
-        _populationValue.text =
-            string.Format("{0}/{1}", _planet.Population.Count.ToString(), _planet.MaxPopulation.ToString());
+        var board = Gameboard.Instance;
+        // A dimmed planet shows only its name, owner and (next to the human's planets) population; the rest is not the human's to see.
+        var limited = board != null && board.PlanetDetailIsLimited(_planet);
+        var showPopulation = board == null || board.PlanetPopulationShown(_planet);
+        _ownerLabel.text = board != null ? "Owner: " + board.OwnerLabel(_planet) : "";
+        foreach (var row in _detailRows)
+            if (row != null) row.style.display = limited ? DisplayStyle.None : DisplayStyle.Flex;
+        _populationProgress.style.display = limited ? DisplayStyle.None : DisplayStyle.Flex;
+        _populationValue.text = showPopulation
+            ? string.Format("{0}/{1}", _planet.Population.Count.ToString(), _planet.MaxPopulation.ToString())
+            : string.Format("?/{0}", _planet.MaxPopulation.ToString());
         _populationProgress.text = 
             string.Format("{0}/{1}", _planet.Food.ToString(), _planet.FoodNeededForNewPop.ToString());
         _foodProduction.text = _planet.FoodProduced.ToString();
@@ -263,7 +282,7 @@ public class PlanetDetailUIController : MonoBehaviour
             else if (isGrotsitsDC) _distributionCenterStatus.text = "Distribution Center: Grotsits";
             else _distributionCenterStatus.text = "";
         }
-        _orders?.Bind(_planet);
+        _orders?.Bind(limited ? null : _planet);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created

@@ -219,8 +219,8 @@ public static class HumanUiSelfCheck
                 "NeverSeenPlanetIsBlank: a known planet never seen has no owner and no figures");
             f.P(1).DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());   // a rival ship on the planet next to mine
             var adjacent = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, name => name == "P1", seen, sights, none, p => false).Find(r => r.Planet == "P1");
-            ok &= Check(adjacent.OwnerText == "Player 1" && !adjacent.Pop.HasValue && adjacent.BuildItem == "" && adjacent.Ships == 1 && adjacent.ShipOwners == "P1 1",
-                "AdjacentOwnerVisible: a planet next to mine shows its current owner, its ship count and who owns them, no age, and still no other figures");
+            ok &= Check(adjacent.OwnerText == "Player 1" && adjacent.Pop == 2 && adjacent.BuildItem == "" && adjacent.Ships == 1 && adjacent.ShipOwners == "P1 1",
+                "AdjacentOwnerVisible: a planet next to mine shows its current owner, its population, ship count and who owns them, no age, and still no other figures");
             ok &= Check(HumanPlanetTable.OwnerText(0, 1, false, true, 1) == "Player 1 (1 turn ago)", "one turn ago is singular");
             ok &= Check(HumanPlanetTable.OwnerText(0, 1, true, true, 5) == "Player 1", "in sight: no age");
             ok &= Check(HumanPlanetTable.OwnerText(0, Planet.NoOwner, false, true, 5) == "Unowned (5 turns ago)" && HumanPlanetTable.OwnerText(0, Planet.NoOwner, true, true, 0) == "" && HumanPlanetTable.OwnerText(0, Planet.NoOwner, false, false, 0) == "",
