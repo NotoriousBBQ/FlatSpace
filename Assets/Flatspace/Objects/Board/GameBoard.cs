@@ -98,6 +98,10 @@ namespace FlatSpace
             void Update()
             {
                 UpdateLineHover();
+                // P opens the Planets screen; while its search box has the keyboard the key is a letter, so only the button or Esc closes it.
+                if (HumanPlayerId >= 0 && Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame
+                    && !PlanetsScreen.IsOpen && !PlanetsScreen.AnyTextFieldFocused())
+                    TogglePlanets();
                 if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
                     return;
 
@@ -109,7 +113,7 @@ namespace FlatSpace
                 var mousePosition = Mouse.current.position.ReadValue();
 
                 // The fleet summary is a HUD screen of its own: a press on it must leave the open planet or fleet panel alone.
-                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition))
+                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition) || PlanetsScreen.ContainsScreenPoint(mousePosition))
                     return;
 
                 if (FleetUIShowing())
@@ -373,6 +377,59 @@ namespace FlatSpace
             /// <summary>The human player's id, -1 when the match has none.</summary>
             public int HumanPlayerId => MatchSettings.HumanPlayerId;
 
+            /// <summary>What the human last saw of each planet (owner and turn); the Planets screen's Owner column. Fresh per match, saved with the game.</summary>
+            public FlatSpace.Human.PlanetSightMemory PlanetSights { get; private set; } = new FlatSpace.Human.PlanetSightMemory();
+
+            // Planet -> the last turn the human's ships cut another player's orders there (presentation only, not saved: a load shows none until the next cut).
+            private readonly Dictionary<string, int> _humanBlockadingSince = new Dictionary<string, int>();
+            private const int HumanBlockadingTurns = 5;
+
+            private void RecordHumanBlockading()
+            {
+                if (HumanPlayerId < 0 || GameAI == null) return;
+                foreach (var cut in GameAI.LastBlockadeCuts)
+                    if (cut.BlockerId == HumanPlayerId && cut.PlayerId != HumanPlayerId)
+                        _humanBlockadingSince[cut.Planet] = TurnNumber;
+            }
+
+            /// <summary>The Planets screen's rows for the human: the planets it has seen and its own. Empty without a human.</summary>
+            public List<FlatSpace.Human.PlanetRow> BuildPlanetRows()
+            {
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count || players[HumanPlayerId].playerAI == null || GameAI == null)
+                    return new List<FlatSpace.Human.PlanetRow>();
+                var humanId = HumanPlayerId;
+                var humanAI = players[humanId].playerAI;
+                var map = GameAI.GameAIMap;
+                // The human blockades a planet when its docked ships cut another player's orders there, as recently as HumanBlockadingTurns ago.
+                // Stance does not matter (a blockade works at peace); docked ships that cut nothing are not hostile activity.
+                return FlatSpace.Human.HumanPlanetTable.Build(map, humanAI, humanId, TurnNumber, HumanSeesPlanet, HumanOwnerVisible(), HumanHasSeenPlanet, PlanetSights, humanAI.CurrentBlockadeView,
+                    p => _humanBlockadingSince.TryGetValue(p.PlanetName, out var turn) && TurnNumber - turn <= HumanBlockadingTurns);
+            }
+
+            /// <summary>Opens or closes the Planets screen (the P key and the HUD button). Only while a human plays.</summary>
+            public void TogglePlanets() => _mainScreenUIController?.TogglePlanets();
+
+            /// <summary>
+            /// Planets whose owner the human sees now: those in sight, and those next to a planet it occupies or has a ship at (its vision sources). The rest of an
+            /// adjacent planet (rates, building) stays hidden; only the owner is read.
+            /// </summary>
+            private Func<string, bool> HumanOwnerVisible()
+            {
+                var near = new HashSet<string>();
+                var map = GameAI.GameAIMap;
+                foreach (var source in map.GetVisionSourcePlanets(HumanPlayerId))
+                    foreach (var neighbour in map.GetNeighbours(source.Planet.PlanetName))
+                        near.Add(neighbour);
+                return name => near.Contains(name) || HumanSeesPlanet(name);
+            }
+
+            /// <summary>Records the planets in the human's sight now. Does nothing without a human.</summary>
+            public void UpdatePlanetSights()
+            {
+                if (HumanPlayerId < 0 || GameAI == null || GameAI.GameAIMap == null) return;
+                PlanetSights.Update(GameAI.GameAIMap.PlanetList, HumanOwnerVisible(), TurnNumber);
+            }
+
             /// <summary>
             /// Makes the player the human one. Player components are recreated on every init, so this runs after each
             /// InitGame of a human match (ApplyMatchHumanChoice).
@@ -398,6 +455,7 @@ namespace FlatSpace
                 var buttons = GetComponentInChildren<GameButtonHandler>();
                 buttons?.RefreshFogView();
                 buttons?.ShowNotificationList();   // the notification list is how a human plays: show it from the start
+                UpdatePlanetSights();   // only overwrites the planets in sight now, so it is safe after a load's restore too
             }
 
             // After a board is initialised: a chosen human (a loaded save, or a pick already made) is applied at once, a requested
@@ -520,6 +578,7 @@ namespace FlatSpace
             {
                 TurnNumber = gameSave.turnNumber;
                 HumanPause = FlatSpace.Human.HumanPauseSettings.FromSave(gameSave.hasPauseEvents, gameSave.pauseEvents);
+                PlanetSights.Restore(gameSave.humanSightings?.ConvertAll(s => (s.planet, s.owner, s.turn)));
                 foreach (var playerSave in gameSave.players)
                 {
                     players[playerSave.playerId].SetStrategy(playerSave.strategy);
@@ -615,6 +674,10 @@ namespace FlatSpace
                 _defeatReported = false;
                 _turnLimitReported = false;
                 HumanNotifications = new FlatSpace.Human.HumanNotificationList();
+                PlanetSights = new FlatSpace.Human.PlanetSightMemory();
+                _humanBlockadingSince.Clear();
+                PlanetsScreen.Close();
+                PlanetsScreen.ResetState();
                 _shippedFood.Clear();
                 _shippedGrotsits.Clear();
                 AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
@@ -1053,6 +1116,8 @@ namespace FlatSpace
                     TurnLimitReached = true;
                 if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
                     _fogOfWarSystem.Recompute();   // before the events: rival events are reported only for planets in sight
+                UpdatePlanetSights();
+                RecordHumanBlockading();
                 CollectHumanEvents();
                 ReportTurnLimit();
                 PlanetaryUIUpdate();
@@ -1086,6 +1151,16 @@ namespace FlatSpace
                 _panelClickFrame = Time.frameCount;   // the click is on a HUD element: Update() must not read it as an outside click
                 ViewPlanet(planetName);
                 ShowPlanetDetail(planetName);
+            }
+
+            /// <summary>Whether the human has seen a planet: it is not hidden in the human's fog view (live or explored); the known planets when there is no fog system.</summary>
+            public bool HumanHasSeenPlanet(string planetName)
+            {
+                var planet = GetPlanet(planetName);
+                if (planet == null) return false;
+                if (_fogOfWarSystem != null && _fogOfWarSystem.Ready)
+                    return _fogOfWarSystem.Classify(planet.Position) != FlatSpace.Fog.FogVisibility.Hidden;
+                return GameAI.GameAIMap.Knowledge.IsKnown(HumanPlayerId, planetName);
             }
 
             /// <summary>Whether a planet is in the human's sight right now (the fog view); the known planets when there is no fog system.</summary>
@@ -1262,12 +1337,14 @@ namespace FlatSpace
                 if (_fogOfWarSystem == null || !_fogOfWarSystem.Ready)
                     return;
                 var dim = _fogOfWarSettings != null ? _fogOfWarSettings.exploredObjectDim : 0.45f;
+                // The human sees the fleets on the planets next to its own (an explored planet shows its icons but not its stats).
+                var nextToHuman = HumanPlayerId >= 0 && GameAI != null && GameAI.GameAIMap != null ? HumanOwnerVisible() : null;
 
                 foreach (var planetUI in _planetUIObjects)
                 {
                     var planet = GetPlanet(planetUI._planetName);
                     if (planet == null) continue;
-                    planetUI.SetFogState(_fogOfWarSystem.Classify(planet.Position), dim);
+                    planetUI.SetFogState(_fogOfWarSystem.Classify(planet.Position), dim, nextToHuman != null && nextToHuman(planetUI._planetName));
                 }
 
                 var lineDrawObjects = GetComponentsInChildren<LineDrawObject>();

@@ -39,9 +39,9 @@ namespace Game.UI.MainGameScreenUI
                     line.style.backgroundColor = new StyleColor(name == selected ? new Color(0.35f, 0.1f, 0.1f) : Color.clear);
             }
 
-            var options = HumanPlanetView.ColonizeOptions(board.GameAI.GameAIMap, human, origin, board.TurnNumber);
+            var options = HumanPlanetView.ColonizeOptions(board.GameAI.GameAIMap, human, origin, board.TurnNumber, board.HumanHasSeenPlanet);
             if (options.Count == 0)
-                list.Add(HumanUiKit.Text("No known planet in range can be colonized from here.", HumanUiKit.Muted));
+                list.Add(HumanUiKit.Text("No planet you have seen in range can be colonized from here.", HumanUiKit.Muted));
             foreach (var option in options)
             {
                 var name = option.Target.PlanetName;

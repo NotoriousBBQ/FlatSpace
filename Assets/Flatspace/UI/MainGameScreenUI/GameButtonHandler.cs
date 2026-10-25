@@ -221,6 +221,12 @@ namespace Game.UI.MainGameScreenUI
 
         public void EscapeButtonPressed()
         {
+            if (PlanetsScreen.IsOpen)
+            {
+                PlanetsScreen.Close();
+                return;
+            }
+
             if (Gameboard.Instance.FleetUIShowing())
             {
                 Gameboard.Instance.HideFleetUI();

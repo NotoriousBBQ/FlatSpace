@@ -195,7 +195,11 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
         strip.GetComponent<Image>().color = color;
     }
 
-    public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim)
+    // The children of the stats canvas that were switched off to show only the fleet icons, with their state before (so they are restored exactly).
+    private readonly List<KeyValuePair<GameObject, bool>> _hiddenForShips = new List<KeyValuePair<GameObject, bool>>();
+
+    /// <param name="showFleets">An explored planet still shows its fleet icons (not its stats): the human sees ships on the planets next to its own.</param>
+    public void SetFogState(FlatSpace.Fog.FogVisibility state, float exploredDim, bool showFleets = false)
     {
         if (state == FlatSpace.Fog.FogVisibility.Hidden)
         {
@@ -218,7 +222,26 @@ public class PlanetUIObject : MonoBehaviour, IPointerClickHandler, IPointerMoveH
             spriteRenderer.color = _fogBasePlanetColor * new Color(d, d, d, 1f);
         }
 
-        if (_statsCanvas) _statsCanvas.enabled = !explored;
+        if (_statsCanvas)
+        {
+            var shipsOnly = explored && showFleets && _fleetIconRect != null;
+            _statsCanvas.enabled = !explored || shipsOnly;
+            if (shipsOnly && _hiddenForShips.Count == 0)
+            {
+                foreach (Transform child in _statsCanvas.transform)
+                {
+                    if (child == _fleetIconRect.transform) continue;
+                    _hiddenForShips.Add(new KeyValuePair<GameObject, bool>(child.gameObject, child.gameObject.activeSelf));
+                    child.gameObject.SetActive(false);
+                }
+            }
+            else if (!shipsOnly && _hiddenForShips.Count > 0)
+            {
+                foreach (var pair in _hiddenForShips)
+                    if (pair.Key != null) pair.Key.SetActive(pair.Value);
+                _hiddenForShips.Clear();
+            }
+        }
     }
 
     // A drag that starts on the planet is a pan (or a fleet drag), not a click. Unity only cancels the click when the dragged object differs from the

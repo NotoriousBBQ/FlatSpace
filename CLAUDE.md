@@ -426,6 +426,17 @@ Spec `docs/superpowers/specs/2026-10-23-human-player-ui-stage2-design.md`, plan 
   10 px screen-space test against the order lines; the order-to-line link is `Gameboard._orderLines`). `Gameboard.UpdateLineHover` runs while a human plays.
 - **Fleet summary:** `FleetSummaryScreen` (HUD Fleets button) lists `HumanFleetList.Build` rows; a row click centres the board on the planet (the destination in flight), opens nothing, and closes the screen.
 
+#### The human UI (project 2, stage 3: the Planets screen)
+
+Spec `docs/superpowers/specs/2026-10-25-human-player-ui-stage3-planets-screen-design.md`, plan `docs/superpowers/plans/2026-10-25-human-player-ui-stage3-planets-screen.md`.
+Only the planet search and planet summary of the stage 3 list are built; the rest (top bar, Esc menu, diplomacy, board icons, pause settings, base output display) is still open.
+- **One screen** (`PlanetsScreen`, HUD Planets button or the P key; Esc or the button closes it): a search box (focused on open), four radio filters (All known, Colonization targets,
+  Mine, Hostile activity; default Mine) and one table row per known planet. Every column sorts (first click descending, then ascending, blanks last, Building by item name).
+  A row click opens that planet's panel and closes the screen. P only opens it (in the search box it types a letter).
+- **Pure parts** in `Assets/Flatspace/Player/Human/` (self-check `HumanUiSelfCheck`): `HumanPlanetTable` (rows, filters, search, sort; Colonization targets follow the AI's own `PlayerAI.IsValidColonizationTarget`, no colony ship needed; the rows are the planets the human has seen (the fog view, not the AI's wider `Knowledge`, which reaches 6 path nodes) plus every owned planet, so the first turn is right before any knowledge update; the Owner column shows the current owner of any planet in sight or next to a planet the human occupies or has a ship at (`Gameboard.HumanOwnerVisible`; the owner and the ships docked there, not the other figures; on the board `PlanetUIObject.SetFogState(..., showFleets)` keeps the fleet icons of such an explored planet and hides its stats), else the last-known owner ("Unowned" included) and its age; Hostile is the human's blockaded / converted / enemy-ship planets plus the planets where the human's ships cut another player's orders in the last 5 turns (`Gameboard._humanBlockadingSince`, from `LastBlockadeCuts`, any stance, not saved) and the rival planets it converts, out of sight too; docked ships that cut nothing do not count) and `PlanetSightMemory`.
+- **Last-known owner:** a planet out of sight shows its owner as the human last saw it with the age ("Player 2 (7 turns ago)"); the figures stay blank. `Gameboard.PlanetSights` is
+  presentation only, fresh per match, refreshed once a turn from `HumanSeesPlanet`, saved as `GameSave.humanSightings` (an older save loads with none).
+
 ### Input
 
 New Input System. `Assets/Game/Input/MapInputActions.cs` is the generated C# wrapper for the map action

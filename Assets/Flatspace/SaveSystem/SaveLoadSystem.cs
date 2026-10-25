@@ -111,6 +111,15 @@ public class SaveLoadSystem : MonoBehaviour
             public float escortOffense;
         }
 
+        // What the human last saw of one planet: its owner and the turn (see PlanetSightMemory).
+        [Serializable]
+        public struct SightingSave
+        {
+            public string planet;
+            public int owner;
+            public int turn;
+        }
+
         // A planet where one of the player's orders was cut by a blockade, remembered for routing (see BlockadeMemory).
         [Serializable]
         public struct RememberedBlockadeSave
@@ -206,6 +215,8 @@ public class SaveLoadSystem : MonoBehaviour
         // Which events stop the timer (HumanPauseSettings.ToSave); hasPauseEvents false (an older save) restores the defaults.
         public bool hasPauseEvents;
         public List<int> pauseEvents;
+        // What the human last saw of each planet (PlanetSightMemory); an older save has none and loads with nothing remembered.
+        public List<SightingSave> humanSightings;
         public string initialBoardStatePath;
         public string boardDesignDataPath;
         public float cameraOrtho = 5f;
@@ -222,6 +233,12 @@ public class SaveLoadSystem : MonoBehaviour
             humanPlayerId = hasHuman ? MatchSettings.HumanPlayerId : 0;
             hasPauseEvents = hasHuman;
             pauseEvents = hasHuman ? Gameboard.Instance.HumanPause.ToSave() : null;
+            if (hasHuman)
+            {
+                humanSightings = new List<SightingSave>();
+                foreach (var (planet, owner, turn) in Gameboard.Instance.PlanetSights.Entries())
+                    humanSightings.Add(new SightingSave { planet = planet, owner = owner, turn = turn });
+            }
             initialBoardStatePath = Gameboard.Instance.IntialBoardState != null ? Gameboard.Instance.IntialBoardState.name : null;
             boardDesignDataPath = Gameboard.Instance._boardDesignPath;
             cameraOrtho = Gameboard.Instance.CameraOrtho;
