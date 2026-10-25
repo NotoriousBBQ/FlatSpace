@@ -754,9 +754,15 @@ namespace FlatSpace
                 return false;
             }
             // Public for the FlatSpace/AI self-check (Assets/Editor is a separate assembly).
-            public bool IsValidColonizationTarget(Planet planet)
+            public bool IsValidColonizationTarget(Planet planet) => IsValidColonizationTarget(planet, true);
+
+            /// <summary>
+            /// The same rule; requireKnown false skips the knowledge test, for the human's Planets screen, which lists only planets the human has seen
+            /// (the fog) and must not wait for the AI's knowledge to be updated by a turn.
+            /// </summary>
+            public bool IsValidColonizationTarget(Planet planet, bool requireKnown)
             {
-                if (!AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;
+                if (requireKnown && !AIMap.Knowledge.IsKnown(Player.playerID, planet.PlanetName)) return false;
                 if (planet.IsPopulationTransferInProgress(Player.playerID))       return false;
                 if (planet.Population.Count == 0)                                return true;
                 if (planet.Population.Count >= planet.MaxPopulation)             return false;

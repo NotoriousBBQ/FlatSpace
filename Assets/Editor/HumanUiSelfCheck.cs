@@ -37,6 +37,8 @@ public static class HumanUiSelfCheck
         ok &= RunHoverTextChecks();
         ok &= RunLinePickChecks();
         ok &= RunFleetListChecks();
+        ok &= RunSightMemoryChecks();
+        ok &= RunPlanetTableChecks();
         return ok;
     }
 
@@ -123,6 +125,143 @@ public static class HumanUiSelfCheck
             ok &= Check(rows[3].InFlight && rows[3].PlanetToShow == "P2" && rows[3].TurnsLeft == 3 && rows[3].Where == "P1 -> P2" && rows[3].Detail == "2 WarShip",
                 "the last row is the flight, showing its destination and turns left");
         }
+        return ok;
+    }
+
+    #endregion
+
+    #region Stage 3: Planets screen
+
+    public static bool RunSightMemoryChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(3))
+        {
+            var sights = new PlanetSightMemory();
+            ok &= Check(!sights.TryGet("P1", out _), "NeverSeenHasNoEntry: nothing is remembered before the first update");
+
+            f.Own(1, 2, 2);
+            sights.Update(f.Map.PlanetList, name => name == "P1", 3);
+            ok &= Check(sights.TryGet("P1", out var first) && first.Owner == 2 && first.Turn == 3, "P1 in sight at turn 3 is remembered with owner 2");
+            ok &= Check(!sights.TryGet("P0", out _), "a planet out of sight is not remembered");
+
+            f.Own(1, 5, 1);   // changes hands while the human cannot see it (more people of player 1)
+            sights.Update(f.Map.PlanetList, name => false, 9);
+            ok &= Check(sights.TryGet("P1", out var stale) && stale.Owner == 2 && stale.Turn == 3, "StaleOwnerKeptWhileUnseen: owner 2 and turn 3 stay");
+            sights.Update(f.Map.PlanetList, name => name == "P1", 10);
+            ok &= Check(sights.TryGet("P1", out var fresh) && fresh.Owner == 1 && fresh.Turn == 10, "seen again at turn 10: the new owner and turn replace it");
+
+            var copy = new PlanetSightMemory();
+            copy.Restore(sights.Entries());
+            ok &= Check(copy.TryGet("P1", out var again) && again.Owner == 1 && again.Turn == 10, "RestoreRoundTrip: a restored copy answers the same");
+            copy.Restore(new List<(string, int, int)>());
+            ok &= Check(!copy.TryGet("P1", out _), "EmptyRestore: restoring nothing leaves nothing remembered");
+            copy.Restore(null);
+            ok &= Check(!copy.TryGet("P1", out _), "EmptyRestore: restoring null (an older save) is the same as nothing");
+        }
+        return ok;
+    }
+
+    public static bool RunPlanetTableChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(3))
+        {
+            f.Own(0, 3);
+            f.Own(1, 2, 1);   // a rival's planet
+            var warship = HumanModeSelfCheck.MakeItem("W", "Ship", "Warship");
+            warship.cost = 10f;
+            f.P(0).IndustryProduced = 3f;
+            f.P(0).ProductionQueue.Add(new Planet.ProductionItem(warship));
+            var sights = new PlanetSightMemory();
+            sights.Update(f.Map.PlanetList, name => name == "P1", 3);
+            var none = BlockadeView.Of();
+            System.Func<string, bool> sees = name => name == "P0";
+            System.Func<string, bool> seen = name => true;   // the fog shows every planet of the fixture
+
+            var rows = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, sees, seen, sights, none, p => false);
+            var byName = rows.ToDictionary(r => r.Planet);
+            ok &= Check(rows.Count == 3, "all three known planets are rows");
+            ok &= Check(byName["P0"].IsMine && byName["P0"].OwnerText == "You" && byName["P0"].Pop == 3, "my planet: owner You, population shown");
+            ok &= Check(byName["P0"].BuildItem == "W" && byName["P0"].BuildTurns == 4, "building shows the item and ceil(10 / 3) = 4 turns");
+            ok &= Check(byName["P1"].OwnerText == "Player 1 (7 turns ago)" && !byName["P1"].Pop.HasValue && !byName["P1"].Food.HasValue
+                        && byName["P1"].BuildItem == "" && !byName["P1"].Ships.HasValue && byName["P1"].Alerts == "",
+                "StaleOwnerText: a rival planet out of sight shows its last owner and age, every figure blank");
+            ok &= Check(byName["P1"].Type != "" && byName["P1"].MaxPop > 0, "type and max population are shown out of sight");
+            ok &= Check(byName["P2"].OwnerText == "" && !byName["P2"].Pop.HasValue && byName["P2"].BuildItem == "" && byName["P2"].Alerts == "",
+                "NeverSeenPlanetIsBlank: a known planet never seen has no owner and no figures");
+            f.P(1).DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());   // a rival ship on the planet next to mine
+            var adjacent = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, name => name == "P1", seen, sights, none, p => false).Find(r => r.Planet == "P1");
+            ok &= Check(adjacent.OwnerText == "Player 1" && !adjacent.Pop.HasValue && adjacent.BuildItem == "" && adjacent.Ships == 1 && adjacent.ShipOwners == "P1 1",
+                "AdjacentOwnerVisible: a planet next to mine shows its current owner, its ship count and who owns them, no age, and still no other figures");
+            ok &= Check(HumanPlanetTable.OwnerText(0, 1, false, true, 1) == "Player 1 (1 turn ago)", "one turn ago is singular");
+            ok &= Check(HumanPlanetTable.OwnerText(0, 1, true, true, 5) == "Player 1", "in sight: no age");
+            ok &= Check(HumanPlanetTable.OwnerText(0, Planet.NoOwner, false, true, 5) == "Unowned (5 turns ago)" && HumanPlanetTable.OwnerText(0, Planet.NoOwner, true, true, 0) == "" && HumanPlanetTable.OwnerText(0, Planet.NoOwner, false, false, 0) == "",
+                "UnownedAge: an unowned planet seen earlier and now out of sight shows its age; in sight or never seen it is blank");
+
+            ok &= Check(HumanPlanetTable.Filter(rows, PlanetFilter.Mine).Select(r => r.Planet).SequenceEqual(new[] { "P0" }), "FilterMine");
+            ok &= Check(HumanPlanetTable.Count(rows, PlanetFilter.AllKnown) == 3, "FilterAllKnownOnlyKnown: three rows");
+
+            // Colonization targets follow the AI's own target rule and need no colony ship.
+            var expected = f.Map.PlanetList.Where(p => f.Human.IsValidColonizationTarget(p) && !p.Population.Exists(q => q.Player != 0))
+                .Select(p => p.PlanetName).OrderBy(n => n).ToList();
+            ok &= Check(expected.Contains("P2") && !expected.Contains("P1"), "the empty planet P2 is a target, the rival's P1 is not (fixture sanity)");
+            ok &= Check(HumanPlanetTable.Filter(rows, PlanetFilter.ColonizationTargets).Select(r => r.Planet).OrderBy(n => n).SequenceEqual(expected),
+                "FilterTargetsFollowTheAiRule: no colony ship needed");
+
+            // The human's own planets are listed even before the knowledge has been updated (the first turn).
+            var unseen = HumanPlanetTable.Build(f.Map, f.Human, 0, 1, sees, sees, name => false, sights, none, p => false);
+            ok &= Check(unseen.Select(r => r.Planet).SequenceEqual(new[] { "P0" }), "OwnedPlanetListedBeforeSeen: only the owned planet, none of the planets not seen yet");
+            var targetsUnseen = HumanPlanetTable.Build(f.Map, f.Human, 0, 1, sees, sees, name => name != "P1", sights, none, p => false);
+            ok &= Check(!targetsUnseen.Exists(r => r.Planet == "P1") && targetsUnseen.Exists(r => r.Planet == "P2" && r.IsTarget),
+                "a planet not seen is not listed, and a seen empty one is a target without the AI's knowledge having been updated");
+
+            // Hostile activity.
+            ok &= Check(HumanPlanetTable.Count(rows, PlanetFilter.Hostile) == 0, "nothing hostile yet");
+            f.P(0).ConversionBy = 1;
+            var own = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, sees, seen, sights, BlockadeView.Of("P0"), p => false);
+            ok &= Check(own.Find(r => r.Planet == "P0").IsHostile && own.Find(r => r.Planet == "P0").Alerts.Contains("Blockaded")
+                        && own.Find(r => r.Planet == "P0").Alerts.Contains("Converting"), "FilterHostileOwnPlanet: blockaded and converting");
+            f.P(0).ConversionBy = Planet.NoOwner;
+            var rival = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, sees, seen, sights, none, p => p.PlanetName == "P1");
+            ok &= Check(rival.Find(r => r.Planet == "P1").IsHostile, "FilterHostileRivalPlanet: the human blockades it, out of sight");
+            f.P(2).ConversionBy = 0;
+            var conv = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, sees, seen, sights, none, p => false);
+            ok &= Check(conv.Find(r => r.Planet == "P2").IsHostile, "a rival planet the human converts is hostile");
+            f.P(2).ConversionBy = Planet.NoOwner;
+            f.P(1).DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>());
+            var docked = HumanPlanetTable.Build(f.Map, f.Human, 0, 10, sees, sees, seen, sights, none, p => false);
+            ok &= Check(!docked.Find(r => r.Planet == "P1").IsHostile, "DockedOnlyStaysOut: ships docked at a rival planet are not hostile activity");
+        }
+
+        var a = new PlanetRow { Planet = "A", Type = "T", OwnerText = "Player 2", Pop = 5, Food = 1f, BuildItem = "Zed", Ships = 2, Alerts = "" };
+        var b = new PlanetRow { Planet = "B", Type = "T", OwnerText = "", Pop = 9, Food = null, BuildItem = "Alpha", Ships = null, Alerts = "Blockaded" };
+        var c = new PlanetRow { Planet = "C", Type = "T", OwnerText = "Player 10", Pop = 5, Food = 3f, BuildItem = "", Ships = 2, Alerts = "" };
+        var table = new List<PlanetRow> { c, b, a };
+
+        var s = new SortState();
+        s = HumanPlanetTable.Click(s, PlanetColumn.Pop);
+        ok &= Check(s.Active && s.Descending, "ClickCycle: the first click sorts descending");
+        s = HumanPlanetTable.Click(s, PlanetColumn.Pop);
+        ok &= Check(!s.Descending, "the second click sorts ascending");
+        s = HumanPlanetTable.Click(s, PlanetColumn.Pop);
+        ok &= Check(s.Descending, "the third click descends again");
+        s = HumanPlanetTable.Click(s, PlanetColumn.Food);
+        ok &= Check(s.Column == PlanetColumn.Food && s.Descending, "another heading starts at descending");
+
+        var byPop = HumanPlanetTable.Sort(table, new SortState { Column = PlanetColumn.Pop, Descending = true, Active = true }).Select(r => r.Planet);
+        ok &= Check(byPop.SequenceEqual(new[] { "B", "A", "C" }), "SortNumericAndText: numeric descending, the 5-5 tie by planet name");
+        var byPopAsc = HumanPlanetTable.Sort(table, new SortState { Column = PlanetColumn.Pop, Descending = false, Active = true }).Select(r => r.Planet);
+        ok &= Check(byPopAsc.SequenceEqual(new[] { "A", "C", "B" }), "ascending: the tie is still by planet name");
+        var byFoodDesc = HumanPlanetTable.Sort(table, new SortState { Column = PlanetColumn.Food, Descending = true, Active = true }).Select(r => r.Planet);
+        var byFoodAsc = HumanPlanetTable.Sort(table, new SortState { Column = PlanetColumn.Food, Descending = false, Active = true }).Select(r => r.Planet);
+        ok &= Check(byFoodDesc.SequenceEqual(new[] { "C", "A", "B" }) && byFoodAsc.SequenceEqual(new[] { "A", "C", "B" }), "BlanksLastBothDirections");
+        var byBuild = HumanPlanetTable.Sort(table, new SortState { Column = PlanetColumn.Building, Descending = false, Active = true }).Select(r => r.Planet);
+        ok &= Check(byBuild.SequenceEqual(new[] { "B", "A", "C" }), "BuildingSortsByItemName: Alpha, Zed, then the blank");
+        var allBlank = HumanPlanetTable.Sort(table, new SortState { Column = PlanetColumn.Alerts, Descending = true, Active = true }).Select(r => r.Planet);
+        ok &= Check(allBlank.SequenceEqual(new[] { "B", "A", "C" }), "BlanksAndTiesSortStable: the blanks come in planet-name order");
+        ok &= Check(HumanPlanetTable.Search(table, "b").Count == 1 && HumanPlanetTable.Search(table, "").Count == 3 && HumanPlanetTable.Search(table, "zz").Count == 0,
+            "SearchNarrowsActiveFilter: case-insensitive contains, empty text returns all");
         return ok;
     }
 
@@ -256,6 +395,7 @@ public static class HumanUiSelfCheck
 
             f.Own(2, 5, player: 1);
             ok &= Check(HumanPlanetView.ColonizeOptions(f.Map, f.Human, f.P(0), 3).Select(o => o.Target.PlanetName).SequenceEqual(new[] { "P1" }), "a full rival planet is not a target");
+            ok &= Check(HumanPlanetView.ColonizeOptions(f.Map, f.Human, f.P(0), 3, name => false).Count == 0, "planets the human has not seen are not offered");
             f.Map.Knowledge.SetKnownPlanets(0, new[] { "P0" });
             ok &= Check(HumanPlanetView.ColonizeOptions(f.Map, f.Human, f.P(0), 3).Count == 0, "planets the human does not know are not targets");
         }

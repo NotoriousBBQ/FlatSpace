@@ -20,6 +20,7 @@ namespace Game.UI.MainGameScreenUI
         private Label _grotsitsLabel;
         private Button _researchButton;
         private Button _fleetsButton;
+        private Button _planetsButton;
         private Button _pauseBanner;
         private string _pauseBannerPlanet;
 
@@ -51,6 +52,15 @@ namespace Game.UI.MainGameScreenUI
             HumanUiKit.StyleButton(_fleetsButton);
             root.Add(_fleetsButton);
 
+            // The planets screen (search, filters, one row per known planet) opens from the button under Fleets, or the P key.
+            _planetsButton = new Button(() => PlanetsScreen.Toggle(root)) { text = "Planets" };
+            _planetsButton.style.position = Position.Absolute;
+            _planetsButton.style.top = 112;
+            _planetsButton.style.right = 10;
+            _planetsButton.style.display = DisplayStyle.None;
+            HumanUiKit.StyleButton(_planetsButton);
+            root.Add(_planetsButton);
+
             // Why the timer stopped, shown at once and clickable to go there; hidden otherwise.
             _pauseBanner = new Button(() => { if (!string.IsNullOrEmpty(_pauseBannerPlanet)) Gameboard.Instance.GoToPlanet(_pauseBannerPlanet); });
             _pauseBanner.style.position = Position.Absolute;
@@ -79,6 +89,12 @@ namespace Game.UI.MainGameScreenUI
             _gameButtonHandler.Setup(root, _notificationListController);
             _gameButtonHandler.enabled = true;
             
+        }
+
+        /// <summary>Opens or closes the Planets screen; the P key calls this through Gameboard.</summary>
+        public void TogglePlanets()
+        {
+            if (uiDocument != null) PlanetsScreen.Toggle(uiDocument.rootVisualElement);
         }
 
         /// <summary>Shows why the timer stopped (and where, on click), or hides the banner when text is null or empty.</summary>
@@ -117,6 +133,13 @@ namespace Game.UI.MainGameScreenUI
                 _fleetsButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
                 if (!human) FleetSummaryScreen.Close();
                 else FleetSummaryScreen.Refresh();
+            }
+            if (_planetsButton != null)
+            {
+                var human = Gameboard.Instance != null && Gameboard.Instance.HumanPlayerId >= 0;
+                _planetsButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
+                if (!human) PlanetsScreen.Close();
+                else PlanetsScreen.Refresh();
             }
         }
 

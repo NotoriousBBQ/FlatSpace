@@ -49,9 +49,9 @@ namespace FlatSpace
 
             /// <summary>
             /// The known planets the human could colonize from here: each is one the colonize command would accept (HumanCommandProcessor.Check),
-            /// with the turns the colonist takes. Nearest first. Empty when nothing can be colonized from this planet at all.
+            /// with the turns the colonist takes. Nearest first. hasSeen (when given) limits the list to planets the human has seen. Empty when nothing can be colonized from this planet at all.
             /// </summary>
-            public static List<ColonizeOption> ColonizeOptions(GameAIMap map, PlayerAI human, Planet origin, int turn)
+            public static List<ColonizeOption> ColonizeOptions(GameAIMap map, PlayerAI human, Planet origin, int turn, Func<string, bool> hasSeen = null)
             {
                 var options = new List<ColonizeOption>();
                 var humanId = human.Player.playerID;
@@ -63,6 +63,7 @@ namespace FlatSpace
                 {
                     var target = map.GetPlanet(entry.Key);
                     if (target == null) continue;
+                    if (hasSeen != null && !hasSeen(entry.Key)) continue;   // the AI's knowledge reaches further than what the human has seen
                     if (checker.Check(new HumanCommand { type = "colonize", origin = origin.PlanetName, target = target.PlanetName }) != null) continue;
                     // The same rounding the colonize command uses for the colonist's delay, so the list and the order agree.
                     options.Add(new ColonizeOption { Target = target, Turns = Math.Max(1, Convert.ToInt32(entry.Value.Cost / speed)) });
