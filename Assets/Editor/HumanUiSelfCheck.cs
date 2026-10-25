@@ -69,6 +69,11 @@ public static class HumanUiSelfCheck
 
         ok &= Check(HumanHoverText.Order(ShipOrder(2, 3)) == "2 WarShip to P1, arrives in 3 turns", "ship order text: ships, destination, turns");
         ok &= Check(HumanHoverText.Order(ShipOrder(1, 1)) == "1 WarShip to P1, arrives in 1 turn", "one turn is singular");
+        ok &= Check(HumanHoverText.Order(ShipOrder(2, 3), false) == "2 ships to P1, arrives in 3 turns" && HumanHoverText.Order(ShipOrder(1, 1), false) == "1 ship to P1, arrives in 1 turn",
+            "a rival's ship order shows only the number of ships");
+        ok &= Check(HumanHoverText.ShipCount(1) == "1 ship" && HumanHoverText.ShipCount(4) == "4 ships" && HumanHoverText.ShipCount(0) == "0 ships", "ship count text");
+        ok &= Check(HumanHoverText.ShowFullFleetDetail(1, 0) == false && HumanHoverText.ShowFullFleetDetail(0, 0) && HumanHoverText.ShowFullFleetDetail(1, -1) && HumanHoverText.ShowFullFleetDetail(0, -1),
+            "full fleet detail: my own fleets, and every fleet when no human plays; a rival's fleet only while a human plays is a count");
         ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport, 7, 3)) == "7 Food to P1, arrives in 3 turns", "food shipment text");
         ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypeGrotsitsTransport, 7.5f, 2)) == "7.5 Grotsits to P1, arrives in 2 turns", "grotsits shipment text keeps one decimal");
         ok &= Check(HumanHoverText.Order(TypedOrder(GameAI.GameAIOrder.OrderType.OrderTypePopulationTransport, 1, 4)) == "Colonist to P1, arrives in 4 turns", "colonist text");

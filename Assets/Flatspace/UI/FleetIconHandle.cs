@@ -40,7 +40,10 @@ public class FleetIconHandle : MonoBehaviour, IPointerEnterHandler, IPointerExit
             .Where(s => s.Owner == Owner && Ship.CountsAsShip(s.Kind) && (Owner != human || s.FleetId == FleetId))
             .Select(s => s.Kind);
         var label = Owner == human ? $"Fleet {FleetId + 1}" : Owner < 0 ? "Unowned" : $"Player {Owner}";
-        return $"{label}: {HumanHoverText.Ships(kinds)}";
+        // A rival's fleet shows only how many ships it has while a human plays (HumanHoverText.ShowFullFleetDetail).
+        return HumanHoverText.ShowFullFleetDetail(Owner, human)
+            ? $"{label}: {HumanHoverText.Ships(kinds)}"
+            : $"{label}: {HumanHoverText.ShipCount(kinds.Count())}";
     }
 
     public void OnPointerEnter(PointerEventData eventData)

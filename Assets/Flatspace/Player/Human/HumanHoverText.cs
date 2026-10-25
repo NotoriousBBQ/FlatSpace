@@ -15,6 +15,15 @@ namespace FlatSpace
         /// </summary>
         public static class HumanHoverText
         {
+            /// <summary>
+            /// Whether the human may see the ships of a fleet in detail (kinds, health): their own fleets always, and every fleet when no human plays.
+            /// A rival's fleet shows only a ship count (ShipCount). A future debug mode (FUTURE_FEATURES.md) would make this true for everything.
+            /// </summary>
+            public static bool ShowFullFleetDetail(int owner, int humanId) => humanId < 0 || owner == humanId;
+
+            /// <summary>"4 ships", "1 ship".</summary>
+            public static string ShipCount(int count) => $"{count} {(count == 1 ? "ship" : "ships")}";
+
             /// <summary>"3 WarShip, 1 SiegeShip": counts per kind in enum order; "no ships" for none.</summary>
             public static string Ships(IEnumerable<Ship.ShipKind> kinds)
             {
@@ -27,7 +36,7 @@ namespace FlatSpace
             /// in-progress flags): ships, food or grotsits with the amount, a colonist, or a colony's food rider, then the destination and the
             /// turns left.
             /// </summary>
-            public static string Order(GameAI.GameAIOrder order)
+            public static string Order(GameAI.GameAIOrder order, bool fullShipDetail = true)
             {
                 if (order == null) return null;
                 string what;
@@ -38,7 +47,7 @@ namespace FlatSpace
                         var count = order.Fleet.Snapshots != null && order.Fleet.Snapshots.Count > 0
                             ? order.Fleet.Snapshots.Count
                             : System.Convert.ToInt32(order.Data);
-                        what = Ships(Enumerable.Repeat(order.Fleet.Kind, count));
+                        what = fullShipDetail ? Ships(Enumerable.Repeat(order.Fleet.Kind, count)) : ShipCount(count);
                         break;
                     case GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport:
                         what = Amount(order.Data) + " Food";
