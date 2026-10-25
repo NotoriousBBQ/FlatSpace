@@ -62,6 +62,24 @@ namespace FlatSpace
             private readonly HashSet<string> _blockaded = new HashSet<string>();
             private bool _researchIdle;
 
+            /// <summary>
+            /// The blockades worth telling the human about: those on a planet it owns, and those on a planet where one of its own orders was cut (the
+            /// remembered blockades). The blockade view also lists every visible planet where a rival's docked offense beats the human's, which for a
+            /// rival's own garrisoned planet next to the human's changes nothing for the human; that is routing information, not news.
+            /// </summary>
+            public static List<string> RelevantBlockades(GameAIMap map, int humanId, IEnumerable<string> blockaded, IEnumerable<string> cutPlanets)
+            {
+                var result = new List<string>();
+                if (blockaded == null) return result;
+                var cuts = new HashSet<string>(cutPlanets ?? new string[0]);
+                foreach (var name in blockaded)
+                {
+                    var planet = map.GetPlanet(name);
+                    if ((planet != null && planet.Owner == humanId) || cuts.Contains(name)) result.Add(name);
+                }
+                return result;
+            }
+
             public List<HumanEvent> Collect(GameAIMap map, PlayerAI human, HumanTurnInput input)
             {
                 var events = new List<HumanEvent>();
