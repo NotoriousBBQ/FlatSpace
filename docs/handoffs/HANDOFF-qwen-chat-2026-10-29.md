@@ -48,9 +48,9 @@ Uncommitted when this was written: `FUTURE_FEATURES.md` (new "Experiment with ot
 
 ## Open items
 
-1. Remove the temporary hook position: send the request only after `SubmitHumanCommands` succeeds (a refused command still gets a reply today).
-2. Message text: the model gets the raw `declareWar` / `makePeace` / `surrender` strings; map them to sentences ("Player 0 has declared war on you").
-3. The 66 / 33 tone thresholds are duplicated in `GetToneFromDiplomacyState` and `GenerateDynamicSystemPrompt`; make one helper.
+1. DONE 2026-10-29 (branch `qwen-chat-followups`): the request is sent only after `SubmitHumanCommands` applied the command.
+2. DONE 2026-10-29: `DiplomacyScreen.EventMessage` turns `declareWar` / `makePeace` / `surrender` into sentences.
+3. DONE 2026-10-29: one `Tone` enum and `ToneOf` in `ChatClient.cs` (`HostileFrom` 66, `FearfulBelow` 33) drive the sample and the prompt.
 4. Model experiments (`Qwen/model-experiments.md`): `gemma3:4b` first; `qwen3:4b` needs `"think": false` on the payload.
 5. Tie replies to the AI's real decisions once ask-and-trade exists (the FUTURE_FEATURES entry, "never the other way round").
 6. A failed request leaves the old reply in the box with only a console warning; there is no on-screen error.
