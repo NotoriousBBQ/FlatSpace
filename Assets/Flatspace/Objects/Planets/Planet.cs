@@ -420,7 +420,198 @@ public class Planet : MonoBehaviour
     }
     
 
-    private void AssignWorkForStrategy() 
+    #region Manual worker assignment (human UI)
+
+    /// <summary>The four jobs a person can have, in the order the panel shows them and the override stores them.</summary>
+    public enum WorkerCategory { Food = 0, Grotsits = 1, Industry = 2, Research = 3 }
+
+    private const int WorkerCategoryCount = 4;
+
+    // The player's own split (food, grotsits, industry, research), adding up to Population.Count; null when the algorithm decides.
+    private int[] _workerOverride;
+
+    /// <summary>True when the human has set this planet's worker split by hand; AssignWorkForStrategy then applies it over the algorithm's.</summary>
+    public bool HasWorkerOverride { get; private set; }
+
+    /// <summary>
+    /// Told when a person is placed or removed by the algorithm rule ("Placed", "Arrival Industry" / "Loss Food") and when an override ends
+    /// ("Cleared", reason). Set by Gameboard while a human plays for the tuning log; null (the default, and in self-checks) means nobody listens.
+    /// </summary>
+    public static System.Action<Planet, string, string> WorkerEventSink;
+
+    /// <summary>The category the strategy's switch gives leftover workers to (Balanced, Growth and the Food strategies: Food).</summary>
+    public static WorkerCategory LeftoverCategory(PlanetStrategy strategy)
+    {
+        switch (strategy)
+        {
+            case PlanetStrategy.PlanetStrategyGrotsits:
+            case PlanetStrategy.PlanetStrategyFocusedGrotsits:
+                return WorkerCategory.Grotsits;
+            case PlanetStrategy.PlanetStrategyResearch:
+            case PlanetStrategy.PlanetStrategyFocusedResearch:
+                return WorkerCategory.Research;
+            case PlanetStrategy.PlanetStrategyIndustry:
+            case PlanetStrategy.PlanetStrategyFocusedIndustry:
+                return WorkerCategory.Industry;
+            default:
+                return WorkerCategory.Food;
+        }
+    }
+
+    private static int IndexOfMax(int[] counts)
+    {
+        var best = 0;
+        for (var i = 1; i < counts.Length; i++)
+            if (counts[i] > counts[best]) best = i;
+        return best;
+    }
+
+    /// <summary>
+    /// Makes a worker split add up to the population: negatives read as 0, an excess comes off Food first and then the largest category
+    /// (ties to the lowest index), a shortfall goes to the strategy's leftover category. The algorithm itself may assign more food workers than
+    /// there are people on purpose (Food, FocusedFood); the panel and the override never do.
+    /// </summary>
+    public static int[] NormalizeWorkers(int[] raw, int population, PlanetStrategy strategy)
+    {
+        var counts = new int[WorkerCategoryCount];
+        for (var i = 0; i < WorkerCategoryCount; i++)
+            counts[i] = raw != null && i < raw.Length ? Math.Max(raw[i], 0) : 0;
+        var sum = counts.Sum();
+        while (sum > population)
+        {
+            var from = counts[(int)WorkerCategory.Food] > 0 ? (int)WorkerCategory.Food : IndexOfMax(counts);
+            counts[from]--;
+            sum--;
+        }
+        if (sum < population)
+            counts[(int)LeftoverCategory(strategy)] += population - sum;
+        return counts;
+    }
+
+    /// <summary>Where one more person goes: the category where the algorithm's count exceeds the player's by the most (ties: the leftover category, then the lowest index).</summary>
+    public static WorkerCategory PlaceOne(int[] current, int[] automatic, PlanetStrategy strategy)
+    {
+        var leftover = (int)LeftoverCategory(strategy);
+        var best = 0;
+        var bestDeficit = int.MinValue;
+        for (var i = 0; i < WorkerCategoryCount; i++)
+        {
+            var deficit = automatic[i] - current[i];
+            if (deficit > bestDeficit || (deficit == bestDeficit && i == leftover))
+            {
+                best = i;
+                bestDeficit = deficit;
+            }
+        }
+        return (WorkerCategory)best;
+    }
+
+    /// <summary>Where one person leaves: among categories with people, where the player's count exceeds the algorithm's by the most (ties: the larger category, then the lowest index).</summary>
+    public static WorkerCategory RemoveOne(int[] current, int[] automatic)
+    {
+        var best = -1;
+        var bestExcess = int.MinValue;
+        for (var i = 0; i < WorkerCategoryCount; i++)
+        {
+            if (current[i] <= 0) continue;
+            var excess = current[i] - automatic[i];
+            if (best < 0 || excess > bestExcess || (excess == bestExcess && current[i] > current[best]))
+            {
+                best = i;
+                bestExcess = excess;
+            }
+        }
+        return best < 0 ? WorkerCategory.Food : (WorkerCategory)best;
+    }
+
+    // The algorithm's split as it stands in the worker fields (call after AssignAutomaticWorkers), made to add up to the population.
+    private int[] AutomaticWorkerCounts()
+        => NormalizeWorkers(new[] { FoodWorkers, GrotsitsWorkers, IndustryWorkers, ResearchWorkers }, Population.Count, CurrentStrategy);
+
+    private void AdjustToPopulation(int[] counts, int[] automatic, bool raiseEvents)
+    {
+        var sum = counts.Sum();
+        while (sum < Population.Count)
+        {
+            var category = PlaceOne(counts, automatic, CurrentStrategy);
+            counts[(int)category]++;
+            sum++;
+            if (raiseEvents) WorkerEventSink?.Invoke(this, "Placed", "Arrival " + category);
+        }
+        while (sum > Population.Count)
+        {
+            var category = RemoveOne(counts, automatic);
+            counts[(int)category]--;
+            sum--;
+            if (raiseEvents) WorkerEventSink?.Invoke(this, "Placed", "Loss " + category);
+        }
+    }
+
+    private void WriteOverrideToWorkerFields()
+    {
+        FoodWorkers = _workerOverride[(int)WorkerCategory.Food];
+        GrotsitsWorkers = _workerOverride[(int)WorkerCategory.Grotsits];
+        IndustryWorkers = _workerOverride[(int)WorkerCategory.Industry];
+        ResearchWorkers = _workerOverride[(int)WorkerCategory.Research];
+    }
+
+    // Population changes since the override was set are absorbed here, one person at a time, by the strategy's rule.
+    private void ApplyWorkerOverride()
+    {
+        AdjustToPopulation(_workerOverride, AutomaticWorkerCounts(), raiseEvents: true);
+        WriteOverrideToWorkerFields();
+    }
+
+    /// <summary>
+    /// The split the panel shows: the override when there is one, else the algorithm's, always adding up to the population. Worked out on
+    /// demand (the worker fields can be stale after an arrival); the stored override is not changed and the worker fields are left as they were.
+    /// </summary>
+    public int[] CurrentWorkerCounts()
+    {
+        if (Population.Count == 0) return new int[WorkerCategoryCount];
+        var saved = (FoodWorkers, GrotsitsWorkers, IndustryWorkers, ResearchWorkers);
+        AssignAutomaticWorkers();
+        var automatic = AutomaticWorkerCounts();
+        (FoodWorkers, GrotsitsWorkers, IndustryWorkers, ResearchWorkers) = saved;
+        if (!HasWorkerOverride) return automatic;
+        var counts = (int[])_workerOverride.Clone();
+        AdjustToPopulation(counts, automatic, raiseEvents: false);
+        return counts;
+    }
+
+    /// <summary>Stores the human's split (the caller has checked it adds up to the population) and uses it from now on.</summary>
+    public void SetWorkerOverride(int[] counts)
+    {
+        _workerOverride = (int[])counts.Clone();
+        HasWorkerOverride = true;
+        WriteOverrideToWorkerFields();
+    }
+
+    /// <summary>Hands the split back to the algorithm. Does nothing without an override. reason: "Automatic", "OwnerChanged" or "NoPopulation".</summary>
+    public void ClearWorkerOverride(string reason)
+    {
+        if (!HasWorkerOverride) return;
+        HasWorkerOverride = false;
+        _workerOverride = null;
+        WorkerEventSink?.Invoke(this, "Cleared", reason);
+    }
+
+    /// <summary>A copy of the stored split for the save, or null when the algorithm decides.</summary>
+    public int[] WorkerOverrideCounts() => HasWorkerOverride ? (int[])_workerOverride.Clone() : null;
+
+    /// <summary>Puts a saved split back (no event, no placement); the caller has checked the length and the sum.</summary>
+    public void RestoreWorkerOverride(int[] counts) => SetWorkerOverride(counts);
+
+    private void AssignWorkForStrategy()
+    {
+        AssignAutomaticWorkers();
+        if (HasWorkerOverride)
+            ApplyWorkerOverride();
+    }
+
+    #endregion
+
+    private void AssignAutomaticWorkers() 
     {
         int remainingWorkers;
         switch (CurrentStrategy)
@@ -857,7 +1048,10 @@ public class Planet : MonoBehaviour
         SetPlanetOwnership();
         // An emptied planet is dead (every path that removes inhabitants, including the economy's starvation loss, ends here): its bunkers go too.
         if (Population.Count == 0)
+        {
+            ClearWorkerOverride("NoPopulation");
             ClearBunkers();
+        }
         // On a mixed planet, a player whose last inhabitant just left (starvation, launched as a colonist) loses its bunkers too: they
         // would otherwise block conversion and fire at the planet's new owner. Other players' bunkers stay.
         else if (changeAmount < 0 && !Population.Exists(x => x.Player == playerId))
@@ -870,7 +1064,11 @@ public class Planet : MonoBehaviour
         Owner = PlayerWithMostPopulation();
         // A planet takes its new owner's default: manual for the human player, automatic (the AI chooses) for anyone else.
         if (Owner != before)
+        {
+            // A dead planet reports NoPopulation instead (ChangePopulation).
+            if (Population.Count > 0) ClearWorkerOverride("OwnerChanged");
             ManualDevelopment = Owner != NoOwner && HumanOwnerTest != null && HumanOwnerTest(Owner);
+        }
     }
 
     /// <summary>

@@ -465,6 +465,16 @@ namespace FlatSpace
                 // Planets change hands under this rule from now on (manual for the human, automatic otherwise), and the human's
                 // planets already held start manual. A loaded save keeps its own flags (GameAIMap.SetPlanetSimulationStats).
                 Planet.HumanOwnerTest = id => id == MatchSettings.HumanPlayerId;
+                // A manual worker split exists only on the human's planets, so every event is the human's (the owner is already the new one when it ends as OwnerChanged).
+                Planet.WorkerEventSink = (planet, kind, detail) =>
+                {
+                    if (kind == "Cleared") AITuningLogger.LogWorkersCleared(TurnNumber, MatchSettings.HumanPlayerId, planet.PlanetName, detail);
+                    else
+                    {
+                        var parts = detail.Split(' ');   // "Arrival Industry" / "Loss Food"
+                        AITuningLogger.LogWorkersPlaced(TurnNumber, MatchSettings.HumanPlayerId, planet.PlanetName, parts[0], parts.Length > 1 ? parts[1] : "");
+                    }
+                };
                 if (freshMatch)
                     foreach (var planet in GameAI.GameAIMap.PlanetList)
                         if (planet.Owner == playerId)
@@ -690,6 +700,7 @@ namespace FlatSpace
                 TurnNumber = 1;
                 TurnLimitReached = false;
                 Planet.HumanOwnerTest = null;   // no human until SetHumanPlayer; planets start automatic
+                Planet.WorkerEventSink = null;
                 HumanPause = FlatSpace.Human.HumanPauseSettings.Defaults();
                 _humanEvents = new FlatSpace.Human.HumanTurnEvents();
                 LastHumanEvents = new List<FlatSpace.Human.HumanEvent>();

@@ -40,6 +40,9 @@ public static class HumanModeSelfCheck
         ok &= RunPauseSettingsChecks();
         ok &= RunDefeatChecks();
         ok &= RunReviewFixChecks();
+        ok &= RunWorkerOverrideChecks();
+        ok &= RunWorkerCommandChecks();
+        ok &= RunWorkerSaveChecks();
         return ok;
     }
 
@@ -1414,4 +1417,249 @@ public static class HumanModeSelfCheck
     }
 
     #endregion
+
+    #region Manual worker assignment (override, placement)
+
+    private static bool SameCounts(int[] a, int[] b) => a != null && b != null && a.SequenceEqual(b);
+
+    public static bool RunWorkerOverrideChecks()
+    {
+        var ok = true;
+
+        // Pure helpers
+        var industry = Planet.PlanetStrategy.PlanetStrategyIndustry;
+        ok &= Check(SameCounts(Planet.NormalizeWorkers(new[] { 8, 0, 0, 0 }, 5, Planet.PlanetStrategy.PlanetStrategyFood), new[] { 5, 0, 0, 0 }),
+            "NormalizeWorkers: an over-assigned Food is cut to the population");
+        ok &= Check(SameCounts(Planet.NormalizeWorkers(new[] { 2, 2, 2, 2 }, 9, Planet.PlanetStrategy.PlanetStrategyResearch), new[] { 2, 2, 2, 3 }),
+            "NormalizeWorkers: a shortfall goes to the strategy's leftover category");
+        ok &= Check(SameCounts(Planet.NormalizeWorkers(new[] { 3, 3, 3, 3 }, 8, industry), new[] { 0, 2, 3, 3 }),
+            "NormalizeWorkers: an excess comes off Food first, then the largest category (ties to the lowest index)");
+        ok &= Check(SameCounts(Planet.NormalizeWorkers(new[] { -2, 0, 4, 0 }, 4, industry), new[] { 0, 0, 4, 0 }),
+            "NormalizeWorkers: a negative count reads as 0");
+        ok &= Check(Planet.LeftoverCategory(Planet.PlanetStrategy.PlanetStrategyFocusedGrotsits) == Planet.WorkerCategory.Grotsits
+                    && Planet.LeftoverCategory(Planet.PlanetStrategy.PlanetStrategyBalanced) == Planet.WorkerCategory.Food
+                    && Planet.LeftoverCategory(Planet.PlanetStrategy.PlanetStrategyFocusedResearch) == Planet.WorkerCategory.Research
+                    && Planet.LeftoverCategory(industry) == Planet.WorkerCategory.Industry,
+            "LeftoverCategory follows the strategy's leftover rule");
+        ok &= Check(Planet.PlaceOne(new[] { 2, 0, 2, 0 }, new[] { 2, 0, 2, 1 }, industry) == Planet.WorkerCategory.Research,
+            "PlaceOneByDeficit: the new person goes where the algorithm has the largest surplus over the player's count");
+        ok &= Check(Planet.PlaceOne(new[] { 1, 1, 1, 1 }, new[] { 2, 2, 1, 1 }, industry) == Planet.WorkerCategory.Food,
+            "PlaceOne: an equal deficit that does not include the leftover category goes to the lowest index");
+        ok &= Check(Planet.PlaceOne(new[] { 1, 1, 1, 1 }, new[] { 2, 1, 2, 1 }, industry) == Planet.WorkerCategory.Industry,
+            "PlaceOne: an equal deficit that includes the leftover category goes to it");
+        ok &= Check(Planet.RemoveOne(new[] { 0, 3, 0, 1 }, new[] { 1, 2, 0, 1 }) == Planet.WorkerCategory.Grotsits,
+            "RemoveOneSkipsEmptyCategory: the loss comes out of the category furthest above the algorithm, never an empty one");
+        ok &= Check(Planet.RemoveOne(new[] { 0, 0, 0, 2 }, new[] { 1, 1, 0, 0 }) == Planet.WorkerCategory.Research,
+            "RemoveOne: the only category with people is the one chosen");
+
+        // On a planet
+        using (var f = new Fixture(1))
+        {
+            var planet = f.P(0);
+            planet.CurrentStrategy = industry;   // zero worker rates in a fixture: all workers go to the leftover category
+            f.Own(0, 5);
+
+            var reference = new Fixture(1);
+            try
+            {
+                reference.P(0).CurrentStrategy = industry;
+                reference.Own(0, 5);
+                planet.ProjectProduction();
+                reference.P(0).ProjectProduction();
+                ok &= Check(!planet.HasWorkerOverride
+                            && SameCounts(planet.CurrentWorkerCounts(), new[] { 0, 0, 5, 0 })
+                            && planet.FoodWorkers == reference.P(0).FoodWorkers && planet.GrotsitsWorkers == reference.P(0).GrotsitsWorkers
+                            && planet.IndustryWorkers == reference.P(0).IndustryWorkers && planet.ResearchWorkers == reference.P(0).ResearchWorkers,
+                    "NoOverrideSameAsBefore: without an override the shown split is the normalized algorithm split and the worker fields are the algorithm's");
+            }
+            finally
+            {
+                reference.Dispose();
+            }
+
+            var events = new List<string>();
+            Planet.WorkerEventSink = (p, kind, detail) => events.Add(kind + ":" + detail);
+            try
+            {
+                planet.SetWorkerOverride(new[] { 1, 1, 2, 1 });
+                planet.ProjectProduction();
+                ok &= Check(planet.HasWorkerOverride && SameCounts(planet.CurrentWorkerCounts(), new[] { 1, 1, 2, 1 }),
+                    "OverrideRespectedByProjectProduction: the shown split is the override");
+                ok &= Check(planet.FoodWorkers == 1 && planet.GrotsitsWorkers == 1 && planet.IndustryWorkers == 2 && planet.ResearchWorkers == 1,
+                    "OverrideRespectedByProjectProduction: the worker fields are the override");
+
+                // two arrivals: the algorithm (all Industry) says both go to Industry
+                f.Own(0, 2);
+                planet.ProjectProduction();
+                ok &= Check(SameCounts(planet.WorkerOverrideCounts(), new[] { 1, 1, 4, 1 }),
+                    "WorkerPlacementMultiStep: two arrivals are placed one at a time by the strategy");
+                ok &= Check(events.Count == 2 && events.TrueForAll(e => e == "Placed:Arrival Industry"),
+                    "WorkerPlacementMultiStep: one Placed event per person");
+
+                // a loss of five (7 -> 2): counts stay non-negative and add up
+                events.Clear();
+                f.Own(0, -5);
+                planet.ProjectProduction();
+                var after = planet.WorkerOverrideCounts();
+                ok &= Check(after != null && after.Sum() == 2 && after.All(c => c >= 0),
+                    "WorkerPlacementMultiStep: after a loss of five the counts add up to the population and none is negative");
+                ok &= Check(events.Count == 5 && events.TrueForAll(e => e.StartsWith("Placed:Loss ")),
+                    "WorkerPlacementMultiStep: one Placed event per person removed");
+
+                // owner change clears
+                events.Clear();
+                planet.ChangePopulation(6, 1);   // 2 against 6: player 1 takes the planet (no tie, so no Gameboard lookup)
+                ok &= Check(planet.Owner == 1 && !planet.HasWorkerOverride && events.Contains("Cleared:OwnerChanged"),
+                    "OverrideClearsOnOwnerChange: a planet that changes hands loses the override");
+            }
+            finally
+            {
+                Planet.WorkerEventSink = null;
+            }
+        }
+
+        using (var f = new Fixture(1))
+        {
+            var planet = f.P(0);
+            planet.CurrentStrategy = industry;
+            f.Own(0, 3);
+            var reasons = new List<string>();
+            Planet.WorkerEventSink = (p, kind, detail) => { if (kind == "Cleared") reasons.Add(detail); };
+            try
+            {
+                planet.SetWorkerOverride(new[] { 1, 0, 2, 0 });
+                f.Own(0, -3);
+                ok &= Check(planet.Population.Count == 0 && !planet.HasWorkerOverride && reasons.Contains("NoPopulation"),
+                    "OverrideClearsAtZeroPopulation: a dead planet loses the override");
+                planet.SetWorkerOverride(new[] { 0, 0, 0, 0 });
+                planet.ClearWorkerOverride("Automatic");
+                ok &= Check(!planet.HasWorkerOverride && reasons.Contains("Automatic"), "ClearWorkerOverride ends an override with the given reason");
+                var before = reasons.Count;
+                planet.ClearWorkerOverride("Automatic");
+                ok &= Check(reasons.Count == before, "ClearWorkerOverride without an override does nothing");
+            }
+            finally
+            {
+                Planet.WorkerEventSink = null;
+            }
+        }
+        return ok;
+    }
+
+    #endregion
+
+
+    #region Manual worker assignment (command)
+
+    private static HumanCommand AssignCmd(string planet, params int[] counts)
+        => new HumanCommand { type = "assignWorkers", origin = planet, workers = counts == null ? null : new List<int>(counts) };
+
+    public static bool RunWorkerCommandChecks()
+    {
+        var ok = true;
+        using (var f = new Fixture(2))
+        {
+            f.P(0).CurrentStrategy = Planet.PlanetStrategy.PlanetStrategyIndustry;
+            f.Own(0, 5);
+            f.Own(1, 3, player: 1);
+            f.P(0).ManualDevelopment = true;
+            f.P(1).ManualDevelopment = true;
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 4);
+
+            // AssignAppliesAndDetail
+            var results = processor.Apply(new[] { AssignCmd("P0", 1, 1, 2, 1) }, new List<GameAI.GameAIOrder>());
+            ok &= Check(results[0].applied, "assignWorkers on an owned manual planet is accepted");
+            ok &= Check(f.P(0).HasWorkerOverride && SameCounts(f.P(0).CurrentWorkerCounts(), new[] { 1, 1, 2, 1 }),
+                "assignWorkers stores the split");
+            ok &= Check(results[0].detail.Contains("1/1/2/1"), "assignWorkers logs the four counts in its detail");
+
+            // Refusals
+            ok &= Check(Refusal(processor, AssignCmd("Nowhere", 1, 1, 2, 1)) == "UnknownPlanet", "assignWorkers on an unknown planet is UnknownPlanet");
+            ok &= Check(Refusal(processor, AssignCmd("P1", 1, 1, 1, 0)) == "NotYourPlanet", "assignWorkers on a rival's planet is NotYourPlanet");
+            f.P(0).ManualDevelopment = false;
+            ok &= Check(Refusal(processor, AssignCmd("P0", 1, 1, 2, 1)) == "NotManual", "assignWorkers on an automatic planet is NotManual");
+            f.P(0).ManualDevelopment = true;
+            ok &= Check(Refusal(processor, AssignCmd("P0", null)) == "BadWorkerCounts", "assignWorkers with no counts is BadWorkerCounts");
+            ok &= Check(Refusal(processor, AssignCmd("P0", 1, 1, 3)) == "BadWorkerCounts", "assignWorkers with three counts is BadWorkerCounts");
+            ok &= Check(Refusal(processor, AssignCmd("P0", 6, -1, 0, 0)) == "BadWorkerCounts", "assignWorkers with a negative count is BadWorkerCounts");
+            ok &= Check(Refusal(processor, AssignCmd("P0", 1, 1, 1, 1)) == "WorkersDoNotMatchPopulation",
+                "assignWorkers adding up to 4 on a planet of 5 is WorkersDoNotMatchPopulation");
+
+            // StaleDropRefused: a drop built for 5 people arrives after a sixth came
+            var stale = AssignCmd("P0", 0, 0, 3, 2);
+            f.Own(0, 1);
+            ok &= Check(Refusal(processor, stale) == "WorkersDoNotMatchPopulation", "StaleDropRefused: a split for the old population is refused");
+            ok &= Check(SameCounts(f.P(0).WorkerOverrideCounts(), new[] { 1, 1, 2, 1 }), "StaleDropRefused: the refused command changed nothing");
+
+            // CheckIsDryRun
+            f.P(0).ClearWorkerOverride("Automatic");
+            ok &= Check(processor.Check(AssignCmd("P0", 0, 0, 6, 0)) == null, "Check accepts a valid split");
+            ok &= Check(!f.P(0).HasWorkerOverride, "Check stores nothing");
+            ok &= Check(processor.Check(AssignCmd("P0", 0, 0, 5, 0)) == "WorkersDoNotMatchPopulation", "Check returns the refusal reason");
+
+            // AutomaticClearsOverride
+            processor.Apply(new[] { AssignCmd("P0", 0, 0, 6, 0) }, new List<GameAI.GameAIOrder>());
+            ok &= Check(f.P(0).HasWorkerOverride, "precondition: the planet has an override");
+            processor.Apply(new[] { new HumanCommand { type = "setDevelopment", origin = "P0", flag = false } }, new List<GameAI.GameAIOrder>());
+            ok &= Check(f.P(0).HasWorkerOverride && f.P(0).ManualDevelopment, "setDevelopment to manual keeps the override");
+            processor.Apply(new[] { new HumanCommand { type = "setDevelopment", origin = "P0", flag = true } }, new List<GameAI.GameAIOrder>());
+            ok &= Check(!f.P(0).HasWorkerOverride && !f.P(0).ManualDevelopment, "AutomaticClearsOverride: switching to automatic ends the override");
+        }
+        return ok;
+    }
+
+    #endregion
+
+
+    #region Manual worker assignment (saves)
+
+    public static bool RunWorkerSaveChecks()
+    {
+        var ok = true;
+        using (var f = new Fixture(1))
+        {
+            var planet = f.P(0);
+            planet.CurrentStrategy = Planet.PlanetStrategy.PlanetStrategyIndustry;
+            f.Own(0, 5);
+            planet.SetWorkerOverride(new[] { 1, 1, 2, 1 });
+
+            // The save is written the way SaveLoadSystem writes it and read back through JsonUtility.
+            var save = new SaveLoadSystem.GameSave.PlanetSave
+            {
+                name = planet.PlanetName,
+                hasWorkerOverride = planet.HasWorkerOverride,
+                workerOverride = planet.WorkerOverrideCounts() == null ? null : new List<int>(planet.WorkerOverrideCounts())
+            };
+            var read = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>(JsonUtility.ToJson(save));
+            var restored = GameAIMap.WorkerOverrideFromSave(read, 5);
+            ok &= Check(SameCounts(restored, new[] { 1, 1, 2, 1 }), "a saved override round-trips through JSON");
+
+            using (var g = new Fixture(1))
+            {
+                g.P(0).CurrentStrategy = Planet.PlanetStrategy.PlanetStrategyIndustry;
+                g.Own(0, 5);
+                g.P(0).RestoreWorkerOverride(restored);
+                ok &= Check(g.P(0).HasWorkerOverride && SameCounts(g.P(0).CurrentWorkerCounts(), new[] { 1, 1, 2, 1 }),
+                    "a restored override gives the same shown split");
+            }
+
+            // Older saves and bad data load as no override
+            var older = JsonUtility.FromJson<SaveLoadSystem.GameSave.PlanetSave>("{\"name\":\"P0\"}");
+            ok &= Check(GameAIMap.WorkerOverrideFromSave(older, 5) == null, "an older save with no override keys loads with none");
+            save.hasWorkerOverride = false;
+            ok &= Check(GameAIMap.WorkerOverrideFromSave(save, 5) == null, "hasWorkerOverride false loads with none");
+            save.hasWorkerOverride = true;
+            ok &= Check(GameAIMap.WorkerOverrideFromSave(save, 6) == null, "a saved override whose sum is not the population is discarded");
+            save.workerOverride = new List<int> { 1, 1, 3 };
+            ok &= Check(GameAIMap.WorkerOverrideFromSave(save, 5) == null, "a saved override that is not four counts is discarded");
+            save.workerOverride = new List<int> { 6, -1, 0, 0 };
+            ok &= Check(GameAIMap.WorkerOverrideFromSave(save, 5) == null, "a saved override with a negative count is discarded");
+            save.workerOverride = null;
+            ok &= Check(GameAIMap.WorkerOverrideFromSave(save, 5) == null, "a missing list is discarded");
+        }
+        return ok;
+    }
+
+    #endregion
+
 }

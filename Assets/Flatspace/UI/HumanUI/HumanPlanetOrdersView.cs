@@ -17,10 +17,14 @@ namespace Game.UI.MainGameScreenUI
         private readonly VisualElement _container;
         private readonly VisualElement _strip;
         private readonly ScrollView _scroll;
+        private readonly HumanWorkersView _workers = new HumanWorkersView();
         private Planet _boundPlanet;
         private bool _improvementsOpen;
         private bool _shipsOpen;
         private string _status = "";
+
+        /// <summary>True when the last Bind showed the order section; the stock and rate lines in it then replace the figures at the top of the panel.</summary>
+        public bool IsShown { get; private set; }
 
         public HumanPlanetOrdersView(VisualElement panel)
         {
@@ -40,14 +44,17 @@ namespace Game.UI.MainGameScreenUI
         {
             var board = Gameboard.Instance;
             var humanId = board != null ? board.HumanPlayerId : -1;
+            _workers.CancelDrag();   // a turn can interrupt a drag; the old ghost would otherwise stay
             _strip.Clear();
             _scroll.contentContainer.Clear();
+            IsShown = false;
             if (planet == null || humanId < 0 || !HumanPlanetView.CanOrder(planet, humanId))
             {
                 _container.style.display = DisplayStyle.None;
                 return;
             }
             _container.style.display = DisplayStyle.Flex;
+            IsShown = true;
             if (_boundPlanet != planet)
             {
                 _boundPlanet = planet;
@@ -81,12 +88,22 @@ namespace Game.UI.MainGameScreenUI
 
             var net = HumanPlanetView.NetPerTurn(planet);
             // Red when the rate is negative; the stock itself only when it cannot cover that loss (see RateLine).
-            scroll.Add(RateLine("Food", planet.Food, net.food));
-            scroll.Add(RateLine("Grotsits", planet.Grotsits, net.grotsits));
-            scroll.Add(HumanUiKit.Text($"Industry +{planet.IndustryProduced:0.#}   Research +{planet.ResearchProduced:0.#}"));
+            // Two columns: Food and Grotsits (stock and rate) on the left, Industry and Research (production) on the right.
+            var resources = HumanUiKit.Row();
+            var stocks = new VisualElement { pickingMode = PickingMode.Ignore };
+            stocks.style.marginRight = 24;
+            stocks.Add(RateLine("Food", planet.Food, net.food));
+            stocks.Add(RateLine("Grotsits", planet.Grotsits, net.grotsits));
+            var outputs = new VisualElement { pickingMode = PickingMode.Ignore };
+            outputs.Add(HumanUiKit.Text($"Industry +{planet.IndustryProduced:0.#}"));
+            outputs.Add(HumanUiKit.Text($"Research +{planet.ResearchProduced:0.#}"));
+            resources.Add(stocks);
+            resources.Add(outputs);
+            scroll.Add(resources);
 
             if (owned)
             {
+            scroll.Add(_workers.Build(planet, humanId, c => Send("Workers", c)));
             scroll.Add(HumanUiKit.Text("Production", HumanUiKit.Muted, bold: true));
             var estimates = HumanBuildList.QueueEstimates(planet);
             var estimateIndex = 0;

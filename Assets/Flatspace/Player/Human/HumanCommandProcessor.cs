@@ -18,7 +18,7 @@ namespace FlatSpace
         ///
         /// Command types (fields read): move (origin, target, ships | kind + count), colonize (origin, target), queueProduction (origin,
         /// item), removeProduction (origin, index), moveProduction (origin, index, toIndex), queueResearch (item), removeResearch
-        /// (index), setShipments (flag), setDevelopment (origin, flag), declareWar / makePeace / surrender (rival), setPause (eventName, flag).
+        /// (index), setShipments (flag), setDevelopment (origin, flag), assignWorkers (origin, workers), declareWar / makePeace / surrender (rival), setPause (eventName, flag).
         /// </summary>
         public class HumanCommandProcessor
         {
@@ -55,6 +55,7 @@ namespace FlatSpace
                     case "colonize":
                     case "shipResource":
                     case "move":
+                    case "assignWorkers":
                         scratch._dryRun = true;
                         try
                         {
@@ -174,6 +175,8 @@ namespace FlatSpace
                         return HandleMoveProduction(command, out detail);
                     case "setDevelopment":
                         return HandleSetDevelopment(command, out detail);
+                    case "assignWorkers":
+                        return HandleAssignWorkers(command, out detail);
                     case "declareWar":
                     case "makePeace":
                     case "surrender":
@@ -516,7 +519,25 @@ namespace FlatSpace
                 var planet = OwnedPlanet(command.origin, out var refusal);
                 if (planet == null) return refusal;
                 planet.ManualDevelopment = !command.flag;
+                if (command.flag && !_dryRun) planet.ClearWorkerOverride("Automatic");   // the algorithm splits the workers again
                 detail = $"{planet.PlanetName} {(command.flag ? "automatic" : "manual")}";
+                return null;
+            }
+
+            // assignWorkers: origin (a planet the human owns and develops by hand), workers = four counts in the order food, grotsits,
+            // industry, research that add up to the planet's population. Instant, no orders; the split stays the human's until the planet
+            // is switched to automatic (see Planet.SetWorkerOverride).
+            private string HandleAssignWorkers(HumanCommand command, out string detail)
+            {
+                detail = "";
+                var planet = OwnedPlanet(command.origin, out var refusal);
+                if (planet == null) return refusal;
+                if (!planet.ManualDevelopment) return "NotManual";
+                var workers = command.workers;
+                if (workers == null || workers.Count != 4 || workers.Exists(w => w < 0)) return "BadWorkerCounts";
+                if (workers.Sum() != planet.Population.Count) return "WorkersDoNotMatchPopulation";
+                detail = $"{planet.PlanetName} {workers[0]}/{workers[1]}/{workers[2]}/{workers[3]}";
+                if (!_dryRun) planet.SetWorkerOverride(workers.ToArray());
                 return null;
             }
 

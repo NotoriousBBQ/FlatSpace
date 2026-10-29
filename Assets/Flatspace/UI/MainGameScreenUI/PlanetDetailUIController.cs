@@ -24,6 +24,7 @@ public class PlanetDetailUIController : MonoBehaviour
     private Label _productionProgress;
     private Label _distributionCenterStatus;
     private Label _ownerLabel;   // built in Awake: who owns the planet, as the human knows it
+    private VisualElement[] _resourceRows;   // the figures the order section replaces: food, grotsits, industry and research
     private VisualElement[] _detailRows;   // the rows a limited panel hides: food, grotsits, industry and research, production, distribution center
     private Game.UI.MainGameScreenUI.HumanPlanetOrdersView _orders;   // the human's order controls; built in Awake, shown only while a human plays
     public Sprite desertIcon;
@@ -217,6 +218,7 @@ public class PlanetDetailUIController : MonoBehaviour
             _element.Q<VisualElement>("FoodElement"), _element.Q<VisualElement>("GrotsitsElement"), _element.Q<VisualElement>("IndustryResearchElement"),
             _element.Q<VisualElement>("ProductionElement"), _element.Q<VisualElement>("DistributionCenterElement"),
         };
+        _resourceRows = new[] { _detailRows[0], _detailRows[1], _detailRows[2] };   // Food, Grotsits, Industry/Research
         _ownerLabel = new Label { pickingMode = PickingMode.Ignore };
         _ownerLabel.style.unityTextAlign = TextAnchor.UpperCenter;
         _panelElement.Insert(1, _ownerLabel);   // under the title row
@@ -283,6 +285,10 @@ public class PlanetDetailUIController : MonoBehaviour
             else _distributionCenterStatus.text = "";
         }
         _orders?.Bind(limited ? null : _planet);
+        // The order section carries the stock and rates, so the top figures go while it is shown (they stay for a planet the human cannot order on, or with no human).
+        if (_orders != null && _orders.IsShown)
+            foreach (var row in _resourceRows)
+                if (row != null) row.style.display = DisplayStyle.None;
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
