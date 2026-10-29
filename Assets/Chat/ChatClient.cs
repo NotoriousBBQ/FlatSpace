@@ -4,7 +4,6 @@ using System.Collections;
 using System.Collections.Generic;
 using FlatSpace.AI;
 using FlatSpace.Game;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -35,20 +34,21 @@ public class ChatClient : MonoBehaviour
     [Header("API Settings")]
     [SerializeField] private string ollamaUrl = "http://localhost:11434/api/chat";
     [SerializeField] private string modelName = "qwenChat:latest";
+    // Seconds; generous because the first request after an idle spell has to load the model.
+    [SerializeField] private int requestTimeoutSeconds = 60;
 
     private static ChatClient _instance;
 
     public static ChatClient Instance =>  _instance != null ? _instance : (_instance = Gameboard.Instance.gameObject.AddComponent<ChatClient>());
 
-    public void RequestChatResponse(string message, string me, string player, DiplomacyState.Pair diplomacyState)
+    public void RequestChatResponse(string message, string me, string player, DiplomacyState.Pair diplomacyState, Action<string> onReply = null)
     {
         var dynamicSystemPrompt = GenerateDynamicSystemPrompt(me, player, diplomacyState);
-        StartCoroutine(SendChatRequestCoroutine(message, dynamicSystemPrompt, diplomacyState));
+        StartCoroutine(SendChatRequestCoroutine(message, dynamicSystemPrompt, diplomacyState, onReply));
     }
 
     private KeyValuePair<string, string> GetToneFromDiplomacyState(DiplomacyState.Pair diplomacyState)
     {
-        new KeyValuePair<string, string>();
         if (diplomacyState.Hostility >= 66)
         {
             // aggressive
@@ -68,12 +68,12 @@ public class ChatClient : MonoBehaviour
         // enigmatic
         return new KeyValuePair<string, string>(
             "What are you going to do about it?", 
-            "The wind blows gently across the surface of the pond, splashing the frog in its face"
+            "The wind blows gently across the surface of the pond, splashing the frog in its face."
         );
 
     }
 
-    private IEnumerator SendChatRequestCoroutine(string message, string dynamicSystemPrompt, DiplomacyState.Pair diplomacyState)
+    private IEnumerator SendChatRequestCoroutine(string message, string dynamicSystemPrompt, DiplomacyState.Pair diplomacyState, Action<string> onReply)
     {
         KeyValuePair<string, string> toneExample = GetToneFromDiplomacyState(diplomacyState);
         var messageList = new List<OllamaMessage>()
@@ -101,14 +101,25 @@ public class ChatClient : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            request.timeout = requestTimeoutSeconds;
 
             yield return request.SendWebRequest();
 
-            if (request.result == UnityWebRequest.Result.Success)
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                OllamaResponse responseData = JsonUtility.FromJson<OllamaResponse>(request.downloadHandler.text);
-                Debug.Log($"<b>NPC Dynamic Reply:</b> {responseData.message.content}");
+                Debug.LogWarning($"ChatClient: request to {ollamaUrl} failed ({request.result}): {request.error} {request.downloadHandler?.text}");
+                yield break;
             }
+
+            OllamaResponse responseData = JsonUtility.FromJson<OllamaResponse>(request.downloadHandler.text);
+            if (responseData?.message == null || string.IsNullOrEmpty(responseData.message.content))
+            {
+                Debug.LogWarning($"ChatClient: reply had no message content: {request.downloadHandler.text}");
+                yield break;
+            }
+
+            Debug.Log($"<b>NPC Dynamic Reply:</b> {responseData.message.content}");
+            onReply?.Invoke(responseData.message.content.Trim());
         }
 
     }
@@ -121,7 +132,6 @@ public class ChatClient : MonoBehaviour
         systemPrompt += $"- Your current hostility score with the player is: {diplomacyState.Hostility}. Do not state your hostility directly, use it to guide your word choice\n";
         systemPrompt += $"- Your current stance with the player is: {diplomacyState.Stance}. Do not state your stance directly, use it to guide your word choice\n";
         systemPrompt += "- You must strictly maintain your designated tone constraint while addressing this relationship and requested response.\n";
-        systemPrompt += "- Do not reuse any sequence of more than 3 words from your previous responses when constructing this one\n";
         systemPrompt += "\n";
         systemPrompt += "SYSTEM:\n";
         systemPrompt += "You are an advanced NPC dialogue generation engine operating inside a game loop.\n";
@@ -130,7 +140,7 @@ public class ChatClient : MonoBehaviour
         systemPrompt += "\n";
         systemPrompt += "CRITICAL RULES:\n";
         systemPrompt += "1. Output ONLY the literal spoken dialogue of the character.\n";
-        systemPrompt += "2. Never include meta-commentary, introductory text, or explanatory footnotes (e.g., Do NOT say 'Here is an aggressive response:'').\n";
+        systemPrompt += "2. Never include meta-commentary, introductory text, or explanatory footnotes (e.g., Do NOT say 'Here is an aggressive response:').\n";
         systemPrompt += "3. Do not break character under any circumstances.\n"; 
         systemPrompt += "4. Keep responses punchy, direct, and under 3 structural sentences.\n";
         systemPrompt += "\n";

@@ -25,6 +25,11 @@ namespace Game.UI.MainGameScreenUI
         private static string _pending;   // the command waiting for its confirmation, or null
         private static int _pendingTurn;  // the turn it was asked on: a new turn may have changed what is allowed, so the question lapses
 
+        // The rival's latest reply (shown in the response box at the top). Kept here so it survives the screen being closed and reopened.
+        private static string _replyText;
+        private static string _replyFrom;
+        private static Label _replyLabel;
+
         private static VisualElement _screen;
         private static VisualElement _host;
         private static ScrollView _list;
@@ -37,6 +42,8 @@ namespace Game.UI.MainGameScreenUI
         {
             _selected = -1;
             _pending = null;
+            _replyText = null;
+            _replyFrom = null;
         }
 
         public static void Toggle(VisualElement host)
@@ -45,6 +52,8 @@ namespace Game.UI.MainGameScreenUI
             if (host == null || Gameboard.Instance == null || Gameboard.Instance.HumanPlayerId < 0) return;
             Build(host);
             Refresh();
+            // The rival picked on open (the first, or the one last viewed) greets the human, like a click on a rival does.
+            if (IsOpen && _selected >= 0) RequestReply("Negotiations Begin", _selected);
         }
 
         public static void Close()
@@ -54,6 +63,7 @@ namespace Game.UI.MainGameScreenUI
             _host = null;
             _list = null;
             _detail = null;
+            _replyLabel = null;
             _pending = null;
         }
 
@@ -84,7 +94,9 @@ namespace Game.UI.MainGameScreenUI
             var response = HumanUiKit.Panel(280f);
             response.style.minHeight = 44;
             response.tooltip = "A rival's replies appear here";
-            response.Add(HumanUiKit.Text("No messages yet", HumanUiKit.Muted, size: 13));
+            _replyLabel = HumanUiKit.Text("", size: 13);
+            response.Add(_replyLabel);
+            ShowReply();
             top.Add(response);
             top.Add(HumanUiKit.Btn("Close", Close));
             _screen.Add(top);
@@ -166,8 +178,10 @@ namespace Game.UI.MainGameScreenUI
             var rival = row.Rival;
             line.RegisterCallback<ClickEvent>(_ =>
             {
+                var changed = rival != _selected;
                 _selected = rival;
                 _pending = null;
+                if (changed) RequestReply("Negotiations Begin", rival);
                 Refresh();
             });
             return line;
@@ -336,10 +350,41 @@ namespace Game.UI.MainGameScreenUI
             }
         }
 
+        /// <summary>Puts the stored reply (or the empty-state text) into the response box, if the screen is open.</summary>
+        private static void ShowReply()
+        {
+            if (_replyLabel == null) return;
+            if (string.IsNullOrEmpty(_replyText))
+            {
+                _replyLabel.text = "No messages yet";
+                _replyLabel.style.color = new StyleColor(HumanUiKit.Muted);
+            }
+            else
+            {
+                _replyLabel.text = $"{_replyFrom}: \"{_replyText}\"";
+                _replyLabel.style.color = new StyleColor(Color.white);
+            }
+        }
+
+        /// <summary>Asks the chat model for the rival's reply to a message; the answer lands in the response box.</summary>
+        private static void RequestReply(string message, int rival)
+        {
+            var human = Gameboard.Instance.HumanPlayerId;
+            if (human < 0) return;
+            // The rival's own view of the human: its stance and hostility toward them.
+            var status = Gameboard.Instance.GameAI.GameAIMap.Diplomacy.Get(rival, human);
+            var from = "Player " + rival;
+            ChatClient.Instance.RequestChatResponse(message, from, "Player " + human, status, reply =>
+            {
+                _replyText = reply;
+                _replyFrom = from;
+                ShowReply();
+            });
+        }
+
         private static void Send(string type, int rival)
         {
-            var status = Gameboard.Instance.GameAI.GameAIMap.Diplomacy.Get(rival, 0);
-            ChatClient.Instance.RequestChatResponse(type, "Player " + rival.ToString(), "Player 0", status);
+            RequestReply(type, rival);
 
             _pending = null;
             var results = Gameboard.Instance.SubmitHumanCommands(new[] { new HumanCommand { type = type, rival = rival } }, "Diplomacy");
