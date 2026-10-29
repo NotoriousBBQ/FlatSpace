@@ -41,6 +41,8 @@ public static class HumanUiSelfCheck
         ok &= RunPlanetTableChecks();
         ok &= RunBlockadeRelevanceChecks();
         ok &= RunWorkerViewChecks();
+        ok &= RunDiplomacyCheckChecks();
+        ok &= RunDiplomacyViewChecks();
         return ok;
     }
 
@@ -67,6 +69,8 @@ public static class HumanUiSelfCheck
                     == "3 WarShip, 1 SiegeShip", "ship text lists counts per kind in enum order");
         ok &= Check(HumanHoverText.Ships(new[] { Ship.ShipKind.ColonyShip }) == "1 ColonyShip", "a single ship reads '1 ColonyShip'");
         ok &= Check(HumanHoverText.Ships(new Ship.ShipKind[0]) == "no ships", "no ships reads 'no ships'");
+        ok &= Check(HumanHoverText.WithStrength("Player 1: 2 ships", 110.4f) == "Player 1: 2 ships, strength 110", "a fleet's strength is added as a whole number");
+        ok &= Check(HumanHoverText.WithStrength("Player 1: 1 ship", 0f) == "Player 1: 1 ship", "a fleet with no strength (no warships) gets no strength text");
 
         ok &= Check(HumanHoverText.Order(ShipOrder(2, 3)) == "2 WarShip to P1, arrives in 3 turns", "ship order text: ships, destination, turns");
         ok &= Check(HumanHoverText.Order(ShipOrder(1, 1)) == "1 WarShip to P1, arrives in 1 turn", "one turn is singular");
@@ -980,6 +984,141 @@ public static class HumanUiSelfCheck
             f.P(0).Food = 0f;
             ok &= Check(HumanWorkerView.Warnings(f.P(0)).Exists(l => l.StartsWith("Food:") && l.Contains("stock is empty")), "an empty stock reads as empty");
             ok &= Check(HumanWorkerView.Warnings(null).Count == 0, "no planet, no warnings");
+        }
+        return ok;
+    }
+
+    #endregion
+
+    #region Diplomacy screen: Check supports the stance commands
+
+    private static HumanCommand StanceCmd(string type, int rival) => new HumanCommand { type = type, rival = rival };
+
+    public static bool RunDiplomacyCheckChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(3))
+        {
+            f.Map.Diplomacy.Enabled = true;
+            HumanModeSelfCheck.Dock(f.P(2), Ship.ShipKind.WarShip, 1, 1);   // rival 1 is met; rival 2 has no ships anywhere
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 5);
+            var diplomacy = f.Map.Diplomacy;
+
+            ok &= Check(processor.Check(StanceCmd("declareWar", 1)) == null, "at peace with a met rival, declareWar would be accepted");
+            ok &= Check(processor.Check(StanceCmd("makePeace", 1)) == "AlreadyPeace", "makePeace at peace is refused AlreadyPeace");
+            ok &= Check(processor.Check(StanceCmd("surrender", 1)) == "NotAtWar", "surrender at peace is refused NotAtWar");
+            ok &= Check(processor.Check(StanceCmd("declareWar", 2)) == "NoContact", "declareWar on a rival never met is refused NoContact");
+            ok &= Check(diplomacy.StanceToward(0, 1) == Stance.Peace, "Check applied nothing");
+
+            diplomacy.SetStance(0, 1, Stance.War, 4);
+            ok &= Check(processor.Check(StanceCmd("declareWar", 1)) == "AlreadyAtWar", "declareWar with my own stance War is refused AlreadyAtWar");
+            ok &= Check(processor.Check(StanceCmd("makePeace", 1)) == null, "makePeace with my own stance War would be accepted");
+            ok &= Check(processor.Check(StanceCmd("surrender", 1)) == null, "surrender at war would be accepted");
+            ok &= Check(diplomacy.StanceToward(0, 1) == Stance.War, "Check left the war as it was");
+
+            diplomacy.SetStance(0, 1, Stance.Peace, 4);
+            diplomacy.SetStance(1, 0, Stance.War, 4);
+            ok &= Check(processor.Check(StanceCmd("declareWar", 1)) == null, "mine Peace, theirs War: declareWar is still accepted (only my own stance counts)");
+            ok &= Check(processor.Check(StanceCmd("makePeace", 1)) == "AlreadyPeace", "mine Peace, theirs War: makePeace is refused AlreadyPeace");
+            ok &= Check(processor.Check(StanceCmd("surrender", 1)) == null, "mine Peace, theirs War: surrender is accepted (effective war)");
+
+            var pair = diplomacy.Get(0, 1);
+            pair.TruceUntil = 30;
+            diplomacy.Set(0, 1, pair);
+            ok &= Check(processor.Check(StanceCmd("declareWar", 1)) == "Truce", "in a truce declareWar is refused Truce");
+            ok &= Check(processor.Check(StanceCmd("surrender", 1)) == "NotAtWar", "in a truce surrender is refused NotAtWar");
+        }
+        return ok;
+    }
+
+    #endregion
+
+    #region Diplomacy screen: the pure builder
+
+    public static bool RunDiplomacyViewChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(4))
+        {
+            var diplomacy = f.Map.Diplomacy;
+            diplomacy.Enabled = true;
+            diplomacy.Turn = 5;
+            var stats = new WarshipStats(null);
+            HumanModeSelfCheck.Dock(f.P(0), Ship.ShipKind.WarShip, 0, 1);   // the human's own
+            HumanModeSelfCheck.Dock(f.P(2), Ship.ShipKind.WarShip, 1, 2);   // rival 1
+            HumanModeSelfCheck.Dock(f.P(1), Ship.ShipKind.ColonyShip, 1, 1);
+            HumanModeSelfCheck.Dock(f.P(3), Ship.ShipKind.WarShip, 2, 1);   // rival 2; nobody is rival 3
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 5);
+            System.Func<string, int, string> refusal = (type, rival) => processor.Check(new HumanCommand { type = type, rival = rival });
+            System.Func<string, bool> seesAll = name => true;
+
+            var rows = HumanDiplomacyView.Rivals(f.Map, 0);
+            ok &= Check(rows.Select(r => r.Rival).SequenceEqual(new[] { 1, 2 }), "the list holds the met rivals only (rival 3 was never met)");
+            ok &= Check(HumanDiplomacyView.Label(1) == "Player 1", "a rival is labelled 'Player n'");
+            diplomacy.SetStance(0, 2, Stance.War, 3);
+            rows = HumanDiplomacyView.Rivals(f.Map, 0);
+            ok &= Check(rows[0].Rival == 2 && rows[0].AtWar && rows[0].State == "War", "a rival at war is listed first");
+            diplomacy.SetStance(0, 2, Stance.Peace, 3);
+
+            ok &= Check(HumanDiplomacyView.Build(f.Map, 0, 3, seesAll, stats, refusal) == null, "no view for a rival never met");
+
+            // A war I declared stays listed after contact is lost; a rival I have no stance toward and no contact with does not.
+            diplomacy.SetStance(0, 3, Stance.War, 3);
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0).Select(r => r.Rival).SequenceEqual(new[] { 3, 1, 2 }),
+                "my war on a rival with no contact keeps it listed, first");
+            var lost = HumanDiplomacyView.Build(f.Map, 0, 3, seesAll, stats, refusal);
+            ok &= Check(lost != null && lost.AtWar && lost.EndWar.Enabled && lost.Surrender.Enabled, "and its pane offers End the war and Surrender");
+            ok &= Check(lost.Others.Exists(o => o.Rival == 1) && HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal).Others.Exists(o => o.Rival == 3),
+                "a listed war counts as known in the others block both ways");
+            diplomacy.SetStance(0, 3, Stance.Peace, 4);
+            ok &= Check(HumanDiplomacyView.Build(f.Map, 0, 3, seesAll, stats, refusal) == null, "once the war ends the rival drops out again");
+
+            var view = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal);
+            ok &= Check(view.Others.Count == 1 && view.Others[0].Rival == 2 && view.Others[0].Stance == diplomacy.StanceToward(1, 2),
+                "the others block holds exactly the other met rival, with the rival's own stance toward it");
+            ok &= Check(view.Hostility == diplomacy.Hostility(1, 0) && view.HostilityMax == f.Constants.hostilityMax, "hostility is the rival's toward the human, against the maximum");
+
+            var unseen = HumanDiplomacyView.Build(f.Map, 0, 1, name => name != "P2", stats, refusal);
+            ok &= Check(unseen.Fleets.Count == 0 && unseen.TotalWarships == 0 && unseen.TotalStrength == 0f, "warships on a planet out of sight are not listed");
+            ok &= Check(view.Fleets.Count == 1 && view.Fleets[0].Planet == "P2" && view.Fleets[0].Warships == 2, "the rival's two warships on a seen planet make one line (the colony ship adds none)");
+            var rivalShips = f.P(2).DockedShips.Where(s => s.Owner == 1).ToList();
+            ok &= Check(view.Fleets[0].Strength == FleetStrength.Of(rivalShips, stats) && view.TotalStrength == view.Fleets[0].Strength, "the line and the total use FleetStrength.Of");
+            ok &= Check(view.MyStrength == FleetStrength.Mine(f.Map, 0, stats), "my total is FleetStrength.Mine");
+
+            // States and buttons
+            ok &= Check(view.StateText == "Peace" && !view.AtWar, "Peace on both sides reads Peace");
+            ok &= Check(view.DeclareWar.Enabled && !view.EndWar.Enabled && !view.Surrender.Enabled && view.Surrender.Reason == "Not at war",
+                "at peace only Declare war is available, and Surrender says why not");
+            ok &= Check(!view.DemandSurrender.Enabled && view.DemandSurrender.Reason == "Needs negotiation", "Demand surrender is always inactive");
+
+            diplomacy.SetStance(0, 1, Stance.War, 4);
+            view = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal);
+            ok &= Check(view.StateText == "War" && view.AtWar && view.MyChangeTurn == 4, "my War reads War, with the turn it changed");
+            ok &= Check(!view.DeclareWar.Enabled && view.DeclareWar.Reason == "Already at war" && view.EndWar.Enabled && view.Surrender.Enabled, "at war: End the war and Surrender are available, Declare war is not");
+
+            diplomacy.SetStance(0, 1, Stance.Peace, 4);
+            diplomacy.SetStance(1, 0, Stance.War, 4);
+            view = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal);
+            ok &= Check(view.AtWar && view.StateText.Contains("still at war"), "mine Peace, theirs War reads 'still at war'");
+            ok &= Check(view.DeclareWar.Enabled && !view.EndWar.Enabled && view.EndWar.Reason.Contains("Surrender") && view.Surrender.Enabled,
+                "mine Peace, theirs War: Declare war stays, End the war is off with the Surrender hint, Surrender is on");
+
+            var pair = diplomacy.Get(0, 1);
+            pair.TruceUntil = 30;
+            diplomacy.Set(0, 1, pair);
+            view = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal);
+            ok &= Check(view.TruceEndsTurn == 30 && view.StateText.Contains("truce") && !view.AtWar, "a truce is shown with its end turn and is not war");
+            ok &= Check(!view.DeclareWar.Enabled && view.DeclareWar.Reason.Contains("Truce") && !view.Surrender.Enabled, "in a truce Declare war says Truce and Surrender is off");
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0).Find(r => r.Rival == 1).State == "Truce", "the list shows a truce");
+
+            diplomacy.Enabled = false;
+            ok &= Check(!HumanDiplomacyView.IsOn(f.Map) && HumanDiplomacyView.Rivals(f.Map, 0).Count == 0
+                        && HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal) == null, "with diplomacy off there are no rows and no view");
+        }
+        using (var f = new HumanModeSelfCheck.Fixture(2))
+        {
+            f.Map.Diplomacy.Enabled = true;
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0).Count == 0, "with nobody met the list is empty");
         }
         return ok;
     }

@@ -21,6 +21,7 @@ namespace Game.UI.MainGameScreenUI
         private Button _researchButton;
         private Button _fleetsButton;
         private Button _planetsButton;
+        private Button _diplomacyButton;
         private Button _pauseBanner;
         private string _pauseBannerPlanet;
 
@@ -61,6 +62,15 @@ namespace Game.UI.MainGameScreenUI
             HumanUiKit.StyleButton(_planetsButton);
             root.Add(_planetsButton);
 
+            // The diplomacy screen (the rivals met, their stances and fleets, war and peace) opens from the button under Planets, or the T key.
+            _diplomacyButton = new Button(() => DiplomacyScreen.Toggle(root)) { text = "Diplomacy" };
+            _diplomacyButton.style.position = Position.Absolute;
+            _diplomacyButton.style.top = 148;
+            _diplomacyButton.style.right = 10;
+            _diplomacyButton.style.display = DisplayStyle.None;
+            HumanUiKit.StyleButton(_diplomacyButton);
+            root.Add(_diplomacyButton);
+
             // Why the timer stopped, shown at once and clickable to go there; hidden otherwise.
             _pauseBanner = new Button(() => { if (!string.IsNullOrEmpty(_pauseBannerPlanet)) Gameboard.Instance.GoToPlanet(_pauseBannerPlanet); });
             _pauseBanner.style.position = Position.Absolute;
@@ -95,6 +105,12 @@ namespace Game.UI.MainGameScreenUI
         public void TogglePlanets()
         {
             if (uiDocument != null) PlanetsScreen.Toggle(uiDocument.rootVisualElement);
+        }
+
+        /// <summary>Opens or closes the Diplomacy screen; the T key calls this through Gameboard.</summary>
+        public void ToggleDiplomacy()
+        {
+            if (uiDocument != null) DiplomacyScreen.Toggle(uiDocument.rootVisualElement);
         }
 
         /// <summary>Shows why the timer stopped (and where, on click), or hides the banner when text is null or empty.</summary>
@@ -140,6 +156,13 @@ namespace Game.UI.MainGameScreenUI
                 _planetsButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
                 if (!human) PlanetsScreen.Close();
                 else PlanetsScreen.Refresh();
+            }
+            if (_diplomacyButton != null)
+            {
+                var human = Gameboard.Instance != null && Gameboard.Instance.HumanPlayerId >= 0;
+                _diplomacyButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
+                if (!human) DiplomacyScreen.Close();
+                else DiplomacyScreen.Refresh();
             }
         }
 

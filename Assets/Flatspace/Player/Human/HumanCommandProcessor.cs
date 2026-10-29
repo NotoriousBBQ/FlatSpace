@@ -40,7 +40,7 @@ namespace FlatSpace
 
             /// <summary>
             /// Whether a command would be accepted right now, without applying it: null when it would, else the refusal reason. Covers
-            /// the commands a screen offers a choice of (queueProduction, queueResearch, colonize, shipResource); any other type is
+            /// the commands a screen offers a choice of (queueProduction, queueResearch, colonize, shipResource, move, assignWorkers, declareWar, makePeace, surrender); any other type is
             /// "CheckNotSupported". It runs the command on a scratch processor and order list, so no queue, claim or order survives it.
             /// </summary>
             public string Check(HumanCommand command)
@@ -56,6 +56,9 @@ namespace FlatSpace
                     case "shipResource":
                     case "move":
                     case "assignWorkers":
+                    case "declareWar":
+                    case "makePeace":
+                    case "surrender":
                         scratch._dryRun = true;
                         try
                         {

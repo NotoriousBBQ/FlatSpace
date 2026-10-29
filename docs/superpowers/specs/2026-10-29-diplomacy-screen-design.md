@@ -13,7 +13,7 @@ hostile it is toward the human and how strong its visible fleets are, and lets t
 
 ## Goals
 
-- Open from a HUD Diplomacy button and a hotkey (D, if free; same pattern as the Planets screen: Esc or the button closes it).
+- Open from a HUD Diplomacy button and a hotkey (T; D is taken by map scrolling; same pattern as the Planets screen: Esc or the button closes it).
 - A list of the rivals the human has contact with (`PlayerKnowledge.ContactPlayers`), each with its current state (War or Peace).
   **A rival the human has not met has no entry anywhere**: not in the list, and not in any rival's "stance toward others" block.
 - For the picked rival, show:
@@ -66,7 +66,8 @@ hostile it is toward the human and how strong its visible fleets are, and lets t
 - Effective war: `DiplomacyState.IsAtWar(me, rival, meHasContactWithRival)`. Stances, hostility, last change: `DiplomacyState.Get`,
   `StanceToward`, `Hostility`, `TurnsSinceChange`, `InTruce`. The AI's `UpdateDiplomacy` runs at the end of `ProcessResults` and decides a
   stance only once `stanceHoldTurns` (10) have passed since its last change.
-- "Planets I can see" means the human's fog view (`Gameboard.HumanSeesPlanet`), the same rule as the Planets screen, **not**
+- **Corrected after Play testing (2026-10-29):** "planets I can see" means the planets whose docked ships the board shows: in sight, or next to a planet the human occupies or has a ship at (`Gameboard.HumanOwnerVisible`, the Planets screen's Owner/Ships rule). The first version used only `HumanSeesPlanet` and missed a rival's ships on an adjacent dimmed planet.
+- (Superseded) "Planets I can see" means the human's fog view (`Gameboard.HumanSeesPlanet`), the same rule as the Planets screen, **not**
   `FleetStrength.VisibleOf`, which uses the AI's wider `Knowledge.KnownPlanets` (up to 6 path nodes). Strength per planet is
   `FleetStrength.Of(planet.DockedShips.Where(owner == rival), stats)`; the human's own total is `FleetStrength.Mine`.
 - Pure logic goes in a builder class in `Assets/Flatspace/Player/Human/` (never touches `Gameboard.Instance`), with its self-check added
@@ -86,10 +87,10 @@ hostile it is toward the human and how strong its visible fleets are, and lets t
   and a truce can block a later declaration). **End the war asks for one too (the owner's decision, 2026-10-29).**
 - **Surrender and the inactive Demand surrender are in this project** (the owner's decision, 2026-10-29, after I explained what surrender does).
   Demand surrender's design (what it asks, how the AI answers) is project 2.
-- Hotkey D and the HUD Diplomacy button.
-- A rival with a recorded pair but no current contact is not listed (list = contact players only).
+- HUD Diplomacy button and a hotkey; D is taken by map scrolling (WASD), so the plan uses T.
+- **A war the human declared stays listed after contact is lost** (the owner's decision, 2026-10-29, after review): the list is the contact players plus any rival the human's own stance is War toward, so the way to end the war never disappears. A player never met, or at peace and out of contact, is not listed.
 - **Button states are shown disabled with the refusal reason, never hidden** (reviewer question, my call): Declare war is disabled with
-  "Already at war" (mine Peace, theirs War), "Truce" or "No contact"; End the war is enabled whenever the human's own stance is War
+  "Already at war" (the human's own stance is already War), "Truce" or "No contact"; with mine Peace and theirs War it stays enabled (`HandleStance` tests only the human's own stance), and End the war is disabled with a hint that Surrender ends it; End the war is enabled whenever the human's own stance is War
   (`makePeace` has no truce refusal; read in `HandleStance`). The pure builder returns a button state plus a reason; use
   `HumanCommandProcessor.Check` if it can take `declareWar` / `makePeace`, else derive the state from the same conditions.
 - After `declareWar` / `makePeace` the screen re-reads state at once (commands run between turns through `SubmitHumanCommands`,
@@ -97,7 +98,7 @@ hostile it is toward the human and how strong its visible fleets are, and lets t
 - "Other rivals I know" in the third-party block is exactly the human's `ContactPlayers` minus the picked rival: the same set as the list,
   so nothing about an unmet player can appear (fog-of-war rule).
 - Rivals are labelled "Player n" through `Gameboard.OwnerLabel` (no player-name system exists), in the same colour as their planets on the board.
-- The hotkey is D unless it clashes with map scrolling or other key handling in `Gameboard` / the input actions; then the builder picks a free key.
+
 
 ## Tuning log
 
