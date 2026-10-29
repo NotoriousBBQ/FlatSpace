@@ -39,7 +39,7 @@ Changes made after the owner's last full Play test, with no report back from the
 - **Keep a declared war listed after contact is lost** (`HumanDiplomacyView.Known`, new assertions in `RunDiplomacyViewChecks`). The owner reported the self-checks passing after this one, so it is likely covered by that run, but it was not played.
 - **The adjacent-planet fix:** fleet lines now use `Gameboard.HumanOwnerVisible()`, not `HumanSeesPlanet`. The owner's save `Assets/Flatspace/GameSaves/DiplomacyView.json` showed rival 1's ships on two dimmed planets beside the human's, missing from the screen. Not re-tested by the owner.
 - **The hover popup strength** (two new assertions in `RunHoverTextChecks`). Not run, not looked at in Play mode.
-The next session should have the owner run the self-checks once more and hover a fleet icon.
+Update, same day: the owner re-ran the self-checks after all three changes and they passed. Still not looked at in Play mode: the adjacent-planet fleet lines (reload `DiplomacyView.json`, rival 1 should show two lines of one ship each) and the hover popup strength (hover a fleet icon).
 
 ## Files
 
@@ -68,7 +68,7 @@ Uncommitted (written at the close-out):
 
 ## Open items and next steps
 
-1. **Ask the owner to run the self-checks again** and look at the adjacent-planet fleet line and the hover popup strength (see "Not verified"), then commit the close-out files if wanted.
+1. **Look at the adjacent-planet fleet lines and the hover popup strength in Play mode** (see "Not verified"; the self-checks already pass). The close-out files are committed and pushed.
 2. **Diplomacy, project 2: ask and trade** (recommended next design; brainstorm first): asking a rival to declare war or make peace on a third party, offers and demands of planets, fleets and tech (dropdowns), the coarse acceptance meter, the AI's answers in the response area, peace and Demand surrender depending on acceptance. Needs an AI scoring of proposals that also drives its real answer. Entry in `FUTURE_FEATURES.md`.
 3. **Rest of stage 3:** top bar, Esc/system menu, clickable board icons, pause settings, base-output display, the debug mode, the colony ship `move` bug.
 4. **Remind the owner** (memory note): planet ownership indicators; the fleet hover popup showing too much on dimmed planets (the strength just added to it is one number, no detail); re-verify the Blockaded-notification fix once shipment automation has a UI.
