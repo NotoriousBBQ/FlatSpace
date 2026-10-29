@@ -436,6 +436,7 @@ namespace FlatSpace
                         GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                         0, 0, decision.Rival, string.Empty, string.Empty));
                 }
+
             }
 
             // LossDrop Start/End when the loss share crosses significantLossFraction (log-only state, so no repeat every turn).

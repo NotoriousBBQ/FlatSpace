@@ -338,6 +338,9 @@ namespace Game.UI.MainGameScreenUI
 
         private static void Send(string type, int rival)
         {
+            var status = Gameboard.Instance.GameAI.GameAIMap.Diplomacy.Get(rival, 0);
+            ChatClient.Instance.RequestChatResponse(type, "Player " + rival.ToString(), "Player 0", status);
+
             _pending = null;
             var results = Gameboard.Instance.SubmitHumanCommands(new[] { new HumanCommand { type = type, rival = rival } }, "Diplomacy");
             var refused = HumanUiKit.RefusalSummary(results);

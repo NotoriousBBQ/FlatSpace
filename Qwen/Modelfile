@@ -1,0 +1,11 @@
+FROM qwen2.5:3b
+
+# Forces deterministic choices over casual storytelling creativity
+PARAMETER temperature 0.9
+PARAMETER top_p 0.9
+
+# Extends the context tracking loop window to handle dense 4X JSON histories cleanly
+PARAMETER num_ctx 8192
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
