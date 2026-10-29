@@ -40,6 +40,7 @@ public static class HumanUiSelfCheck
         ok &= RunSightMemoryChecks();
         ok &= RunPlanetTableChecks();
         ok &= RunBlockadeRelevanceChecks();
+        ok &= RunWorkerViewChecks();
         return ok;
     }
 
@@ -924,4 +925,65 @@ public static class HumanUiSelfCheck
     }
 
     #endregion
+
+    #region Manual worker assignment (view logic)
+
+    private static bool SameWorkers(int[] a, params int[] b) => a != null && a.SequenceEqual(b);
+
+    public static bool RunWorkerViewChecks()
+    {
+        var ok = true;
+
+        // Pick-up: the pressed icon and every icon after it in its category
+        ok &= Check(HumanWorkerView.PickedCount(5, 3) == 2, "pressing the second icon from the right of five picks up 2");
+        ok &= Check(HumanWorkerView.PickedCount(5, 0) == 5, "pressing the first icon picks up the whole category");
+        ok &= Check(HumanWorkerView.PickedCount(5, 4) == 1, "pressing the last icon picks up just it");
+        ok &= Check(HumanWorkerView.PickedCount(5, 5) == 0 && HumanWorkerView.PickedCount(5, -1) == 0, "an icon index out of range picks up nothing");
+
+        // Drop result
+        var food = Planet.WorkerCategory.Food;
+        var research = Planet.WorkerCategory.Research;
+        var counts = new[] { 3, 1, 2, 0 };
+        ok &= Check(SameWorkers(HumanWorkerView.AfterDrop(counts, food, research, 2), 1, 1, 2, 2), "dropping 2 of Food on Research moves them");
+        ok &= Check(SameWorkers(HumanWorkerView.AfterDrop(counts, food, food, 2), 3, 1, 2, 0), "dropping on the same category changes nothing");
+        ok &= Check(SameWorkers(HumanWorkerView.AfterDrop(counts, food, research, 0), 3, 1, 2, 0), "dropping nothing changes nothing");
+        ok &= Check(SameWorkers(counts, 3, 1, 2, 0) && HumanWorkerView.AfterDrop(counts, food, research, 3).Sum() == counts.Sum(),
+            "a drop never changes the input and always keeps the total");
+
+        using (var f = new HumanModeSelfCheck.Fixture(2))
+        {
+            f.P(0).CurrentStrategy = Planet.PlanetStrategy.PlanetStrategyIndustry;
+            f.Own(0, 5);
+            f.Own(1, 3, player: 1);
+            f.P(0).ManualDevelopment = true;
+            f.P(1).ManualDevelopment = true;
+
+            var command = HumanWorkerView.DropCommand(f.P(0), counts, food, research, 2);
+            ok &= Check(command != null && command.type == "assignWorkers" && command.origin == "P0"
+                        && command.workers != null && command.workers.SequenceEqual(new[] { 1, 1, 2, 2 }),
+                "DropCommand builds the assignWorkers command for the dropped split");
+            ok &= Check(HumanWorkerView.DropCommand(f.P(0), counts, food, food, 2) == null, "DropCommand is null for a drop that changes nothing");
+
+            ok &= Check(HumanWorkerView.CanAssign(f.P(0), 0), "an owned manual planet can be assigned");
+            f.P(0).ManualDevelopment = false;
+            ok &= Check(!HumanWorkerView.CanAssign(f.P(0), 0), "an automatic planet cannot be assigned");
+            f.P(0).ManualDevelopment = true;
+            ok &= Check(!HumanWorkerView.CanAssign(f.P(1), 0), "a rival's planet cannot be assigned");
+
+            // Warnings: the stock against the loss, in turns
+            f.P(0).SetWorkerOverride(new[] { 0, 1, 4, 0 });
+            f.P(0).Food = 12f;
+            var low = HumanWorkerView.Warnings(f.P(0));
+            ok &= Check(low.Exists(l => l.StartsWith("Food:") && l.Contains("stock lasts")), "a Food loss that the stock covers for fewer than 10 turns is warned about");
+            f.P(0).Food = 100f;
+            ok &= Check(!HumanWorkerView.Warnings(f.P(0)).Exists(l => l.StartsWith("Food:")), "a stock that lasts well over 10 turns draws no Food warning");
+            f.P(0).Food = 0f;
+            ok &= Check(HumanWorkerView.Warnings(f.P(0)).Exists(l => l.StartsWith("Food:") && l.Contains("stock is empty")), "an empty stock reads as empty");
+            ok &= Check(HumanWorkerView.Warnings(null).Count == 0, "no planet, no warnings");
+        }
+        return ok;
+    }
+
+    #endregion
+
 }

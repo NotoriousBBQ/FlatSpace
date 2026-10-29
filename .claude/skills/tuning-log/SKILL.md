@@ -35,7 +35,10 @@ ask, rather than silently analyzing a near-empty log.
   from a closed set per command, see `HumanCommandProcessor`: UnknownCommand, UnknownPlanet, NotYourPlanet, TargetUnknown, OutOfRange, NotEnoughShips,
   NoColonyShip, CannotPayRider, NotUnlocked, AlreadyBuilt, Superseded, BunkerCap, NoContact ...; `Error: ...` is a bug, not a rule),
   `HumanPause|<event>|<planet>` (the timer stopped itself), `HumanDefeat|<populated>|<colonyShips>|<colonists>` (once) and
-  `T<turn>|P-1|TurnLimitReached|<limit>` (once, every match). Questions they answer: what the human did and in what order, which rule refuses them most,
+  `T<turn>|P-1|TurnLimitReached|<limit>` (once, every match), `WorkersPlaced|<planet>|<Arrival or Loss>|<category>` (the planet rule put a person into, or took one out of, the
+  human's manual worker split; category Food, Grotsits, Industry or Research) and `WorkersCleared|<planet>|<Automatic, OwnerChanged or NoPopulation>` (that split ended; one-off
+  lines, the counts themselves ride on the `HumanCommand|assignWorkers` detail `P0 f/g/i/r`). They answer how often and why a manual split ends and whether the arrival rule puts people where
+  the player would (compare `WorkersPlaced` with the next `assignWorkers` on that planet). Questions they answer: what the human did and in what order, which rule refuses them most,
   whether the default pause set is too noisy (count `HumanPause` per 100 turns by event). Invariants: no `HumanCommand` line without an earlier
   command from a UI click (`HumanUiOrder`); a human's `P<id>` never appears on `Stance`, `Retreat`, `AssaultTarget`, `ColonizeStart`-style
   lines the AI writes for its own decisions unless the human enabled the matching automation (shipments) or a planet is switched to automatic.

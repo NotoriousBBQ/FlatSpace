@@ -389,6 +389,17 @@ namespace FlatSpace
             public static Planet.ProductionItem QueueEntryFromSave(SaveLoadSystem.GameSave.ProductionSave production, CatalogItem item)
                 => new Planet.ProductionItem { Progress = production.Progress, FixedCost = production.FixedCost, Item = item };
 
+            /// <summary>
+            /// The human's saved worker split, or null when there is none to restore: an older save, a list that is not four counts, a negative
+            /// count, or a sum that is not the planet's population (the people changed since, so the algorithm decides again).
+            /// </summary>
+            public static int[] WorkerOverrideFromSave(SaveLoadSystem.GameSave.PlanetSave save, int population)
+            {
+                if (!save.hasWorkerOverride || save.workerOverride == null || save.workerOverride.Count != 4) return null;
+                if (save.workerOverride.Exists(c => c < 0) || save.workerOverride.Sum() != population) return null;
+                return save.workerOverride.ToArray();
+            }
+
             public void SetPlanetSimulationStats(SaveLoadSystem.GameSave gameSave)
             {
                 var catalog = Gameboard.Instance.GetComponent<Catalog>();
@@ -435,6 +446,9 @@ namespace FlatSpace
                     planet.GrotsitsShipmentIncoming = planetStatus.grotsitsTransferInProgress;
                     foreach(var playerID in planetStatus.populationTransferInProgress)
                         planet.SetPopulationTransferInProgress(playerID);
+                    // InitGame already gave the planet its type's starting population; the save holds the real one, so start from empty
+                    // (without this a loaded planet carried both, e.g. 30 people on a planet saved with 15).
+                    planet.Population.Clear();
                     for (var i = 0; i < planetStatus.population.Length; i++)
                     {
                         if (planetStatus.population[i] <= 0)
@@ -442,6 +456,8 @@ namespace FlatSpace
                         for (var j = 0; j < planetStatus.population[i]; j++)
                             planet.Population.Add(new Planet.Inhabitant { Player = i });
                     }
+                    var workerOverride = WorkerOverrideFromSave(planetStatus, planet.Population.Count);
+                    if (workerOverride != null) planet.RestoreWorkerOverride(workerOverride);
 
                     if (planetStatus.dockedShips != null)
                     {

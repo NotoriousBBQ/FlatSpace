@@ -88,6 +88,10 @@ public class SaveLoadSystem : MonoBehaviour
             // Human player mode: the human builds on this planet by hand. Stored this way round so that an older save, which has no
             // key and reads false, still has the AI developing every planet.
             public bool manualDevelopment;
+            // Human player mode: the human's worker split (food, grotsits, industry, research). The flag is stored this way round so that an
+            // older save, which has neither key, loads with the algorithm deciding, as before.
+            public bool hasWorkerOverride;
+            public List<int> workerOverride;
         }
 
         [Serializable]
@@ -295,7 +299,11 @@ public class SaveLoadSystem : MonoBehaviour
                     conversionBy = planet.SavedConversionBy,
                     conversionProgress = planet.ConversionProgress,
                     conversionWarMask = planet.ConversionWarMask,
-                    manualDevelopment = planet.ManualDevelopment
+                    manualDevelopment = planet.ManualDevelopment,
+                    hasWorkerOverride = planet.HasWorkerOverride,
+                    // The split as the panel shows it (adjusted to the people now), not the stored one: a colonist or loss after the last
+                    // assignment leaves the stored split a person off, and the load discards a split that does not add up to the population.
+                    workerOverride = planet.HasWorkerOverride ? new List<int>(planet.CurrentWorkerCounts()) : new List<int>()
                 };
 
                 foreach (var ship in planet.DockedShips)

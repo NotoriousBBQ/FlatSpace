@@ -25,6 +25,7 @@ namespace FlatSpace
             public int toIndex;
             public int rival;         // a player id
             public List<int> ships;   // dock indices at the origin (move)
+            public List<int> workers; // four worker counts in the order food, grotsits, industry, research (assignWorkers)
             public bool flag;
         }
 

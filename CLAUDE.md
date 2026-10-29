@@ -390,19 +390,28 @@ rules and a temporary JSON command channel; the UI rework (project 2) is separat
   The temporary `HumanCommands/commands.json` channel is gone (UI stage 2): the UI sends commands through `Gameboard.SubmitHumanCommands` and they execute between turns;
   `HumanCommandProcessor.ApplyJson` stays for the self-checks. Ship indices in a batch name the dock list as
   it stood when the batch began; colonize and shipResource commands in one batch share the origin's people, food and stock. Command types: move, colonize, shipResource,
-  queueProduction, removeProduction, moveProduction, setDevelopment, queueResearch, removeResearch, moveResearch, setShipments, declareWar, makePeace, surrender, setPause, setFleet, mergeFleets.
+  queueProduction, removeProduction, moveProduction, setDevelopment, assignWorkers, queueResearch, removeResearch, moveResearch, setShipments, declareWar, makePeace, surrender, setPause, setFleet, mergeFleets.
 - **Events and pausing:** `HumanTurnEvents.Collect` turns the turn's results into `HumanEvent`s (the message list of project 2); `HumanPauseSettings` (default on: attacked, blockaded,
   lost, contact, war, peace, fleet arrived, both shortages) decides which stop the timer; a rival's event never pauses. `Gameboard.CollectHumanEvents` runs at the end of each turn.
 - **Match end:** defeat (no populated planet, docked colony ship or colonist in flight) and the turn limit show a `MatchEndPopup`; the limit ends the match with no winner (scoring is a
   separate, later feature). The human's view is that player's fog (`SetFogViewMode(Player, id)`, dropdown locked).
 - **Self-check:** `Assets/Editor/HumanModeSelfCheck.cs` (`FlatSpace -> Human -> Run Human Mode Self-Check`, also in `Run All AI Self-Checks`).
+- **Manual worker assignment** (spec `docs/superpowers/specs/2026-10-28-manual-worker-assignment-design.md`, plan `docs/superpowers/plans/2026-10-28-manual-worker-assignment.md`): on a planet the human owns and develops by hand, the Workers section of the
+  planet panel (`HumanWorkersView`, logic in the pure `HumanWorkerView`) shows one square per person in four boxes (Food, Grotsits, Industry, Research); a press picks up that person and the rest after
+  them in the category, a drop on another box sends `assignWorkers` (origin, `workers` = four counts that add up to the population; refusals NotManual, BadWorkerCounts, WorkersDoNotMatchPopulation). The
+  split is `Planet`'s worker override (`HasWorkerOverride`, `SetWorkerOverride`, saved as `PlanetSave.hasWorkerOverride/workerOverride`, absent = the algorithm decides). `AssignWorkForStrategy` runs
+  `AssignAutomaticWorkers` (the old strategy switch) first and then `ApplyWorkerOverride`: people who arrive or leave are placed or removed one at a time by the strategy rule (`PlaceOne`/`RemoveOne`) at
+  the next assignment. The override ends on switching the planet to automatic, on an owner change and at population 0. `NormalizeWorkers` makes any split add up to the population, so the first drag on a
+  Food/FocusedFood planet (which over-assigns food workers on purpose) can lower food output; the owner accepted that. A red line warns when Food or Grotsits would run out within 10 turns. A planet
+  loads with only its saved people (`SetPlanetSimulationStats` clears the starting population `InitGame` gave it). Log lines `WorkersPlaced` and `WorkersCleared` (see the `tuning-log` skill); a strategy
+  picker is in `FUTURE_FEATURES.md`.
 
 #### The human UI (project 2, stage 1)
 
 Spec `docs/superpowers/specs/2026-10-23-human-player-ui-design.md`, plan `docs/superpowers/plans/2026-10-23-human-player-ui-stage1.md`.
 - **One entry point:** every button builds `HumanCommand`s and calls `Gameboard.SubmitHumanCommands(commands, screen)`: the `HumanCommandProcessor` applies them
   and `GameAI.ApplyOrdersNow` executes the orders at once (between turns, equivalent to how the AI's orders are timed), then the board and panels refresh. Where a screen
-  needs to know if a command would be accepted it calls `HumanCommandProcessor.Check` (queueProduction, queueResearch, colonize, shipResource, move; it applies nothing, and a checked move leaves the dock order alone).
+  needs to know if a command would be accepted it calls `HumanCommandProcessor.Check` (queueProduction, queueResearch, colonize, shipResource, move, assignWorkers; it applies nothing, and a checked move leaves the dock order alone).
 - **Pure list builders** in `Assets/Flatspace/Player/Human/` (self-check `Assets/Editor/HumanUiSelfCheck.cs`, in `Run All AI Self-Checks`): `HumanNotificationList` + `HumanOngoing`
   (one entry per planet and kind; state kinds shortage, blockade, conversion, queue empty and idle live while true and count turns; one-shots stay until clicked; a click dismisses
   an episode; not saved; the timer pauses only on the fresh events it returns), `HumanShipmentList` (sources: the human's planets in range with last turn's surplus result x population

@@ -793,6 +793,20 @@ public static class AITuningLogger
         AppendLines(new List<string> { FormatLine(turnNumber, playerId, "HumanPause", eventName, planet ?? "") });
     }
 
+    /// <summary>The planet rule placed or removed a person of the human's manual split: T&lt;turn&gt;|P&lt;id&gt;|WorkersPlaced|planet|Arrival or Loss|category.</summary>
+    public static void LogWorkersPlaced(int turnNumber, int playerId, string planet, string arrivalOrLoss, string category)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "WorkersPlaced", planet, arrivalOrLoss, category) });
+    }
+
+    /// <summary>The human's manual split on a planet ended: T&lt;turn&gt;|P&lt;id&gt;|WorkersCleared|planet|Automatic, OwnerChanged or NoPopulation.</summary>
+    public static void LogWorkersCleared(int turnNumber, int playerId, string planet, string reason)
+    {
+        if (_currentLogPath == null) return;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "WorkersCleared", planet, reason) });
+    }
+
     /// <summary>The human was defeated: T&lt;turn&gt;|P&lt;id&gt;|HumanDefeat|populatedPlanets|colonyShips|colonistsInFlight.</summary>
     public static void LogHumanDefeat(int turnNumber, int playerId, int populatedPlanets, int colonyShips, int colonistsInFlight)
     {
