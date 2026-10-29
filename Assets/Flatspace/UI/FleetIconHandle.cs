@@ -36,14 +36,17 @@ public class FleetIconHandle : MonoBehaviour, IPointerEnterHandler, IPointerExit
         var planet = Gameboard.Instance.GetPlanet(PlanetName);
         if (planet == null) return null;
         var human = Gameboard.Instance.HumanPlayerId;
-        var kinds = planet.DockedShips
+        var ships = planet.DockedShips
             .Where(s => s.Owner == Owner && Ship.CountsAsShip(s.Kind) && (Owner != human || s.FleetId == FleetId))
-            .Select(s => s.Kind);
+            .ToList();
+        var kinds = ships.Select(s => s.Kind);
         var label = Owner == human ? $"Fleet {FleetId + 1}" : Owner < 0 ? "Unowned" : $"Player {Owner}";
-        // A rival's fleet shows only how many ships it has while a human plays (HumanHoverText.ShowFullFleetDetail).
-        return HumanHoverText.ShowFullFleetDetail(Owner, human)
+        // A rival's fleet shows only how many ships it has while a human plays (HumanHoverText.ShowFullFleetDetail); the strength is one number
+        // for any fleet, the same figure the Diplomacy screen shows.
+        var text = HumanHoverText.ShowFullFleetDetail(Owner, human)
             ? $"{label}: {HumanHoverText.Ships(kinds)}"
-            : $"{label}: {HumanHoverText.ShipCount(kinds.Count())}";
+            : $"{label}: {HumanHoverText.ShipCount(ships.Count)}";
+        return HumanHoverText.WithStrength(text, Gameboard.Instance.FleetStrengthOf(ships));
     }
 
     public void OnPointerEnter(PointerEventData eventData)

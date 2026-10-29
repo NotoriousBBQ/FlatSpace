@@ -431,7 +431,7 @@ Spec `docs/superpowers/specs/2026-10-23-human-player-ui-stage2-design.md`, plan 
 - **Fleet panel:** `FleetUIController` shows the human's ships as fleet boxes plus a "+ New fleet" box; dragging a ship row to a box is `setFleet`, a box title onto a box is `mergeFleets`.
 - **Board:** one icon per human fleet (`FleetIconHandle` on each icon). A press-drag from an own icon draws a line (green/red from `Gameboard.CheckFleetDrag`, checked only when the planet under the pointer changes)
   and on release `Gameboard.TryDragFleet` sends a `move` of that fleet's `HumanFleetView.ShipIndices`; a refusal shows a toast (`HumanHoverText.RefusalSentence`). A rival's icon only hovers.
-- **Hover popups:** one popup (`HumanHoverPopup`) fed by the pure `HumanHoverText` (ship text, `Order` text for ship, food, grotsits, colonist and rider lines, `CanSee`: a rival's line only with both ends visible, `Pick`:
+- **Hover popups:** one popup (`HumanHoverPopup`) fed by the pure `HumanHoverText` (a fleet icon's popup ends with `, strength N`, `HumanHoverText.WithStrength` over `Gameboard.FleetStrengthOf`, the figure the Diplomacy screen shows; none for a fleet with no warships) (ship text, `Order` text for ship, food, grotsits, colonist and rider lines, `CanSee`: a rival's line only with both ends visible, `Pick`:
   10 px screen-space test against the order lines; the order-to-line link is `Gameboard._orderLines`). `Gameboard.UpdateLineHover` runs while a human plays.
   While a human plays, a rival's fleet (icon popup, line popup, fleet panel) shows only a ship count: `HumanHoverText.ShowFullFleetDetail(owner, humanId)` is the one rule (full detail for the human's own fleets and for every fleet when no human plays; a future debug mode, see `FUTURE_FEATURES.md`, would lift it). A rival's fleet panel opens only for a planet in sight now (`Gameboard.ShowFleetUI`), never for a dimmed one.
 - **Fleet summary:** `FleetSummaryScreen` (HUD Fleets button) lists `HumanFleetList.Build` rows; a row click centres the board on the planet (the destination in flight), opens nothing, and closes the screen.
@@ -448,6 +448,21 @@ Only the planet search and planet summary of the stage 3 list are built; the res
   presentation only, fresh per match, refreshed once a turn from `HumanSeesPlanet`, saved as `GameSave.humanSightings` (an older save loads with none).
 - **Dimmed planets next to the human's:** on the board such a planet (explored, next to a planet the human occupies or has a ship at) keeps its name, its owner colour and its fleet icons, and hides population, food, grotsits and morale (`PlanetUIObject.SetFogState(..., nextToHuman)`). Clicking any planet not in sight opens a limited planet panel (`Gameboard.PlanetDetailIsLimited`): name, an `Owner:` line (`Gameboard.OwnerLabel`, with the age when out of the owner-visible set) and, only for a planet next to the human's, the population; the production, stock and order sections are hidden. With no human playing everything shows.
 - **Blockade messages:** the human's `Blockaded: <planet>` notification (and its pause) covers only the human's own planets and the planets where one of its orders was cut (`HumanTurnEvents.RelevantBlockades`, fed by `PlayerAI.RememberedBlockades`). `BlockadeView` itself still lists every visible planet where a rival's docked offense beats the human's, for the AI's routing; a rival garrison beside the human's planets is no news.
+
+#### The human UI (project 2, stage 3: the Diplomacy screen)
+
+Spec `docs/superpowers/specs/2026-10-29-diplomacy-screen-design.md`, plan `docs/superpowers/plans/2026-10-29-diplomacy-screen.md`. Project 1 of 2: ask-and-trade (asking a rival to declare war or
+make peace on a third party, offering and demanding planets, fleets and tech, an acceptance meter, the AI's answers) is a separate, later project.
+- **One screen** (`DiplomacyScreen`, HUD Diplomacy button or the T key; D is map scrolling; Esc or Close shuts it): the rivals the human has met on the left (war first), the picked rival on the
+  right: both stances with the turn each changed, the effective state ("Peace (mine), War (theirs): still at war"), a truce, the rival's hostility toward the human (a bar), its stance toward the other
+  rivals met, and its warships on planets whose ships the board shows (in sight, or next to a planet the human occupies or has a ship at: `Gameboard.HumanOwnerVisible`; a count and one strength number per planet, a total beside the human's own). A rival not met appears nowhere; a war the human declared stays listed after contact is lost (`HumanDiplomacyView.Known`). A response
+  area in the upper right stays empty (the project 2 answers go there; a local-model idea is in `FUTURE_FEATURES.md`).
+- **Buttons** go through `Gameboard.SubmitHumanCommands(.., "Diplomacy")`: Declare war, End the war (`makePeace`: sets only the human's own stance, so a rival still at war with it keeps the war on),
+  Surrender (both stances to Peace and a `surrenderTruceTurns` truce, no acceptance needed; the one sure way to end a war) each behind an inline confirmation, and Demand surrender, visible but inactive.
+  Their on/off state and reason come from `HumanCommandProcessor.Check`, which now covers `declareWar`, `makePeace` and `surrender`; `declareWar` is refused AlreadyAtWar on the human's own stance
+  only, so with mine Peace and theirs War it stays available.
+- **Pure part** `HumanDiplomacyView` (rows, the rival view, button states; self-check `HumanUiSelfCheck.RunDiplomacyViewChecks` / `RunDiplomacyCheckChecks`). It reads `DiplomacyState.Turn`, which
+  `GameAI` keeps current. With diplomacy off the screen says so and lists nobody.
 
 ### Input
 

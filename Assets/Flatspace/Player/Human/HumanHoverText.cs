@@ -24,6 +24,10 @@ namespace FlatSpace
             /// <summary>"4 ships", "1 ship".</summary>
             public static string ShipCount(int count) => $"{count} {(count == 1 ? "ship" : "ships")}";
 
+            /// <summary>"3 WarShip, strength 420": the fleet text with its strength (FleetStrength.Of) added; unchanged when the strength is 0 (no warships).</summary>
+            public static string WithStrength(string text, float strength)
+                => strength > 0f ? $"{text}, strength {strength.ToString("0", CultureInfo.InvariantCulture)}" : text;
+
             /// <summary>"3 WarShip, 1 SiegeShip": counts per kind in enum order; "no ships" for none.</summary>
             public static string Ships(IEnumerable<Ship.ShipKind> kinds)
             {

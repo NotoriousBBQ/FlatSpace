@@ -221,6 +221,12 @@ namespace Game.UI.MainGameScreenUI
 
         public void EscapeButtonPressed()
         {
+            if (DiplomacyScreen.IsOpen)
+            {
+                DiplomacyScreen.Close();
+                return;
+            }
+
             if (PlanetsScreen.IsOpen)
             {
                 PlanetsScreen.Close();

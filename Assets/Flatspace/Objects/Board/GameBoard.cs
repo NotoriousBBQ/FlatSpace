@@ -102,6 +102,10 @@ namespace FlatSpace
                 if (HumanPlayerId >= 0 && Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame
                     && !PlanetsScreen.IsOpen && !PlanetsScreen.AnyTextFieldFocused())
                     TogglePlanets();
+                // T opens the Diplomacy screen (D is map scrolling); the same rule as P about a focused text field.
+                if (HumanPlayerId >= 0 && Keyboard.current != null && Keyboard.current.tKey.wasPressedThisFrame
+                    && !DiplomacyScreen.IsOpen && !PlanetsScreen.AnyTextFieldFocused())
+                    ToggleDiplomacy();
                 if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame)
                     return;
 
@@ -113,7 +117,7 @@ namespace FlatSpace
                 var mousePosition = Mouse.current.position.ReadValue();
 
                 // The fleet summary is a HUD screen of its own: a press on it must leave the open planet or fleet panel alone.
-                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition) || PlanetsScreen.ContainsScreenPoint(mousePosition))
+                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition) || PlanetsScreen.ContainsScreenPoint(mousePosition) || DiplomacyScreen.ContainsScreenPoint(mousePosition))
                     return;
 
                 if (FleetUIShowing())
@@ -406,6 +410,42 @@ namespace FlatSpace
                     p => _humanBlockadingSince.TryGetValue(p.PlanetName, out var turn) && TurnNumber - turn <= HumanBlockadingTurns);
             }
 
+            /// <summary>The Diplomacy screen's rival list: the players the human has met. Empty without a human, or with diplomacy off.</summary>
+            public List<FlatSpace.Human.RivalRow> BuildDiplomacyRows()
+            {
+                if (HumanPlayerId < 0 || GameAI == null) return new List<FlatSpace.Human.RivalRow>();
+                GameAI.GameAIMap.Diplomacy.Turn = TurnNumber;   // GameAI sets it at the start of each turn; a fresh load and the time between turns leave it behind
+                return FlatSpace.Human.HumanDiplomacyView.Rivals(GameAI.GameAIMap, HumanPlayerId);
+            }
+
+            /// <summary>
+            /// The Diplomacy screen's pane for one rival (null without a human, with diplomacy off, or for a player not met). The button states come
+            /// from the command processor's own Check, and a fleet shows on the planets whose ships the board shows (in sight, or next to a planet the human occupies or has a ship at: HumanOwnerVisible).
+            /// </summary>
+            public FlatSpace.Human.RivalView BuildRivalView(int rival)
+            {
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count || players[HumanPlayerId].playerAI == null || GameAI == null) return null;
+                var humanAI = players[HumanPlayerId].playerAI;
+                var map = GameAI.GameAIMap;
+                map.Diplomacy.Turn = TurnNumber;   // see BuildDiplomacyRows: the truce and IsAtWar tests read it
+                var processor = new FlatSpace.Human.HumanCommandProcessor(map, humanAI, TurnNumber) { PauseSettings = HumanPause };
+                var stats = new WarshipStats(humanAI.ResearchCatalog != null ? humanAI.ResearchCatalog.catalogItems : null);
+                return FlatSpace.Human.HumanDiplomacyView.Build(map, HumanPlayerId, rival, HumanOwnerVisible(), stats,
+                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }));
+            }
+
+            /// <summary>The strength of docked ships (FleetStrength.Of, with the human's research for the stats; any player's when no human plays). 0 without a game.</summary>
+            public float FleetStrengthOf(IEnumerable<Ship> ships)
+            {
+                var ai = HumanPlayerId >= 0 && HumanPlayerId < players.Count ? players[HumanPlayerId].playerAI : players.Select(p => p.playerAI).FirstOrDefault(a => a != null);
+                if (ai == null) return 0f;
+                return FleetStrength.Of(ships, new WarshipStats(ai.ResearchCatalog != null ? ai.ResearchCatalog.catalogItems : null));
+            }
+
+            /// <summary>How long a surrender's truce lasts (the Diplomacy screen's confirmation names it).</summary>
+            public int SurrenderTruceTurns
+                => GameAI != null && GameAI.GameAIMap != null && GameAI.GameAIMap.GameAIConstants != null ? GameAI.GameAIMap.GameAIConstants.surrenderTruceTurns : 30;
+
             /// <summary>
             /// Whether the planet panel shows only name, owner and population: a human plays and the planet is neither theirs nor in their sight now
             /// (a dimmed planet). Everything is shown when no human plays.
@@ -431,6 +471,9 @@ namespace FlatSpace
 
             /// <summary>Opens or closes the Planets screen (the P key and the HUD button). Only while a human plays.</summary>
             public void TogglePlanets() => _mainScreenUIController?.TogglePlanets();
+
+            /// <summary>Opens or closes the Diplomacy screen (the T key and the HUD button). Only while a human plays.</summary>
+            public void ToggleDiplomacy() => _mainScreenUIController?.ToggleDiplomacy();
 
             /// <summary>
             /// Planets whose owner the human sees now: those in sight, and those next to a planet it occupies or has a ship at (its vision sources). The rest of an
@@ -712,6 +755,8 @@ namespace FlatSpace
                 _humanBlockadingSince.Clear();
                 PlanetsScreen.Close();
                 PlanetsScreen.ResetState();
+                DiplomacyScreen.Close();
+                DiplomacyScreen.ResetState();
                 _shippedFood.Clear();
                 _shippedGrotsits.Clear();
                 AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
