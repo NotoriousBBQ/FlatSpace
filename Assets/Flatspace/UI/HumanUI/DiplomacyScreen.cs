@@ -382,14 +382,27 @@ namespace Game.UI.MainGameScreenUI
             });
         }
 
+        /// <summary>What the rival is told happened, in words (the model reacts better to a sentence than to a command name).</summary>
+        private static string EventMessage(string type)
+        {
+            var human = "Player " + Gameboard.Instance.HumanPlayerId;
+            switch (type)
+            {
+                case DeclareWar: return $"{human} has declared war on you.";
+                case EndWar: return $"{human} has ended their war against you and set their stance to Peace.";
+                case Surrender: return $"{human} has surrendered to you. A truce begins.";
+                default: return type;
+            }
+        }
+
         private static void Send(string type, int rival)
         {
-            RequestReply(type, rival);
-
             _pending = null;
             var results = Gameboard.Instance.SubmitHumanCommands(new[] { new HumanCommand { type = type, rival = rival } }, "Diplomacy");
             var refused = HumanUiKit.RefusalSummary(results);
             if (!string.IsNullOrEmpty(refused)) HumanUiKit.Toast(_host, refused);
+            // Only a command that was applied gives the rival something to answer; the stance it reads is the one after the command.
+            if (results.Exists(r => r.applied)) RequestReply(EventMessage(type), rival);
             Refresh();
         }
     }

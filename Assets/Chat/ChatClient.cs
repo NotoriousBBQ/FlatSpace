@@ -47,30 +47,32 @@ public class ChatClient : MonoBehaviour
         StartCoroutine(SendChatRequestCoroutine(message, dynamicSystemPrompt, diplomacyState, onReply));
     }
 
+    private enum Tone { Hostile, Fearful, Enigmatic }
+
+    // The one place hostility (0..100) becomes a tone; the few-shot sample and the prompt's tone constraint both read it.
+    private const float HostileFrom = 66f;
+    private const float FearfulBelow = 33f;
+
+    private static Tone ToneOf(DiplomacyState.Pair diplomacyState)
+    {
+        if (diplomacyState.Hostility >= HostileFrom) return Tone.Hostile;
+        if (diplomacyState.Hostility < FearfulBelow) return Tone.Fearful;
+        return Tone.Enigmatic;
+    }
+
     private KeyValuePair<string, string> GetToneFromDiplomacyState(DiplomacyState.Pair diplomacyState)
     {
-        if (diplomacyState.Hostility >= 66)
+        const string question = "What are you going to do about it?";
+        switch (ToneOf(diplomacyState))
         {
-            // aggressive
-            return new KeyValuePair<string, string>(
-                "What are you going to do about it?", 
-                "I'll rip out your spleen!"
-                );
+            case Tone.Hostile:
+                return new KeyValuePair<string, string>(question, "I'll rip out your spleen!");
+            case Tone.Fearful:
+                return new KeyValuePair<string, string>(question, "I'm going to beg and plead and whine and cry");
+            default:
+                return new KeyValuePair<string, string>(question,
+                    "The wind blows gently across the surface of the pond, splashing the frog in its face.");
         }
-        else if (diplomacyState.Hostility < 33)
-        {            
-            // passive
-            return new KeyValuePair<string, string>(
-                "What are you going to do about it?", 
-                "I'm going to beg and plead and whine and cry"
-            );
-        }
-        // enigmatic
-        return new KeyValuePair<string, string>(
-            "What are you going to do about it?", 
-            "The wind blows gently across the surface of the pond, splashing the frog in its face."
-        );
-
     }
 
     private IEnumerator SendChatRequestCoroutine(string message, string dynamicSystemPrompt, DiplomacyState.Pair diplomacyState, Action<string> onReply)
@@ -145,12 +147,12 @@ public class ChatClient : MonoBehaviour
         systemPrompt += "4. Keep responses punchy, direct, and under 3 structural sentences.\n";
         systemPrompt += "\n";
         systemPrompt += "CURRENT TONE CONSTRAINT:\n";
-        if (diplomacyState.Hostility >= 66)
-            systemPrompt += "Hostility";
-        else if (diplomacyState.Hostility < 33)
-            systemPrompt += "Fear";
-        else
-            systemPrompt += "Enigmatic";        
+        switch (ToneOf(diplomacyState))
+        {
+            case Tone.Hostile: systemPrompt += "Hostility"; break;
+            case Tone.Fearful: systemPrompt += "Fear"; break;
+            default: systemPrompt += "Enigmatic"; break;
+        }
 
         return systemPrompt;
     }
