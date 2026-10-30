@@ -150,6 +150,11 @@ public class GameAIConstants : ScriptableObject
     // showed lossy shipments delivering ~12% of what they cost (e.g. 11 sent into a blockade of 10), hence 0.5. Read through
     // PlayerAI.MinDeliveredFractionFor, the seam for a per-target (high value planet) threshold.
     public float shipmentMinDeliveredFraction = 0.5f;
+    // Automatic resource shipments fill a shortage up to this many turns of its per-turn deficit (a shortage of 3 can take 30), never
+    // more than the source's surplus. 1 = only the deficit (the 2026-09-27 behavior, which logged ~6 per shipment and thousands of shipments a
+    // run); a large value approaches draining the whole surplus (the earlier behavior, which overshot and turned the target into a source).
+    // A Distribution Center's own demand (target stock minus stock) is already a buffer and is not multiplied.
+    public float shipmentBufferTurns = 10f;
 
     [Header("Warships")]
     // Each researched Warship improvement a ship carries adds this fraction of the base cost to building it

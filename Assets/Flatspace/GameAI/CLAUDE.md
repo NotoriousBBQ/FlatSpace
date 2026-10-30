@@ -465,6 +465,8 @@ precisely because a DC can ALSO report a genuine real shortage the same turn —
 keep its own normal, gap-derived priority instead of being wrongly demoted to the sentinel just because
 the planet happens to hold a DC role (`RunNoDuplicateRowForDCWithRealShortageCheck`).
 
+**Shipment size (2026-10-30):** a real shortage is filled up to `GameAIConstants.shipmentBufferTurns` (10) turns of its per-turn deficit, never more than the source's surplus (`ProcessResourceShipments` multiplies the shortage balance; a DC's synthetic gap, already a stock target, is not multiplied). History: before commit `8302257` (2026-09-27) a shipment drained the source's whole surplus (logged mean about 400, but it overshot and turned targets into sources); that commit capped it at the bare deficit (mean about 6.5, thousands of shipments a run, tiny against blockade losses). 1 restores the bare-deficit cap; logs from before and after this change are not comparable on shipment counts and sizes. The target's 600 storage cap is not considered. No new log line: the `FoodShip`/`GrotsitsShip` amounts show it.
+
 `PlayerAI.IsCoverageGap` is a one-turn-stale diagnostic (using the last-known, cached surplus/DC lists,
 since it runs from order execution before this turn's `UpdateResult`s exist) that flags a newly
 colonized planet with no path to any surplus planet or DC at all; it drives the `DCCoverageGap` log
