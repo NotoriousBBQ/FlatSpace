@@ -28,7 +28,9 @@ namespace Game.UI.MainGameScreenUI
             var destinationPlanet = board != null ? board.GetPlanet(destination) : null;
             if (host == null || destinationPlanet == null || board.HumanPlayerId < 0) return;
 
-            var food = true;
+            // Opens on Food, unless grotsits is the only one losing stock here (the same net rates the dialog and the panel show).
+            var opening = HumanPlanetView.NetPerTurn(destinationPlanet);
+            var food = !(opening.grotsits < 0f && opening.food >= 0f);
             var dialog = HumanUiKit.Panel(780f);
             dialog.Add(HumanUiKit.Header($"Ship to {destination}"));
 

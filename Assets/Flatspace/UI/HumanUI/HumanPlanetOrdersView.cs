@@ -66,7 +66,10 @@ namespace Game.UI.MainGameScreenUI
 
             // ── Action strip ──
             var strip = _strip;
-            strip.Add(HumanUiKit.Btn("Ship resources", () => ShipResourcesDialog.Show(name)));
+            // With shipments automated the AI does the shipping, so the manual dialog is off (the Game Settings switch turns it back on).
+            var ship = HumanUiKit.Btn("Ship resources", () => ShipResourcesDialog.Show(name));
+            ship.SetEnabled(!board.players[humanId].playerAI.ShipmentsAutomated);
+            strip.Add(ship);
             var colonize = HumanUiKit.Btn("Colonize", () => ColonizeDialog.Show(name));
             colonize.SetEnabled(HumanPlanetView.CanColonizeFrom(planet, humanId));
             strip.Add(colonize);

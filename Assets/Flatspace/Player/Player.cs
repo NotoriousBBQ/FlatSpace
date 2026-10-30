@@ -33,7 +33,9 @@ public class Player : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     private void Start()
     {
-        if (aiDriven == true)
+        // A load calls SetStrategy (which creates the PlayerAI and restores its state) in the same frame the Player is created, before
+        // this Start runs; replacing that PlayerAI here would throw the restored state away.
+        if (aiDriven == true && !playerAI)
         {
             playerAI = this.AddComponent<PlayerAI>();
             playerAI.Player = this;

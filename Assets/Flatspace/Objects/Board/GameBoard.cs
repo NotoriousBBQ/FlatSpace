@@ -117,7 +117,7 @@ namespace FlatSpace
                 var mousePosition = Mouse.current.position.ReadValue();
 
                 // The fleet summary is a HUD screen of its own: a press on it must leave the open planet or fleet panel alone.
-                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition) || PlanetsScreen.ContainsScreenPoint(mousePosition) || DiplomacyScreen.ContainsScreenPoint(mousePosition))
+                if (FleetSummaryScreen.ContainsScreenPoint(mousePosition) || PlanetsScreen.ContainsScreenPoint(mousePosition) || DiplomacyScreen.ContainsScreenPoint(mousePosition) || GameSettingsScreen.ContainsScreenPoint(mousePosition))
                     return;
 
                 if (FleetUIShowing())
@@ -519,9 +519,12 @@ namespace FlatSpace
                     }
                 };
                 if (freshMatch)
+                {
                     foreach (var planet in GameAI.GameAIMap.PlanetList)
                         if (planet.Owner == playerId)
                             planet.ManualDevelopment = true;
+                    players[playerId].playerAI.ShipmentsAutomated = true;   // a new match starts with shipments automated; a loaded save keeps its own flag (an old one: off)
+                }
                 MatchSettings.HumanRequested = true;
                 MatchSettings.HumanPlayerId = playerId;
                 owningPlayerId = playerId;
@@ -757,6 +760,7 @@ namespace FlatSpace
                 PlanetsScreen.ResetState();
                 DiplomacyScreen.Close();
                 DiplomacyScreen.ResetState();
+                GameSettingsScreen.Close();
                 _shippedFood.Clear();
                 _shippedGrotsits.Clear();
                 AITuningLogger.BeginMatch(_logAIEvents || AITuningLogger.EnabledViaMainMenu);
@@ -1365,9 +1369,9 @@ namespace FlatSpace
                 var fresh = HumanNotifications.Update(TurnNumber, LastHumanEvents,
                     (kind, planet) => FlatSpace.Human.HumanOngoing.IsStillTrue(GameAI.GameAIMap, HumanPlayerId, blockaded, LastHumanEvents, kind, planet, researchIdle));
                 // A shortage stops the timer only when something can be done about it: one of the human's planets could ship to it. It is
-                // listed either way.
+                // listed either way. With shipments automated the AI answers shortages itself, so they never stop the timer.
                 fresh = fresh.FindAll(e => (e.Kind != FlatSpace.Human.HumanEventKind.ShortageFood && e.Kind != FlatSpace.Human.HumanEventKind.ShortageGrotsits)
-                                           || GetShipmentSources(e.Kind == FlatSpace.Human.HumanEventKind.ShortageFood, e.Planet).Count > 0);
+                                           || (!humanAI.ShipmentsAutomated && GetShipmentSources(e.Kind == FlatSpace.Human.HumanEventKind.ShortageFood, e.Planet).Count > 0));
                 if (HumanPause.ShouldPause(fresh, out var first))
                 {
                     PausedByEvent = first;
