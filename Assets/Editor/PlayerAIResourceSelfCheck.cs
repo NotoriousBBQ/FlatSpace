@@ -14,6 +14,7 @@ public static class PlayerAIResourceSelfCheck
         var ok = RunFoodShortageScopingCheck();
         ok &= RunPartialShipmentRoundsCheck();
         ok &= RunShipmentCappedAtSurplusCheck();
+        ok &= RunShipmentBufferCheck();
         ok &= RunDistributionCenterPullsSurplusCheck();
         ok &= RunRealShortageOutranksSyntheticDemandCheck();
         ok &= RunNoDuplicateRowForDCWithRealShortageCheck();
@@ -64,6 +65,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
 
@@ -143,6 +145,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
 
@@ -207,6 +210,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
 
@@ -251,6 +255,62 @@ public static class PlayerAIResourceSelfCheck
         return ok;
     }
 
+    // A real shortage is filled up to shipmentBufferTurns turns of its deficit (never more than the source's surplus); a DC's own
+    // gap is already a stock target and is not multiplied.
+    public static bool RunShipmentBufferCheck()
+    {
+        var ok = true;
+        var mapGo = new GameObject("PAResSelfCheckMapBuffer");
+        var playerGo = new GameObject("PAResSelfCheckPlayerBuffer");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();   // the default buffer: 10 turns
+            constants.defaultTravelSpeed = 1f;
+            constants.maxPathNodesForResourceDistribution = 10;
+            ok &= Check(Mathf.Approximately(constants.shipmentBufferTurns, 10f), "the default buffer is 10 turns");
+
+            var spawns = new List<PlanetSpawnData>
+            {
+                MakeSpawn("Source", connections: new[] { "Short" }),
+                MakeSpawn("Short"),
+            };
+            map.GameAIMapInit(spawns, constants);
+            map.GetPlanet("Source").Population.Add(new Planet.Inhabitant { Player = 0 });
+
+            var player = playerGo.AddComponent<Player>();
+            var playerAI = playerGo.AddComponent<PlayerAI>();
+            playerAI.Player = player;
+            playerAI.AIMap = map;
+            player.playerID = 0;
+
+            List<GameAI.GameAIOrder> Run(float surplus)
+            {
+                var results = new List<Planet.UpdateResult>
+                {
+                    new Planet.UpdateResult("Short", Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodShortage, -3f, playerID: 0),
+                    new Planet.UpdateResult("Source", Planet.UpdateResult.UpdateResultType.UpdateResultTypeFoodSurplus, surplus, playerID: 0),
+                };
+                var orders = new List<GameAI.GameAIOrder>();
+                playerAI.ProcessResults(results, orders);
+                return orders;
+            }
+
+            var big = Run(100f).Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Short");
+            ok &= Check(big != null && Mathf.Approximately(Convert.ToSingle(big.Data), 30f),
+                "a deficit of 3 with a surplus of 100 ships 30 (10 turns of the deficit), not 3 and not the whole 100");
+            var small = Run(20f).Find(o => o.Type == GameAI.GameAIOrder.OrderType.OrderTypeFoodTransport && o.Target == "Short");
+            ok &= Check(small != null && Mathf.Approximately(Convert.ToSingle(small.Data), 20f),
+                "the buffer never ships more than the source's surplus");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(playerGo);
+            UnityEngine.Object.DestroyImmediate(mapGo);
+        }
+        return ok;
+    }
+
     // A DC below its target stock, with NO real shortage anywhere, must still pull surplus toward it —
     // proving the synthetic demand path actually reaches the shipment pipeline.
     public static bool RunDistributionCenterPullsSurplusCheck()
@@ -262,6 +322,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
             constants.distributionCenterFoodTargetStock = 20f;
@@ -329,6 +390,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
             // Small gap (1), not huge — see the comment above for why a huge gap fails to discriminate.
@@ -414,6 +476,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
             constants.distributionCenterFoodTargetStock = 100f;
@@ -492,6 +555,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
             constants.distributionCenterFoodTargetStock = 50f;
@@ -570,6 +634,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
 
@@ -637,6 +702,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 10;
             constants.distributionCenterFoodTargetStock = 20f;
@@ -703,6 +769,7 @@ public static class PlayerAIResourceSelfCheck
         {
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts; the buffer has its own check
             constants.defaultTravelSpeed = 1f;
             constants.maxPathNodesForResourceDistribution = 2; // direct connections only
             constants.minPlanetsForDistributionCenters = 0;

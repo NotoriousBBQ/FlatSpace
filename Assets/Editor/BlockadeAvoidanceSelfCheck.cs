@@ -150,6 +150,7 @@ public static class BlockadeAvoidanceSelfCheck
         var ok = true;
         var go = new GameObject("BASelfCheckMap_Planner");
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts
         try
         {
             var map = BuildDiamond(go, constants);
@@ -191,6 +192,7 @@ public static class BlockadeAvoidanceSelfCheck
         // A detour may exceed the node range: A - B - D is 3 nodes, the way round is 5.
         var go2 = new GameObject("BASelfCheckMap_PlannerLong");
         var constants2 = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants2.shipmentBufferTurns = 1f;
         try
         {
             var map = Build(go2, constants2,
@@ -221,6 +223,7 @@ public static class BlockadeAvoidanceSelfCheck
         var ok = true;
         var go = new GameObject("BASelfCheckMap_ShipPlanner");
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants.shipmentBufferTurns = 1f;   // these checks assert deficit-sized amounts
         try
         {
             var map = BuildDiamond(go, constants);   // A to D: about 224 via B, about 361 via C
@@ -269,6 +272,7 @@ public static class BlockadeAvoidanceSelfCheck
         // A detour may exceed the node range: A - B - D is 3 nodes, the way round is 5.
         var go2 = new GameObject("BASelfCheckMap_ShipPlannerLong");
         var constants2 = ScriptableObject.CreateInstance<GameAIConstants>();
+        constants2.shipmentBufferTurns = 1f;
         try
         {
             var map = Build(go2, constants2,

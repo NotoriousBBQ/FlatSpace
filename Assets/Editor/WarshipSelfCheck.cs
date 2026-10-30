@@ -227,6 +227,7 @@ public static class WarshipSelfCheck
     {
         var constants = ScriptableObject.CreateInstance<GameAIConstants>();
         constants.defaultTravelSpeed = 1f;
+        constants.shipmentBufferTurns = 1f;             // older checks assert deficit-sized shipments
         constants.warShipData = warship;
         constants.chokepointPercentile = 2f;            // chokepoints off: older checks keep their meaning
         constants.colonizationChokepointWeight = 0f;

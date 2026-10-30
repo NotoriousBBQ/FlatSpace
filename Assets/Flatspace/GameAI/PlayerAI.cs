@@ -1315,7 +1315,10 @@ namespace FlatSpace
                 }
 
                 // Real PlanetUpdatePlanet shortages carry a negative Data; the magnitude is what matters here.
-                var remainingShortage = shortages.ToDictionary(s => s.Name, s => Mathf.Abs(Convert.ToSingle(s.Data)));
+                // A real shortage is filled up to shipmentBufferTurns turns of its deficit; a DC's synthetic gap is already a stock target.
+                var bufferTurns = Mathf.Max(1f, AIMap.GameAIConstants.shipmentBufferTurns);
+                var remainingShortage = shortages.ToDictionary(s => s.Name,
+                    s => Mathf.Abs(Convert.ToSingle(s.Data)) * (syntheticShortageNames.Contains(s.Name) ? 1f : bufferTurns));
                 var remainingSurplus = surplusResults.ToDictionary(s => s.Name,
                     s => Convert.ToSingle(s.Data) * AIMap.GetPlanet(s.Name).GetPopulationFraction(Player.playerID));
 
