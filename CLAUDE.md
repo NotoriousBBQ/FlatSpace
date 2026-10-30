@@ -449,6 +449,12 @@ Only the planet search and planet summary of the stage 3 list are built; the res
 - **Dimmed planets next to the human's:** on the board such a planet (explored, next to a planet the human occupies or has a ship at) keeps its name, its owner colour and its fleet icons, and hides population, food, grotsits and morale (`PlanetUIObject.SetFogState(..., nextToHuman)`). Clicking any planet not in sight opens a limited planet panel (`Gameboard.PlanetDetailIsLimited`): name, an `Owner:` line (`Gameboard.OwnerLabel`, with the age when out of the owner-visible set) and, only for a planet next to the human's, the population; the production, stock and order sections are hidden. With no human playing everything shows.
 - **Blockade messages:** the human's `Blockaded: <planet>` notification (and its pause) covers only the human's own planets and the planets where one of its orders was cut (`HumanTurnEvents.RelevantBlockades`, fed by `PlayerAI.RememberedBlockades`). `BlockadeView` itself still lists every visible planet where a rival's docked offense beats the human's, for the AI's routing; a rival garrison beside the human's planets is no news.
 
+#### The human UI: Game Settings screen
+
+`GameSettingsScreen` (HUD Settings button under Diplomacy; Esc or Close shuts it) holds the game-wide switches; for now one checkbox, "Automate resource shipments", which sends `setShipments` through
+`Gameboard.SubmitHumanCommands(.., "GameSettings")` (more settings go in as more rows). **Default on for a new match:** `Gameboard.SetHumanPlayer` sets `ShipmentsAutomated = true` when `freshMatch`; a loaded
+save keeps its own flag, so an older save (which never recorded it) loads with it off. The PlayerAI field itself still defaults to false (the self-check fixtures rely on it). While it is on, food and grotsits shortages are still listed as notifications but never stop the timer (`Gameboard.CollectHumanEvents` drops them from the pause list). No new log line: the existing `HumanCommand` line records `setShipments`.
+
 #### The human UI (project 2, stage 3: the Diplomacy screen)
 
 Spec `docs/superpowers/specs/2026-10-29-diplomacy-screen-design.md`, plan `docs/superpowers/plans/2026-10-29-diplomacy-screen.md`. Project 1 of 2: ask-and-trade (asking a rival to declare war or

@@ -22,6 +22,7 @@ namespace Game.UI.MainGameScreenUI
         private Button _fleetsButton;
         private Button _planetsButton;
         private Button _diplomacyButton;
+        private Button _settingsButton;
         private Button _pauseBanner;
         private string _pauseBannerPlanet;
 
@@ -70,6 +71,15 @@ namespace Game.UI.MainGameScreenUI
             _diplomacyButton.style.display = DisplayStyle.None;
             HumanUiKit.StyleButton(_diplomacyButton);
             root.Add(_diplomacyButton);
+
+            // The game settings (for now the shipment automation switch) open from the button under Diplomacy.
+            _settingsButton = new Button(() => GameSettingsScreen.Toggle(root)) { text = "Settings" };
+            _settingsButton.style.position = Position.Absolute;
+            _settingsButton.style.top = 184;
+            _settingsButton.style.right = 10;
+            _settingsButton.style.display = DisplayStyle.None;
+            HumanUiKit.StyleButton(_settingsButton);
+            root.Add(_settingsButton);
 
             // Why the timer stopped, shown at once and clickable to go there; hidden otherwise.
             _pauseBanner = new Button(() => { if (!string.IsNullOrEmpty(_pauseBannerPlanet)) Gameboard.Instance.GoToPlanet(_pauseBannerPlanet); });
@@ -163,6 +173,13 @@ namespace Game.UI.MainGameScreenUI
                 _diplomacyButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
                 if (!human) DiplomacyScreen.Close();
                 else DiplomacyScreen.Refresh();
+            }
+            if (_settingsButton != null)
+            {
+                var human = Gameboard.Instance != null && Gameboard.Instance.HumanPlayerId >= 0;
+                _settingsButton.style.display = human ? DisplayStyle.Flex : DisplayStyle.None;
+                if (!human) GameSettingsScreen.Close();
+                else GameSettingsScreen.Refresh();
             }
         }
 
