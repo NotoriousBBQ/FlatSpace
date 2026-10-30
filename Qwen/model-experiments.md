@@ -1,4 +1,32 @@
-# Other lightweight models to try (2026-10-29)
+# Model experiments for the diplomacy chat (2026-10-29)
+
+## Result: the game uses `gemma3:4b` (`gemmaChat`)
+
+Built from `Qwen/Modelfile.gemma` (`ollama create gemmaChat -f Qwen/Modelfile.gemma`); `ChatClient.modelName` defaults to `gemmaChat:latest`.
+The `qwenChat` model (`Qwen/Modelfile`, `qwen2.5:3b`) is the previous baseline.
+
+Compared with `Qwen/experiments/run_chat_experiment.py` (3 hostility levels x 3 messages, with and without the few-shot, one reply per cell at
+temperature 0.9; replies in `Qwen/experiments/results-gemma3-4b.md` and `results-qwen3.5-4b.md`). Latency was about 2.4-2.7 s a reply for all three
+models after the load (the first request after Ollama starts loads the model, 5-10 s).
+
+| Model | Tone control | Rule-following (dialogue only, short) | Reacts to the event |
+|---|---|---|---|
+| `gemma3:4b` | good; enigmatic flat without help | best | best |
+| `qwen3.5:4b` (`think: false`) | best enigmatic, uneven fear (a threat instead of fear) | weakest: stage directions ("I whisper..."), up to 59 words, quoted paragraphs | good |
+| `qwen2.5:3b` | weakest; leaks the tone word, misreads events | good | weakest |
+
+Why Gemma: it keeps to short in-character dialogue with no preamble and answers what actually happened ("Good. About time you showed some spine." to a war
+declaration), which the Qwen models often missed. Qwen3.5 writes the most atmospheric lines but would need stricter instructions and a length cap.
+
+**Few-shot findings (owner's tests, after the script run, which suggested otherwise from one reply per cell):** on Gemma the few-shot sample works better
+than none for Hostility and Fear, so both stay. Enigmatic does better with a descriptive line than with a sample reply: the frog and pond sample is
+replaced by "Use astronomy or spiritual metaphors and profound zen-like phrasing to obfuscate your meaning. don't use 'river' or 'ocean'", still in the
+assistant slot of the few-shot (the owner likes the results there; moving it into the system prompt's tone constraint is an untried option). Naming
+'river' and 'ocean' may prime them, so watch for those words.
+
+Not done: Gemma was not sampled repeatedly to measure variation; `qwen3.5:4b` with a stricter prompt was not tried.
+
+## Candidates considered
 
 Candidates for the diplomacy chat (`Assets/Chat/ChatClient.cs`, model set by `modelName` and the Modelfile's `FROM` line). Tags are from memory: check each against the Ollama library before pulling.
 

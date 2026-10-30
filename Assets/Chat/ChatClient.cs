@@ -33,7 +33,7 @@ public class ChatClient : MonoBehaviour
 {   
     [Header("API Settings")]
     [SerializeField] private string ollamaUrl = "http://localhost:11434/api/chat";
-    [SerializeField] private string modelName = "qwenChat:latest";
+    [SerializeField] private string modelName = "gemmaChat:latest";
     // Seconds; generous because the first request after an idle spell has to load the model.
     [SerializeField] private int requestTimeoutSeconds = 60;
 
@@ -71,7 +71,7 @@ public class ChatClient : MonoBehaviour
                 return new KeyValuePair<string, string>(question, "I'm going to beg and plead and whine and cry");
             default:
                 return new KeyValuePair<string, string>(question,
-                    "The wind blows gently across the surface of the pond, splashing the frog in its face.");
+                    "Use astronomy or spiritual metaphors and profound zen-like phrasing to obfuscate your meaning. don't use 'river' or 'ocean'");
         }
     }
 
