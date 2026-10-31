@@ -30,6 +30,7 @@ public static class AllAISelfChecks
             ("Human Mode", HumanModeSelfCheck.RunChecks),
             ("Human UI", HumanUiSelfCheck.RunChecks),
             ("Player Value", PlayerValueSelfCheck.RunChecks),
+            ("Deal", DealSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

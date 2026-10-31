@@ -40,6 +40,7 @@ namespace Game.UI.MainGameScreenUI
         /// <summary>No rival picked and nothing awaiting confirmation. Called when a match starts or a game loads.</summary>
         public static void ResetState()
         {
+            ProposalDialog.Close();
             _selected = -1;
             _pending = null;
             _replyText = null;
@@ -58,6 +59,7 @@ namespace Game.UI.MainGameScreenUI
 
         public static void Close()
         {
+            ProposalDialog.Close();
             _screen?.RemoveFromHierarchy();
             _screen = null;
             _host = null;
@@ -71,6 +73,7 @@ namespace Game.UI.MainGameScreenUI
         public static bool ContainsScreenPoint(Vector2 screenPosition)
         {
             if (!IsOpen || _screen.panel == null) return false;
+            if (ProposalDialog.ContainsScreenPoint(screenPosition)) return true;
             return _screen.worldBound.Contains(RuntimePanelUtils.ScreenToPanel(_screen.panel, screenPosition));
         }
 
@@ -144,6 +147,7 @@ namespace Game.UI.MainGameScreenUI
                 _selected = rows.Count > 0 ? rows[0].Rival : -1;
                 _pending = null;
             }
+            ProposalDialog.Sync(_selected);   // an open proposal is re-previewed (the turn may have passed) or closed when its rival is gone
 
             _list.Clear();
             _detail.Clear();
@@ -181,6 +185,7 @@ namespace Game.UI.MainGameScreenUI
                 var changed = rival != _selected;
                 _selected = rival;
                 _pending = null;
+                if (changed) ProposalDialog.Close();
                 if (changed) RequestReply("Negotiations Begin", rival);
                 Refresh();
             });
@@ -313,6 +318,13 @@ namespace Game.UI.MainGameScreenUI
             row.Add(ActionButton("End the war", view.EndWar, () => Ask(EndWar)));
             row.Add(ActionButton("Surrender", view.Surrender, () => Ask(Surrender)));
             row.Add(ActionButton("Demand surrender", view.DemandSurrender, null));
+            // A proposal needs contact (a rival kept in the list after contact was lost has none) and diplomacy on.
+            var rival = view.Rival;
+            var map = Gameboard.Instance.GameAI.GameAIMap;
+            var inContact = map.Knowledge.ContactPlayers(map, Gameboard.Instance.HumanPlayerId).Contains(rival);
+            row.Add(ActionButton("Propose...",
+                new DiplomacyButton { Enabled = inContact, Reason = inContact ? null : ProposalText.RefusalSentence("NoContact") },
+                () => ProposalDialog.Show(_host, rival)));
             return row;
         }
 
@@ -363,6 +375,9 @@ namespace Game.UI.MainGameScreenUI
             }
         }
 
+        /// <summary>The latest reply as the response box shows it, or "" when there is none (the proposal dialog repeats it).</summary>
+        internal static string ReplyLine => string.IsNullOrEmpty(_replyText) ? "" : $"{_replyFrom}: \"{_replyText}\"";
+
         /// <summary>Puts the stored reply (or the empty-state text) into the response box, if the screen is open.</summary>
         private static void ShowReply()
         {
@@ -377,10 +392,19 @@ namespace Game.UI.MainGameScreenUI
                 _replyLabel.text = $"{_replyFrom}: \"{_replyText}\"";
                 _replyLabel.style.color = new StyleColor(Color.white);
             }
+            ProposalDialog.ReplyChanged(ReplyLine);
+        }
+
+        /// <summary>Shows a line at once as the rival's reply (the model's answer replaces it when it arrives).</summary>
+        internal static void SetReply(string text, int rival)
+        {
+            _replyText = text;
+            _replyFrom = "Player " + rival;
+            ShowReply();
         }
 
         /// <summary>Asks the chat model for the rival's reply to a message; the answer lands in the response box.</summary>
-        private static void RequestReply(string message, int rival)
+        internal static void RequestReply(string message, int rival)
         {
             var human = Gameboard.Instance.HumanPlayerId;
             if (human < 0) return;

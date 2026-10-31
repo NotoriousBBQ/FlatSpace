@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using FlatSpace.AI;
 
 namespace FlatSpace
 {
@@ -27,6 +28,8 @@ namespace FlatSpace
             public List<int> ships;   // dock indices at the origin (move)
             public List<int> workers; // four worker counts in the order food, grotsits, industry, research (assignWorkers)
             public bool flag;
+            public List<DealItem> dealGive = new List<DealItem>();   // propose: what the human gives (old JSON without it keeps the empty list)
+            public List<DealItem> dealGet = new List<DealItem>();    // propose: what the human asks for
         }
 
         [Serializable]

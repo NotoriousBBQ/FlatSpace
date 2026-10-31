@@ -1399,6 +1399,19 @@ public class Planet : MonoBehaviour
         return lowest < 0 ? 0 : lowest;
     }
 
+    // Hands ships docked here to a new owner (a deal): the group shares one fresh fleet id of the new owner. Touches no Gameboard.Instance.
+    public void TransferShips(IEnumerable<Ship> ships, int newOwner)
+    {
+        var group = ships.Where(s => s != null && DockedShips.Contains(s)).ToList();
+        if (group.Count == 0) return;
+        var fleetId = NextFleetId(newOwner);
+        foreach (var ship in group)
+        {
+            ship.Owner = newOwner;
+            ship.FleetId = fleetId;
+        }
+    }
+
     public bool UndockShip(Ship.ShipKind kind)
     {
         var ship = DockedShips.Find(s => s.Kind == kind);

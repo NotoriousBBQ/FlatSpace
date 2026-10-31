@@ -384,6 +384,9 @@ namespace FlatSpace
             /// <summary>What the human last saw of each planet (owner and turn); the Planets screen's Owner column. Fresh per match, saved with the game.</summary>
             public FlatSpace.Human.PlanetSightMemory PlanetSights { get; private set; } = new FlatSpace.Human.PlanetSightMemory();
 
+            // Caps the hostility shift deals cause per rival per turn. Not saved: a new match or a load starts empty.
+            private FlatSpace.AI.DealHostilityLedger _dealHostilityLedger = new FlatSpace.AI.DealHostilityLedger();
+
             // Planet -> the last turn the human's ships cut another player's orders there (presentation only, not saved: a load shows none until the next cut).
             private readonly Dictionary<string, int> _humanBlockadingSince = new Dictionary<string, int>();
             private const int HumanBlockadingTurns = 5;
@@ -415,7 +418,7 @@ namespace FlatSpace
             {
                 if (HumanPlayerId < 0 || GameAI == null) return new List<FlatSpace.Human.RivalRow>();
                 GameAI.GameAIMap.Diplomacy.Turn = TurnNumber;   // GameAI sets it at the start of each turn; a fresh load and the time between turns leave it behind
-                return FlatSpace.Human.HumanDiplomacyView.Rivals(GameAI.GameAIMap, HumanPlayerId);
+                return FlatSpace.Human.HumanDiplomacyView.Rivals(GameAI.GameAIMap, HumanPlayerId, HumanMetPlayers());
             }
 
             /// <summary>
@@ -431,7 +434,7 @@ namespace FlatSpace
                 var processor = new FlatSpace.Human.HumanCommandProcessor(map, humanAI, TurnNumber) { PauseSettings = HumanPause };
                 var stats = new WarshipStats(humanAI.ResearchCatalog != null ? humanAI.ResearchCatalog.catalogItems : null);
                 return FlatSpace.Human.HumanDiplomacyView.Build(map, HumanPlayerId, rival, HumanOwnerVisible(), stats,
-                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }), PlayerScoreOf);
+                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }), PlayerScoreOf, HumanMetPlayers());
             }
 
             /// <summary>A player's score (planets, fleets, tech; PlayerValue.ScoreOf). Zeros without a game or for an unknown player.</summary>
@@ -445,6 +448,64 @@ namespace FlatSpace
                 var research = ai.ResearchCatalog != null ? ai.ResearchCatalog.catalogItems : null;
                 var settings = FlatSpace.AI.PlayerValue.ValueSettings.From(map.GameAIConstants, ai.ProductionCatalog != null ? ai.ProductionCatalog.catalogItems : null);
                 return FlatSpace.AI.PlayerValue.ScoreOf(map, player, GameAI.CurrentAIOrders, research, new WarshipStats(research), settings);
+            }
+
+            // The context the rival's deal evaluation reads (Proposer is the human; the processor fills in the rival per command).
+            private FlatSpace.AI.DealContext BuildDealContext()
+            {
+                var humanAI = players[HumanPlayerId].playerAI;
+                var map = GameAI.GameAIMap;
+                var research = humanAI.ResearchCatalog != null ? humanAI.ResearchCatalog.catalogItems : null;
+                return new FlatSpace.AI.DealContext
+                {
+                    Map = map,
+                    Proposer = HumanPlayerId,
+                    Settings = FlatSpace.AI.PlayerValue.ValueSettings.From(map.GameAIConstants,
+                        humanAI.ProductionCatalog != null ? humanAI.ProductionCatalog.catalogItems : null),
+                    Stats = new WarshipStats(research),
+                    ScoreOf = PlayerScoreOf,
+                    WarCost = (victim, attacker) =>
+                    {
+                        if (victim < 0 || victim >= players.Count || players[victim].playerAI == null) return 0f;
+                        var victimAI = players[victim].playerAI;
+                        var victimSettings = FlatSpace.AI.PlayerValue.ValueSettings.From(map.GameAIConstants,
+                            victimAI.ProductionCatalog != null ? victimAI.ProductionCatalog.catalogItems : null);
+                        var victimStats = new WarshipStats(victimAI.ResearchCatalog != null ? victimAI.ResearchCatalog.catalogItems : null);
+                        var fleetValue = 0f;
+                        foreach (var planet in map.PlanetList)
+                            foreach (var ship in planet.DockedShips)
+                                if (ship.Owner == victim) fleetValue += FlatSpace.AI.PlayerValue.ShipValue(ship, victimStats, victimSettings);
+                        return victimAI.WarCostToward(attacker, TurnNumber, fleetValue);
+                    },
+                    Research = player => player >= 0 && player < players.Count && players[player].playerAI != null
+                        && players[player].playerAI.ResearchCatalog != null ? players[player].playerAI.ResearchCatalog.catalogItems : null,
+                };
+            }
+
+            // A processor for the human with the deal context set (propose reads it).
+            private FlatSpace.Human.HumanCommandProcessor NewHumanProcessor()
+            {
+                var humanAI = players[HumanPlayerId].playerAI;
+                GameAI.GameAIMap.Diplomacy.Turn = TurnNumber;   // the truce and IsAtWar tests read it (see BuildRivalView)
+                return new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, humanAI, TurnNumber)
+                {
+                    PauseSettings = HumanPause,
+                    Deal = BuildDealContext(),
+                    CapitalOf = id => GetPlayerCapitol(id)?.PlanetName,
+                    AiOf = id => id >= 0 && id < players.Count ? players[id].playerAI : null,
+                    HostilityLedger = _dealHostilityLedger,
+                };
+            }
+
+            /// <summary>
+            /// What a rival would make of a proposal, changing nothing (the Ask and Trade screen's acceptance meter): Refusal holds the closed
+            /// reason when it cannot be put. An empty verdict with Refusal "NoHuman" when no human plays.
+            /// </summary>
+            public FlatSpace.AI.DealVerdict PreviewDeal(int rival, List<FlatSpace.AI.DealItem> give, List<FlatSpace.AI.DealItem> get)
+            {
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count || players[HumanPlayerId].playerAI == null || GameAI == null)
+                    return new FlatSpace.AI.DealVerdict { Refusal = "NoHuman" };
+                return NewHumanProcessor().Preview(new FlatSpace.Human.HumanCommand { type = "propose", rival = rival, dealGive = give, dealGet = get });
             }
 
             /// <summary>The strength of docked ships (FleetStrength.Of, with the human's research for the stats; any player's when no human plays). 0 without a game.</summary>
@@ -492,7 +553,7 @@ namespace FlatSpace
             /// Planets whose owner the human sees now: those in sight, and those next to a planet it occupies or has a ship at (its vision sources). The rest of an
             /// adjacent planet (rates, building) stays hidden; only the owner is read.
             /// </summary>
-            private Func<string, bool> HumanOwnerVisible()
+            public Func<string, bool> HumanOwnerVisible()
             {
                 var near = new HashSet<string>();
                 var map = GameAI.GameAIMap;
@@ -500,6 +561,32 @@ namespace FlatSpace
                     foreach (var neighbour in map.GetNeighbours(source.Planet.PlanetName))
                         near.Add(neighbour);
                 return name => near.Contains(name) || HumanSeesPlanet(name);
+            }
+
+            /// <summary>
+            /// The players the human has met: those whose people or ships it can read now (a planet in HumanOwnerVisible) and the owner it last saw on any other
+            /// planet (PlanetSights). The Diplomacy screen lists these; the AI's Knowledge contact reaches maxPathNodesForKnowledge (6) path nodes and listed
+            /// players the human had never seen. Empty without a human.
+            /// </summary>
+            public SortedSet<int> HumanMetPlayers()
+            {
+                var met = new SortedSet<int>();
+                if (HumanPlayerId < 0 || GameAI == null || GameAI.GameAIMap == null) return met;
+                var visible = HumanOwnerVisible();
+                foreach (var planet in GameAI.GameAIMap.PlanetList)
+                {
+                    if (visible(planet.PlanetName))
+                    {
+                        foreach (var inhabitant in planet.Population)
+                            if (inhabitant.Player >= 0) met.Add(inhabitant.Player);
+                        foreach (var ship in planet.DockedShips)
+                            if (ship.Owner >= 0 && Ship.CountsAsShip(ship.Kind)) met.Add(ship.Owner);
+                    }
+                    else if (PlanetSights.TryGet(planet.PlanetName, out var seen) && seen.Owner >= 0)
+                        met.Add(seen.Owner);
+                }
+                met.Remove(HumanPlayerId);
+                return met;
             }
 
             /// <summary>Records the planets in the human's sight now. Does nothing without a human.</summary>
@@ -768,6 +855,7 @@ namespace FlatSpace
                 _turnLimitReported = false;
                 HumanNotifications = new FlatSpace.Human.HumanNotificationList();
                 PlanetSights = new FlatSpace.Human.PlanetSightMemory();
+                _dealHostilityLedger = new FlatSpace.AI.DealHostilityLedger();
                 _humanBlockadingSince.Clear();
                 PlanetsScreen.Close();
                 PlanetsScreen.ResetState();
@@ -1059,7 +1147,7 @@ namespace FlatSpace
                 return GameAI.GetPlanet(planetName);
             }
 
-            private Planet GetPlayerCapitol(int playerID)
+            public Planet GetPlayerCapitol(int playerID)
             {
                 return GameAI.GetPlayerCapitol(playerID);
             }
@@ -1284,7 +1372,7 @@ namespace FlatSpace
                 if (humanAI == null) return results;
 
                 var commandList = commands.ToList();
-                var processor = new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, humanAI, TurnNumber) { PauseSettings = HumanPause };
+                var processor = NewHumanProcessor();
                 var orders = new List<GameAI.GameAIOrder>();
                 results = processor.Apply(commandList, orders);
                 humanAI.StartQueuedResearchIfIdle(orders);   // an item queued while nothing is in progress starts now
@@ -1339,6 +1427,17 @@ namespace FlatSpace
                     return;   // TimedUpdate stops a watch-only run at the limit itself, or starts the next repeat run
                 StopTimedUpdate();
                 ShowMatchEnd("Turn limit reached", $"The match ended at turn {TurnNumber}. There is no winner yet.");
+            }
+
+            /// <summary>
+            /// An AI declared war on the human, who was at peace with it: a one-button popup says so (the notification and the pause come from the
+            /// usual WarDeclared event). The war is also the human's own: it lasts until the human ends it (see GameAI.ApplyStanceOrder).
+            /// </summary>
+            public void ReportWarDeclaredOnHuman(int declarer)
+            {
+                if (HumanPlayerId < 0) return;
+                ShowMatchEnd($"Player {declarer} declares war",
+                    $"Player {declarer} has declared war on you. The war lasts until you end it (Diplomacy, End the war) and they agree, or you strike a peace deal.");
             }
 
             private void ShowMatchEnd(string title, string message)

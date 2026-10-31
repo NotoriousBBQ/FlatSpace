@@ -178,6 +178,24 @@ public static class AITuningLogger
             pSurrender.ToString("0.###", ci), truceUntil.ToString(ci)) });
     }
 
+    /// <summary>The human proposed a deal: T&lt;turn&gt;|P&lt;human&gt;|Proposal|rival|give|get|net|band|accepted (give and get are comma-joined items such as planet:Name, fleet:2 WarShip@Planet, tech:Name, endWar; accepted is 1 or 0).</summary>
+    public static void LogProposal(int turnNumber, int human, int rival, string give, string get, float net, string band, bool accepted)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, human, "Proposal", rival.ToString(ci), give, get,
+            net.ToString("0.##", ci), band, accepted ? "1" : "0") });
+    }
+
+    /// <summary>An accepted deal moved a rival's hostility toward the human: T&lt;turn&gt;|P&lt;rival&gt;|DealHostility|human|delta|hostilityAfter (delta is the change actually applied after clamping).</summary>
+    public static void LogDealHostility(int turnNumber, int rival, int human, float delta, float hostilityAfter)
+    {
+        if (_currentLogPath == null) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, rival, "DealHostility", human.ToString(ci), delta.ToString("0.##", ci),
+            hostilityAfter.ToString("0.##", ci)) });
+    }
+
     /// <summary>A group left a lost fight: T&lt;turn&gt;|P&lt;id&gt;|Retreat|planet|destination|tier|ships|projectedLossPct (the perceived loss the decision used)|rivalSurvivorsPct|routeCost|cooldownUntil|pRetreat|exactLossPct (tier 3 appends |rememberedBlockade|myOffense).</summary>
     public static void LogRetreat(int turnNumber, int playerId, string planet, string destination, int tier, int ships,
         float lossFraction, float rivalSurvivorsFraction, float routeCost, int cooldownUntil, float pRetreat,

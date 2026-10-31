@@ -41,6 +41,13 @@ namespace FlatSpace
             /// A human player runs ProcessResultsHuman instead of the AI routine; every other player is unchanged.
             /// </summary>
             public bool HumanControlled => Player != null && Player.isHuman;
+
+            /// <summary>Whether a player is the human one (Player.isHuman). False without a Gameboard, so a self-check that builds a PlayerAI directly sees no human.</summary>
+            private static bool IsHumanPlayer(int playerId)
+            {
+                var board = Gameboard.Instance;
+                return board != null && playerId >= 0 && playerId < board.players.Count && board.players[playerId].isHuman;
+            }
             public GameAIMap   AIMap   { get; set; }
 
             public Catalog ProductionCatalog { get; set; }
@@ -286,6 +293,14 @@ namespace FlatSpace
             {
                 foreach (var result in results)
                 {
+                    if (result.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeConversion
+                        && result.Data is ConversionEvent flip && flip.OwnerChanged && flip.OldOwner == Player.playerID)
+                    {
+                        if (!_planetLosses.TryGetValue(flip.NewOwner, out var taken))
+                            _planetLosses[flip.NewOwner] = taken = new List<(int turn, float value)>();
+                        taken.Add((turn, AIMap.GetPlanet(result.Name)?.PlanetValue ?? 0f));
+                        continue;
+                    }
                     if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost) continue;
                     if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
                     if (!_losses.TryGetValue(loss.Attacker, out var list))
@@ -308,6 +323,53 @@ namespace FlatSpace
                 var window = AIMap.GameAIConstants.lossWindowTurns;
                 list.RemoveAll(e => turn - e.turn >= window);
                 return list.Sum(e => e.engaged);
+            }
+
+            // Per rival, the planets it took from me over the last lossWindowTurns: (turn, planet value). Player-private, not saved.
+            private readonly Dictionary<int, List<(int turn, float value)>> _planetLosses
+                = new Dictionary<int, List<(int turn, float value)>>();
+
+            /// <summary>
+            /// What the war has cost me toward this rival over the window: the share of my fleet it destroyed (LossShareToward) x
+            /// ownFleetValue, plus the value of the planets it took from me. Prunes entries older than the window.
+            /// </summary>
+            public float WarCostToward(int attacker, int turn, float ownFleetValue)
+            {
+                var cost = LossShareToward(attacker, turn) * ownFleetValue;
+                if (_planetLosses.TryGetValue(attacker, out var list))
+                {
+                    list.RemoveAll(e => turn - e.turn >= AIMap.GameAIConstants.lossWindowTurns);
+                    cost += list.Sum(e => e.value);
+                }
+                return cost;
+            }
+
+            /// <summary>
+            /// The not-yet-researched items of a tech's prerequisite chain on this player's research catalog (the item plus every
+            /// item reached through requiredTech); empty when the item is unknown or already researched.
+            /// </summary>
+            public List<CatalogItem> TechChain(string itemName)
+                => DealEvaluator.MissingChain(ResearchCatalog != null ? ResearchCatalog.catalogItems : null, itemName);
+
+            /// <summary>
+            /// Grants a tech by deal: the item and every unresearched prerequisite become researched, the production items they unlock
+            /// are flipped (as CompleteResearch does), each leaves ResearchQueue and currentResearch is cleared when it is one of them.
+            /// No notifications or log. Returns the names newly granted (empty when unknown or already researched). No Gameboard.Instance.
+            /// </summary>
+            public List<string> GrantTech(string itemName)
+            {
+                var granted = new List<string>();
+                foreach (var item in TechChain(itemName))
+                {
+                    item.researched = true;
+                    granted.Add(item.itemName);
+                    if (ProductionCatalog != null)
+                        foreach (var dependent in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == item.itemName))
+                            dependent.researched = true;
+                    ResearchQueue.RemoveAll(n => n == item.itemName);
+                    if (currentResearch == item) currentResearch = null;
+                }
+                return granted;
             }
 
             private float ShipsLostThisTurn(int rival, int turn)
@@ -377,6 +439,7 @@ namespace FlatSpace
                         MyStrength = myStrength,
                         RivalStrength = rivalStrength,
                         Truce = diplomacy.InTruce(me, rival, turn),
+                        RivalIsHuman = IsHumanPlayer(rival),
                     });
                 }
                 // A war I declared on a rival I no longer have contact with must still be able to end (my own War stance counts
@@ -405,6 +468,7 @@ namespace FlatSpace
                         MyStrength = myStrength,
                         RivalStrength = 0f,   // out of contact the rival's fleet is not visible, so I am never "weaker": no surrender to it
                         Truce = diplomacy.InTruce(me, rival, turn),
+                        RivalIsHuman = IsHumanPlayer(rival),
                     });
                 }
                 diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later

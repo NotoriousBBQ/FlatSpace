@@ -73,24 +73,26 @@ namespace FlatSpace
             public static bool IsOn(GameAIMap map) => map != null && map.Diplomacy != null && map.Diplomacy.Enabled;
 
             /// <summary>
-            /// The rivals shown: the players in contact, plus any the human has declared war on whose ships have since left (the war stays on, and
-            /// so must the way to end it). A player never met is in neither set.
+            /// The rivals shown: the players the human has met, plus any the human has declared war on whose ships have since left (the war stays on, and
+            /// so must the way to end it). A player never met is in neither set. metPlayers is who the human has actually SEEN (Gameboard builds it from the
+            /// fog view); null falls back to the AI's contact, which reaches maxPathNodesForKnowledge path nodes and so lists players the human never saw.
             /// </summary>
-            public static List<int> Known(GameAIMap map, int humanId)
+            public static List<int> Known(GameAIMap map, int humanId, IEnumerable<int> metPlayers = null)
             {
-                var known = new SortedSet<int>(map.Knowledge.ContactPlayers(map, humanId));
+                var known = new SortedSet<int>(metPlayers ?? map.Knowledge.ContactPlayers(map, humanId));
+                known.Remove(humanId);
                 foreach (var rival in map.Diplomacy.Rivals(humanId))
                     if (rival != humanId && map.Diplomacy.StanceToward(humanId, rival) == Stance.War) known.Add(rival);
                 return known.ToList();
             }
 
             /// <summary>The rivals the human has met, the ones at war first, then by player id. Empty when diplomacy is off.</summary>
-            public static List<RivalRow> Rivals(GameAIMap map, int humanId)
+            public static List<RivalRow> Rivals(GameAIMap map, int humanId, IEnumerable<int> metPlayers = null)
             {
                 var rows = new List<RivalRow>();
                 if (!IsOn(map)) return rows;
                 var diplomacy = map.Diplomacy;
-                foreach (var rival in Known(map, humanId))
+                foreach (var rival in Known(map, humanId, metPlayers))
                 {
                     var atWar = diplomacy.IsAtWar(humanId, rival, true);
                     var truce = diplomacy.InTruce(humanId, rival, diplomacy.Turn);
@@ -104,10 +106,10 @@ namespace FlatSpace
             /// wider knowledge); refusal(type, rival) is HumanCommandProcessor.Check for declareWar / makePeace / surrender (null = accepted).
             /// </summary>
             public static RivalView Build(GameAIMap map, int humanId, int rival, Func<string, bool> seesPlanet, WarshipStats stats,
-                Func<string, int, string> refusal, Func<int, PlayerValue.ScoreBreakdown> scoreOf = null)
+                Func<string, int, string> refusal, Func<int, PlayerValue.ScoreBreakdown> scoreOf = null, IEnumerable<int> metPlayers = null)
             {
                 if (!IsOn(map)) return null;
-                var contacts = Known(map, humanId);
+                var contacts = Known(map, humanId, metPlayers);
                 if (!contacts.Contains(rival)) return null;
 
                 var diplomacy = map.Diplomacy;

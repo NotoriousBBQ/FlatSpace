@@ -962,6 +962,26 @@ public static class DiplomacySelfCheck
             "a Make Peace order against a War pair reports a change");
         ok &= Check(d.StanceToward(0, 1) == Stance.Peace && d.Get(0, 1).LastChangeTurn == 20, "Peace, stamped turn 20");
 
+        // A war declared on the human is also the human's war: its own stance goes to War, so the declarer's later peace cannot end it
+        // (the human ends it with End the war, or a peace deal). Against anyone else the rival's stance is not touched.
+        var h = new DiplomacyState();
+        ok &= Check(GameAI.ApplyStanceOrder(h, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 30, targetIsHuman: true),
+            "an AI's Declare War on the human reports a change");
+        ok &= Check(h.StanceToward(1, 0) == Stance.War && h.StanceToward(0, 1) == Stance.War && h.Get(0, 1).LastChangeTurn == 30,
+            "and puts the human's own stance toward the declarer to War too, stamped the same turn");
+        GameAI.ApplyStanceOrder(h, Order(GameAI.GameAIOrder.OrderType.OrderTypeMakePeace, 1, 0), 45, targetIsHuman: true);
+        ok &= Check(h.StanceToward(1, 0) == Stance.Peace && h.StanceToward(0, 1) == Stance.War && h.IsAtWar(0, 1, true),
+            "the declarer's later peace leaves the human's war on (a Make Peace order never touches the human's stance)");
+        var other = new DiplomacyState();
+        GameAI.ApplyStanceOrder(other, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 30);
+        ok &= Check(other.StanceToward(0, 1) == Stance.Peace, "without targetIsHuman the rival's own stance is not touched, as before");
+        var locked = new DiplomacyState();
+        var lockedPair = locked.Get(1, 0);
+        lockedPair.TruceUntil = 99;
+        locked.Set(1, 0, lockedPair);
+        ok &= Check(!GameAI.ApplyStanceOrder(locked, Order(GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar, 1, 0), 30, targetIsHuman: true)
+                    && locked.StanceToward(0, 1) == Stance.Peace, "in a truce the declaration fails and the human's stance stays Peace");
+
         using (var f = Fixture.Line())
             ok &= Check(f.Map.GetPlanet(string.Empty) == null,
                 "an order with an empty Target looks up no planet (GetPlanet(\"\") is null, not an exception)");
@@ -1119,6 +1139,14 @@ public static class DiplomacySelfCheck
             ok &= Check(peace.Count == 1 && !peace[0].Surrender, "never when I am not at war with the rival");
             var truce = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.War, 100, 0.99f, true, 10f, 100f, truce: true) }, c);
             ok &= Check(truce.Count == 1 && !truce[0].Surrender, "never inside a truce (the pair is not at war)");
+
+            // The human is never surrendered to: the same row that surrenders above (at war, weaker, nearly wiped out) does not when the rival is the human
+            // (both Peace and War have weight 0 here, so the pick is uniform between them; it is never the surrender).
+            var toHuman = StanceMatrix.Decide(0, new List<StanceMatrix.Row>
+            {
+                new StanceMatrix.Row { Rival = 1, Hostility = 100f, Current = Stance.War, TurnsSinceChange = 100, LossShare = 0.99f, AtWar = true, MyStrength = 10f, RivalStrength = 100f, RivalIsHuman = true },
+            }, c);
+            ok &= Check(toHuman.Count == 1 && !toHuman[0].Surrender, "an AI never surrenders to the human, however badly it is losing");
 
             // A truce removes War: even at hostility 100 the matrix does not pick War.
             var noWar = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.Peace, 100, 0f, false, 100f, 100f, truce: true) }, c);
