@@ -15,6 +15,7 @@ public static class DealSelfCheck
         var ok = RunConstantsCheck();
         ok &= RunWarCostChecks();
         ok &= RunEvaluatorChecks();
+        ok &= RunFleetValueChecks();
         Debug.Log(ok
             ? "[DealSelfCheck] ALL PASSED"
             : "[DealSelfCheck] FAILURES (see errors above)");
@@ -205,6 +206,69 @@ public static class DealSelfCheck
             ok &= Check(DealEvaluator.MissingChain(rivalHas, "C").Select(i => i.itemName).SequenceEqual(new[] { "C" }), "chain stops at a researched item");
             ok &= Check(DealEvaluator.MissingChain(rivalHas, "B").Count == 0, "researched tech has an empty chain");
             ok &= Check(DealEvaluator.MissingChain(rivalHas, "Nope").Count == 0, "unknown tech has an empty chain");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mapGo);
+            foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
+        }
+        return ok;
+    }
+
+    public static bool RunFleetValueChecks()
+    {
+        var ok = true;
+        var junk = new List<Object>();
+        var mapGo = new GameObject("DealSelfCheckFleetMap");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            junk.Add(constants);
+            map.GameAIMapInit(new List<PlanetSpawnData> { MakeSpawn("Dock", 10f, 0f, junk), MakeSpawn("Far", 10f, 100f, junk) }, constants);
+            var dock = map.GetPlanet("Dock");
+
+            // Null templates: health fraction is 1 whatever the damage, so ships differ by research snapshot length.
+            // Warship value = 100 x (1 + 0.1 x snapshot size): 0 -> 100, 1 -> 110, 3 -> 130, 5 -> 150.
+            // Healthiest first = lowest Damage (the rule HumanCommandProcessor.HandleMove uses: OrderBy(Damage)).
+            dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "a", "b", "c" }, 0f);    // healthiest, 130
+            dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 10f);                    // 100
+            dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "a" }, 20f);              // 110
+            dock.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "a", "b", "c", "d", "e" }, 0f);   // another owner: never counts
+            dock.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f);               // another kind: never counts
+
+            var ctx = new DealContext
+            {
+                Map = map, Proposer = 0, Rival = 1,
+                Settings = new PlayerValue.ValueSettings { BaseWarshipCost = 100f, ImprovementFactor = 0.1f, FleetDivisor = 1f, TechDivisor = 1f },
+                Stats = new WarshipStats(null),
+                ScoreOf = p => new PlayerValue.ScoreBreakdown(),
+                WarCost = (victim, attacker) => 0f,
+                Research = p => null,
+            };
+            System.Func<string, int, DealItem> fleet = (kind, n) => new DealItem { kind = "fleet", name = kind, planet = "Dock", count = n };
+
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 0, fleet("WarShip", 2)), 230f), "fleet of 2: the two healthiest (130 + 100), not 110 + 100 or 130 + 110");
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 0, fleet("WarShip", 1)), 130f), "fleet of 1: the healthiest, 130");
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 0, fleet("WarShip", 9)), 340f), "count above the ships available values only the 3 owned: 340");
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 1, fleet("WarShip", 9)), 150f), "the other owner's fleet is only its own ship: 150");
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 0, fleet("Bogus", 2)), 0f), "an unparseable kind values 0");
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 0, fleet("WarShip", 0)), 0f), "count 0 values 0");
+
+            // Get-side tech: the rival gives it, so the receiver is the PROPOSER and the chain is the proposer's missing items.
+            var p1 = Tech("P1", "", 30f, false);
+            var p2 = Tech("P2", "P1", 70f, false);
+            var r1 = Tech("R1", "", 999f, false);
+            junk.Add(p1); junk.Add(p2); junk.Add(r1);
+            var proposerHas = new List<CatalogItem> { p1, p2 };
+            var rivalHas = new List<CatalogItem> { r1 };
+            ctx.Research = p => p == 0 ? proposerHas : p == 1 ? rivalHas : null;
+            var deal = new Deal();
+            deal.Get.Add(new DealItem { kind = "tech", name = "P2" });
+            var v = DealEvaluator.Evaluate(ctx, deal);
+            ok &= Check(Near(v.Give, 100f), "Get-side tech P2 is the proposer's missing chain P1 + P2 = 100");
+            p1.researched = true;
+            ok &= Check(Near(DealEvaluator.ItemValue(ctx, 1, deal.Get[0]), 70f), "with P1 researched only P2 is missing: 70");
         }
         finally
         {
