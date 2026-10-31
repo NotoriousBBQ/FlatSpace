@@ -4,6 +4,7 @@ using UnityEngine;
 using FlatSpace.AI;
 using Flatspace.Objects.Production;
 using System.Linq;
+using FlatSpace.Human;
 
 public static class DealSelfCheck
 {
@@ -17,6 +18,7 @@ public static class DealSelfCheck
         ok &= RunEvaluatorChecks();
         ok &= RunFleetValueChecks();
         ok &= RunExecutorChecks();
+        ok &= RunProposeChecks();
         Debug.Log(ok
             ? "[DealSelfCheck] ALL PASSED"
             : "[DealSelfCheck] FAILURES (see errors above)");
@@ -450,6 +452,188 @@ public static class DealSelfCheck
             Object.DestroyImmediate(mapGo);
             foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
         }
+        return ok;
+    }
+
+    // A: human, value 30 (its capital). B: human, 20. C: rival 1, 20. D: rival 1, 5. Two human warships at A, each worth 5.
+    private sealed class DealScene : System.IDisposable
+    {
+        public GameAIMap Map;
+        public GameAIConstants Constants;
+        public PlayerAI Human;
+        public HumanCommandProcessor Processor;
+        public float WarCost;
+        private readonly GameObject _mapGo, _playerGo;
+        private readonly List<Object> _junk = new List<Object>();
+
+        public DealScene(bool withContext = true)
+        {
+            _mapGo = new GameObject("DealSelfCheckProposeMap");
+            _playerGo = new GameObject("DealSelfCheckProposePlayer");
+            Map = _mapGo.AddComponent<GameAIMap>();
+            Constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            _junk.Add(Constants);
+            Map.GameAIMapInit(new List<PlanetSpawnData>
+            {
+                MakeSpawn("A", 30f, 0f, _junk), MakeSpawn("B", 20f, 100f, _junk),
+                MakeSpawn("C", 20f, 200f, _junk), MakeSpawn("D", 5f, 300f, _junk),
+            }, Constants);
+            SetPop(Map.GetPlanet("A"), 0, 0, 0, 0, 0, 0);
+            SetPop(Map.GetPlanet("B"), 0, 0, 0, 0, 0, 0);
+            SetPop(Map.GetPlanet("C"), 1, 1, 1, 1);
+            SetPop(Map.GetPlanet("D"), 1, 1, 1);
+            for (var i = 0; i < 2; i++) Map.GetPlanet("A").DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>());
+
+            var player = _playerGo.AddComponent<Player>();
+            Human = _playerGo.AddComponent<PlayerAI>();
+            Human.Player = player;
+            Human.AIMap = Map;
+            player.playerID = 0;
+            Map.Knowledge.SetKnownPlanets(0, new List<string> { "A", "B", "C", "D" });
+            Map.Diplomacy.Enabled = true;
+            Map.Diplomacy.Turn = 5;
+
+            Processor = new HumanCommandProcessor(Map, Human, 5);
+            if (withContext)
+            {
+                Processor.Deal = new DealContext
+                {
+                    Settings = new PlayerValue.ValueSettings { BaseWarshipCost = 5f, ImprovementFactor = 0.1f, FleetDivisor = 1f, TechDivisor = 1f },
+                    Stats = new WarshipStats(null),
+                    ScoreOf = p => new PlayerValue.ScoreBreakdown { Planets = 1000f },
+                    WarCost = (victim, attacker) => WarCost,
+                    Research = p => new List<CatalogItem>(),
+                };
+                Processor.CapitalOf = p => p == 0 ? "A" : null;
+            }
+        }
+
+        public void SetHostility(float value)
+        {
+            var pair = Map.Diplomacy.Get(1, 0);
+            pair.Hostility = value;
+            Map.Diplomacy.Set(1, 0, pair);
+        }
+
+        public float Hostility => Map.Diplomacy.Hostility(1, 0);
+
+        public HumanCommandResult Propose(List<DealItem> give, List<DealItem> get, int rival = 1)
+            => Processor.Apply(new[] { new HumanCommand { type = "propose", rival = rival, dealGive = give, dealGet = get } },
+                new List<GameAI.GameAIOrder>())[0];
+
+        public void Dispose()
+        {
+            Object.DestroyImmediate(_playerGo);
+            Object.DestroyImmediate(_mapGo);
+            foreach (var o in _junk) if (o != null) Object.DestroyImmediate(o);
+        }
+    }
+
+    private static DealItem PlanetItem(string name) => new DealItem { kind = "planet", name = name };
+    private static DealItem WarshipItem(int count) => new DealItem { kind = "fleet", name = "WarShip", planet = "A", count = count };
+    private static List<DealItem> Items(params DealItem[] items) => new List<DealItem>(items);
+
+    public static bool RunProposeChecks()
+    {
+        var ok = true;
+        var none = new List<DealItem>();
+        var endWar = new DealItem { kind = "endWar" };
+
+        // An accepted planet gift: the planet flips, hostility falls by min(cap 10, value 20) = 10 (50 -> 40).
+        using (var s = new DealScene())
+        {
+            s.SetHostility(50f);
+            var preview = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = Items(PlanetItem("B")), dealGet = none });
+            ok &= Check(preview.Refusal == null && preview.Accept && Near(preview.Net, 20f) && Near(preview.TangibleDelta, 20f), "preview of a gift of B: accepted, Net 20");
+            ok &= Check(s.Map.GetPlanet("B").Owner == 0, "a preview changes nothing");
+            ok &= Check(s.Processor.Check(new HumanCommand { type = "propose", rival = 1, dealGive = Items(PlanetItem("B")), dealGet = none }) == null, "Check allows a valid proposal");
+            ok &= Check(s.Map.GetPlanet("B").Owner == 0 && Near(s.Hostility, 50f), "Check applies nothing");
+            var result = s.Propose(Items(PlanetItem("B")), none);
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "gift applied, detail starts accepted: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.GetPlanet("B").Owner == 1, "the planet changed hands");
+            ok &= Check(Near(s.Hostility, 40f), "hostility 50 + clamp(-20, -10, 10) = 40");
+        }
+
+        // A fleet gift worth 5 at hostility 4: -5 would go below 0, so it stops at 0.
+        using (var s = new DealScene())
+        {
+            s.SetHostility(4f);
+            var result = s.Propose(Items(WarshipItem(1)), none);
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "fleet gift accepted");
+            ok &= Check(Near(s.Hostility, 0f), "hostility 4 - 5 stays at 0");
+            ok &= Check(s.Map.GetPlanet("A").DockedShips.Count(x => x.Owner == 0) == 1 && s.Map.GetPlanet("A").DockedShips.Count(x => x.Owner == 1) == 1, "one ship moved to the rival");
+        }
+
+        // Declined: asking planet C for nothing changes no owner, no hostility, no truce.
+        using (var s = new DealScene())
+        {
+            s.SetHostility(50f);
+            var result = s.Propose(none, Items(PlanetItem("C")));
+            ok &= Check(result.applied && result.reason == "" && result.detail.StartsWith("declined"), "a declined deal is applied with detail declined: " + result.detail);
+            ok &= Check(s.Map.GetPlanet("C").Owner == 1 && Near(s.Hostility, 50f), "declined: owner and hostility unchanged");
+            ok &= Check(s.Map.Diplomacy.Get(0, 1).TruceUntil == 0 && s.Map.Diplomacy.Get(1, 0).TruceUntil == 0, "declined: no truce");
+        }
+
+        // End the war alone: war cost 30, hostility 20 -> penalty 10, PeaceWorth 20: accepted, Peace both ways, truce to 5 + 20 = 25, hostility untouched.
+        using (var s = new DealScene())
+        {
+            s.Map.Diplomacy.SetStance(0, 1, Stance.War, 1);
+            s.WarCost = 30f;
+            s.SetHostility(20f);
+            var result = s.Propose(none, Items(endWar));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "end-war deal accepted: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.Diplomacy.StanceToward(0, 1) == Stance.Peace && s.Map.Diplomacy.StanceToward(1, 0) == Stance.Peace, "Peace both ways");
+            ok &= Check(s.Map.Diplomacy.Get(0, 1).TruceUntil == 25 && s.Map.Diplomacy.Get(1, 0).TruceUntil == 25, "20-turn truce");
+            ok &= Check(Near(s.Hostility, 20f), "a peace deal with no tangible items leaves hostility unchanged");
+        }
+
+        // The sign: the rival gives C (20), gets a ship (5) and still accepts for the peace (45 - 25 = 20): net 5, tangible -15, hostility + min(10, 15).
+        using (var s = new DealScene())
+        {
+            s.Map.Diplomacy.SetStance(0, 1, Stance.War, 1);
+            s.WarCost = 45f;
+            s.SetHostility(50f);
+            var result = s.Propose(Items(WarshipItem(1)), Items(PlanetItem("C"), endWar));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "peace carries a lopsided trade: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.GetPlanet("C").Owner == 0, "the rival gave C");
+            ok &= Check(Near(s.Hostility, 60f), "hostility 50 + min(10, 15) = 60");
+        }
+        // The same at hostility 98 (war cost 100, penalty 49, peace worth 51): 98 + 10 stops at 100.
+        using (var s = new DealScene())
+        {
+            s.Map.Diplomacy.SetStance(0, 1, Stance.War, 1);
+            s.WarCost = 100f;
+            s.SetHostility(98f);
+            var result = s.Propose(Items(WarshipItem(1)), Items(PlanetItem("C"), endWar));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "accepted at hostility 98: " + result.reason);
+            ok &= Check(Near(s.Hostility, 100f), "hostility stops at hostilityMax");
+        }
+
+        // Refusals
+        using (var s = new DealScene())
+        {
+            ok &= Check(s.Propose(none, none).reason == "EmptyDeal", "EmptyDeal");
+            ok &= Check(s.Processor.Preview(new HumanCommand { type = "propose", rival = 1 }).Refusal == "EmptyDeal", "preview carries EmptyDeal in Verdict.Refusal");
+            ok &= Check(s.Processor.Check(new HumanCommand { type = "propose", rival = 1 }) == "EmptyDeal", "Check reports EmptyDeal");
+            ok &= Check(s.Propose(Items(PlanetItem("B")), none, -1).reason == "UnknownRival", "UnknownRival for a negative id");
+            ok &= Check(s.Propose(Items(PlanetItem("B")), none, 0).reason == "UnknownRival", "UnknownRival for the human itself");
+            ok &= Check(s.Propose(Items(PlanetItem("B")), none, 5).reason == "NoContact", "NoContact for a player never met");
+            ok &= Check(s.Propose(Items(PlanetItem("A")), none).reason == "Capital", "the capital cannot be given (Validate reason)");
+            s.Map.Diplomacy.Enabled = false;
+            ok &= Check(s.Propose(Items(PlanetItem("B")), none).reason == "DiplomacyOff", "DiplomacyOff");
+        }
+        using (var s = new DealScene(false))
+        {
+            ok &= Check(s.Propose(Items(PlanetItem("B")), none).reason == "NoDealContext", "a processor with no deal context refuses");
+            ok &= Check(s.Map.GetPlanet("B").Owner == 0, "and applies nothing");
+        }
+
+        // Old JSON without the new fields still parses; new fields round-trip.
+        var old = HumanCommandProcessor.Parse("{\"commands\":[{\"type\":\"declareWar\",\"rival\":1}]}", out var error);
+        ok &= Check(error == null && old.Count == 1 && old[0].type == "declareWar" && (old[0].dealGive == null || old[0].dealGive.Count == 0)
+                    && (old[0].dealGet == null || old[0].dealGet.Count == 0), "JSON without dealGive/dealGet parses");
+        var fresh = HumanCommandProcessor.Parse("{\"commands\":[{\"type\":\"propose\",\"rival\":1,\"dealGive\":[{\"kind\":\"planet\",\"name\":\"B\"}]}]}", out error);
+        ok &= Check(error == null && fresh.Count == 1 && fresh[0].dealGive.Count == 1 && fresh[0].dealGive[0].name == "B", "dealGive parses from JSON");
         return ok;
     }
 }

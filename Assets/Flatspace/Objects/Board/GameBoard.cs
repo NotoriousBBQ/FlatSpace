@@ -447,6 +447,63 @@ namespace FlatSpace
                 return FlatSpace.AI.PlayerValue.ScoreOf(map, player, GameAI.CurrentAIOrders, research, new WarshipStats(research), settings);
             }
 
+            // The context the rival's deal evaluation reads (Proposer is the human; the processor fills in the rival per command).
+            private FlatSpace.AI.DealContext BuildDealContext()
+            {
+                var humanAI = players[HumanPlayerId].playerAI;
+                var map = GameAI.GameAIMap;
+                var research = humanAI.ResearchCatalog != null ? humanAI.ResearchCatalog.catalogItems : null;
+                return new FlatSpace.AI.DealContext
+                {
+                    Map = map,
+                    Proposer = HumanPlayerId,
+                    Settings = FlatSpace.AI.PlayerValue.ValueSettings.From(map.GameAIConstants,
+                        humanAI.ProductionCatalog != null ? humanAI.ProductionCatalog.catalogItems : null),
+                    Stats = new WarshipStats(research),
+                    ScoreOf = PlayerScoreOf,
+                    WarCost = (victim, attacker) =>
+                    {
+                        if (victim < 0 || victim >= players.Count || players[victim].playerAI == null) return 0f;
+                        var victimAI = players[victim].playerAI;
+                        var victimSettings = FlatSpace.AI.PlayerValue.ValueSettings.From(map.GameAIConstants,
+                            victimAI.ProductionCatalog != null ? victimAI.ProductionCatalog.catalogItems : null);
+                        var victimStats = new WarshipStats(victimAI.ResearchCatalog != null ? victimAI.ResearchCatalog.catalogItems : null);
+                        var fleetValue = 0f;
+                        foreach (var planet in map.PlanetList)
+                            foreach (var ship in planet.DockedShips)
+                                if (ship.Owner == victim) fleetValue += FlatSpace.AI.PlayerValue.ShipValue(ship, victimStats, victimSettings);
+                        return victimAI.WarCostToward(attacker, TurnNumber, fleetValue);
+                    },
+                    Research = player => player >= 0 && player < players.Count && players[player].playerAI != null
+                        && players[player].playerAI.ResearchCatalog != null ? players[player].playerAI.ResearchCatalog.catalogItems : null,
+                };
+            }
+
+            // A processor for the human with the deal context set (propose reads it).
+            private FlatSpace.Human.HumanCommandProcessor NewHumanProcessor()
+            {
+                var humanAI = players[HumanPlayerId].playerAI;
+                GameAI.GameAIMap.Diplomacy.Turn = TurnNumber;   // the truce and IsAtWar tests read it (see BuildRivalView)
+                return new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, humanAI, TurnNumber)
+                {
+                    PauseSettings = HumanPause,
+                    Deal = BuildDealContext(),
+                    CapitalOf = id => GetPlayerCapitol(id)?.PlanetName,
+                    AiOf = id => id >= 0 && id < players.Count ? players[id].playerAI : null,
+                };
+            }
+
+            /// <summary>
+            /// What a rival would make of a proposal, changing nothing (the Ask and Trade screen's acceptance meter): Refusal holds the closed
+            /// reason when it cannot be put. An empty verdict with Refusal "NoHuman" when no human plays.
+            /// </summary>
+            public FlatSpace.AI.DealVerdict PreviewDeal(int rival, List<FlatSpace.AI.DealItem> give, List<FlatSpace.AI.DealItem> get)
+            {
+                if (HumanPlayerId < 0 || HumanPlayerId >= players.Count || players[HumanPlayerId].playerAI == null || GameAI == null)
+                    return new FlatSpace.AI.DealVerdict { Refusal = "NoHuman" };
+                return NewHumanProcessor().Preview(new FlatSpace.Human.HumanCommand { type = "propose", rival = rival, dealGive = give, dealGet = get });
+            }
+
             /// <summary>The strength of docked ships (FleetStrength.Of, with the human's research for the stats; any player's when no human plays). 0 without a game.</summary>
             public float FleetStrengthOf(IEnumerable<Ship> ships)
             {
@@ -1284,7 +1341,7 @@ namespace FlatSpace
                 if (humanAI == null) return results;
 
                 var commandList = commands.ToList();
-                var processor = new FlatSpace.Human.HumanCommandProcessor(GameAI.GameAIMap, humanAI, TurnNumber) { PauseSettings = HumanPause };
+                var processor = NewHumanProcessor();
                 var orders = new List<GameAI.GameAIOrder>();
                 results = processor.Apply(commandList, orders);
                 humanAI.StartQueuedResearchIfIdle(orders);   // an item queued while nothing is in progress starts now

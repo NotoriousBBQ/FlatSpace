@@ -18,7 +18,7 @@ namespace FlatSpace
         ///
         /// Command types (fields read): move (origin, target, ships | kind + count), colonize (origin, target), queueProduction (origin,
         /// item), removeProduction (origin, index), moveProduction (origin, index, toIndex), queueResearch (item), removeResearch
-        /// (index), setShipments (flag), setDevelopment (origin, flag), assignWorkers (origin, workers), declareWar / makePeace / surrender (rival), setPause (eventName, flag).
+        /// (index), setShipments (flag), setDevelopment (origin, flag), assignWorkers (origin, workers), declareWar / makePeace / surrender (rival), propose (rival, dealGive, dealGet: a deal the rival accepts or declines), setPause (eventName, flag).
         /// </summary>
         public class HumanCommandProcessor
         {
@@ -38,6 +38,15 @@ namespace FlatSpace
             /// <summary>The pause settings the setPause command edits; null (a self-check, or no human yet) refuses it.</summary>
             public HumanPauseSettings PauseSettings { get; set; }
 
+            /// <summary>The evaluation context of the propose command (Proposer is the human; Rival is filled per command). Null refuses propose with "NoDealContext".</summary>
+            public DealContext Deal { get; set; }
+
+            /// <summary>Maps a player id to its capital planet name (null for none). Required by propose, like Deal.</summary>
+            public Func<int, string> CapitalOf { get; set; }
+
+            /// <summary>Maps a player id to its PlayerAI (a tech gift grants through it). Defaults to the human only.</summary>
+            public Func<int, PlayerAI> AiOf { get; set; }
+
             /// <summary>
             /// Whether a command would be accepted right now, without applying it: null when it would, else the refusal reason. Covers
             /// the commands a screen offers a choice of (queueProduction, queueResearch, colonize, shipResource, move, assignWorkers, declareWar, makePeace, surrender); any other type is
@@ -46,7 +55,7 @@ namespace FlatSpace
             public string Check(HumanCommand command)
             {
                 if (command == null) return "UnknownCommand";
-                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings };
+                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings, Deal = Deal, CapitalOf = CapitalOf, AiOf = AiOf };
                 switch (command.type)
                 {
                     case "queueResearch":
@@ -59,6 +68,7 @@ namespace FlatSpace
                     case "declareWar":
                     case "makePeace":
                     case "surrender":
+                    case "propose":
                         scratch._dryRun = true;
                         try
                         {
@@ -184,6 +194,8 @@ namespace FlatSpace
                     case "makePeace":
                     case "surrender":
                         return HandleStance(command, orders, out detail);
+                    case "propose":
+                        return HandlePropose(command, out detail);
                     case "setPause":
                         return HandleSetPause(command, out detail);
                     case "setShipments":
@@ -360,6 +372,97 @@ namespace FlatSpace
                     PlayerId = HumanId,
                 });
                 detail = $"{command.type} {rival}";
+                return null;
+            }
+
+            // ── Deals ────────────────────────────────────────────────────────
+
+            // The refusal for a propose command, or null when it can be put to the rival; ctx and deal are filled when it can.
+            private string ProposalRefusal(HumanCommand command, out DealContext ctx, out Deal deal)
+            {
+                ctx = null;
+                deal = null;
+                if (command == null) return "UnknownCommand";
+                if (Deal == null || CapitalOf == null) return "NoDealContext";
+                var diplomacy = _map.Diplomacy;
+                if (!diplomacy.Enabled) return "DiplomacyOff";
+                var rival = command.rival;
+                if (rival < 0 || rival == HumanId) return "UnknownRival";
+                if (!_map.Knowledge.ContactPlayers(_map, HumanId).Contains(rival)) return "NoContact";
+
+                ctx = new DealContext
+                {
+                    Map = _map, Proposer = HumanId, Rival = rival,
+                    Settings = Deal.Settings, Stats = Deal.Stats, ScoreOf = Deal.ScoreOf, WarCost = Deal.WarCost, Research = Deal.Research,
+                };
+                deal = new Deal
+                {
+                    Give = command.dealGive != null ? new List<DealItem>(command.dealGive) : new List<DealItem>(),
+                    Get = command.dealGet != null ? new List<DealItem>(command.dealGet) : new List<DealItem>(),
+                };
+                var refusal = DealExecutor.Validate(ctx, deal, CapitalOf);
+                if (refusal != null) { ctx = null; deal = null; }
+                return refusal;
+            }
+
+            /// <summary>
+            /// What the rival would make of a propose command, changing nothing: Verdict.Refusal holds the closed reason when the deal
+            /// cannot be put (no context, diplomacy off, unknown rival, no contact, or a DealExecutor.Validate reason), else the
+            /// evaluation (band, accept and the reasons). Pure.
+            /// </summary>
+            public DealVerdict Preview(HumanCommand command)
+            {
+                var refusal = ProposalRefusal(command, out var ctx, out var deal);
+                return refusal != null ? new DealVerdict { Refusal = refusal } : DealEvaluator.Evaluate(ctx, deal);
+            }
+
+            private static string Terms(List<DealItem> items)
+            {
+                if (items == null || items.Count == 0) return "-";
+                return string.Join(",", items.Select(i =>
+                {
+                    if (i == null) return "?";
+                    switch (i.kind)
+                    {
+                        case "fleet": return $"fleet:{i.count} {i.name}@{i.planet}";
+                        case "endWar": return "endWar";
+                        default: return $"{i.kind}:{i.name}";
+                    }
+                }));
+            }
+
+            // propose: rival, dealGive (what the human gives), dealGet (what it asks for). Accepted: the deal is executed and the rival's
+            // hostility toward the human shifts by -dealHostilityPerValue x TangibleDelta (capped, kept in 0..hostilityMax). Declined:
+            // nothing changes, but the command is applied (the answer is the detail). A dry run (Check) only validates.
+            private string HandlePropose(HumanCommand command, out string detail)
+            {
+                detail = "";
+                var refusal = ProposalRefusal(command, out var ctx, out var deal);
+                if (refusal != null) return refusal;
+                if (_dryRun) return null;
+
+                var constants = _map.GameAIConstants;
+                var verdict = DealEvaluator.Evaluate(ctx, deal);   // before Execute: the ships and planets still sit where they are valued
+                var give = Terms(deal.Give);
+                var get = Terms(deal.Get);
+                AITuningLogger.LogProposal(_turn, HumanId, ctx.Rival, give, get, verdict.Net, verdict.Band.ToString(), verdict.Accept);
+                var terms = $"rival {ctx.Rival} give {give} get {get} net {verdict.Net.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}";
+                if (!verdict.Accept)
+                {
+                    detail = "declined " + terms;
+                    return null;
+                }
+
+                DealExecutor.Execute(ctx, deal, _turn, constants, AiOf ?? (id => id == HumanId ? _human : null), CapitalOf);
+
+                var pair = _map.Diplomacy.Get(ctx.Rival, HumanId);
+                var before = pair.Hostility;
+                var shift = Mathf.Clamp(-constants.dealHostilityPerValue * verdict.TangibleDelta, -constants.dealHostilityCap, constants.dealHostilityCap);
+                pair.Hostility = Mathf.Clamp(before + shift, 0f, constants.hostilityMax);
+                _map.Diplomacy.Set(ctx.Rival, HumanId, pair);
+                var applied = pair.Hostility - before;
+                if (applied != 0f) AITuningLogger.LogDealHostility(_turn, ctx.Rival, HumanId, applied, pair.Hostility);
+                detail = "accepted " + terms;
                 return null;
             }
 
