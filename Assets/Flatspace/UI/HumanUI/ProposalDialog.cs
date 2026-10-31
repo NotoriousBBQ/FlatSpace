@@ -30,6 +30,9 @@ namespace Game.UI.MainGameScreenUI
         private static bool _menuOpen;
         private static string _menuCategory;     // null = the category buttons, else planet / fleet / tech
         private static Label _replyLabel;
+        // How the last Propose ended: shown as a banner until the deal is edited, so a refusal cannot be missed.
+        private enum Outcome { None, Accepted, Declined }
+        private static Outcome _outcome;
 
         public static bool IsOpen => _root != null && _root.parent != null;
 
@@ -44,6 +47,7 @@ namespace Game.UI.MainGameScreenUI
             Get.Clear();
             _menuOpen = false;
             _menuCategory = null;
+            _outcome = Outcome.None;
 
             _root = HumanUiKit.Panel();
             _root.style.position = Position.Absolute;
@@ -185,6 +189,7 @@ namespace Game.UI.MainGameScreenUI
                     {
                         Give.Add(new DealItem { kind = "endWar" });
                         Get.Add(new DealItem { kind = "endWar" });
+                        _outcome = Outcome.None;
                         CloseMenu();
                     }));
                 return menu;
@@ -207,6 +212,7 @@ namespace Game.UI.MainGameScreenUI
                 list.Add(HumanUiKit.Btn(option.Label, () =>
                 {
                     (isGive ? Give : Get).Add(item);
+                    _outcome = Outcome.None;
                     CloseMenu();
                 }));
             }
@@ -230,6 +236,7 @@ namespace Game.UI.MainGameScreenUI
 
         private static void Remove(DealItem item)
         {
+            _outcome = Outcome.None;
             if (item.kind == "endWar")
             {
                 // The linked pair goes together.
@@ -348,6 +355,17 @@ namespace Game.UI.MainGameScreenUI
 
         private static void BuildVerdict(VisualElement parent, DealVerdict verdict)
         {
+            if (_outcome != Outcome.None)
+            {
+                var accepted = _outcome == Outcome.Accepted;
+                var color = accepted ? HumanUiKit.Good : HumanUiKit.Bad;
+                var banner = HumanUiKit.Panel();
+                banner.style.marginBottom = 6;
+                banner.style.borderTopColor = banner.style.borderRightColor = banner.style.borderBottomColor = banner.style.borderLeftColor = new StyleColor(color);
+                banner.Add(HumanUiKit.Text(accepted ? "DEAL ACCEPTED" : "DEAL DECLINED", color, bold: true, size: 18));
+                banner.Add(HumanUiKit.Text(accepted ? "The items changed hands. The deal is cleared; add another or close the window." : "They said no. Nothing changed; mend the deal and try again.", color, size: 12));
+                parent.Add(banner);
+            }
             parent.Add(HumanUiKit.Text("How they see it", HumanUiKit.Warn, bold: true));
             var judged = string.IsNullOrEmpty(verdict.Refusal);
 
@@ -442,12 +460,21 @@ namespace Game.UI.MainGameScreenUI
             var tone = (int)ChatClient.ToneOf(pair);
             var template = ProposalText.TemplateReply(accepted, tone, Random.Range(0, 1000));
 
-            if (accepted) Close();
+            // The dialog stays open either way: a banner says how it ended. An accepted deal has been carried out, so its items are cleared.
+            _outcome = accepted ? Outcome.Accepted : Outcome.Declined;
+            if (accepted)
+            {
+                Give.Clear();
+                Get.Clear();
+                _menuOpen = false;
+                _menuCategory = null;
+            }
+            HumanUiKit.Toast(host, accepted ? "Deal accepted" : "Deal declined");
             // The template answers at once; the model's line replaces it when it arrives.
             DiplomacyScreen.SetReply(template, rival);
             DiplomacyScreen.RequestReply(ProposalText.OutcomeMessage(human, accepted, give, get), rival);
             if (accepted) DiplomacyScreen.Refresh();   // stances and a truce may have changed
-            else Redraw();
+            Redraw();
         }
     }
 }

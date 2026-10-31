@@ -43,6 +43,7 @@ public static class HumanUiSelfCheck
         ok &= RunWorkerViewChecks();
         ok &= RunDiplomacyCheckChecks();
         ok &= RunDiplomacyViewChecks();
+        ok &= RunDiplomacyMetChecks();
         ok &= RunProposalTextChecks();
         return ok;
     }
@@ -1159,6 +1160,38 @@ public static class HumanUiSelfCheck
         {
             f.Map.Diplomacy.Enabled = true;
             ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0).Count == 0, "with nobody met the list is empty");
+        }
+        return ok;
+    }
+
+    // The screen lists the players the HUMAN has seen (the fog view the Gameboard hands in), not the AI's wider Knowledge contact (6 path nodes),
+    // which listed players the human had never met.
+    public static bool RunDiplomacyMetChecks()
+    {
+        var ok = true;
+        using (var f = new HumanModeSelfCheck.Fixture(4))
+        {
+            var diplomacy = f.Map.Diplomacy;
+            diplomacy.Enabled = true;
+            diplomacy.Turn = 5;
+            var stats = new WarshipStats(null);
+            HumanModeSelfCheck.Dock(f.P(0), Ship.ShipKind.WarShip, 0, 1);
+            HumanModeSelfCheck.Dock(f.P(2), Ship.ShipKind.WarShip, 1, 2);   // rival 1
+            HumanModeSelfCheck.Dock(f.P(3), Ship.ShipKind.WarShip, 2, 1);   // rival 2
+            var processor = new HumanCommandProcessor(f.Map, f.Human, 5);
+            System.Func<string, int, string> refusal = (type, rival) => processor.Check(new HumanCommand { type = type, rival = rival });
+            System.Func<string, bool> seesAll = name => true;
+
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0).Select(r => r.Rival).SequenceEqual(new[] { 1, 2 }), "without a met set the AI's contact decides (the old behaviour)");
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0, new[] { 2 }).Select(r => r.Rival).SequenceEqual(new[] { 2 }),
+                "with the human having seen only rival 2, only rival 2 is listed although the AI knows both");
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0, new int[0]).Count == 0, "nobody seen: the list is empty even though the AI knows two rivals");
+            ok &= Check(HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal, null, new[] { 2 }) == null, "no pane for a rival the human has not seen");
+            ok &= Check(HumanDiplomacyView.Build(f.Map, 0, 2, seesAll, stats, refusal, null, new[] { 2 }) != null, "the pane of a seen rival opens");
+
+            diplomacy.SetStance(0, 1, Stance.War, 3);
+            ok &= Check(HumanDiplomacyView.Rivals(f.Map, 0, new[] { 2 }).Select(r => r.Rival).SequenceEqual(new[] { 1, 2 }),
+                "a war the human declared keeps its rival listed even when it is not in the seen set");
         }
         return ok;
     }

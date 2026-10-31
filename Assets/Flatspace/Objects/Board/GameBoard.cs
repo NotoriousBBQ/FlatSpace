@@ -418,7 +418,7 @@ namespace FlatSpace
             {
                 if (HumanPlayerId < 0 || GameAI == null) return new List<FlatSpace.Human.RivalRow>();
                 GameAI.GameAIMap.Diplomacy.Turn = TurnNumber;   // GameAI sets it at the start of each turn; a fresh load and the time between turns leave it behind
-                return FlatSpace.Human.HumanDiplomacyView.Rivals(GameAI.GameAIMap, HumanPlayerId);
+                return FlatSpace.Human.HumanDiplomacyView.Rivals(GameAI.GameAIMap, HumanPlayerId, HumanMetPlayers());
             }
 
             /// <summary>
@@ -434,7 +434,7 @@ namespace FlatSpace
                 var processor = new FlatSpace.Human.HumanCommandProcessor(map, humanAI, TurnNumber) { PauseSettings = HumanPause };
                 var stats = new WarshipStats(humanAI.ResearchCatalog != null ? humanAI.ResearchCatalog.catalogItems : null);
                 return FlatSpace.Human.HumanDiplomacyView.Build(map, HumanPlayerId, rival, HumanOwnerVisible(), stats,
-                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }), PlayerScoreOf);
+                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }), PlayerScoreOf, HumanMetPlayers());
             }
 
             /// <summary>A player's score (planets, fleets, tech; PlayerValue.ScoreOf). Zeros without a game or for an unknown player.</summary>
@@ -561,6 +561,32 @@ namespace FlatSpace
                     foreach (var neighbour in map.GetNeighbours(source.Planet.PlanetName))
                         near.Add(neighbour);
                 return name => near.Contains(name) || HumanSeesPlanet(name);
+            }
+
+            /// <summary>
+            /// The players the human has met: those whose people or ships it can read now (a planet in HumanOwnerVisible) and the owner it last saw on any other
+            /// planet (PlanetSights). The Diplomacy screen lists these; the AI's Knowledge contact reaches maxPathNodesForKnowledge (6) path nodes and listed
+            /// players the human had never seen. Empty without a human.
+            /// </summary>
+            public SortedSet<int> HumanMetPlayers()
+            {
+                var met = new SortedSet<int>();
+                if (HumanPlayerId < 0 || GameAI == null || GameAI.GameAIMap == null) return met;
+                var visible = HumanOwnerVisible();
+                foreach (var planet in GameAI.GameAIMap.PlanetList)
+                {
+                    if (visible(planet.PlanetName))
+                    {
+                        foreach (var inhabitant in planet.Population)
+                            if (inhabitant.Player >= 0) met.Add(inhabitant.Player);
+                        foreach (var ship in planet.DockedShips)
+                            if (ship.Owner >= 0 && Ship.CountsAsShip(ship.Kind)) met.Add(ship.Owner);
+                    }
+                    else if (PlanetSights.TryGet(planet.PlanetName, out var seen) && seen.Owner >= 0)
+                        met.Add(seen.Owner);
+                }
+                met.Remove(HumanPlayerId);
+                return met;
             }
 
             /// <summary>Records the planets in the human's sight now. Does nothing without a human.</summary>
