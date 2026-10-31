@@ -43,6 +43,37 @@ public static class HumanUiSelfCheck
         ok &= RunWorkerViewChecks();
         ok &= RunDiplomacyCheckChecks();
         ok &= RunDiplomacyViewChecks();
+        ok &= RunProposalTextChecks();
+        return ok;
+    }
+
+    public static bool RunProposalTextChecks()
+    {
+        var ok = true;
+        ok &= Check(ProposalText.BandLabel(DealBand.VeryUnlikely) == "Very unlikely" && ProposalText.BandLabel(DealBand.Uncertain) == "Uncertain"
+                    && ProposalText.BandLabel(DealBand.VeryLikely) == "Very likely", "ProposalText: band labels follow the enum order");
+        var planet = new DealItem { kind = "planet", name = "Farm 3" };
+        var fleet = new DealItem { kind = "fleet", name = "WarShip", planet = "Prime 0", count = 2 };
+        var end = new DealItem { kind = "endWar" };
+        ok &= Check(ProposalText.RowText(planet, true) == "Planet: Farm 3" && ProposalText.RowText(fleet, false) == "2 WarShip at Prime 0",
+            "ProposalText: planet and fleet rows");
+        ok &= Check(ProposalText.RowText(end, true) == "I end the war with them" && ProposalText.RowText(end, false) == "They end the war with me",
+            "ProposalText: the linked end-the-war rows read per side");
+        ok &= Check(ProposalText.SameItem(fleet, new DealItem { kind = "fleet", name = "WarShip", planet = "Prime 0", count = 1 })
+                    && !ProposalText.SameItem(fleet, new DealItem { kind = "fleet", name = "WarShip", planet = "Prime 1", count = 2 }),
+            "ProposalText: a fleet item is the same whatever its count, not at another planet");
+        ok &= Check(ProposalText.DescribeAll(new DealItem[0]) == "nothing" && ProposalText.DescribeAll(new[] { planet, end }) == "planet Farm 3, an end to the war",
+            "ProposalText: DescribeAll");
+        ok &= Check(ProposalText.OutcomeMessage("Player 0", true, new[] { planet }, new DealItem[0]).EndsWith("You accepted the deal.")
+                    && ProposalText.OutcomeMessage("Player 0", false, new[] { planet }, new DealItem[0]).EndsWith("You declined the deal."),
+            "ProposalText: outcome message names the outcome");
+        var distinct = true;
+        for (var tone = 0; tone < 3; tone++)
+            for (var v = 0; v < 3; v++)
+                distinct &= !string.IsNullOrEmpty(ProposalText.TemplateReply(true, tone, v)) && ProposalText.TemplateReply(true, tone, v) != ProposalText.TemplateReply(false, tone, v);
+        ok &= Check(distinct, "ProposalText: every template is filled and differs between accepted and declined");
+        ok &= Check(ProposalText.TemplateReply(true, 0, 3) == ProposalText.TemplateReply(true, 0, 0) && ProposalText.TemplateReply(true, 1, -1) == ProposalText.TemplateReply(true, 1, 2)
+                    && ProposalText.TemplateReply(false, 9, 0) == ProposalText.TemplateReply(false, 2, 0), "ProposalText: variant wraps, an unknown tone is enigmatic");
         return ok;
     }
 

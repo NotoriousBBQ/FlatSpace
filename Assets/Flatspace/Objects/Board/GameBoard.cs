@@ -549,7 +549,7 @@ namespace FlatSpace
             /// Planets whose owner the human sees now: those in sight, and those next to a planet it occupies or has a ship at (its vision sources). The rest of an
             /// adjacent planet (rates, building) stays hidden; only the owner is read.
             /// </summary>
-            private Func<string, bool> HumanOwnerVisible()
+            public Func<string, bool> HumanOwnerVisible()
             {
                 var near = new HashSet<string>();
                 var map = GameAI.GameAIMap;

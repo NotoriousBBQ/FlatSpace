@@ -47,13 +47,13 @@ public class ChatClient : MonoBehaviour
         StartCoroutine(SendChatRequestCoroutine(message, dynamicSystemPrompt, diplomacyState, onReply));
     }
 
-    private enum Tone { Hostile, Fearful, Enigmatic }
+    public enum Tone { Hostile, Fearful, Enigmatic }
 
     // The one place hostility (0..100) becomes a tone; the few-shot sample and the prompt's tone constraint both read it.
     private const float HostileFrom = 66f;
     private const float FearfulBelow = 33f;
 
-    private static Tone ToneOf(DiplomacyState.Pair diplomacyState)
+    public static Tone ToneOf(DiplomacyState.Pair diplomacyState)
     {
         if (diplomacyState.Hostility >= HostileFrom) return Tone.Hostile;
         if (diplomacyState.Hostility < FearfulBelow) return Tone.Fearful;
