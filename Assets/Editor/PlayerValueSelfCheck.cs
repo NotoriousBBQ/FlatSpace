@@ -60,6 +60,7 @@ public static class PlayerValueSelfCheck
         var c = ScriptableObject.CreateInstance<GameAIConstants>();
         var ok = Check(Near(c.fleetValueDivisor, 50f), "fleetValueDivisor defaults to 50");
         ok &= Check(Near(c.techValueDivisor, 2000f), "techValueDivisor defaults to 2000");
+        ok &= Check(Near(c.colonyShipValue, 2f), "colonyShipValue defaults to 2");
         Object.DestroyImmediate(c);
         return ok;
     }
@@ -162,13 +163,13 @@ public static class PlayerValueSelfCheck
             a.DockShipFromSave(Ship.ShipKind.Bunker, 0, new List<string>());
             ok &= Check(Near(PlayerValue.ShipValue(a.DockedShips[3], stats, s), 3f), "bunker: 100 x 1.5 / 50 = 3");
             a.DockShipFromSave(Ship.ShipKind.ColonyShip, 0, new List<string>());
-            ok &= Check(Near(PlayerValue.ShipValue(a.DockedShips[4], stats, s), 6f), "colony ship: 300 / 50 = 6");
+            ok &= Check(Near(PlayerValue.ShipValue(a.DockedShips[4], stats, s), 2f), "colony ship: its fixed colonyShipValue 2 (not its 300 production cost)");
             a.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string> { "x", "y", "z" });
             ok &= Check(Near(PlayerValue.ShipValue(a.DockedShips[5], stats, s), 3.9f), "siegeship with 3 improvements: 100 x 1.5 x 1.3 / 50 = 3.9");
             a.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>());   // another player's ship
 
             var withShips = PlayerValue.ScoreOf(map, 0, null, null, stats, s);
-            ok &= Check(Near(withShips.Fleets, 2f + 2.6f + 1f + 3f + 6f + 3.9f), "docked ships of player 0 sum into Fleets; another player's ship adds 0");
+            ok &= Check(Near(withShips.Fleets, 2f + 2.6f + 1f + 3f + 2f + 3.9f), "docked ships of player 0 sum into Fleets; another player's ship adds 0");
 
             // Research.
             var research = new List<CatalogItem> { MakeItem("x", 6000f, true, junk), MakeItem("x", 300f, true, junk), MakeItem("x", 12000f, false, junk) };

@@ -473,8 +473,8 @@ make peace on a third party, offering and demanding planets, fleets and tech, an
 #### Player value and score
 
 Phase 1 of `docs/superpowers/specs/2026-10-30-ask-and-trade-design.md`; the later phases (ask-and-trade) build on it. `PlayerValue` (`Assets/Flatspace/GameAI/PlayerValue.cs`, pure) values a player in three parts and `score` is their sum:
-- **Planet** = the type's `_planetValue` (Prime 10, Verdant 6, Desolate 6, Industrial 5, Farm 4, Ocean 4, Desert 4, Normal 2).
-- **Fleet** = each ship's production cost by the research tiers it carries x its health fraction / `fleetValueDivisor` (50). Docked and in-flight ships count; colonists in flight do not.
+- **Planet** = the type's `_planetValue` (Prime 100, Verdant 60, Desolate 60, Industrial 50, Farm 40, Ocean 40, Desert 40, Normal 20; ten times the first values on 2026-10-30, because planets must always be worth far more than ships).
+- **Fleet** = each ship's production cost by the research tiers it carries x its health fraction / `fleetValueDivisor` (50). Docked and in-flight ships count; colonists in flight do not. A colony ship is worth the fixed `colonyShipValue` (2) instead of its production cost, so colonizing never lowers the score.
 - **Tech** = the cost of the player's researched research items / `techValueDivisor` (2000, set for the research costs doubled on 2026-10-30; retune the two together).
 - Shown for the human and the picked rival on the Diplomacy screen (`Gameboard.PlayerScoreOf`). Logged as `Score|<total>|<planets>|<fleets>|<tech>` every 25 turns per player with a planet (`GameAI.LogEconomySummary`); the `tuning-log` skill says how to read it.
 

@@ -21,7 +21,7 @@ namespace FlatSpace.AI
         public class ValueSettings
         {
             public float BaseWarshipCost;
-            public float ColonyShipCost;
+            public float ColonyShipValue;
             public float ImprovementFactor;
             public float SiegeshipRatio = 1.5f;
             public float BunkerRatio = 1.5f;
@@ -36,11 +36,10 @@ namespace FlatSpace.AI
             {
                 var items = productionCatalog != null ? productionCatalog.Where(i => i != null).ToList() : new List<CatalogItem>();
                 var warship = items.FirstOrDefault(i => i.subType == "Warship");
-                var colony = items.FirstOrDefault(i => i.subType == "ColonyShip");
                 return new ValueSettings
                 {
                     BaseWarshipCost = warship != null ? warship.cost : 0f,
-                    ColonyShipCost = colony != null ? colony.cost : 0f,
+                    ColonyShipValue = constants.colonyShipValue,
                     ImprovementFactor = constants.warshipImprovementCostFactor,
                     SiegeshipRatio = constants.siegeshipCostRatio,
                     BunkerRatio = constants.bunkerCostRatio,
@@ -72,9 +71,11 @@ namespace FlatSpace.AI
             WarshipStats stats, ValueSettings s)
         {
             var improvements = snapshot != null ? snapshot.Count : 0;
-            var cost = WarshipCosts.ShipCost(kind, improvements, s.BaseWarshipCost, s.ColonyShipCost,
-                s.ImprovementFactor, s.SiegeshipRatio, s.BunkerRatio);
             var fraction = stats.HealthFraction(template, snapshot, damage, WarshipStats.SubtypeOf(kind));
+            // A colony ship has a fixed worth (colonyShipValue), not its production cost.
+            if (kind == Ship.ShipKind.ColonyShip) return s.ColonyShipValue * fraction;
+            var cost = WarshipCosts.ShipCost(kind, improvements, s.BaseWarshipCost, 0f,
+                s.ImprovementFactor, s.SiegeshipRatio, s.BunkerRatio);
             return cost / s.FleetDivisor * fraction;
         }
 

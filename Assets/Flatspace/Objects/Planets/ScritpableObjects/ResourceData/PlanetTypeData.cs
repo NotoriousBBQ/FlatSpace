@@ -27,8 +27,8 @@ public class PlanetResourceData : ScriptableObject
     // local-only today stay 0). Read by the AI's initiated blockades (colony target value); see GameAIMap.ProducerValue.
     public float _producerValue;
     // What one planet of this type is worth to its owner, in the same units as a fleet's or a tech's value; a player's score is the sum
-    // over everything it owns. Starting points, retune in the type assets: Prime 10, Verdant 6, Desolate 6, Industrial 5, Farm 4,
-    // Ocean 4, Desert 4, Normal 2. Read through Planet.PlanetValue.
+    // over everything it owns. Starting points, retune in the type assets: Prime 100, Verdant 60, Desolate 60, Industrial 50, Farm 40,
+    // Ocean 40, Desert 40, Normal 20 (planets must always be worth far more than ships). Read through Planet.PlanetValue.
     public float _planetValue;
 }
  

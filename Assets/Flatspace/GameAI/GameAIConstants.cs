@@ -164,6 +164,9 @@ public class GameAIConstants : ScriptableObject
     [Header("Player value")]
     // Industry points of ship cost per value point of a fleet (a fleet's value is its summed cost x health fraction / this).
     public float fleetValueDivisor = 50f;
+    // What a colony ship is worth in the player score, a fixed value instead of its production cost: planets are always worth far more than
+    // ships (a Normal planet is 20), and a colony ship is worth less than the planet it will found, so colonizing never lowers the score.
+    public float colonyShipValue = 2f;
     // Research points per value point of completed research; retune together with the research costs.
     public float techValueDivisor = 2000f;
 
