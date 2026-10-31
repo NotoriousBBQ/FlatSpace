@@ -24,3 +24,4 @@ MonoBehaviour:
   _industryProduction: 3
   _maxPopulation: 15
   _initialStrategy: 1
+  _planetValue: 10

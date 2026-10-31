@@ -171,6 +171,9 @@ public class Planet : MonoBehaviour
     /// <summary>The planet type's authored producer value (PlanetResourceData._producerValue), 0 with no resource data.</summary>
     public float ProducerValue => _resourceData != null ? _resourceData._producerValue : 0f;
 
+    /// <summary>The planet type's authored worth (PlanetResourceData._planetValue), 0 with no resource data. A player's score sums it over its planets.</summary>
+    public float PlanetValue => _resourceData != null ? _resourceData._planetValue : 0f;
+
     /// <summary>
     /// True for a planet that cannot feed even one colonist by itself (its base food plus one worker's food is below
     /// 1, e.g. Desolate). A colonist there starves the turn it lands, so the colony ship must bring a food rider.
