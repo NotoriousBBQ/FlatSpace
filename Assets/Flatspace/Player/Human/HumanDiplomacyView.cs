@@ -55,6 +55,7 @@ namespace FlatSpace
             public int TotalWarships;
             public float TotalStrength, MyStrength;
             public DiplomacyButton EndWar, DeclareWar, Surrender, DemandSurrender;
+            public PlayerValue.ScoreBreakdown MyScore, RivalScore;   // zeros when no scoreOf was given
         }
 
         /// <summary>
@@ -103,7 +104,7 @@ namespace FlatSpace
             /// wider knowledge); refusal(type, rival) is HumanCommandProcessor.Check for declareWar / makePeace / surrender (null = accepted).
             /// </summary>
             public static RivalView Build(GameAIMap map, int humanId, int rival, Func<string, bool> seesPlanet, WarshipStats stats,
-                Func<string, int, string> refusal)
+                Func<string, int, string> refusal, Func<int, PlayerValue.ScoreBreakdown> scoreOf = null)
             {
                 if (!IsOn(map)) return null;
                 var contacts = Known(map, humanId);
@@ -151,6 +152,12 @@ namespace FlatSpace
                 view.TotalWarships = view.Fleets.Sum(l => l.Warships);
                 view.TotalStrength = view.Fleets.Sum(l => l.Strength);
                 view.MyStrength = FleetStrength.Mine(map, humanId, stats);
+
+                if (scoreOf != null)
+                {
+                    view.MyScore = scoreOf(humanId);
+                    view.RivalScore = scoreOf(rival);
+                }
 
                 view.DeclareWar = ButtonFor(refusal("declareWar", rival), truceEnds);
                 view.Surrender = ButtonFor(refusal("surrender", rival), truceEnds);

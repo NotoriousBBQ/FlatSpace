@@ -1078,6 +1078,11 @@ public static class HumanUiSelfCheck
                 "the others block holds exactly the other met rival, with the rival's own stance toward it");
             ok &= Check(view.Hostility == diplomacy.Hostility(1, 0) && view.HostilityMax == f.Constants.hostilityMax, "hostility is the rival's toward the human, against the maximum");
 
+            ok &= Check(view.MyScore.Total == 0f && view.RivalScore.Total == 0f, "without scoreOf both scores are zeros");
+            var scored = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal,
+                p => new PlayerValue.ScoreBreakdown { Planets = p * 10, Fleets = 1, Tech = 2 });
+            ok &= Check(scored.MyScore.Planets == 0f && scored.RivalScore.Planets == 10f && scored.RivalScore.Total == 13f, "scoreOf feeds my score (human 0) and the rival's (rival 1)");
+
             var unseen = HumanDiplomacyView.Build(f.Map, 0, 1, name => name != "P2", stats, refusal);
             ok &= Check(unseen.Fleets.Count == 0 && unseen.TotalWarships == 0 && unseen.TotalStrength == 0f, "warships on a planet out of sight are not listed");
             ok &= Check(view.Fleets.Count == 1 && view.Fleets[0].Planet == "P2" && view.Fleets[0].Warships == 2, "the rival's two warships on a seen planet make one line (the colony ship adds none)");

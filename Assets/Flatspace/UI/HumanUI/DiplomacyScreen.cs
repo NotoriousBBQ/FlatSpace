@@ -225,6 +225,10 @@ namespace Game.UI.MainGameScreenUI
                 _detail.Add(line);
             }
 
+            _detail.Add(Section("Score"));
+            _detail.Add(ScoreLine("You", view.MyScore));
+            _detail.Add(ScoreLine(view.Label, view.RivalScore));
+
             _detail.Add(Section("Their fleets on planets I can see"));
             if (view.Fleets.Count == 0)
                 _detail.Add(HumanUiKit.Text("No warships seen on the planets in sight.", HumanUiKit.Muted));
@@ -274,6 +278,15 @@ namespace Game.UI.MainGameScreenUI
             line.Add(HumanUiKit.Cell(label, 200f));
             line.Add(HumanUiKit.Text(changeTurn >= 0 ? $"{stance} (since turn {changeTurn})" : stance.ToString(),
                 stance == Stance.War ? HumanUiKit.Bad : HumanUiKit.Good));
+            return line;
+        }
+
+        private static VisualElement ScoreLine(string label, FlatSpace.AI.PlayerValue.ScoreBreakdown score)
+        {
+            var line = HumanUiKit.Row();
+            line.Add(HumanUiKit.Cell(label, 120f));
+            line.Add(HumanUiKit.Cell(score.Total.ToString("0.#"), 70f));
+            line.Add(HumanUiKit.Text($"(planets {score.Planets:0.#}, fleets {score.Fleets:0.#}, tech {score.Tech:0.#})", HumanUiKit.Muted));
             return line;
         }
 
