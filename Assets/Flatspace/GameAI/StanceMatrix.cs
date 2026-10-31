@@ -69,6 +69,7 @@ namespace FlatSpace
                 public float MyStrength;
                 public float RivalStrength;
                 public bool Truce;            // the pair is locked by a surrender: no War, no Surrender
+                public bool RivalIsHuman;     // a rival the human controls: an AI never surrenders to it (the human ends a war itself; an offer is a later feature)
             }
 
             public struct Decision
@@ -85,8 +86,9 @@ namespace FlatSpace
                 return (float)(1.0 / (1.0 + Math.Exp(-(lossShare - constants.surrenderMidpoint) / steepness)));
             }
 
-            // Offered only while I am at war with the rival, weaker than it, and not in a truce.
-            private static bool CanSurrender(Row row) => row.AtWar && !row.Truce && row.MyStrength < row.RivalStrength;
+            // Offered only while I am at war with the rival, weaker than it, not in a truce, and the rival is not the human (a surrender would override the
+            // stance the human chose and end its conquest with a truce).
+            private static bool CanSurrender(Row row) => row.AtWar && !row.Truce && !row.RivalIsHuman && row.MyStrength < row.RivalStrength;
 
             public static float WarProbability(float hostility, GameAIConstants constants)
             {

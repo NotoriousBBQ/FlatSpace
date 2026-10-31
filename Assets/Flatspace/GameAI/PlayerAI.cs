@@ -41,6 +41,13 @@ namespace FlatSpace
             /// A human player runs ProcessResultsHuman instead of the AI routine; every other player is unchanged.
             /// </summary>
             public bool HumanControlled => Player != null && Player.isHuman;
+
+            /// <summary>Whether a player is the human one (Player.isHuman). False without a Gameboard, so a self-check that builds a PlayerAI directly sees no human.</summary>
+            private static bool IsHumanPlayer(int playerId)
+            {
+                var board = Gameboard.Instance;
+                return board != null && playerId >= 0 && playerId < board.players.Count && board.players[playerId].isHuman;
+            }
             public GameAIMap   AIMap   { get; set; }
 
             public Catalog ProductionCatalog { get; set; }
@@ -432,6 +439,7 @@ namespace FlatSpace
                         MyStrength = myStrength,
                         RivalStrength = rivalStrength,
                         Truce = diplomacy.InTruce(me, rival, turn),
+                        RivalIsHuman = IsHumanPlayer(rival),
                     });
                 }
                 // A war I declared on a rival I no longer have contact with must still be able to end (my own War stance counts
@@ -460,6 +468,7 @@ namespace FlatSpace
                         MyStrength = myStrength,
                         RivalStrength = 0f,   // out of contact the rival's fleet is not visible, so I am never "weaker": no surrender to it
                         Truce = diplomacy.InTruce(me, rival, turn),
+                        RivalIsHuman = IsHumanPlayer(rival),
                     });
                 }
                 diplomacy.DiscardCuts(me);   // cuts by players I have no contact with must not pile up for later

@@ -1120,6 +1120,14 @@ public static class DiplomacySelfCheck
             var truce = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.War, 100, 0.99f, true, 10f, 100f, truce: true) }, c);
             ok &= Check(truce.Count == 1 && !truce[0].Surrender, "never inside a truce (the pair is not at war)");
 
+            // The human is never surrendered to: the same row that surrenders above (at war, weaker, nearly wiped out) does not when the rival is the human
+            // (both Peace and War have weight 0 here, so the pick is uniform between them; it is never the surrender).
+            var toHuman = StanceMatrix.Decide(0, new List<StanceMatrix.Row>
+            {
+                new StanceMatrix.Row { Rival = 1, Hostility = 100f, Current = Stance.War, TurnsSinceChange = 100, LossShare = 0.99f, AtWar = true, MyStrength = 10f, RivalStrength = 100f, RivalIsHuman = true },
+            }, c);
+            ok &= Check(toHuman.Count == 1 && !toHuman[0].Surrender, "an AI never surrenders to the human, however badly it is losing");
+
             // A truce removes War: even at hostility 100 the matrix does not pick War.
             var noWar = StanceMatrix.Decide(0, new List<StanceMatrix.Row> { Row(100f, Stance.Peace, 100, 0f, false, 100f, 100f, truce: true) }, c);
             ok &= Check(noWar.Count == 1 && noWar[0].Stance == Stance.Peace, "inside a truce War is never offered, whatever the hostility");
