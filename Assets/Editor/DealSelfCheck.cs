@@ -375,16 +375,16 @@ public static class DealSelfCheck
             // Planet gifts: the minimum conversions on a real planet
             deal = new Deal(); deal.Give.Add(planet("A"));
             SetPop(a, 0, 0, 0, 0, 0, 0);
-            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             ok &= Check(a.Owner == 1 && Count(a, 0) == 2 && Count(a, 1) == 3, "giver 5 alone: owner flips after 3, giver keeps 2");
             SetPop(a, 0, 0, 0, 0, 0, 0, 2, 2);
-            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             ok &= Check(a.Owner == 1 && Count(a, 0) == 2 && Count(a, 1) == 3 && Count(a, 2) == 2, "giver 5 + third 2: 3 conversions");
             SetPop(a, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2);
-            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             ok &= Check(a.Owner == 1 && Count(a, 0) == 0 && Count(a, 1) == 5 && Count(a, 2) == 4, "giver 5 + third 4: 5 conversions");
             SetPop(a, 0, 0);
-            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             ok &= Check(a.Owner == 1 && Count(a, 1) == 1, "one inhabitant: 1 conversion");
 
             // Fleet gift: the two healthiest of three; the rival own ship, the damaged third and another kind stay
@@ -394,7 +394,7 @@ public static class DealSelfCheck
             c.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>(), 5f, 0);
             c.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f);
             deal = new Deal(); deal.Give.Add(new DealItem { kind = "fleet", name = "WarShip", planet = "C", count = 2 });
-            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             var mine = c.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == 0).ToList();
             var theirs = c.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == 1).ToList();
             ok &= Check(mine.Count == 1 && Near(mine[0].Damage, 20f), "the most damaged warship stays with the giver");
@@ -407,7 +407,7 @@ public static class DealSelfCheck
             // Tech gift: T3 to a receiver with T1 only grants T3 and T2
             deal = new Deal(); deal.Give.Add(new DealItem { kind = "tech", name = "T3" });
             ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "tech T3 is valid before the gift");
-            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             ok &= Check(r2.researched && r3.researched && !rx.researched, "tiers 2 and 3 researched");
             ok &= Check(!d1.researched && d2.researched && d3.researched, "dependent production items of the granted tiers flipped");
             ok &= Check(ai1.ResearchQueue.SequenceEqual(new[] { "X" }), "granted tiers leave the queue");
@@ -419,16 +419,28 @@ public static class DealSelfCheck
             SetPop(a, 0, 0, 0, 0, 0, 0);
             deal = new Deal(); deal.Give.Add(planet("A")); deal.Give.Add(new DealItem { kind = "tech", name = "T3" });
             var threw = false;
-            try { DealExecutor.Execute(ctx, deal, 1, constants, aiOf); }
+            try { DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital); }
             catch (System.InvalidOperationException) { threw = true; }
             ok &= Check(threw, "Execute throws on an invalid deal");
             ok &= Check(a.Owner == 0 && Count(a, 0) == 5, "an invalid deal applied nothing");
+
+            // Execute with the giver's capital: refused, nothing applied
+            SetPop(a, 0, 0, 0, 0, 0, 0);
+            deal = new Deal(); deal.Give.Add(planet("A"));
+            threw = false;
+            try { DealExecutor.Execute(ctx, deal, 1, constants, aiOf, p => p == 0 ? "A" : null); }
+            catch (System.InvalidOperationException) { threw = true; }
+            ok &= Check(threw && a.Owner == 0 && Count(a, 0) == 5, "Execute throws for the giver capital and applies nothing");
+            threw = false;
+            try { DealExecutor.Execute(ctx, deal, 1, constants, aiOf, null); }
+            catch (System.ArgumentNullException) { threw = true; }
+            ok &= Check(threw && a.Owner == 0, "a null capitalOf throws ArgumentNullException");
 
             // endWar
             map.Diplomacy.SetStance(0, 1, Stance.War, 1);
             deal = new Deal(); deal.Give.Add(new DealItem { kind = "endWar" });
             ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "endWar valid while at war");
-            DealExecutor.Execute(ctx, deal, 5, constants, aiOf);
+            DealExecutor.Execute(ctx, deal, 5, constants, aiOf, noCapital);
             ok &= Check(map.Diplomacy.StanceToward(0, 1) == Stance.Peace && map.Diplomacy.StanceToward(1, 0) == Stance.Peace, "endWar sets both stances to Peace");
             ok &= Check(map.Diplomacy.Get(0, 1).TruceUntil == 25 && map.Diplomacy.Get(1, 0).TruceUntil == 25, "truce until turn + 20 on both rows");
         }

@@ -39,6 +39,7 @@ namespace FlatSpace.AI
         /// </summary>
         public static string Validate(DealContext ctx, Deal deal, Func<int, string> capitalOf)
         {
+            if (capitalOf == null) throw new ArgumentNullException(nameof(capitalOf));
             var items = Sides(ctx, deal).ToList();
             if (items.Count == 0) return EmptyDeal;
 
@@ -89,7 +90,7 @@ namespace FlatSpace.AI
                 var remaining = ctx.Map.PlanetList.Count(p => p.Owner == giver && p.Population.Count > 0
                                                               && !planetsGiven.Contains((giver, p.PlanetName)));
                 if (remaining == 0) return LastPlanet;
-                if (capitalOf != null && capitalOf(giver) == name) return Capital;
+                if (capitalOf(giver) == name) return Capital;
             }
             return null;
         }
@@ -120,12 +121,12 @@ namespace FlatSpace.AI
 
         /// <summary>
         /// Applies a deal. Re-runs Validate first and throws InvalidOperationException (applying nothing) when it fails. capitalOf is the
-        /// same delegate Validate takes (trailing and optional because the planned signature had no room for it; omit it only where
-        /// capitals do not matter).
+        /// same delegate Validate takes and is required, so the capital rule can never be skipped (null throws ArgumentNullException).
         /// </summary>
         public static void Execute(DealContext ctx, Deal deal, int turn, GameAIConstants constants, Func<int, PlayerAI> aiOf,
-            Func<int, string> capitalOf = null)
+            Func<int, string> capitalOf)
         {
+            if (capitalOf == null) throw new ArgumentNullException(nameof(capitalOf));
             var refusal = Validate(ctx, deal, capitalOf);
             if (refusal != null) throw new InvalidOperationException("Deal is not valid: " + refusal);
 
