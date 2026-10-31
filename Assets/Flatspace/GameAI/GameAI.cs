@@ -564,9 +564,22 @@ namespace FlatSpace
                     case GameAIOrder.OrderType.OrderTypeMakePeace:
                     {
                         var stanceTurn = Gameboard.Instance.TurnNumber;
-                        if (ApplyStanceOrder(GameAIMap.Diplomacy, executableOrder, stanceTurn))
+                        var stanceRival = Convert.ToInt32(executableOrder.Data);
+                        // An AI declaring war on the human: the human's own stance follows (ApplyStanceOrder), and a popup says so when it was at peace.
+                        var onHuman = executableOrder.Type == GameAIOrder.OrderType.OrderTypeDeclareWar
+                                      && stanceRival >= 0 && stanceRival < Gameboard.Instance.players.Count
+                                      && Gameboard.Instance.players[stanceRival].isHuman && executableOrder.PlayerId != stanceRival;
+                        var wasAtWar = onHuman && GameAIMap.Diplomacy.IsAtWar(stanceRival, executableOrder.PlayerId, true);
+                        if (ApplyStanceOrder(GameAIMap.Diplomacy, executableOrder, stanceTurn, onHuman))
                         {
-                            var stanceRival = Convert.ToInt32(executableOrder.Data);
+                            if (onHuman)
+                            {
+                                var humanPair = GameAIMap.Diplomacy.Get(stanceRival, executableOrder.PlayerId);
+                                AITuningLogger.LogStance(stanceTurn, stanceRival, executableOrder.PlayerId, humanPair.Stance.ToString(),
+                                    humanPair.Hostility, humanPair.CutsTerm, humanPair.NearTerm, humanPair.StrengthTerm, humanPair.PWar,
+                                    humanPair.LossAccum, humanPair.ConversionTerm);
+                                if (!wasAtWar) Gameboard.Instance.ReportWarDeclaredOnHuman(executableOrder.PlayerId);
+                            }
                             var stancePair = GameAIMap.Diplomacy.Get(executableOrder.PlayerId, stanceRival);
                             AITuningLogger.LogStance(stanceTurn, executableOrder.PlayerId, stanceRival,
                                 stancePair.Stance.ToString(), stancePair.Hostility, stancePair.CutsTerm,
@@ -596,13 +609,18 @@ namespace FlatSpace
                 => order.Fleet != null ? order.Fleet.Kind : Ship.ShipKind.WarShip;
 
             // Immediate: player order.PlayerId takes its stance toward the rival in order.Data to War or Peace. True only
-            // when the stance changed (the caller logs on that). Pure: no Gameboard.Instance.
-            public static bool ApplyStanceOrder(DiplomacyState diplomacy, GameAIOrder order, int turn)
+            // when the stance changed (the caller logs on that). targetIsHuman: the rival is the human, so a war declared on it is also
+            // its war (its own stance toward the declarer goes to War) and the declarer's later peace cannot end it: the human ends it itself.
+            // Pure: no Gameboard.Instance.
+            public static bool ApplyStanceOrder(DiplomacyState diplomacy, GameAIOrder order, int turn, bool targetIsHuman = false)
             {
                 var rival = Convert.ToInt32(order.Data);
                 var stance = order.Type == GameAIOrder.OrderType.OrderTypeDeclareWar ? Stance.War : Stance.Peace;
                 if (stance == Stance.War && diplomacy.InTruce(order.PlayerId, rival, turn)) return false;   // locked by a surrender
-                return diplomacy.SetStance(order.PlayerId, rival, stance, turn);
+                var changed = diplomacy.SetStance(order.PlayerId, rival, stance, turn);
+                if (changed && stance == Stance.War && targetIsHuman)
+                    diplomacy.SetStance(rival, order.PlayerId, Stance.War, turn);
+                return changed;
             }
 
             // Immediate: the player surrenders to the rival in order.Data. Both stances go to Peace and both pair rows are locked

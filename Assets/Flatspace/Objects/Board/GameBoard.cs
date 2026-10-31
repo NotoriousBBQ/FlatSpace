@@ -1429,6 +1429,17 @@ namespace FlatSpace
                 ShowMatchEnd("Turn limit reached", $"The match ended at turn {TurnNumber}. There is no winner yet.");
             }
 
+            /// <summary>
+            /// An AI declared war on the human, who was at peace with it: a one-button popup says so (the notification and the pause come from the
+            /// usual WarDeclared event). The war is also the human's own: it lasts until the human ends it (see GameAI.ApplyStanceOrder).
+            /// </summary>
+            public void ReportWarDeclaredOnHuman(int declarer)
+            {
+                if (HumanPlayerId < 0) return;
+                ShowMatchEnd($"Player {declarer} declares war",
+                    $"Player {declarer} has declared war on you. The war lasts until you end it (Diplomacy, End the war) and they agree, or you strike a peace deal.");
+            }
+
             private void ShowMatchEnd(string title, string message)
             {
                 var canvas = GetComponentInParent<Canvas>();

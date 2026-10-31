@@ -467,6 +467,9 @@ make peace on a third party, offering and demanding planets, fleets and tech, an
   Surrender (both stances to Peace and a `surrenderTruceTurns` truce, no acceptance needed; the one sure way to end a war) each behind an inline confirmation, and Demand surrender, visible but inactive.
   Their on/off state and reason come from `HumanCommandProcessor.Check`, which now covers `declareWar`, `makePeace` and `surrender`; `declareWar` is refused AlreadyAtWar on the human's own stance
   only, so with mine Peace and theirs War it stays available.
+- **A war an AI declares on the human is the human's war too** (2026-10-30): `GameAI.ApplyStanceOrder(.., targetIsHuman)` also sets the human's own stance toward the declarer to War (a second `Stance` log line, P = the human), so the
+  declarer's later peace (its hostility decays and the stance roulette picks Peace) cannot end a conquest in progress; the human ends it with End the war (its own stance) and the rival's peace, or a peace deal. A one-button popup
+  (`Gameboard.ReportWarDeclaredOnHuman`, the `MatchEndPopup` widget) says it when the human was at peace; the `WarDeclared` notification and pause are unchanged. A rival in a truce cannot declare.
 - **Pure part** `HumanDiplomacyView` (rows, the rival view, button states; self-check `HumanUiSelfCheck.RunDiplomacyViewChecks` / `RunDiplomacyCheckChecks`). It reads `DiplomacyState.Turn`, which
   `GameAI` keeps current. With diplomacy off the screen says so and lists nobody.
 
