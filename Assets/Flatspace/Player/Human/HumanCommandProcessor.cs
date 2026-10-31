@@ -401,8 +401,33 @@ namespace FlatSpace
                     Get = command.dealGet != null ? new List<DealItem>(command.dealGet) : new List<DealItem>(),
                 };
                 var refusal = DealExecutor.Validate(ctx, deal, CapitalOf);
+                if (refusal == null) refusal = ExecutionRefusal(ctx, deal);
                 if (refusal != null) { ctx = null; deal = null; }
                 return refusal;
+            }
+
+            private Func<int, PlayerAI> ResolveAi => AiOf ?? (id => id == HumanId ? _human : null);
+
+            // What Validate cannot know: whether Execute can finish the deal. A tech item needs its receiver's PlayerAI, and a fleet
+            // given must not include a ship an earlier command of this batch already sent (its departure order is still pending).
+            private string ExecutionRefusal(DealContext ctx, Deal deal)
+            {
+                var aiOf = ResolveAi;
+                foreach (var item in deal.Give)
+                    if (item.kind == "tech" && aiOf(ctx.Rival) == null) return "NoDealContext";
+                foreach (var item in deal.Get)
+                    if (item.kind == "tech" && aiOf(ctx.Proposer) == null) return "NoDealContext";
+                foreach (var item in deal.Give)
+                {
+                    if (item.kind != "fleet" || !Enum.TryParse(item.name, true, out Ship.ShipKind kind)) continue;
+                    var planet = _map.GetPlanet(item.planet);
+                    var chosen = planet.DockedShips
+                        .Where(s => s.Kind == kind && s.Owner == ctx.Proposer)
+                        .OrderBy(s => s.Damage)   // healthiest first: the ships DealExecutor.Execute transfers
+                        .Take(item.count);
+                    if (chosen.Any(IsClaimed)) return "NotOwned";
+                }
+                return null;
             }
 
             /// <summary>
@@ -453,7 +478,7 @@ namespace FlatSpace
                     return null;
                 }
 
-                DealExecutor.Execute(ctx, deal, _turn, constants, AiOf ?? (id => id == HumanId ? _human : null), CapitalOf);
+                DealExecutor.Execute(ctx, deal, _turn, constants, ResolveAi, CapitalOf);
 
                 var pair = _map.Diplomacy.Get(ctx.Rival, HumanId);
                 var before = pair.Hostility;

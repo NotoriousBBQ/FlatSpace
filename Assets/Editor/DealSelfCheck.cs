@@ -463,7 +463,10 @@ public static class DealSelfCheck
         public PlayerAI Human;
         public HumanCommandProcessor Processor;
         public float WarCost;
+        public PlayerAI Rival;
+        public CatalogItem RivalT2;
         private readonly GameObject _mapGo, _playerGo;
+        private GameObject _rivalGo;
         private readonly List<Object> _junk = new List<Object>();
 
         public DealScene(bool withContext = true)
@@ -473,6 +476,8 @@ public static class DealSelfCheck
             Map = _mapGo.AddComponent<GameAIMap>();
             Constants = ScriptableObject.CreateInstance<GameAIConstants>();
             _junk.Add(Constants);
+            Constants.defaultTravelSpeed = 1f;
+            Constants.maxPathNodesForShipTransport = 10;
             Map.GameAIMapInit(new List<PlanetSpawnData>
             {
                 MakeSpawn("A", 30f, 0f, _junk), MakeSpawn("B", 20f, 100f, _junk),
@@ -508,6 +513,25 @@ public static class DealSelfCheck
             }
         }
 
+        // Rival 1 gets a PlayerAI. Both know T1; only the human has T2 (cost 20); the rival's T2 is unresearched.
+        public void AttachRival()
+        {
+            var h1 = Tech("T1", "", 10f, true); var h2 = Tech("T2", "T1", 20f, true);
+            var r1 = Tech("T1", "", 10f, true); RivalT2 = Tech("T2", "T1", 20f, false);
+            _junk.AddRange(new Object[] { h1, h2, r1, RivalT2 });
+            _rivalGo = new GameObject("DealSelfCheckProposeRival");
+            Rival = _rivalGo.AddComponent<PlayerAI>();
+            Rival.Player = _rivalGo.AddComponent<Player>();
+            Rival.Player.playerID = 1;
+            Rival.AIMap = Map;
+            Rival.ResearchCatalog = _rivalGo.AddComponent<Catalog>();
+            Rival.ResearchCatalog.catalogItems = new List<CatalogItem> { r1, RivalT2 };
+            Rival.ProductionCatalog = _rivalGo.AddComponent<Catalog>();
+            Rival.ProductionCatalog.catalogItems = new List<CatalogItem>();
+            var humanItems = new List<CatalogItem> { h1, h2 };
+            Processor.Deal.Research = p => p == 0 ? humanItems : p == 1 ? Rival.ResearchCatalog.catalogItems : null;
+        }
+
         public void SetHostility(float value)
         {
             var pair = Map.Diplomacy.Get(1, 0);
@@ -523,6 +547,7 @@ public static class DealSelfCheck
 
         public void Dispose()
         {
+            if (_rivalGo != null) Object.DestroyImmediate(_rivalGo);
             Object.DestroyImmediate(_playerGo);
             Object.DestroyImmediate(_mapGo);
             foreach (var o in _junk) if (o != null) Object.DestroyImmediate(o);
@@ -626,6 +651,37 @@ public static class DealSelfCheck
         {
             ok &= Check(s.Propose(Items(PlanetItem("B")), none).reason == "NoDealContext", "a processor with no deal context refuses");
             ok &= Check(s.Map.GetPlanet("B").Owner == 0, "and applies nothing");
+        }
+
+        // A tech gift needs the rival's PlayerAI: with AiOf at its default the deal is refused before anything is applied, even behind a planet item.
+        using (var s = new DealScene())
+        {
+            s.AttachRival();
+            s.SetHostility(50f);
+            var techGift = new DealItem { kind = "tech", name = "T2" };
+            ok &= Check(s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = Items(techGift), dealGet = none }).Refusal == "NoDealContext",
+                "preview of a tech gift refuses NoDealContext without AiOf");
+            var result = s.Propose(Items(PlanetItem("B"), techGift), none);
+            ok &= Check(!result.applied && result.reason == "NoDealContext", "tech gift with default AiOf is refused NoDealContext: " + result.reason);
+            ok &= Check(s.Map.GetPlanet("B").Owner == 0 && !s.RivalT2.researched && Near(s.Hostility, 50f), "nothing changed: the planet ahead of the tech stays");
+
+            // With AiOf set: T2 (cost 20, value 20) is granted, accepted, hostility 50 - 10 = 40.
+            s.Processor.AiOf = id => id == 1 ? s.Rival : s.Human;
+            result = s.Propose(Items(techGift), none);
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "tech gift accepted with AiOf set: " + result.reason + " " + result.detail);
+            ok &= Check(s.RivalT2.researched, "the chain was granted to the rival");
+            ok &= Check(Near(s.Hostility, 40f), "hostility 50 + clamp(-20, -10, 10) = 40");
+        }
+
+        // A ship sent by a move earlier in the same batch cannot also be given: the fleet is refused NotOwned and the ships stay.
+        using (var s = new DealScene())
+        {
+            var move = new HumanCommand { type = "move", origin = "A", target = "B", kind = "WarShip", count = 2 };
+            var propose = new HumanCommand { type = "propose", rival = 1, dealGive = Items(WarshipItem(1)), dealGet = none };
+            var results = s.Processor.Apply(new[] { move, propose }, new List<GameAI.GameAIOrder>());
+            ok &= Check(results[0].applied, "the move of both warships is applied: " + results[0].reason);
+            ok &= Check(!results[1].applied && results[1].reason == "NotOwned", "giving a ship already sent in the batch is refused NotOwned: " + results[1].reason);
+            ok &= Check(s.Map.GetPlanet("A").DockedShips.Count(x => x.Owner == 0) == 2, "both ships are still the human's");
         }
 
         // Old JSON without the new fields still parses; new fields round-trip.
