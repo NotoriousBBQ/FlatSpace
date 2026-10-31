@@ -231,9 +231,10 @@ public static class DealSelfCheck
             // Null templates: health fraction is 1 whatever the damage, so ships differ by research snapshot length.
             // Warship value = 100 x (1 + 0.1 x snapshot size): 0 -> 100, 1 -> 110, 3 -> 130, 5 -> 150.
             // Healthiest first = lowest Damage (the rule HumanCommandProcessor.HandleMove uses: OrderBy(Damage)).
+            // The dock order is deliberately not the damage order, so dropping the OrderBy(Damage) would fail the sums.
+            dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "a" }, 20f);              // 110
             dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "a", "b", "c" }, 0f);    // healthiest, 130
             dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 10f);                    // 100
-            dock.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string> { "a" }, 20f);              // 110
             dock.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string> { "a", "b", "c", "d", "e" }, 0f);   // another owner: never counts
             dock.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f);               // another kind: never counts
 
