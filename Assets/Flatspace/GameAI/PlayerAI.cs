@@ -337,6 +337,13 @@ namespace FlatSpace
                 return cost;
             }
 
+            /// <summary>
+            /// The not-yet-researched items of a tech's prerequisite chain on this player's research catalog (the item plus every
+            /// item reached through requiredTech); empty when the item is unknown or already researched.
+            /// </summary>
+            public List<CatalogItem> TechChain(string itemName)
+                => DealEvaluator.MissingChain(ResearchCatalog != null ? ResearchCatalog.catalogItems : null, itemName);
+
             private float ShipsLostThisTurn(int rival, int turn)
                 => _losses.TryGetValue(rival, out var list) ? list.Where(e => e.turn == turn).Sum(e => e.ships) : 0f;
 
