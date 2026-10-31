@@ -119,6 +119,10 @@ user asked about one specific thing.
   meanMorale|totalUpkeep`), full trend, not just the last one — a flat-200-morale run and a run that
   *declines* to 200 by the end look identical in a single snapshot but mean very different things.
   Count total shortage lines (`$5 > 0`) as the headline shortage signal.
+- **Score balance:** every `Score` line (`T<turn>|P<id>|Score|total|planets|fleets|tech`, one decimal each, every 25 turns
+  for each player with a planet). Check the three parts are balanced over the match: does tech or fleets swamp planets, does a
+  leading player lead on all three. It tunes `_planetValue` (per planet type), `fleetValueDivisor` and `techValueDivisor`.
+  Totals must be non-negative and tech should grow over the match.
 - **Fleet cap discipline:** for every `WarshipBoost` line with multiplier `0`, confirm zero
   `WarShipProduction` starts for that player on that turn. This invariant should always hold; if it
   doesn't, that's a real bug, not tuning variance. Exception: planets blockaded against their owner are

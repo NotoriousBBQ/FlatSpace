@@ -431,7 +431,20 @@ namespace FlatSpace
                 var processor = new FlatSpace.Human.HumanCommandProcessor(map, humanAI, TurnNumber) { PauseSettings = HumanPause };
                 var stats = new WarshipStats(humanAI.ResearchCatalog != null ? humanAI.ResearchCatalog.catalogItems : null);
                 return FlatSpace.Human.HumanDiplomacyView.Build(map, HumanPlayerId, rival, HumanOwnerVisible(), stats,
-                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }));
+                    (type, id) => processor.Check(new FlatSpace.Human.HumanCommand { type = type, rival = id }), PlayerScoreOf);
+            }
+
+            /// <summary>A player's score (planets, fleets, tech; PlayerValue.ScoreOf). Zeros without a game or for an unknown player.</summary>
+            public FlatSpace.AI.PlayerValue.ScoreBreakdown PlayerScoreOf(int player)
+            {
+                if (GameAI == null || GameAI.GameAIMap == null || player < 0 || player >= players.Count || players[player].playerAI == null)
+                    return default;
+                var ai = players[player].playerAI;
+                var map = GameAI.GameAIMap;
+                if (map.GameAIConstants == null) return default;
+                var research = ai.ResearchCatalog != null ? ai.ResearchCatalog.catalogItems : null;
+                var settings = FlatSpace.AI.PlayerValue.ValueSettings.From(map.GameAIConstants, ai.ProductionCatalog != null ? ai.ProductionCatalog.catalogItems : null);
+                return FlatSpace.AI.PlayerValue.ScoreOf(map, player, GameAI.CurrentAIOrders, research, new WarshipStats(research), settings);
             }
 
             /// <summary>The strength of docked ships (FleetStrength.Of, with the human's research for the stats; any player's when no human plays). 0 without a game.</summary>

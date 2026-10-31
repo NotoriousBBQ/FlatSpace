@@ -361,6 +361,15 @@ namespace FlatSpace
                     AITuningLogger.LogEconomy(turnNumber, player, owned.Count,
                         owned.Count(p => p.GrotsitsShort), owned.Average(p => p.Morale),
                         owned.Sum(p => p.GetImprovementMaintenanceCost()));
+                    var scoreAi = Gameboard.Instance.players[player].playerAI;
+                    if (scoreAi != null && GameAIMap.GameAIConstants != null)
+                    {
+                        var research = scoreAi.ResearchCatalog != null ? scoreAi.ResearchCatalog.catalogItems : null;
+                        var scoreSettings = PlayerValue.ValueSettings.From(GameAIMap.GameAIConstants,
+                            scoreAi.ProductionCatalog != null ? scoreAi.ProductionCatalog.catalogItems : null);
+                        var score = PlayerValue.ScoreOf(GameAIMap, player, CurrentAIOrders, research, new WarshipStats(research), scoreSettings);
+                        AITuningLogger.LogScore(turnNumber, player, score.Total, score.Planets, score.Fleets, score.Tech);
+                    }
                     var chokepoints = GameAIMap.ChokepointSummary(player);
                     AITuningLogger.LogChokepointGarrison(turnNumber, player, chokepoints.colonized, chokepoints.boardTotal,
                         chokepoints.shipsOnThem, chokepoints.allShips);

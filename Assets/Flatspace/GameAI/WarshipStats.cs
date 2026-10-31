@@ -87,6 +87,16 @@ namespace FlatSpace.AI
         public float CurrentHealth(ShipData template, ICollection<string> snapshot, float damage, string subtype)
             => System.Math.Max(0f, Health(template, snapshot, subtype) - damage);
 
+        /// <summary>Share of the Health stat left (0..1); 1 when the Health stat is 0 (colony ships, no template).</summary>
+        public float HealthFraction(ShipData template, ICollection<string> snapshot, float damage, string subtype)
+        {
+            var max = Health(template, snapshot, subtype);
+            return max <= 0f ? 1f : CurrentHealth(template, snapshot, damage, subtype) / max;
+        }
+
+        public float HealthFraction(Ship ship)
+            => HealthFraction(ship.Template, ship.ResearchSnapshot, ship.Damage, SubtypeOf(ship.Kind));
+
         /// <summary>
         /// Offense scaled by how much health is left (Offense x current health / Health stat). No floor, by the owner's
         /// choice; 0 when the Health stat is 0 (colony ships, a ship with no template).

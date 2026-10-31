@@ -29,6 +29,7 @@ public static class AllAISelfChecks
             ("Blockade Initiation", BlockadeInitiateSelfCheck.RunChecks),
             ("Human Mode", HumanModeSelfCheck.RunChecks),
             ("Human UI", HumanUiSelfCheck.RunChecks),
+            ("Player Value", PlayerValueSelfCheck.RunChecks),
         };
 
         var failed = new List<string>();

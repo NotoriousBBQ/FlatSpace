@@ -15,6 +15,22 @@ namespace FlatSpace.AI
         public static float BuildCost(float baseCost, float factor, int improvements)
             => baseCost * (1f + factor * improvements);
 
+        /// <summary>
+        /// What one ship of this kind is worth in industry: a colony ship its catalog cost, the others the Warship base
+        /// cost (times the Siegeship or Bunker ratio) through BuildCost with the improvements the ship carries.
+        /// </summary>
+        public static float ShipCost(Ship.ShipKind kind, int improvements, float baseWarshipCost, float colonyShipCost,
+            float factor, float siegeshipRatio, float bunkerRatio)
+        {
+            switch (kind)
+            {
+                case Ship.ShipKind.ColonyShip: return colonyShipCost;
+                case Ship.ShipKind.SiegeShip: return BuildCost(baseWarshipCost * siegeshipRatio, factor, improvements);
+                case Ship.ShipKind.Bunker: return BuildCost(baseWarshipCost * bunkerRatio, factor, improvements);
+                default: return BuildCost(baseWarshipCost, factor, improvements);
+            }
+        }
+
         public static float UpdateCost(float baseWarshipCost, float factor, int missing)
             => Math.Max(1f, baseWarshipCost * factor * missing);
 

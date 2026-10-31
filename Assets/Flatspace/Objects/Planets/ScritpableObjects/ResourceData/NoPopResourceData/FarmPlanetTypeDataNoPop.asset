@@ -25,3 +25,4 @@ MonoBehaviour:
   _maxPopulation: 10
   _initialStrategy: 2
   _producerValue: 0.5
+  _planetValue: 40

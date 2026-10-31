@@ -39,7 +39,7 @@ name are ad-hoc fixtures). The established substitute is a **self-check invoked 
 failure, a summary `Debug.Log` at the end), reachable as a `[MenuItem]` under `Assets/Editor/` (`FlatSpace -> Fog | AI | UI -> Run ... Self-Check`;
 list them with `ls Assets/Editor/*SelfCheck*.cs`) or as a `[ContextMenu]` on the relevant component (`BoardDesigner`'s "Map Gen: Self Check (50
 seeds)"). Every AI suite exposes `public static bool RunChecks()` and must be added to the list in `Assets/Editor/AllAISelfChecks.cs`
-(`FlatSpace -> AI -> Run All AI Self-Checks`; planet defense has its own, `FlatSpace -> AI -> Run Planet Defense Self-Check`). When adding a subsystem that needs regression coverage, extend or add one of these rather than
+(`FlatSpace -> AI -> Run All AI Self-Checks`; planet defense has its own, `FlatSpace -> AI -> Run Planet Defense Self-Check`; the player value has `PlayerValueSelfCheck`, `FlatSpace -> AI -> Run Player Value Self-Check`, also in Run All AI Self-Checks). When adding a subsystem that needs regression coverage, extend or add one of these rather than
 reaching for a test framework. A self-check must never depend on `Gameboard.Instance` (build a minimal `GameAIMap`/`Planet`/`PlayerAI` set
 directly instead) - several of `Planet`'s methods (`GetPopulationFraction` among them) touch it transitively, so check before assuming a method is
 safe in isolation. `FleetSummarySelfCheck` covers only the per-player grouping, not the icons (those need a Play-mode look). The one deliberate
@@ -350,7 +350,7 @@ changing any of those systems; `FUTURE_FEATURES.md` and the session configuratio
 `AITuningLogger` (`Assets/Flatspace/Diagnostics/AITuningLogger.cs`, global namespace, plain static class) writes a durable, plain-text,
 pipe-delimited log of outcome-level AI events, `T<turn>|P<playerId>|<EventCode>|<fields...>`, for reviewing AI behavior after a match (the in-game
 notification panel is transient). **The event codes and their fields are defined at the `AITuningLogger.Log*` call sites and in the `tuning-log`
-skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `BunkerBuilt` (ends with a chokepoint flag since 2026-10-22), `ChokepointAssault`, `BlockadeInitiateStart`/`BlockadeInitiateEnd`/`BlockadeInitiateSkipped`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`); read those, not this file.** Rules that are not derivable from the code:
+skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `BunkerBuilt` (ends with a chokepoint flag since 2026-10-22), `ChokepointAssault`, `BlockadeInitiateStart`/`BlockadeInitiateEnd`/`BlockadeInitiateSkipped`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`, and the every-25-turns `Score` line, see Player value and score); read those, not this file.** Rules that are not derivable from the code:
 
 - Every new feature adds its log lines (see the plan rule in the session configuration); keep `.claude/skills/tuning-log/SKILL.md` in step with any
   new log line or invariant. Lines that fire on a state change only go through a tracker class (`GrotsitsShortTracker`, `BlockadeTargetTracker`,
@@ -469,6 +469,14 @@ make peace on a third party, offering and demanding planets, fleets and tech, an
   only, so with mine Peace and theirs War it stays available.
 - **Pure part** `HumanDiplomacyView` (rows, the rival view, button states; self-check `HumanUiSelfCheck.RunDiplomacyViewChecks` / `RunDiplomacyCheckChecks`). It reads `DiplomacyState.Turn`, which
   `GameAI` keeps current. With diplomacy off the screen says so and lists nobody.
+
+#### Player value and score
+
+Phase 1 of `docs/superpowers/specs/2026-10-30-ask-and-trade-design.md`; the later phases (ask-and-trade) build on it. `PlayerValue` (`Assets/Flatspace/GameAI/PlayerValue.cs`, pure) values a player in three parts and `score` is their sum:
+- **Planet** = the type's `_planetValue` (Prime 100, Verdant 60, Desolate 60, Industrial 50, Farm 40, Ocean 40, Desert 40, Normal 20; ten times the first values on 2026-10-30, because planets must always be worth far more than ships).
+- **Fleet** = each ship's production cost by the research tiers it carries x its health fraction / `fleetValueDivisor` (50). Docked and in-flight ships count; colonists in flight do not. A colony ship is worth the fixed `colonyShipValue` (2) instead of its production cost, so colonizing never lowers the score.
+- **Tech** = the cost of the player's researched research items / `techValueDivisor` (2000, set for the research costs doubled on 2026-10-30; retune the two together).
+- Shown for the human and the picked rival on the Diplomacy screen (`Gameboard.PlayerScoreOf`). Logged as `Score|<total>|<planets>|<fleets>|<tech>` every 25 turns per player with a planet (`GameAI.LogEconomySummary`); the `tuning-log` skill says how to read it.
 
 ### Input
 

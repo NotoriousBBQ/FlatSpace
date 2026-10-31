@@ -25,3 +25,4 @@ MonoBehaviour:
   _maxPopulation: 10
   _initialStrategy: 8
   _grotsitsImportAllowance: 0
+  _planetValue: 40

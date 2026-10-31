@@ -26,3 +26,4 @@ MonoBehaviour:
   _initialStrategy: 3
   _grotsitsImportAllowance: 30
   _producerValue: 1
+  _planetValue: 60
