@@ -592,6 +592,15 @@ public static class AITuningLogger
             planetsShort.ToString(), meanMorale.ToString("0.#", inv), totalUpkeep.ToString("0.#", inv)) });
     }
 
+    /// <summary>One player's score every 25 turns: T&lt;turn&gt;|P&lt;id&gt;|Score|total|planets|fleets|tech (one decimal each).</summary>
+    public static void LogScore(int turnNumber, int playerId, float total, float planets, float fleets, float tech)
+    {
+        if (_currentLogPath == null) return;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        AppendLines(new List<string> { FormatLine(turnNumber, playerId, "Score", total.ToString("0.0", inv),
+            planets.ToString("0.0", inv), fleets.ToString("0.0", inv), tech.ToString("0.0", inv)) });
+    }
+
     /// <summary>The Chokepoints field: name=betweenness%percentile joined by commas, or - when empty.</summary>
     public static string FormatChokepointList(IEnumerable<(string name, int betweenness, float percentile)> chokepoints)
     {
