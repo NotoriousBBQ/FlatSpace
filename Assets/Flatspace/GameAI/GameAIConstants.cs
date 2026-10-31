@@ -170,6 +170,20 @@ public class GameAIConstants : ScriptableObject
     // Research points per value point of completed research; retune together with the research costs.
     public float techValueDivisor = 2000f;
 
+    [Header("Deals")]
+    // Turns of truce an accepted peace deal gives (the same truce a surrender gets, but short).
+    public int dealTruceTurns = 20;
+    // Hostility removed per value point of a gift a rival receives (an accepted deal that is a net gain for it).
+    public float dealHostilityPerValue = 1f;
+    // The most hostility one deal can remove.
+    public float dealHostilityCap = 10f;
+    // Peace is never priced above this fraction of the war cost it saves the rival (so peace stays buyable).
+    public float peacePriceCapFraction = 0.5f;
+    // Value points peace costs a rival at maximum hostility (scaled by hostility / hostilityMax).
+    public float peaceHostilityPenaltyValue = 50f;
+    // Value points of net gain per step of the acceptance meter.
+    public float dealMeterScale = 10f;
+
     [Header("Improvement upkeep")]
     // Multiplies each improvement's catalog maintenanceCost when it is charged (grotsits per turn, on top of the
     // population's own consumption). Only the BEST tier per resource is charged. 0 switches upkeep off. The catalog

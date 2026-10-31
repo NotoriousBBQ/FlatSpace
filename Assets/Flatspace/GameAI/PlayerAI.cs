@@ -286,6 +286,14 @@ namespace FlatSpace
             {
                 foreach (var result in results)
                 {
+                    if (result.Result == Planet.UpdateResult.UpdateResultType.UpdateResultTypeConversion
+                        && result.Data is ConversionEvent flip && flip.OwnerChanged && flip.OldOwner == Player.playerID)
+                    {
+                        if (!_planetLosses.TryGetValue(flip.NewOwner, out var taken))
+                            _planetLosses[flip.NewOwner] = taken = new List<(int turn, float value)>();
+                        taken.Add((turn, AIMap.GetPlanet(result.Name)?.PlanetValue ?? 0f));
+                        continue;
+                    }
                     if (result.Result != Planet.UpdateResult.UpdateResultType.UpdateResultTypeWarshipsLost) continue;
                     if (result.PlayerID != Player.playerID || !(result.Data is CombatLoss loss)) continue;
                     if (!_losses.TryGetValue(loss.Attacker, out var list))
@@ -308,6 +316,25 @@ namespace FlatSpace
                 var window = AIMap.GameAIConstants.lossWindowTurns;
                 list.RemoveAll(e => turn - e.turn >= window);
                 return list.Sum(e => e.engaged);
+            }
+
+            // Per rival, the planets it took from me over the last lossWindowTurns: (turn, planet value). Player-private, not saved.
+            private readonly Dictionary<int, List<(int turn, float value)>> _planetLosses
+                = new Dictionary<int, List<(int turn, float value)>>();
+
+            /// <summary>
+            /// What the war has cost me toward this rival over the window: the share of my fleet it destroyed (LossShareToward) x
+            /// ownFleetValue, plus the value of the planets it took from me. Prunes entries older than the window.
+            /// </summary>
+            public float WarCostToward(int attacker, int turn, float ownFleetValue)
+            {
+                var cost = LossShareToward(attacker, turn) * ownFleetValue;
+                if (_planetLosses.TryGetValue(attacker, out var list))
+                {
+                    list.RemoveAll(e => turn - e.turn >= AIMap.GameAIConstants.lossWindowTurns);
+                    cost += list.Sum(e => e.value);
+                }
+                return cost;
             }
 
             private float ShipsLostThisTurn(int rival, int turn)
