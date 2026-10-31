@@ -282,7 +282,7 @@ public static class PlanetDefenseSelfCheck
                 var requires = t == 1 ? first : prefix + " " + (t - 1);
                 ok &= Check(item.type == "Ship Improvement" && item.subType == subType && item.effect == effect,
                     $"{name}: type Ship Improvement, subType {subType}, effect {effect}");
-                ok &= Check(item.tier == t && Near(item.cost, 3000f * t), $"{name}: tier {t}, cost {3000 * t}");
+                ok &= Check(item.tier == t && Near(item.cost, 6000f * t), $"{name}: tier {t}, cost {6000 * t}");
                 ok &= Check(item.requiredTech == requires, $"{name}: requires {requires}");
             }
         }
