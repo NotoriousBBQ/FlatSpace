@@ -384,6 +384,9 @@ namespace FlatSpace
             /// <summary>What the human last saw of each planet (owner and turn); the Planets screen's Owner column. Fresh per match, saved with the game.</summary>
             public FlatSpace.Human.PlanetSightMemory PlanetSights { get; private set; } = new FlatSpace.Human.PlanetSightMemory();
 
+            // Caps the hostility shift deals cause per rival per turn. Not saved: a new match or a load starts empty.
+            private FlatSpace.AI.DealHostilityLedger _dealHostilityLedger = new FlatSpace.AI.DealHostilityLedger();
+
             // Planet -> the last turn the human's ships cut another player's orders there (presentation only, not saved: a load shows none until the next cut).
             private readonly Dictionary<string, int> _humanBlockadingSince = new Dictionary<string, int>();
             private const int HumanBlockadingTurns = 5;
@@ -490,6 +493,7 @@ namespace FlatSpace
                     Deal = BuildDealContext(),
                     CapitalOf = id => GetPlayerCapitol(id)?.PlanetName,
                     AiOf = id => id >= 0 && id < players.Count ? players[id].playerAI : null,
+                    HostilityLedger = _dealHostilityLedger,
                 };
             }
 
@@ -825,6 +829,7 @@ namespace FlatSpace
                 _turnLimitReported = false;
                 HumanNotifications = new FlatSpace.Human.HumanNotificationList();
                 PlanetSights = new FlatSpace.Human.PlanetSightMemory();
+                _dealHostilityLedger = new FlatSpace.AI.DealHostilityLedger();
                 _humanBlockadingSince.Clear();
                 PlanetsScreen.Close();
                 PlanetsScreen.ResetState();
@@ -1116,7 +1121,7 @@ namespace FlatSpace
                 return GameAI.GetPlanet(planetName);
             }
 
-            private Planet GetPlayerCapitol(int playerID)
+            public Planet GetPlayerCapitol(int playerID)
             {
                 return GameAI.GetPlayerCapitol(playerID);
             }

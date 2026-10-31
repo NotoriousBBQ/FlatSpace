@@ -74,6 +74,10 @@ public static class HumanUiSelfCheck
         ok &= Check(distinct, "ProposalText: every template is filled and differs between accepted and declined");
         ok &= Check(ProposalText.TemplateReply(true, 0, 3) == ProposalText.TemplateReply(true, 0, 0) && ProposalText.TemplateReply(true, 1, -1) == ProposalText.TemplateReply(true, 1, 2)
                     && ProposalText.TemplateReply(false, 9, 0) == ProposalText.TemplateReply(false, 2, 0), "ProposalText: variant wraps, an unknown tone is enigmatic");
+        ok &= Check(ProposalText.RefusalSentence("LastPlanet") != "LastPlanet" && ProposalText.RefusalSentence("DuplicateItem") != "DuplicateItem"
+                    && ProposalText.RefusalSentence("UnknownKind").Contains("warships") && ProposalText.RefusalSentence("NoContact") != "NoContact"
+                    && ProposalText.RefusalSentence("SomethingNew") == "SomethingNew",
+            "ProposalText: refusal reasons read as sentences, an unknown one stays as it is");
         return ok;
     }
 

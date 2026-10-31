@@ -42,4 +42,23 @@ namespace FlatSpace.AI
         public string Refusal;
         public List<DealFactor> Factors = new List<DealFactor>();
     }
+
+    /// <summary>
+    /// Caps the cumulative signed hostility shift deals can cause per rival per turn, so a string of small gifts cannot erase a war's
+    /// hostility in one turn. Pure state, not saved (a load starts empty).
+    /// </summary>
+    public class DealHostilityLedger
+    {
+        private readonly Dictionary<(int rival, int turn), float> _cumulative = new Dictionary<(int rival, int turn), float>();
+
+        /// <summary>The part of `shift` that fits: the cumulative sum for (rival, turn) is clamped to [-turnCap, +turnCap] and the part added is returned and recorded.</summary>
+        public float Allow(int rival, int turn, float shift, float turnCap)
+        {
+            _cumulative.TryGetValue((rival, turn), out var cumulative);
+            var cap = Math.Abs(turnCap);
+            var next = Math.Max(-cap, Math.Min(cap, cumulative + shift));
+            _cumulative[(rival, turn)] = next;
+            return next - cumulative;
+        }
+    }
 }

@@ -177,7 +177,9 @@ public class GameAIConstants : ScriptableObject
     public float dealHostilityPerValue = 1f;
     // The most hostility one deal can remove.
     public float dealHostilityCap = 10f;
-    // Peace is never priced above this fraction of the war cost it saves the rival (so peace stays buyable).
+    // The most hostility all deals together can shift one rival's hostility in either direction in one turn (so gift spam cannot erase a war).
+    public float dealHostilityTurnCap = 20f;
+    // Peace is priced at least at minus this fraction of the rival's score (the floor on its worth to them, so peace stays buyable).
     public float peacePriceCapFraction = 0.5f;
     // Value points peace costs a rival at maximum hostility (scaled by hostility / hostilityMax).
     public float peaceHostilityPenaltyValue = 50f;

@@ -147,6 +147,7 @@ namespace Game.UI.MainGameScreenUI
                 _selected = rows.Count > 0 ? rows[0].Rival : -1;
                 _pending = null;
             }
+            ProposalDialog.Sync(_selected);   // an open proposal is re-previewed (the turn may have passed) or closed when its rival is gone
 
             _list.Clear();
             _detail.Clear();
@@ -317,9 +318,13 @@ namespace Game.UI.MainGameScreenUI
             row.Add(ActionButton("End the war", view.EndWar, () => Ask(EndWar)));
             row.Add(ActionButton("Surrender", view.Surrender, () => Ask(Surrender)));
             row.Add(ActionButton("Demand surrender", view.DemandSurrender, null));
-            // A proposal needs only contact and diplomacy on, which is what puts the rival on this screen.
+            // A proposal needs contact (a rival kept in the list after contact was lost has none) and diplomacy on.
             var rival = view.Rival;
-            row.Add(ActionButton("Propose...", new DiplomacyButton { Enabled = true }, () => ProposalDialog.Show(_host, rival)));
+            var map = Gameboard.Instance.GameAI.GameAIMap;
+            var inContact = map.Knowledge.ContactPlayers(map, Gameboard.Instance.HumanPlayerId).Contains(rival);
+            row.Add(ActionButton("Propose...",
+                new DiplomacyButton { Enabled = inContact, Reason = inContact ? null : ProposalText.RefusalSentence("NoContact") },
+                () => ProposalDialog.Show(_host, rival)));
             return row;
         }
 

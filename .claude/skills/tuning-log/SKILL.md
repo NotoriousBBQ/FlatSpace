@@ -124,7 +124,7 @@ user asked about one specific thing.
   leading player lead on all three. It tunes `_planetValue` (per planet type), `fleetValueDivisor` and `techValueDivisor`.
   Totals must be non-negative and tech should grow over the match.
 - **Proposals (ask and trade, phase 2):** only with a human. `T<turn>|P<humanId>|Proposal|<rival>|<give>|<get>|<net>|<band>|<accepted>`, once per
-  proposal that reached the rival (a refusal such as OutOfRange logs `HumanCommandRefused` instead), accepted or declined. `give`/`get` are compact
+  proposal that reached the rival (a refusal such as NoDealContext or NotOwned logs `HumanCommandRefused` instead; a peace bought by a deal writes no `Stance`/`Surrender` line, only this line's `endWar` term shows it), accepted or declined. `give`/`get` are compact
   terms joined by `,` (`planet:Farm 3,tech:Food Improvement 2,fleet:3 WarShip@Foo`; a fleet term is `fleet:<count> <kind>@<planet>`, a peace term is just `endWar`, an empty side is `-`; names may contain spaces, so a parser must split on `,` only), `net` is the rival's net value (two decimals at most), `band` is the meter word
   (VeryUnlikely, Unlikely, Uncertain, Likely, VeryLikely) and `accepted` is 1 or 0. It answers how often rivals accept, at what net, and whether
   `dealMeterScale` is right: accepted should be 0 for the unlikely bands and 1 from Likely up (net exactly 0 is accepted and lands in Likely; the decision is deterministic, so a Likely band
@@ -132,7 +132,7 @@ user asked about one specific thing.
   accepted means the scale is too small or large. Peace asks show as an `endWar` term; count how many are accepted per war.
   `T<turn>|P<rivalId>|DealHostility|<humanId>|<delta>|<hostilityAfter>`, once per accepted deal whose shift was non-zero. `delta` is the change
   actually applied after clamping (negative = the rival is less hostile, a gift; positive = the human took more than it gave). It answers whether
-  gifts and bad deals move hostility as intended and whether `dealHostilityCap` binds: many deltas at exactly +/-cap mean it does. Invariants: a
+  gifts and bad deals move hostility as intended and whether `dealHostilityCap` binds: many deltas at exactly +/-cap mean it does. `delta` is also limited by the per-rival per-turn `dealHostilityTurnCap` (cumulative across the turn's deals), so several same-turn lines for one rival summing to +/-the turn cap mean that cap binds. Invariants: a
   `DealHostility` always follows an accepted `Proposal` on the same turn, and `hostilityAfter` stays within 0..`hostilityMax`.
 - **Fleet cap discipline:** for every `WarshipBoost` line with multiplier `0`, confirm zero
   `WarShipProduction` starts for that player on that turn. This invariant should always hold; if it

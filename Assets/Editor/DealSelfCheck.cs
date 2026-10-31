@@ -39,6 +39,7 @@ public static class DealSelfCheck
         var ok = Check(c.dealTruceTurns == 20, "dealTruceTurns defaults to 20");
         ok &= Check(Near(c.dealHostilityPerValue, 1f), "dealHostilityPerValue defaults to 1");
         ok &= Check(Near(c.dealHostilityCap, 10f), "dealHostilityCap defaults to 10");
+        ok &= Check(Near(c.dealHostilityTurnCap, 20f), "dealHostilityTurnCap defaults to 20");
         ok &= Check(Near(c.peacePriceCapFraction, 0.5f), "peacePriceCapFraction defaults to 0.5");
         ok &= Check(Near(c.peaceHostilityPenaltyValue, 50f), "peaceHostilityPenaltyValue defaults to 50");
         ok &= Check(Near(c.dealMeterScale, 10f), "dealMeterScale defaults to 10");
@@ -193,6 +194,12 @@ public static class DealSelfCheck
             constants.peaceHostilityPenaltyValue = 500f;
             v = DealEvaluator.Evaluate(ctx, peace);
             ok &= Check(Near(v.PeaceWorth, -20f), "peace worth floored at -0.5 x rival score");
+
+            // offering a winning rival its own price: a gift worth 20 against peace worth -20 nets 0, which accepts
+            var winPrice = new Deal(); winPrice.Give.Add(planet("Big")); winPrice.Get.Add(endWar);
+            v = DealEvaluator.Evaluate(ctx, winPrice);
+            ok &= Check(Near(v.PeaceWorth, -20f) && Near(v.Receive, 20f) && Near(v.Net, 0f), "its own price: gift 20 + peace -20 nets 0");
+            ok &= Check(DealDecision.Accepts(new DealVerdict { Net = 20f + -20f }) && v.Accept, "offering the winning rival its own price is accepted");
             constants.peaceHostilityPenaltyValue = 50f;
 
             // an exact tie accepts
@@ -373,6 +380,12 @@ public static class DealSelfCheck
             ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "UnknownKind", "a numeric undefined fleet kind");
             deal.Give[0].name = "WarShip";
             ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "NotOwned", "a fleet the giver does not have");
+            deal.Give[0].name = "ColonyShip";
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "UnknownKind", "a ColonyShip fleet item is refused UnknownKind");
+            deal.Give[0].name = "Bunker";
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "UnknownKind", "a Bunker fleet item is refused UnknownKind");
+            deal = new Deal(); deal.Give.Add(planet("A")); deal.Give.Add(planet("A"));
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "DuplicateItem", "the same planet twice on one side is a DuplicateItem");
 
             // Planet gifts: the minimum conversions on a real planet
             deal = new Deal(); deal.Give.Add(planet("A"));
@@ -395,6 +408,12 @@ public static class DealSelfCheck
             c.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 10f);
             c.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>(), 5f, 0);
             c.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f);
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "fleet", name = "SiegeShip", planet = "C", count = 1 });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "a SiegeShip fleet item is accepted");
+            deal = new Deal();
+            deal.Give.Add(new DealItem { kind = "fleet", name = "WarShip", planet = "C", count = 1 });
+            deal.Give.Add(new DealItem { kind = "fleet", name = "warship", planet = "C", count = 1 });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "DuplicateItem", "the same planet+kind fleet twice on one side is a DuplicateItem");
             deal = new Deal(); deal.Give.Add(new DealItem { kind = "fleet", name = "WarShip", planet = "C", count = 2 });
             DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             var mine = c.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == 0).ToList();
@@ -409,6 +428,9 @@ public static class DealSelfCheck
             // Tech gift: T3 to a receiver with T1 only grants T3 and T2
             deal = new Deal(); deal.Give.Add(new DealItem { kind = "tech", name = "T3" });
             ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "tech T3 is valid before the gift");
+            deal.Give.Add(new DealItem { kind = "tech", name = "T3" });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "DuplicateItem", "the same tech twice on one side is a DuplicateItem");
+            deal.Give.RemoveAt(1);
             DealExecutor.Execute(ctx, deal, 1, constants, aiOf, noCapital);
             ok &= Check(r2.researched && r3.researched && !rx.researched, "tiers 2 and 3 researched");
             ok &= Check(!d1.researched && d2.researched && d3.researched, "dependent production items of the granted tiers flipped");
@@ -633,6 +655,28 @@ public static class DealSelfCheck
             ok &= Check(result.applied && result.detail.StartsWith("accepted"), "accepted at hostility 98: " + result.reason);
             ok &= Check(Near(s.Hostility, 100f), "hostility stops at hostilityMax");
         }
+
+        // The per-rival per-turn ledger through the processor: turn cap 8, ships worth 5 each, hostility 50. The first gift moves it by 5, the second by only 3.
+        using (var s = new DealScene())
+        {
+            s.Processor.HostilityLedger = new DealHostilityLedger();
+            s.Constants.dealHostilityTurnCap = 8f;
+            s.SetHostility(50f);
+            var first = s.Propose(Items(WarshipItem(1)), none);
+            ok &= Check(first.applied && first.detail.StartsWith("accepted") && Near(s.Hostility, 45f), "ledger: first gift -5 (45): " + s.Hostility);
+            var second = s.Propose(Items(WarshipItem(1)), none);
+            ok &= Check(second.applied && second.detail.StartsWith("accepted") && Near(s.Hostility, 42f), "ledger: second gift only -3 of -5 (42): " + s.Hostility);
+        }
+
+        // The ledger alone: three -10 gifts to one rival in one turn with turn cap 20 move it -10, -10, 0; the next turn allows -10 again;
+        // a raise and a lowering offset each other; another rival has its own account.
+        var ledger = new DealHostilityLedger();
+        ok &= Check(Near(ledger.Allow(1, 5, -10f, 20f), -10f) && Near(ledger.Allow(1, 5, -10f, 20f), -10f) && Near(ledger.Allow(1, 5, -10f, 20f), 0f),
+            "ledger: -10, -10, then 0 at turn cap 20");
+        ok &= Check(Near(ledger.Allow(1, 6, -10f, 20f), -10f), "ledger: the next turn allows -10 again");
+        ok &= Check(Near(ledger.Allow(2, 5, -10f, 20f), -10f), "ledger: another rival has its own account");
+        ok &= Check(Near(ledger.Allow(1, 7, -15f, 20f), -15f) && Near(ledger.Allow(1, 7, 15f, 20f), 15f) && Near(ledger.Allow(1, 7, -20f, 20f), -20f),
+            "ledger: a lowering and a raising deal offset each other, so -20 still fits afterwards");
 
         // Refusals
         using (var s = new DealScene())

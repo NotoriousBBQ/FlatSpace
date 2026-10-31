@@ -64,6 +64,17 @@ namespace Game.UI.MainGameScreenUI
             _replyLabel = null;
         }
 
+        /// <summary>
+        /// Called by the Diplomacy screen's Refresh: closes the dialog when the picked rival is no longer the one it was opened for, else redraws it
+        /// (the items stay; the deal is re-previewed, so the meter follows the new turn).
+        /// </summary>
+        internal static void Sync(int selectedRival)
+        {
+            if (!IsOpen) return;
+            if (selectedRival != _rival) Close();
+            else Redraw();
+        }
+
         /// <summary>Whether a screen point is on the dialog: a press there is not a click outside the planet or fleet panel.</summary>
         public static bool ContainsScreenPoint(Vector2 screenPosition)
         {
@@ -245,7 +256,8 @@ namespace Game.UI.MainGameScreenUI
             public DealItem Item;
         }
 
-        private static bool InDeal(DealItem item) => Give.Exists(i => ProposalText.SameItem(i, item)) || Get.Exists(i => ProposalText.SameItem(i, item));
+        // Whether the item is already on the side (list) the option would go into; the other side holds other owners' things.
+        private static bool InDeal(DealItem item, bool isGive) => (isGive ? Give : Get).Exists(i => ProposalText.SameItem(i, item));
 
         /// <summary>What the Add menu offers: the human's own things on the give side, the rival's the human may see on the get side. Items already in the deal are left out.</summary>
         private static List<MenuOption> Options(bool isGive, string category)
@@ -259,12 +271,26 @@ namespace Game.UI.MainGameScreenUI
             switch (category)
             {
                 case "planet":
+                    var ownerVisible = isGive ? null : board.HumanOwnerVisible();
+                    var capital = board.GetPlayerCapitol(owner)?.PlanetName;
                     foreach (var planet in map.PlanetList.OrderBy(p => p.PlanetName))
                     {
-                        if (planet.Owner != owner) continue;
-                        if (!isGive && !board.HumanHasSeenPlanet(planet.PlanetName)) continue;
+                        if (isGive)
+                        {
+                            if (planet.Owner != owner) continue;
+                        }
+                        else
+                        {
+                            // Never read the live owner of a planet out of sight: its last-known owner decides (the Planets screen's rule).
+                            if (!board.HumanHasSeenPlanet(planet.PlanetName)) continue;
+                            var known = Planet.NoOwner;
+                            if (ownerVisible(planet.PlanetName)) known = planet.Owner;
+                            else if (board.PlanetSights.TryGet(planet.PlanetName, out var sighting)) known = sighting.Owner;
+                            if (known != owner) continue;
+                        }
+                        if (planet.PlanetName == capital) continue;   // a capital cannot be given
                         var item = new DealItem { kind = "planet", name = planet.PlanetName };
-                        if (!InDeal(item)) options.Add(new MenuOption { Label = planet.PlanetName, Item = item });
+                        if (!InDeal(item, isGive)) options.Add(new MenuOption { Label = planet.PlanetName, Item = item });
                     }
                     break;
 
@@ -275,11 +301,11 @@ namespace Game.UI.MainGameScreenUI
                     {
                         if (!isGive && !visible(planet.PlanetName)) continue;
                         var perKind = HumanFleetView.Docked(planet, owner).Where(s => Ship.CountsAsShip(s.Kind)).GroupBy(s => s.Kind);
-                        foreach (var group in perKind)
+                        foreach (var group in perKind.Where(g => Ship.IsFightingKind(g.Key)))   // colony ships and bunkers are not tradable
                         {
                             var count = group.Count();
                             var kind = group.Key.ToString();
-                            if (InDeal(new DealItem { kind = "fleet", name = kind, planet = planet.PlanetName })) continue;
+                            if (InDeal(new DealItem { kind = "fleet", name = kind, planet = planet.PlanetName }, isGive)) continue;
                             options.Add(new MenuOption
                             {
                                 Label = count > 1 ? $"All {count} {kind} at {planet.PlanetName}" : $"1 {kind} at {planet.PlanetName}",
@@ -306,7 +332,7 @@ namespace Game.UI.MainGameScreenUI
                         var chain = receiverAi.TechChain(tech.itemName);
                         if (chain.Count == 0) continue;
                         var item = new DealItem { kind = "tech", name = tech.itemName };
-                        if (InDeal(item)) continue;
+                        if (InDeal(item, isGive)) continue;
                         options.Add(new MenuOption
                         {
                             Label = chain.Count > 1 ? $"{tech.itemName} (+{chain.Count - 1} lower tiers)" : tech.itemName,
@@ -354,7 +380,7 @@ namespace Game.UI.MainGameScreenUI
             if (!judged)
             {
                 var empty = Give.Count + Get.Count == 0;
-                parent.Add(HumanUiKit.Text(empty ? "Add something to the deal." : "This cannot be put: " + verdict.Refusal, HumanUiKit.Muted, size: 12));
+                parent.Add(HumanUiKit.Text(empty ? "Add something to the deal." : ProposalText.RefusalSentence(verdict.Refusal), HumanUiKit.Muted, size: 12));
             }
             else
             {

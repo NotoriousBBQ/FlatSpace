@@ -47,6 +47,9 @@ namespace FlatSpace
             /// <summary>Maps a player id to its PlayerAI (a tech gift grants through it). Defaults to the human only.</summary>
             public Func<int, PlayerAI> AiOf { get; set; }
 
+            /// <summary>Caps the cumulative hostility shift deals cause per rival per turn (the Gameboard owns one for the match). Null = unlimited.</summary>
+            public DealHostilityLedger HostilityLedger { get; set; }
+
             /// <summary>
             /// Whether a command would be accepted right now, without applying it: null when it would, else the refusal reason. Covers
             /// the commands a screen offers a choice of (queueProduction, queueResearch, colonize, shipResource, move, assignWorkers, declareWar, makePeace, surrender); any other type is
@@ -55,7 +58,7 @@ namespace FlatSpace
             public string Check(HumanCommand command)
             {
                 if (command == null) return "UnknownCommand";
-                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings, Deal = Deal, CapitalOf = CapitalOf, AiOf = AiOf };
+                var scratch = new HumanCommandProcessor(_map, _human, _turn) { PauseSettings = PauseSettings, Deal = Deal, CapitalOf = CapitalOf, AiOf = AiOf, HostilityLedger = HostilityLedger };
                 switch (command.type)
                 {
                     case "queueResearch":
@@ -457,7 +460,7 @@ namespace FlatSpace
             }
 
             // propose: rival, dealGive (what the human gives), dealGet (what it asks for). Accepted: the deal is executed and the rival's
-            // hostility toward the human shifts by -dealHostilityPerValue x TangibleDelta (capped, kept in 0..hostilityMax). Declined:
+            // hostility toward the human shifts by -dealHostilityPerValue x TangibleDelta (capped per deal, then by the per-rival per-turn HostilityLedger, kept in 0..hostilityMax). Declined:
             // nothing changes, but the command is applied (the answer is the detail). A dry run (Check) only validates.
             private string HandlePropose(HumanCommand command, out string detail)
             {
@@ -483,6 +486,7 @@ namespace FlatSpace
                 var pair = _map.Diplomacy.Get(ctx.Rival, HumanId);
                 var before = pair.Hostility;
                 var shift = Mathf.Clamp(-constants.dealHostilityPerValue * verdict.TangibleDelta, -constants.dealHostilityCap, constants.dealHostilityCap);
+                if (HostilityLedger != null) shift = HostilityLedger.Allow(ctx.Rival, _turn, shift, constants.dealHostilityTurnCap);
                 pair.Hostility = Mathf.Clamp(before + shift, 0f, constants.hostilityMax);
                 _map.Diplomacy.Set(ctx.Rival, HumanId, pair);
                 var applied = pair.Hostility - before;

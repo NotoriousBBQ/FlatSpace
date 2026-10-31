@@ -20,6 +20,27 @@ namespace FlatSpace
             public static bool SameItem(DealItem a, DealItem b)
                 => a != null && b != null && a.kind == b.kind && a.name == b.name && a.planet == b.planet;
 
+            /// <summary>A closed refusal reason as a plain sentence for the dialog; an unknown reason is returned as it is.</summary>
+            public static string RefusalSentence(string reason)
+            {
+                switch (reason)
+                {
+                    case "NotOwned": return "One of these is not theirs or yours to give.";
+                    case "LastPlanet": return "Nobody can give away their last populated planet.";
+                    case "Capital": return "A capital cannot be given away.";
+                    case "TechUnavailable": return "That tech cannot be given: the giver lacks it or the receiver already has it.";
+                    case "NotAtWar": return "You are not at war, so there is no war to end.";
+                    case "UnknownKind": return "Only warships and siegeships can be traded as fleets.";
+                    case "EmptyDeal": return "Add something to the deal.";
+                    case "DuplicateItem": return "The same thing is in the deal twice.";
+                    case "NoContact": return "You have no contact with them.";
+                    case "DiplomacyOff": return "Diplomacy is switched off.";
+                    case "NoDealContext": return "Deals cannot be made right now.";
+                    case "UnknownRival": return "There is no such rival.";
+                    default: return reason;
+                }
+            }
+
             /// <summary>An item as a row of the dialog; "I give" rows speak for the human, "I get" rows for the rival.</summary>
             public static string RowText(DealItem item, bool inGive)
             {
