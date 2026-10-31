@@ -350,7 +350,7 @@ changing any of those systems; `FUTURE_FEATURES.md` and the session configuratio
 `AITuningLogger` (`Assets/Flatspace/Diagnostics/AITuningLogger.cs`, global namespace, plain static class) writes a durable, plain-text,
 pipe-delimited log of outcome-level AI events, `T<turn>|P<playerId>|<EventCode>|<fields...>`, for reviewing AI behavior after a match (the in-game
 notification panel is transient). **The event codes and their fields are defined at the `AITuningLogger.Log*` call sites and in the `tuning-log`
-skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `BunkerBuilt` (ends with a chokepoint flag since 2026-10-22), `ChokepointAssault`, `BlockadeInitiateStart`/`BlockadeInitiateEnd`/`BlockadeInitiateSkipped`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`, and the every-25-turns `Score` line, see Player value and score); read those, not this file.** Rules that are not derivable from the code:
+skill (including the planet-defense lines `Bombard`, `ConversionBlocked`, `BunkerBuilt` (ends with a chokepoint flag since 2026-10-22), `ChokepointAssault`, `BlockadeInitiateStart`/`BlockadeInitiateEnd`/`BlockadeInitiateSkipped`, `SiegeSized`, `SiegeFollow`/`SiegeHeld`, `EscortLaunch`/`EscortDetour`, the every-25-turns `Score` line, see Player value and score, and the human-proposal lines `Proposal` and `DealHostility`, see Proposals); read those, not this file.** Rules that are not derivable from the code:
 
 - Every new feature adds its log lines (see the plan rule in the session configuration); keep `.claude/skills/tuning-log/SKILL.md` in step with any
   new log line or invariant. Lines that fire on a state change only go through a tracker class (`GrotsitsShortTracker`, `BlockadeTargetTracker`,
@@ -477,6 +477,28 @@ Phase 1 of `docs/superpowers/specs/2026-10-30-ask-and-trade-design.md`; the late
 - **Fleet** = each ship's production cost by the research tiers it carries x its health fraction / `fleetValueDivisor` (50). Docked and in-flight ships count; colonists in flight do not. A colony ship is worth the fixed `colonyShipValue` (2) instead of its production cost, so colonizing never lowers the score.
 - **Tech** = the cost of the player's researched research items / `techValueDivisor` (2000, set for the research costs doubled on 2026-10-30; retune the two together).
 - Shown for the human and the picked rival on the Diplomacy screen (`Gameboard.PlayerScoreOf`). Logged as `Score|<total>|<planets>|<fleets>|<tech>` every 25 turns per player with a planet (`GameAI.LogEconomySummary`); the `tuning-log` skill says how to read it.
+
+#### Proposals (ask and trade, phase 2)
+
+Plan `docs/superpowers/plans/2026-10-30-ask-and-trade-phase2-proposals.md`, built on branch `ask-trade-proposals`. Peace and gifts only; third-party start/end-war asks are phase 3.
+- **Command:** `propose` (`HumanCommand.rival`, `dealGive` = what the human gives, `dealGet` = what it asks for; `DealItem` kinds `planet`, `fleet` (planet, ship kind, count) and `tech`, `endWar` for peace). Pure parts in `Assets/Flatspace/GameAI/`
+  (`DealModel`, `DealEvaluator`, `DealDecision`, `DealExecutor`), applied by `HumanCommandProcessor.HandlePropose`, which needs `Deal`/`CapitalOf` (else `NoDealContext`). Closed refusals: UnknownCommand, NoDealContext, DiplomacyOff,
+  UnknownRival, NoContact, plus `DealExecutor.Validate`'s EmptyDeal, NotOwned, LastPlanet, Capital, TechUnavailable, NotAtWar, UnknownKind, plus `ExecutionRefusal` (a tech whose receiver has no `PlayerAI`; a fleet that includes a ship an earlier command of the batch already claimed: NotOwned).
+  `Preview` (`Gameboard.PreviewDeal`) runs the same checks and the evaluator, changing nothing, to feed the dialog's meter.
+- **Value:** `Net = Receive - Give + PeaceWorth` from the rival's view. Items are valued by the owner's side: planet = `Planet.PlanetValue`, fleet = the chosen ships' `PlayerValue.ShipValue` (healthiest first), tech = the receiver's *missing prerequisite chain* cost / `techValueDivisor`
+  (`DealEvaluator.MissingChain`). **Peace worth** (only with an `endWar` item) = `max(WarCost - hostility/hostilityMax x peaceHostilityPenaltyValue, -peacePriceCapFraction x rival's score)`: `WarCost` is `PlayerAI.WarCostToward`
+  (fleet share lost x own fleet value plus planets lost to the proposer), the penalty is the rival's anger, and the floor caps what peace can cost it, so a furious rival is never unbuyable for a finite price.
+- **Decision:** `DealDecision.Accepts` is a one-row `ScoreMatrix` (Accept scores `Net`, Decline 0, tie to Accept, so net 0 accepts); deterministic, with no weight selector. A roulette over accept/decline is a one-line seam later (pass a weight selector). The meter band is
+  `DealEvaluator.BandOf(net, dealMeterScale)`: ratio < -2 VeryUnlikely, < -0.5 Unlikely, < 0 Uncertain, < 2 Likely, else VeryLikely.
+- **Execution is instant** (`DealExecutor.Execute`, re-validates and throws without applying anything): a planet moves at the minimum conversion (inhabitants convert until the receiver holds the most population); a fleet moves healthiest-first through `Planet.TransferShips`;
+  a tech is granted with its whole prerequisite chain (`PlayerAI.GrantTech`/`TechChain`); a bought peace sets both stances to Peace and stamps a `dealTruceTurns` truce through `GameAI.ApplySurrender`.
+- **Hostility:** after an accepted deal the rival's hostility toward the human shifts by `-dealHostilityPerValue x TangibleDelta` (Receive - Give, no peace worth), clamped to +/-`dealHostilityCap` and the result to 0..`hostilityMax`: gifts calm, a one-sided deal angers.
+  A **decline is `applied = true`** (the command is applied, detail starts "declined", nothing changes), so it is not a refusal; the dialog shows the rival's reply.
+- **Dialog:** `ProposalDialog` (layout B: "I give"/"I get" lists with an Add menu left, "How they see it" right: meter, green/red factor lines, reply) opened from the Diplomacy screen; every edit re-previews. Words come from the pure `ProposalText` (a fixed reply template first, the local-model text is a later layer).
+- **Tunables** (`GameAIConstants`, "Deals"): `dealTruceTurns` 20, `dealHostilityPerValue` 1, `dealHostilityCap` 10, `peacePriceCapFraction` 0.5, `peaceHostilityPenaltyValue` 50, `dealMeterScale` 10.
+- **Logging:** `Proposal|<rival>|<give>|<get>|<net>|<band>|<accepted>` (P = the human) and `DealHostility|<human>|<delta>|<hostilityAfter>` (P = the rival, only a non-zero applied shift); see the `tuning-log` skill.
+- **Self-check:** `Assets/Editor/DealSelfCheck.cs` (`FlatSpace -> AI -> Run Deal Self-Check`, also in `Run All AI Self-Checks`).
+- **Open:** third-party asks (get a rival to declare war or make peace on another) are phase 3; expanding the chatbot prompts with the deal facts (valuation, hostility change) is a later task (`FUTURE_FEATURES.md`).
 
 ### Input
 
