@@ -45,7 +45,7 @@ Two lists, **I give** and **I get**. An **Add** menu offers: Planet..., Fleet...
 - "End the war with them" adds a **linked pair** of rows, "I end the war" under I give and "They end the war" under I get; removing either removes both. It exists only while the pair is at war.
 - "Start war with P3" / "End war with P3" go only in the list they are added to. In I give they are a promise by the human; in I get they are an ask of the rival. They need P3 to be a player both have met **(my call)**.
 - What the human may pick under I get is what the board already shows the human (planets it knows, fleets it can see, tech the rival has researched that the human lacks). **(my call; whether a rival's researched tech list should be hidden is left to the builder.)**
-- A tech can be given only when its `requiredTech` is already researched by the receiver **(my call)**, so the catalog never holds an orphan.
+- A tech can be given when the giver has it and the receiver lacks it. **A received tech brings its whole prerequisite chain** (the owner's rule, 2026-10-30): every lower tier reached by following `requiredTech` that the receiver lacks is granted too, and all of them leave the receiver's research queue (a tech in progress is cleared). The item is valued as that whole missing chain.
 
 ### Acceptance
 
@@ -64,7 +64,7 @@ When a rival **accepts**, its hostility toward the proposer changes by `delta = 
 
 - **Planet:** convert one inhabitant at a time from the giver to the receiver until `Planet.PlayerWithMostPopulation()` returns the receiver, and no further (the minimum; ownership is a plurality, a tie leaves the planet unowned). Uses `Planet.ConvertInhabitant`: the production queue is cleared, improvements and stocks stay, the planet takes the new owner's manual/automatic default. The giver's remaining inhabitants and ships stay, as after a conquest. Bunkers stay with their owner.
 - **Fleet:** the named ships change `Ship.Owner` where they sit (and join the receiver's fleet numbering).
-- **Tech:** the receiver's matching catalog item is marked researched (production items with that `requiredTech` follow, as completed research does).
+- **Tech:** the receiver's matching catalog item and every missing lower tier of its `requiredTech` chain are marked researched (production items with those `requiredTech` follow, as completed research does) and removed from the research queue.
 - **Stance items:** applied through the existing stance orders (`GameAI.ApplyStanceOrder`), instant. "End the war" sets both stances to Peace. **A bought peace starts a truce of `dealTruceTurns` (new on `GameAIConstants`, default 20, the owner's decision; Surrender's is `surrenderTruceTurns` 30)**, stamped on both pair rows like `GameAI.ApplySurrender` does, so the AI's stance matrix cannot re-declare the war during it; third-party items (start/end war with P3) change only the named player's stance and nothing prevents a later change.
 - Items are checked again at execution; a deal whose item is no longer valid (a planet lost this turn) is refused with a reason, nothing applies (all or nothing).
 
@@ -75,7 +75,7 @@ When a rival **accepts**, its hostility toward the proposer changes by `delta = 
 - **Reply text:** the decision applies at once and never waits for the model. A deterministic template line for the verdict shows immediately; the model's text replaces it when it arrives (async, with the existing timeout). If no model runs, the template stays.
 - **Fleets:** only ships docked at a planet can be given or asked for (ships in flight are orders, not `Ship` objects). A rival's fleet in the I get list obeys the existing rule (`HumanHoverText.ShowFullFleetDetail`): the human sees a ship count and strength, not the ship detail.
 - **Scores:** a rival met has its score shown (the owner's roadmap entry asks for rivals' scores); the leak of its fleet and tech totals is accepted. The score is not used at match end in this project (the turn-limit popup still names no winner; scoring at match end is a later feature).
-- **Tech:** a gifted tech only flips the receiver's `researched` flag (no research progress or cost credit). The I get list shows the rival's researched techs that the human lacks; one whose `requiredTech` the human lacks is listed greyed out with its reason.
+- **Tech:** a gifted tech only flips the receiver's `researched` flag (no research progress or cost credit). The I get list shows the rival's researched techs that the human lacks, with `(+N lower tiers)` when the chain adds more.
 
 ## What exists and what is new
 
