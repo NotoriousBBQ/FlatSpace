@@ -16,6 +16,7 @@ public static class DealSelfCheck
         ok &= RunWarCostChecks();
         ok &= RunEvaluatorChecks();
         ok &= RunFleetValueChecks();
+        ok &= RunExecutorChecks();
         Debug.Log(ok
             ? "[DealSelfCheck] ALL PASSED"
             : "[DealSelfCheck] FAILURES (see errors above)");
@@ -273,6 +274,167 @@ public static class DealSelfCheck
         }
         finally
         {
+            Object.DestroyImmediate(mapGo);
+            foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
+        }
+        return ok;
+    }
+
+    private static void SetPop(Planet planet, int owner, params int[] players)
+    {
+        planet.Population.Clear();
+        foreach (var p in players) planet.Population.Add(new Planet.Inhabitant { Player = p });
+        planet.Owner = owner;
+    }
+
+    private static int Count(Planet planet, int player) => planet.Population.Count(i => i.Player == player);
+
+    public static bool RunExecutorChecks()
+    {
+        var ok = true;
+        var junk = new List<Object>();
+        var mapGo = new GameObject("DealSelfCheckExecMap");
+        var aiGo = new GameObject("DealSelfCheckExecAI");
+        try
+        {
+            // ConversionsNeeded: indexed by player id, giver 0, receiver 1, third 2.
+            ok &= Check(DealExecutor.ConversionsNeeded(new[] { 5, 0, 0 }, 0, 1) == 3, "giver 5 alone: 3 conversions");
+            ok &= Check(DealExecutor.ConversionsNeeded(new[] { 5, 0, 2 }, 0, 1) == 3, "giver 5 + third 2: 3 conversions");
+            ok &= Check(DealExecutor.ConversionsNeeded(new[] { 5, 0, 4 }, 0, 1) == 5, "giver 5 + third 4: 5 conversions (a tie owns nothing)");
+            ok &= Check(DealExecutor.ConversionsNeeded(new[] { 1, 0, 0 }, 0, 1) == 1, "one inhabitant: 1 conversion");
+
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            junk.Add(constants);
+            map.GameAIMapInit(new List<PlanetSpawnData>
+            {
+                MakeSpawn("A", 10f, 0f, junk), MakeSpawn("B", 10f, 100f, junk),
+                MakeSpawn("C", 10f, 200f, junk), MakeSpawn("D", 10f, 300f, junk),
+            }, constants);
+            var a = map.GetPlanet("A"); var b = map.GetPlanet("B"); var c = map.GetPlanet("C"); var d = map.GetPlanet("D");
+            SetPop(a, 0, 0, 0, 0, 0, 0);
+            SetPop(b, 0, 0);
+            SetPop(c, Planet.NoOwner);
+            SetPop(d, 1, 1, 1);
+
+            // tech: proposer (0) has T1..T3; receiver (1) has only T1
+            var g1 = Tech("T1", "", 10f, true); var g2 = Tech("T2", "T1", 20f, true); var g3 = Tech("T3", "T2", 30f, true);
+            var r1 = Tech("T1", "", 10f, true); var r2 = Tech("T2", "T1", 20f, false); var r3 = Tech("T3", "T2", 30f, false);
+            var rx = Tech("X", "", 5f, false);
+            var d1 = Tech("D1", "T1", 1f, false); var d2 = Tech("D2", "T2", 1f, false); var d3 = Tech("D3", "T3", 1f, false);
+            junk.AddRange(new Object[] { g1, g2, g3, r1, r2, r3, rx, d1, d2, d3 });
+            var giverItems = new List<CatalogItem> { g1, g2, g3 };
+            var ai1 = aiGo.AddComponent<PlayerAI>();
+            ai1.Player = aiGo.AddComponent<Player>();
+            ai1.Player.playerID = 1;
+            ai1.AIMap = map;
+            ai1.ResearchCatalog = aiGo.AddComponent<Catalog>();
+            ai1.ResearchCatalog.catalogItems = new List<CatalogItem> { r1, r2, r3, rx };
+            ai1.ProductionCatalog = aiGo.AddComponent<Catalog>();
+            ai1.ProductionCatalog.catalogItems = new List<CatalogItem> { d1, d2, d3 };
+            ai1.SetResearchQueue(new[] { "T2", "X", "T3" });
+            ai1.currentResearch = r2;
+
+            var ctx = new DealContext
+            {
+                Map = map, Proposer = 0, Rival = 1,
+                Settings = new PlayerValue.ValueSettings { BaseWarshipCost = 100f, ImprovementFactor = 0.1f, FleetDivisor = 1f, TechDivisor = 1f },
+                Stats = new WarshipStats(null),
+                ScoreOf = p => new PlayerValue.ScoreBreakdown(),
+                WarCost = (victim, attacker) => 0f,
+                Research = p => p == 0 ? giverItems : p == 1 ? ai1.ResearchCatalog.catalogItems : null,
+            };
+            System.Func<int, string> noCapital = p => null;
+            System.Func<int, PlayerAI> aiOf = p => p == 1 ? ai1 : null;
+            System.Func<string, DealItem> planet = n => new DealItem { kind = "planet", name = n };
+
+            // Validate refusals
+            ok &= Check(DealExecutor.Validate(ctx, new Deal(), noCapital) == "EmptyDeal", "empty deal");
+            var deal = new Deal(); deal.Give.Add(planet("D"));
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "NotOwned", "a planet the proposer does not own");
+            deal = new Deal(); deal.Give.Add(planet("A")); deal.Give.Add(planet("B"));
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "LastPlanet", "giving both populated planets is the last planet");
+            deal = new Deal(); deal.Get.Add(planet("D"));
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "LastPlanet", "the rival only populated planet");
+            deal = new Deal(); deal.Give.Add(planet("A"));
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "giving one of two populated planets is valid");
+            ok &= Check(DealExecutor.Validate(ctx, deal, p => p == 0 ? "A" : null) == "Capital", "the capital cannot be given");
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "tech", name = "T1" });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "TechUnavailable", "a tech the receiver has");
+            deal = new Deal(); deal.Get.Add(new DealItem { kind = "tech", name = "T3" });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "TechUnavailable", "a tech the giver (rival) lacks");
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "endWar" });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "NotAtWar", "endWar while at peace");
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "fleet", name = "Bogus", planet = "C", count = 1 });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "UnknownKind", "a bad fleet kind");
+            deal.Give[0].name = "7";
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "UnknownKind", "a numeric undefined fleet kind");
+            deal.Give[0].name = "WarShip";
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "NotOwned", "a fleet the giver does not have");
+
+            // Planet gifts: the minimum conversions on a real planet
+            deal = new Deal(); deal.Give.Add(planet("A"));
+            SetPop(a, 0, 0, 0, 0, 0, 0);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            ok &= Check(a.Owner == 1 && Count(a, 0) == 2 && Count(a, 1) == 3, "giver 5 alone: owner flips after 3, giver keeps 2");
+            SetPop(a, 0, 0, 0, 0, 0, 0, 2, 2);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            ok &= Check(a.Owner == 1 && Count(a, 0) == 2 && Count(a, 1) == 3 && Count(a, 2) == 2, "giver 5 + third 2: 3 conversions");
+            SetPop(a, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            ok &= Check(a.Owner == 1 && Count(a, 0) == 0 && Count(a, 1) == 5 && Count(a, 2) == 4, "giver 5 + third 4: 5 conversions");
+            SetPop(a, 0, 0);
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            ok &= Check(a.Owner == 1 && Count(a, 1) == 1, "one inhabitant: 1 conversion");
+
+            // Fleet gift: the two healthiest of three; the rival own ship, the damaged third and another kind stay
+            c.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 20f);
+            c.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 0f);
+            c.DockShipFromSave(Ship.ShipKind.WarShip, 0, new List<string>(), 10f);
+            c.DockShipFromSave(Ship.ShipKind.WarShip, 1, new List<string>(), 5f, 0);
+            c.DockShipFromSave(Ship.ShipKind.SiegeShip, 0, new List<string>(), 0f);
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "fleet", name = "WarShip", planet = "C", count = 2 });
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            var mine = c.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == 0).ToList();
+            var theirs = c.DockedShips.Where(s => s.Kind == Ship.ShipKind.WarShip && s.Owner == 1).ToList();
+            ok &= Check(mine.Count == 1 && Near(mine[0].Damage, 20f), "the most damaged warship stays with the giver");
+            ok &= Check(theirs.Count == 3, "the rival holds its own ship plus the 2 gifted");
+            ok &= Check(theirs.Count(s => Near(s.Damage, 0f)) == 1 && theirs.Count(s => Near(s.Damage, 10f)) == 1 && theirs.Count(s => Near(s.Damage, 5f)) == 1,
+                "the gifted ships are the damage 0 and damage 10 ones");
+            ok &= Check(theirs.Where(s => !Near(s.Damage, 5f)).All(s => s.FleetId == 1), "the gifted ships share one fresh fleet id (1, above the rival fleet 0)");
+            ok &= Check(c.DockedShips.Count(s => s.Kind == Ship.ShipKind.SiegeShip && s.Owner == 0) == 1, "another kind never moves");
+
+            // Tech gift: T3 to a receiver with T1 only grants T3 and T2
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "tech", name = "T3" });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "tech T3 is valid before the gift");
+            DealExecutor.Execute(ctx, deal, 1, constants, aiOf);
+            ok &= Check(r2.researched && r3.researched && !rx.researched, "tiers 2 and 3 researched");
+            ok &= Check(!d1.researched && d2.researched && d3.researched, "dependent production items of the granted tiers flipped");
+            ok &= Check(ai1.ResearchQueue.SequenceEqual(new[] { "X" }), "granted tiers leave the queue");
+            ok &= Check(ai1.currentResearch == null, "currentResearch cleared");
+            ok &= Check(ai1.GrantTech("T3").Count == 0, "a tech already held grants nothing");
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == "TechUnavailable", "validate now refuses the held tech");
+
+            // Execute applies nothing when the deal is invalid (the planet is valid, the tech is held)
+            SetPop(a, 0, 0, 0, 0, 0, 0);
+            deal = new Deal(); deal.Give.Add(planet("A")); deal.Give.Add(new DealItem { kind = "tech", name = "T3" });
+            var threw = false;
+            try { DealExecutor.Execute(ctx, deal, 1, constants, aiOf); }
+            catch (System.InvalidOperationException) { threw = true; }
+            ok &= Check(threw, "Execute throws on an invalid deal");
+            ok &= Check(a.Owner == 0 && Count(a, 0) == 5, "an invalid deal applied nothing");
+
+            // endWar
+            map.Diplomacy.SetStance(0, 1, Stance.War, 1);
+            deal = new Deal(); deal.Give.Add(new DealItem { kind = "endWar" });
+            ok &= Check(DealExecutor.Validate(ctx, deal, noCapital) == null, "endWar valid while at war");
+            DealExecutor.Execute(ctx, deal, 5, constants, aiOf);
+            ok &= Check(map.Diplomacy.StanceToward(0, 1) == Stance.Peace && map.Diplomacy.StanceToward(1, 0) == Stance.Peace, "endWar sets both stances to Peace");
+            ok &= Check(map.Diplomacy.Get(0, 1).TruceUntil == 25 && map.Diplomacy.Get(1, 0).TruceUntil == 25, "truce until turn + 20 on both rows");
+        }
+        finally
+        {
+            Object.DestroyImmediate(aiGo);
             Object.DestroyImmediate(mapGo);
             foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
         }

@@ -344,6 +344,27 @@ namespace FlatSpace
             public List<CatalogItem> TechChain(string itemName)
                 => DealEvaluator.MissingChain(ResearchCatalog != null ? ResearchCatalog.catalogItems : null, itemName);
 
+            /// <summary>
+            /// Grants a tech by deal: the item and every unresearched prerequisite become researched, the production items they unlock
+            /// are flipped (as CompleteResearch does), each leaves ResearchQueue and currentResearch is cleared when it is one of them.
+            /// No notifications or log. Returns the names newly granted (empty when unknown or already researched). No Gameboard.Instance.
+            /// </summary>
+            public List<string> GrantTech(string itemName)
+            {
+                var granted = new List<string>();
+                foreach (var item in TechChain(itemName))
+                {
+                    item.researched = true;
+                    granted.Add(item.itemName);
+                    if (ProductionCatalog != null)
+                        foreach (var dependent in ProductionCatalog.catalogItems.FindAll(x => x.requiredTech == item.itemName))
+                            dependent.researched = true;
+                    ResearchQueue.RemoveAll(n => n == item.itemName);
+                    if (currentResearch == item) currentResearch = null;
+                }
+                return granted;
+            }
+
             private float ShipsLostThisTurn(int rival, int turn)
                 => _losses.TryGetValue(rival, out var list) ? list.Where(e => e.turn == turn).Sum(e => e.ships) : 0f;
 
