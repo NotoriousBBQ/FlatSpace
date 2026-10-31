@@ -125,9 +125,9 @@ user asked about one specific thing.
   Totals must be non-negative and tech should grow over the match.
 - **Proposals (ask and trade, phase 2):** only with a human. `T<turn>|P<humanId>|Proposal|<rival>|<give>|<get>|<net>|<band>|<accepted>`, once per
   proposal that reached the rival (a refusal such as OutOfRange logs `HumanCommandRefused` instead), accepted or declined. `give`/`get` are compact
-  terms joined by `;` (`planet:Farm 3;tech:Food Improvement 2`), `net` is the rival's net value (two decimals at most), `band` is the meter word
+  terms joined by `,` (`planet:Farm 3,tech:Food Improvement 2,fleet:3 WarShip@Foo`; a fleet term is `fleet:<count> <kind>@<planet>`, a peace term is just `endWar`, an empty side is `-`; names may contain spaces, so a parser must split on `,` only), `net` is the rival's net value (two decimals at most), `band` is the meter word
   (VeryUnlikely, Unlikely, Uncertain, Likely, VeryLikely) and `accepted` is 1 or 0. It answers how often rivals accept, at what net, and whether
-  `dealMeterScale` is right: accepted should be 0 for the unlikely bands and 1 from Likely up (the decision is deterministic, so a Likely band
+  `dealMeterScale` is right: accepted should be 0 for the unlikely bands and 1 from Likely up (net exactly 0 is accepted and lands in Likely; the decision is deterministic, so a Likely band
   with accepted 0, or a negative net accepted, is a bug); a Likely/VeryLikely band that is mostly declined or an Uncertain band that is always
   accepted means the scale is too small or large. Peace asks show as an `endWar` term; count how many are accepted per war.
   `T<turn>|P<rivalId>|DealHostility|<humanId>|<delta>|<hostilityAfter>`, once per accepted deal whose shift was non-zero. `delta` is the change
