@@ -16,12 +16,12 @@ approach (enums, `EmotionOf`, a pure `BuildMessages`); Claude wrote the approach
 - Step 2: `Player.personality`, drawn per player in `Gameboard.CreatePlayerData` from its own `System.Random` (not `GameAI.Rand`), saved as `PlayerSave.personality` (enum + 1, 0 = an older save keeps the fresh draw). `DiplomacyScreen.RequestReply` uses the rival's personality; the hardcoded Enigmatic is gone.
 - Step 3: `ChatClient` system prompt has SPEECH STYLE and EMOTION blocks, the raw hostility number is gone, and the few-shot is one sample reply per personality x emotion (nine), written by Claude as a first draft.
 
-**Verified:** by reading only. **Nothing was compiled, and no self-check or Play pass ran on these changes.** The owner read the diff and said it looked good; they have not reported running the tester or a match. Unity cannot run from the CLI.
+**Verified:** the owner ran it successfully in the Unity Editor after the session (reported 2026-11-01, no details of which checks or which combinations). Claude itself compiled and ran nothing; before that report the changes were checked by reading only. Unity cannot run from the CLI.
 
-## Files and commits (all on `main`, pushed except the end-of-session commit)
+## Files and commits (all on `main` and pushed)
 
 - `610898d` design doc; `590a647` owner's enums/`BuildMessages` groundwork plus the `ProposalText` mapping fix; `a84408b` tester window (+ `.meta`); `d22377b` `ProposalText` doc comment; `6b6b3b0` steps 2 and 3 (`ChatClient.cs`, `Player.cs`, `SaveLoadSystem.cs`, `GameBoard.cs`, `DiplomacyScreen.cs`, `CLAUDE.md`). Pushed to origin up to `6b6b3b0`.
-- This handoff, `FUTURE_FEATURES.md` and `completed_features.md` (a "Partially done" entry for personality and emotion) are committed and pushed by the `end_session` command that wrote them.
+- `670e3c3` the first end-of-session commit: this handoff, `FUTURE_FEATURES.md` and `completed_features.md` (a "Partially done" entry for personality and emotion). A second end_session run updated this file's Verified line.
 
 ## Decisions and why
 
@@ -34,7 +34,7 @@ approach (enums, `EmotionOf`, a pure `BuildMessages`); Claude wrote the approach
 
 ## Open items, most important first
 
-1. **Compile and run:** focus the Editor and read the Console, try all nine combinations in the tester (watch Aggressive/Happy and Fearful/Angry), start a new match and load an older save.
+1. **Already run by the owner** (see Verified). Not confirmed in detail: all nine tester combinations (watch Aggressive/Happy and Fearful/Angry) and loading an older save.
 2. **The owner will tune the Fearful prompts** (`GetPersonalityBlock`, `GetFewShot`).
 3. **Rest of the roadmap entry:** widen the prompt from a truce (`TruceUntil`), the turns since the last stance change and the rival's stance toward others. Also the deal facts in the prompt (valuation, hostility change), the follow-up in the ask-and-trade entry.
 4. The open items of `HANDOFF-diplomacy-trades-stage-1-and-2-2026-10-30.md` still stand (the "Peace made" pause bug, the unrun self-checks, phase 3 of ask and trade, expand automation options, play notes).
