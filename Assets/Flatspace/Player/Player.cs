@@ -25,6 +25,26 @@ public class Player : MonoBehaviour
     public bool isHuman = false;
     public PlayerAI playerAI = null;
     public int playerID = 0;
+
+    // The speech style this player's chat replies use (presentation only, the simulation never reads it). Assigned once per player at
+    // match start from its own random stream, never GameAI.Rand (drawing from that would change every match's outcome), and saved.
+    public ChatClient.Personality personality = ChatClient.Personality.Enigmatic;
+
+    public void AssignRandomPersonality(System.Random random)
+    {
+        var values = (ChatClient.Personality[])System.Enum.GetValues(typeof(ChatClient.Personality));
+        personality = values[random.Next(values.Length)];
+    }
+
+    /// <summary>The saved form: 0 = never assigned (an older save), otherwise the enum value + 1.</summary>
+    public int PersonalitySaveValue => (int)personality + 1;
+
+    /// <summary>Restores a saved personality; 0 (an older save) leaves the one assigned at match start.</summary>
+    public void RestorePersonality(int saveValue)
+    {
+        if (saveValue > 0 && saveValue <= System.Enum.GetValues(typeof(ChatClient.Personality)).Length)
+            personality = (ChatClient.Personality)(saveValue - 1);
+    }
     public void Clear()
     {
         score = 0;

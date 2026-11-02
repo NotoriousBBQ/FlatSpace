@@ -410,7 +410,7 @@ namespace Game.UI.MainGameScreenUI
             // The rival's own view of the human: its stance and hostility toward them.
             var status = Gameboard.Instance.GameAI.GameAIMap.Diplomacy.Get(rival, human);
             var from = "Player " + rival;
-            ChatClient.Instance.RequestChatResponse(message, from, "Player " + human, ChatClient.Personality.Enigmatic, status, reply =>
+            ChatClient.Instance.RequestChatResponse(message, from, "Player " + human, Gameboard.Instance.players[rival].personality, status, reply =>
             {
                 _replyText = reply;
                 _replyFrom = from;

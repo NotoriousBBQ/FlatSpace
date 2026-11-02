@@ -50,7 +50,7 @@ public class ChatClient : MonoBehaviour
     public enum Personality { Aggressive, Fearful, Enigmatic }// personality types for npc
     public enum Emotion {Angry, Neutral, Happy }// emotional content for npc based on game state
 
-    // The one place hostility (0..100) becomes a tone; the few-shot sample and the prompt's tone constraint both read it.
+    // The one place hostility (0..100) becomes an emotion; the few-shot sample and the prompt's emotion block both read it.
     private const float AngryFrom = 66f;
     private const float HappyBelow = 33f;
 
@@ -61,37 +61,58 @@ public class ChatClient : MonoBehaviour
         return Emotion.Neutral;
     }
 
+    // Speech style only. The mood comes from the emotion block, so these must not name an emotion
+    // (an Aggressive rival that is Happy has to sound aggressive and pleased).
     private static string GetPersonalityBlock(Personality personality)
     {
         switch (personality)
         {
             case Personality.Aggressive:
-                return "You are angry use aggressive and confrontational terms. Your rage is barely kept in check";
+                return "Speak bluntly in aggressive, confrontational terms. Threats and challenges come easily to you.";
             case Personality.Enigmatic:
-                return
-                    "Use astronomy or spiritual metaphors and profound zen-like phrasing to obfuscate your meaning. don't use 'river' or 'ocean'";
+                return "Use astronomy or spiritual metaphors and profound zen-like phrasing to obfuscate your meaning. Don't use 'river' or 'ocean'.";
             case Personality.Fearful:
-                return "Beg and plead and whine and cry.  You are very timid and easily frightened";
+                return "Speak as a timid, easily frightened person: hesitant, pleading, quick to apologise.";
         }
 
         return "No Personality Found";
-
     }
 
-    private static KeyValuePair<string, string> GetEmotionFromDiplomacyState(DiplomacyState.Pair diplomacyState)
+    private static string GetEmotionBlock(Emotion emotion)
+    {
+        switch (emotion)
+        {
+            case Emotion.Angry: return "You are angry with this player.";
+            case Emotion.Happy: return "You are happy with this player and feel warmly toward them.";
+            default: return "You feel neutral toward this player: neither angry nor pleased.";
+        }
+    }
+
+    // One sample reply for each (personality, emotion). Small models copy the sample, so each shows the style AND the mood.
+    private static KeyValuePair<string, string> GetFewShot(Personality personality, Emotion emotion)
     {
         const string question = "What are you going to do about it?";
-        switch (EmotionOf(diplomacyState))
+        string reply;
+        switch (personality)
         {
-            // needs to be emotion few shot
-            case Emotion.Angry:
-                return new KeyValuePair<string, string>(question, "I'll rip out your spleen!");
-            case Emotion.Happy:
-                return new KeyValuePair<string, string>(question, "I'm going to beg and plead and whine and cry");
+            case Personality.Aggressive:
+                reply = emotion == Emotion.Angry ? "I'll tear your fleets apart and drag your name through the dirt!"
+                    : emotion == Emotion.Happy ? "Ha! Nothing today, you lucky fool. Don't make me regret it."
+                    : "Push me and find out. I won't warn you twice.";
+                break;
+            case Personality.Fearful:
+                reply = emotion == Emotion.Angry ? "Don't push me! I'm terrified, but I'll fight if you corner me!"
+                    : emotion == Emotion.Happy ? "Oh, thank goodness, nothing at all! We're friends, yes? Please say yes!"
+                    : "N-nothing, I hope. Please, let's not make this worse.";
+                break;
             default:
-                return new KeyValuePair<string, string>(question,
-                    "Use astronomy or spiritual metaphors and profound zen-like phrasing to obfuscate your meaning. don't use 'river' or 'ocean'");
+                reply = emotion == Emotion.Angry ? "The storm gathers behind a quiet star. Do not ask what it will break."
+                    : emotion == Emotion.Happy ? "The constellations lean toward us tonight. Let the orbit hold."
+                    : "A comet does not explain its path. Watch the sky and learn.";
+                break;
         }
+
+        return new KeyValuePair<string, string>(question, reply);
     }
 
     private IEnumerator SendChatRequestCoroutine(List<OllamaMessage> messageList, Action<string> onReply)
@@ -136,17 +157,15 @@ public class ChatClient : MonoBehaviour
     public static List<OllamaMessage> BuildMessages(string me, string player, Personality personality,
         DiplomacyState.Pair diplomacyState, string message)
     {
-        var dynamicSystemPrompt = GenerateDynamicSystemPrompt(me, player, diplomacyState);
-        KeyValuePair<string, string> emotionExample = GetEmotionFromDiplomacyState(diplomacyState);
-        var personalityBlock = GetPersonalityBlock(personality);
+        var emotion = EmotionOf(diplomacyState);
+        var dynamicSystemPrompt = GenerateDynamicSystemPrompt(me, player, personality, emotion, diplomacyState);
+        var fewShot = GetFewShot(personality, emotion);
         var messageList = new List<OllamaMessage>()
         {
             new OllamaMessage{role = "system", content = dynamicSystemPrompt},
             // The structural training example (Few-Shot)
-            new OllamaMessage { role = "user", content = emotionExample.Key },
-            new OllamaMessage { role = "assistant", content = emotionExample.Value },
-            new OllamaMessage { role = "user", content = personality.ToString() },
-            new OllamaMessage { role = "assistant", content = personalityBlock},
+            new OllamaMessage { role = "user", content = fewShot.Key },
+            new OllamaMessage { role = "assistant", content = fewShot.Value },
             // the actual message
             new OllamaMessage{role = "user", content = message}
         };
@@ -154,19 +173,18 @@ public class ChatClient : MonoBehaviour
         return messageList;
     }
 
-    private static string GenerateDynamicSystemPrompt(string me, string player, DiplomacyState.Pair diplomacyState)
+    private static string GenerateDynamicSystemPrompt(string me, string player, Personality personality, Emotion emotion, DiplomacyState.Pair diplomacyState)
     {
         
         string systemPrompt = "\n\nCURRENT SITUATION CONTEXT:\n";
         systemPrompt += $"- You are {me}, talking to {player}\n";
-        systemPrompt += $"- Your current hostility score with the player is: {diplomacyState.Hostility}. Do not state your hostility directly, use it to guide your word choice\n";
         systemPrompt += $"- Your current stance with the player is: {diplomacyState.Stance}. Do not state your stance directly, use it to guide your word choice\n";
-        systemPrompt += "- You must strictly maintain your designated tone constraint while addressing this relationship and requested response.\n";
+        systemPrompt += "- You must strictly maintain your speech style and emotion while addressing this relationship and requested response.\n";
         systemPrompt += "\n";
         systemPrompt += "SYSTEM:\n";
         systemPrompt += "You are an advanced NPC dialogue generation engine operating inside a game loop.\n";
         systemPrompt +=
-            "Your core priority is to process the tone and game variables provided in the system context and output speech that completely embodies the assigned tone profile.\n";
+            "Your core priority is to process the speech style, emotion and game variables provided in the system context and output speech that completely embodies the assigned speech style and emotion.\n";
         systemPrompt += "\n";
         systemPrompt += "CRITICAL RULES:\n";
         systemPrompt += "1. Output ONLY the literal spoken dialogue of the character.\n";
@@ -174,13 +192,10 @@ public class ChatClient : MonoBehaviour
         systemPrompt += "3. Do not break character under any circumstances.\n"; 
         systemPrompt += "4. Keep responses punchy, direct, and under 3 structural sentences.\n";
         systemPrompt += "\n";
-        systemPrompt += "CURRENT TONE CONSTRAINT:\n";
-        switch (EmotionOf(diplomacyState))
-        {
-            case Emotion.Angry: systemPrompt += "Angry"; break;
-            case Emotion.Happy: systemPrompt += "Happy"; break;
-            default: systemPrompt += "Neutral"; break;
-        }
+        systemPrompt += "SPEECH STYLE:\n";
+        systemPrompt += GetPersonalityBlock(personality) + "\n\n";
+        systemPrompt += "EMOTION:\n";
+        systemPrompt += GetEmotionBlock(emotion) + " Show it in your word choice without naming it.";
 
         return systemPrompt;
     }

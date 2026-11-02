@@ -190,6 +190,8 @@ public class SaveLoadSystem : MonoBehaviour
             public List<string> researchQueue;
             // Human player mode: the shipments switch (false in older saves and for AI players, which never read it).
             public bool shipmentsAutomated;
+            // The chat personality as Player.PersonalitySaveValue: 0 in older saves = keep the one assigned at match start.
+            public int personality;
         }
 
         [Serializable]
@@ -271,6 +273,7 @@ public class SaveLoadSystem : MonoBehaviour
                         stances = gameAI.GameAIMap.Diplomacy.Snapshot(i).ConvertAll(StanceSave.From),
                         researchQueue = new List<string>(Gameboard.Instance.players[i].playerAI.ResearchQueue),
                         shipmentsAutomated = Gameboard.Instance.players[i].playerAI.ShipmentsAutomated,
+                        personality = Gameboard.Instance.players[i].PersonalitySaveValue,
                     });
             }
             

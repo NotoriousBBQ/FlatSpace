@@ -673,10 +673,13 @@ namespace FlatSpace
                     if (player) Destroy(player);
                 players.Clear();
 
+                // Chat personalities come from their own stream, not GameAI.Rand (that one is the simulation's).
+                var personalityRandom = new System.Random();
                 for (var i = 0; i < NumPlayers; i++)
                 {
                     players.Add(this.AddComponent<Player>());
                     players[i].playerID = i;
+                    players[i].AssignRandomPersonality(personalityRandom);
                 }
 
             }
@@ -779,6 +782,7 @@ namespace FlatSpace
                         playerSave.stances?.ConvertAll(s => s.ToEntry()));
                     players[playerSave.playerId].playerAI.SetResearchQueue(playerSave.researchQueue);
                     players[playerSave.playerId].playerAI.ShipmentsAutomated = playerSave.shipmentsAutomated;
+                    players[playerSave.playerId].RestorePersonality(playerSave.personality);
 
                 }
                 GameAI.SetSimulationStats(gameSave);
