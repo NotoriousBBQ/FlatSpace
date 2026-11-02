@@ -41,33 +41,52 @@ public class ChatClient : MonoBehaviour
 
     public static ChatClient Instance =>  _instance != null ? _instance : (_instance = Gameboard.Instance.gameObject.AddComponent<ChatClient>());
 
-    public void RequestChatResponse(string message, string me, string player, DiplomacyState.Pair diplomacyState, Action<string> onReply = null)
+    public void RequestChatResponse(string message, string me, string player, Personality personality, DiplomacyState.Pair diplomacyState, Action<string> onReply = null)
     {
-        var dynamicSystemPrompt = GenerateDynamicSystemPrompt(me, player, diplomacyState);
-        StartCoroutine(SendChatRequestCoroutine(message, dynamicSystemPrompt, diplomacyState, onReply));
+        var messageList = BuildMessages(me, player, personality, diplomacyState, message);
+        StartCoroutine(SendChatRequestCoroutine(messageList, onReply));
     }
 
-    public enum Tone { Hostile, Fearful, Enigmatic }
+    public enum Personality { Aggressive, Fearful, Enigmatic }// personality types for npc
+    public enum Emotion {Angry, Neutral, Happy }// emotional content for npc based on game state
 
     // The one place hostility (0..100) becomes a tone; the few-shot sample and the prompt's tone constraint both read it.
-    private const float HostileFrom = 66f;
-    private const float FearfulBelow = 33f;
+    private const float AngryFrom = 66f;
+    private const float HappyBelow = 33f;
 
-    public static Tone ToneOf(DiplomacyState.Pair diplomacyState)
+    public static Emotion EmotionOf(DiplomacyState.Pair diplomacyState)
     {
-        if (diplomacyState.Hostility >= HostileFrom) return Tone.Hostile;
-        if (diplomacyState.Hostility < FearfulBelow) return Tone.Fearful;
-        return Tone.Enigmatic;
+        if (diplomacyState.Hostility >= AngryFrom) return Emotion.Angry;
+        if (diplomacyState.Hostility < HappyBelow) return Emotion.Happy;
+        return Emotion.Neutral;
     }
 
-    private KeyValuePair<string, string> GetToneFromDiplomacyState(DiplomacyState.Pair diplomacyState)
+    private static string GetPersonalityBlock(Personality personality)
+    {
+        switch (personality)
+        {
+            case Personality.Aggressive:
+                return "You are angry use aggressive and confrontational terms. Your rage is barely kept in check";
+            case Personality.Enigmatic:
+                return
+                    "Use astronomy or spiritual metaphors and profound zen-like phrasing to obfuscate your meaning. don't use 'river' or 'ocean'";
+            case Personality.Fearful:
+                return "Beg and plead and whine and cry.  You are very timid and easily frightened";
+        }
+
+        return "No Personality Found";
+
+    }
+
+    private static KeyValuePair<string, string> GetEmotionFromDiplomacyState(DiplomacyState.Pair diplomacyState)
     {
         const string question = "What are you going to do about it?";
-        switch (ToneOf(diplomacyState))
+        switch (EmotionOf(diplomacyState))
         {
-            case Tone.Hostile:
+            // needs to be emotion few shot
+            case Emotion.Angry:
                 return new KeyValuePair<string, string>(question, "I'll rip out your spleen!");
-            case Tone.Fearful:
+            case Emotion.Happy:
                 return new KeyValuePair<string, string>(question, "I'm going to beg and plead and whine and cry");
             default:
                 return new KeyValuePair<string, string>(question,
@@ -75,19 +94,8 @@ public class ChatClient : MonoBehaviour
         }
     }
 
-    private IEnumerator SendChatRequestCoroutine(string message, string dynamicSystemPrompt, DiplomacyState.Pair diplomacyState, Action<string> onReply)
+    private IEnumerator SendChatRequestCoroutine(List<OllamaMessage> messageList, Action<string> onReply)
     {
-        KeyValuePair<string, string> toneExample = GetToneFromDiplomacyState(diplomacyState);
-        var messageList = new List<OllamaMessage>()
-        {
-            new OllamaMessage{role = "system", content = dynamicSystemPrompt},
-            // The structural training example (Few-Shot)
-            new OllamaMessage { role = "user", content = toneExample.Key },
-            new OllamaMessage { role = "assistant", content = toneExample.Value },
-            // the actual message
-            new OllamaMessage{role = "user", content = message}
-        };
-
         var payload = new OllamaChatPayload
         {
             model = modelName,
@@ -125,6 +133,26 @@ public class ChatClient : MonoBehaviour
         }
 
     }
+    public static List<OllamaMessage> BuildMessages(string me, string player, Personality personality,
+        DiplomacyState.Pair diplomacyState, string message)
+    {
+        var dynamicSystemPrompt = GenerateDynamicSystemPrompt(me, player, diplomacyState);
+        KeyValuePair<string, string> emotionExample = GetEmotionFromDiplomacyState(diplomacyState);
+        var personalityBlock = GetPersonalityBlock(personality);
+        var messageList = new List<OllamaMessage>()
+        {
+            new OllamaMessage{role = "system", content = dynamicSystemPrompt},
+            // The structural training example (Few-Shot)
+            new OllamaMessage { role = "user", content = emotionExample.Key },
+            new OllamaMessage { role = "assistant", content = emotionExample.Value },
+            new OllamaMessage { role = "user", content = personality.ToString() },
+            new OllamaMessage { role = "assistant", content = personalityBlock},
+            // the actual message
+            new OllamaMessage{role = "user", content = message}
+        };
+
+        return messageList;
+    }
 
     private static string GenerateDynamicSystemPrompt(string me, string player, DiplomacyState.Pair diplomacyState)
     {
@@ -147,11 +175,11 @@ public class ChatClient : MonoBehaviour
         systemPrompt += "4. Keep responses punchy, direct, and under 3 structural sentences.\n";
         systemPrompt += "\n";
         systemPrompt += "CURRENT TONE CONSTRAINT:\n";
-        switch (ToneOf(diplomacyState))
+        switch (EmotionOf(diplomacyState))
         {
-            case Tone.Hostile: systemPrompt += "Hostility"; break;
-            case Tone.Fearful: systemPrompt += "Fear"; break;
-            default: systemPrompt += "Enigmatic"; break;
+            case Emotion.Angry: systemPrompt += "Angry"; break;
+            case Emotion.Happy: systemPrompt += "Happy"; break;
+            default: systemPrompt += "Neutral"; break;
         }
 
         return systemPrompt;

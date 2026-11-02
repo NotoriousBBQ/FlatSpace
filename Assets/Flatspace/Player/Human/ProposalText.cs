@@ -83,18 +83,18 @@ namespace FlatSpace
             private static readonly string[][] Accepted =
             {
                 new[] { "Your offer is acceptable. For now.", "Done. Do not mistake this for friendship.", "Take it. We are finished here." },
-                new[] { "Thank you, thank you! We accept!", "Yes, of course, whatever you say.", "We agree. Please, no trouble." },
+                new[] { "WOOO HOOO We accept!", "Of course we came to terms, we're awesome", "We agree. I'm ready to burst with joy." },
                 new[] { "The stars align. We accept.", "A fair orbit. It is agreed.", "So it is written. We accept." },
             };
 
             private static readonly string[][] Declined =
             {
                 new[] { "Laughable. No.", "You insult us. Declined.", "Not a chance." },
-                new[] { "Please, we cannot... not this.", "We are sorry, we must say no.", "Forgive us, but no." },
+                new[] { "Not this time, but feel free to try again.", "It's just not a good time right now.", "It's not you,it's me." },
                 new[] { "The path does not bend that way. No.", "Not under this sky.", "The tide does not carry us there. Declined." },
             };
 
-            /// <summary>tone: 0 hostile, 1 fearful, 2 enigmatic (the order of ChatClient.Tone). variant picks one of the fixed lines.</summary>
+            /// <summary>tone: 0 hostile (Angry), 1 fearful (Happy, low hostility), 2 enigmatic (Neutral); ProposalDialog maps ChatClient.Emotion to it. variant picks one of the fixed lines.</summary>
             public static string TemplateReply(bool accepted, int tone, int variant)
             {
                 var set = (accepted ? Accepted : Declined)[tone < 0 || tone > 2 ? 2 : tone];

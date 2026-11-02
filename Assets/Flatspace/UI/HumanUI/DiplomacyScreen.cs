@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using FlatSpace.AI;
 using FlatSpace.Game;
 using FlatSpace.Human;
@@ -411,7 +410,7 @@ namespace Game.UI.MainGameScreenUI
             // The rival's own view of the human: its stance and hostility toward them.
             var status = Gameboard.Instance.GameAI.GameAIMap.Diplomacy.Get(rival, human);
             var from = "Player " + rival;
-            ChatClient.Instance.RequestChatResponse(message, from, "Player " + human, status, reply =>
+            ChatClient.Instance.RequestChatResponse(message, from, "Player " + human, ChatClient.Personality.Enigmatic, status, reply =>
             {
                 _replyText = reply;
                 _replyFrom = from;

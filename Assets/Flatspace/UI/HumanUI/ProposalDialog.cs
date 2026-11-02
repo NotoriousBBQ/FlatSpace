@@ -457,7 +457,14 @@ namespace Game.UI.MainGameScreenUI
 
             var human = "Player " + board.HumanPlayerId;
             var pair = board.GameAI.GameAIMap.Diplomacy.Get(rival, board.HumanPlayerId);
-            var tone = (int)ChatClient.ToneOf(pair);
+            // ProposalText's template sets are ordered hostile (0), pleading (1), enigmatic (2), not by Emotion's enum order.
+            int tone;
+            switch (ChatClient.EmotionOf(pair))
+            {
+                case ChatClient.Emotion.Angry: tone = 0; break;
+                case ChatClient.Emotion.Happy: tone = 1; break;
+                default: tone = 2; break;
+            }
             var template = ProposalText.TemplateReply(accepted, tone, Random.Range(0, 1000));
 
             // The dialog stays open either way: a banner says how it ended. An accepted deal has been carried out, so its items are cleared.
