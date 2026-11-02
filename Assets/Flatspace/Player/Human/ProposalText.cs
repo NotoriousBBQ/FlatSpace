@@ -94,7 +94,7 @@ namespace FlatSpace
                 new[] { "The path does not bend that way. No.", "Not under this sky.", "The tide does not carry us there. Declined." },
             };
 
-            /// <summary>tone: 0 hostile (Angry), 1 fearful (Happy, low hostility), 2 enigmatic (Neutral); ProposalDialog maps ChatClient.Emotion to it. variant picks one of the fixed lines.</summary>
+            /// <summary>tone: 0 hostile (Angry), 1 Happy (Happy, low hostility), 2 enigmatic (Neutral); ProposalDialog maps ChatClient.Emotion to it. variant picks one of the fixed lines.</summary>
             public static string TemplateReply(bool accepted, int tone, int variant)
             {
                 var set = (accepted ? Accepted : Declined)[tone < 0 || tone > 2 ? 2 : tone];
