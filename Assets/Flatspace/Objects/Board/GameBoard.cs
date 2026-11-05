@@ -479,6 +479,18 @@ namespace FlatSpace
                     },
                     Research = player => player >= 0 && player < players.Count && players[player].playerAI != null
                         && players[player].playerAI.ResearchCatalog != null ? players[player].playerAI.ResearchCatalog.catalogItems : null,
+                    // The warship strength observer can see of subject (its own full strength when they are the same); 0 for an invalid id.
+                    Strength = (observer, subject) =>
+                    {
+                        if (observer < 0 || observer >= players.Count || players[observer].playerAI == null
+                            || subject < 0 || subject >= players.Count) return 0f;
+                        var observerAI = players[observer].playerAI;
+                        var observerStats = new WarshipStats(observerAI.ResearchCatalog != null ? observerAI.ResearchCatalog.catalogItems : null);
+                        return observer == subject
+                            ? FleetStrength.Mine(map, subject, observerStats)
+                            : FleetStrength.VisibleOf(map, observer, subject, observerStats);
+                    },
+                    Met = id => HumanMetPlayers().Contains(id),
                 };
             }
 

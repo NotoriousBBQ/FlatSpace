@@ -37,9 +37,19 @@ namespace FlatSpace
                     case "DiplomacyOff": return "Diplomacy is switched off.";
                     case "NoDealContext": return "Deals cannot be made right now.";
                     case "UnknownRival": return "There is no such rival.";
+                    case "UnknownThirdParty": return "You do not know that player.";
+                    case "AlreadyAtWar": return "They are already at war with that player.";
+                    case "NotAtWarWithThem": return "They are not at war with that player, so there is no peace to ask for.";
+                    case "Truce": return "A truce stops them from declaring war on that player now.";
                     default: return reason;
                 }
             }
+
+            /// <summary>The player an ask names ("Player 2"); an unreadable id falls back to "player " + the raw name.</summary>
+            private static string AskLabel(DealItem item)
+                => int.TryParse(item.name, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var id)
+                    ? HumanDiplomacyView.Label(id)
+                    : "player " + item.name;
 
             /// <summary>An item as a row of the dialog; "I give" rows speak for the human, "I get" rows for the rival.</summary>
             public static string RowText(DealItem item, bool inGive)
@@ -50,6 +60,8 @@ namespace FlatSpace
                     case "fleet": return $"{item.count} {item.name} at {item.planet}";
                     case "tech": return "Tech: " + item.name;
                     case "endWar": return inGive ? "I end the war with them" : "They end the war with me";
+                    case "startWar": return "Ask them to declare war on " + AskLabel(item);
+                    case "endWarWith": return "Ask them to make peace with " + AskLabel(item);
                     default: return item.kind;
                 }
             }
@@ -63,6 +75,8 @@ namespace FlatSpace
                     case "fleet": return $"{item.count} {item.name} at {item.planet}";
                     case "tech": return "the tech " + item.name;
                     case "endWar": return "an end to the war";
+                    case "startWar": return "a declaration of war on " + AskLabel(item);
+                    case "endWarWith": return "peace with " + AskLabel(item);
                     default: return item.kind;
                 }
             }

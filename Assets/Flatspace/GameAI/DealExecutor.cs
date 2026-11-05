@@ -19,6 +19,10 @@ namespace FlatSpace.AI
         public const string NotAtWar = "NotAtWar";
         public const string UnknownKind = "UnknownKind";
         public const string DuplicateItem = "DuplicateItem";
+        public const string UnknownThirdParty = "UnknownThirdParty";
+        public const string AlreadyAtWar = "AlreadyAtWar";
+        public const string NotAtWarWithThem = "NotAtWarWithThem";
+        public const string Truce = "Truce";
 
         private static bool TryKind(DealItem item, out Ship.ShipKind kind)
         {
@@ -82,6 +86,13 @@ namespace FlatSpace.AI
                         if (!seen.Add((giver, "endWar", null, null))) return DuplicateItem;
                         if (!ctx.Map.Diplomacy.IsAtWar(ctx.Proposer, ctx.Rival, true)) return NotAtWar;
                         break;
+                    case "startWar":
+                    case "endWarWith":
+                    {
+                        var askRefusal = ValidateAsk(ctx, item, giver, seen);
+                        if (askRefusal != null) return askRefusal;
+                        break;
+                    }
                     default:
                         return UnknownKind;
                 }
@@ -95,6 +106,28 @@ namespace FlatSpace.AI
                 if (remaining == 0) return LastPlanet;
                 if (capitalOf(giver) == name) return Capital;
             }
+            return null;
+        }
+
+        // An ask is legal only in Get (the rival is the giver) and names a third player both sides have met. A war ask is tested
+        // against the rival's OWN stance; a peace ask against EFFECTIVE war (either side's War, no truce), because accepting it
+        // sets both stances to Peace. Duplicate: the same third player asked twice, whatever the kinds.
+        private static string ValidateAsk(DealContext ctx, DealItem item, int giver,
+            HashSet<(int giver, string kind, string name, string planet)> seen)
+        {
+            if (giver != ctx.Rival) return UnknownKind;
+            var x = DealEvaluator.AskTarget(item);
+            if (x < 0 || x == ctx.Proposer || x == ctx.Rival) return UnknownThirdParty;
+            var met = ctx.Met != null ? ctx.Met(x) : ctx.Map.Knowledge.ContactPlayers(ctx.Map, ctx.Proposer).Contains(x);
+            if (!met || !ctx.Map.Knowledge.ContactPlayers(ctx.Map, ctx.Rival).Contains(x)) return UnknownThirdParty;
+            if (!seen.Add((giver, "ask", x.ToString(), null))) return DuplicateItem;
+            var diplomacy = ctx.Map.Diplomacy;
+            if (item.kind == "startWar")
+            {
+                if (diplomacy.StanceToward(ctx.Rival, x) == Stance.War) return AlreadyAtWar;
+                if (diplomacy.InTruce(ctx.Rival, x, diplomacy.Turn)) return Truce;
+            }
+            else if (!diplomacy.IsAtWar(ctx.Rival, x, true)) return NotAtWarWithThem;   // peace ask: effective war (either side's War, no truce)
             return null;
         }
 
@@ -125,9 +158,11 @@ namespace FlatSpace.AI
         /// <summary>
         /// Applies a deal. Re-runs Validate first and throws InvalidOperationException (applying nothing) when it fails. capitalOf is the
         /// same delegate Validate takes and is required, so the capital rule can never be skipped (null throws ArgumentNullException).
+        /// askResults, when given, receives one (kind, player, target, changed) per stance an ask set: a war ask reports the rival's
+        /// stance toward X; a peace ask reports two entries (the rival toward X, then X toward the rival). changed is whether it really changed.
         /// </summary>
         public static void Execute(DealContext ctx, Deal deal, int turn, GameAIConstants constants, Func<int, PlayerAI> aiOf,
-            Func<int, string> capitalOf)
+            Func<int, string> capitalOf, List<(string kind, int player, int target, bool changed)> askResults = null)
         {
             if (capitalOf == null) throw new ArgumentNullException(nameof(capitalOf));
             var refusal = Validate(ctx, deal, capitalOf);
@@ -159,6 +194,35 @@ namespace FlatSpace.AI
                     case "tech":
                         aiOf(receiver).GrantTech(item.name);
                         break;
+                    case "startWar":
+                    case "endWarWith":
+                        // A war ask changes only the rival's OWN stance toward the third player; a peace ask sets BOTH stances of
+                        // the pair to Peace (no truce). Validate guaranteed a legal ask.
+                    {
+                        var x = DealEvaluator.AskTarget(item);
+                        var war = item.kind == "startWar";
+                        var type = war ? GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar : GameAI.GameAIOrder.OrderType.OrderTypeMakePeace;
+                        var changed = GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
+                        {
+                            Type = type,
+                            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                            PlayerId = ctx.Rival,
+                            Data = x,
+                        }, turn);
+                        askResults?.Add((item.kind, ctx.Rival, x, changed));
+                        if (!war)
+                        {
+                            var changedOther = GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
+                            {
+                                Type = type,
+                                TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                                PlayerId = x,
+                                Data = ctx.Rival,
+                            }, turn);
+                            askResults?.Add((item.kind, x, ctx.Rival, changedOther));
+                        }
+                        break;
+                    }
                     case "endWar":
                     {
                         var order = new GameAI.GameAIOrder

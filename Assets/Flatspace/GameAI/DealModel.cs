@@ -5,7 +5,7 @@ namespace FlatSpace.AI
 {
     /// <summary>
     /// One thing in a deal. kind: "planet" (name = planet), "fleet" (planet, name = ship kind name, count), "tech" (name),
-    /// "endWar" (nothing else).
+    /// "endWar" (nothing else), "startWar" / "endWarWith" (an ask of the rival: name = the third player's id, invariant culture).
     /// </summary>
     [Serializable]
     public class DealItem
@@ -33,10 +33,22 @@ namespace FlatSpace.AI
         public bool Helps;
     }
 
+    /// <summary>One third-party ask's own term and its four parts (worth = host + proposerStrength + thirdStrength + loss).</summary>
+    public class AskTerm
+    {
+        public string kind;
+        public int third;
+        public float worth, host, proposerStrength, thirdStrength, loss;
+    }
+
     /// <summary>The rival's evaluation of a deal. Refusal is a closed reason when the deal is invalid, else null.</summary>
     public class DealVerdict
     {
         public float Receive, Give, PeaceWorth, Net, TangibleDelta;
+        /// <summary>Sum of the third-party asks' centred terms (each ask's own term is in AskTerms).</summary>
+        public float ThirdPartyWorth;
+        /// <summary>One entry per ask: its kind ("startWar" or "endWarWith"), the third player's id, that ask's own term (worth, before the shared anger penalty and price floor) and its four parts.</summary>
+        public List<AskTerm> AskTerms = new List<AskTerm>();
         public DealBand Band;
         public bool Accept;
         public string Refusal;

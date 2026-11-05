@@ -18,6 +18,10 @@ namespace FlatSpace.AI
         public WarshipStats Stats;
         public Func<int, PlayerValue.ScoreBreakdown> ScoreOf;
         public Func<int, int, float> WarCost;
+        /// <summary>Strength(observer, subject): the warship strength `observer` can see of `subject` (observer == subject = its own full strength). May be null: every strength term is then 0.</summary>
+        public Func<int, int, float> Strength;
+        /// <summary>True when the proposer has met that player. May be null (the validator then falls back to the AI's contact set).</summary>
+        public Func<int, bool> Met;
         public Func<int, IEnumerable<CatalogItem>> Research;
     }
 
@@ -100,6 +104,55 @@ namespace FlatSpace.AI
             }
         }
 
+        /// <summary>True for the asks of the rival: "startWar" and "endWarWith".</summary>
+        public static bool IsAsk(DealItem item) => item != null && (item.kind == "startWar" || item.kind == "endWarWith");
+
+        /// <summary>The third player's id an ask names, or -1 when it does not parse.</summary>
+        public static int AskTarget(DealItem item)
+            => item != null && int.TryParse(item.name, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : -1;
+
+        // log2 of (rival's view of `subject`'s strength / its own), clamped to +-2, times thirdPartyStrengthValue; 0 when unknown.
+        private static float StrengthTerm(DealContext ctx, int subject, GameAIConstants constants)
+        {
+            if (ctx.Strength == null) return 0f;
+            var own = ctx.Strength(ctx.Rival, ctx.Rival);
+            var seen = ctx.Strength(ctx.Rival, subject);
+            if (own <= 0f || seen <= 0f) return 0f;
+            var log = (float)Math.Log(seen / own, 2.0);
+            return Math.Max(-2f, Math.Min(2f, log)) * constants.thirdPartyStrengthValue;
+        }
+
+        private static void AddAskFactor(DealVerdict verdict, string kind, int third, string term, float value)
+        {
+            if (Math.Abs(value) < 1e-6f) return;
+            verdict.Factors.Add(new DealFactor { Text = AskFactorText(kind, term, value > 0f, "player " + third.ToString(CultureInfo.InvariantCulture)), Helps = value > 0f });
+        }
+
+        /// <summary>
+        /// The reason line for one term of an ask. term: "hostility", "proposer", "target" or "losses"; positive = it pushes toward
+        /// acceptance. A plain sentence with no numbers, distinct per (kind, term, sign).
+        /// </summary>
+        public static string AskFactorText(string kind, string term, bool positive, string label)
+        {
+            var war = kind == "startWar";
+            switch (term)
+            {
+                case "hostility":
+                    if (war) return positive ? "They already hate " + label : "They have no quarrel with " + label;
+                    return positive ? "They would rather be at peace with " + label : "They want " + label + " beaten";
+                case "proposer":
+                    if (war) return positive ? "They think you are strong enough to back them against " + label : "They think you are too weak to back them against " + label;
+                    return positive ? "They think you are strong enough to mediate with " + label : "They think you are too weak to mediate with " + label;
+                case "target":
+                    if (war) return positive ? "They think " + label + " is weak" : "They think " + label + " is too strong to fight";
+                    return positive ? "They fear the strength of " + label : "They think " + label + " is weak and a peace gains them nothing";
+                default:
+                    return war
+                        ? (positive ? "They have gained from fighting " + label : "Fighting " + label + " has been costly for them")
+                        : (positive ? "Their war with " + label + " is costing them" : "Their war with " + label + " has gone well for them");
+            }
+        }
+
         public static DealVerdict Evaluate(DealContext ctx, Deal deal)
         {
             var constants = ctx.Map.GameAIConstants;
@@ -107,14 +160,45 @@ namespace FlatSpace.AI
             foreach (var item in deal.Give) verdict.Receive += ItemValue(ctx, ctx.Proposer, item);
             foreach (var item in deal.Get) verdict.Give += ItemValue(ctx, ctx.Rival, item);
 
+            var combinedWorth = 0f;
             var endsWar = deal.Give.Concat(deal.Get).Any(i => i != null && i.kind == "endWar");
-            if (endsWar)
+            var hasAsk = deal.Get.Any(i => i != null && IsAsk(i));
+            if (endsWar || hasAsk)
             {
-                var warCost = ctx.WarCost(ctx.Rival, ctx.Proposer);
-                var hostility = ctx.Map.Diplomacy.Hostility(ctx.Rival, ctx.Proposer);
-                var penalty = hostility / constants.hostilityMax * constants.peaceHostilityPenaltyValue;
+                var penalty = ctx.Map.Diplomacy.Hostility(ctx.Rival, ctx.Proposer) / constants.hostilityMax * constants.peaceHostilityPenaltyValue;
                 var floor = -constants.peacePriceCapFraction * ctx.ScoreOf(ctx.Rival).Total;
-                verdict.PeaceWorth = Math.Max(warCost - penalty, floor);
+                var warCost = endsWar ? ctx.WarCost(ctx.Rival, ctx.Proposer) : 0f;
+
+                foreach (var item in deal.Get)
+                {
+                    if (item == null || !IsAsk(item)) continue;
+                    var x = AskTarget(item);
+                    if (x < 0) continue;
+                    var war = item.kind == "startWar";
+                    var sign = war ? 1f : -1f;   // a peace ask is the mirror of a war ask on the hostility and X-strength terms
+
+                    var pWar = StanceMatrix.WarProbability(ctx.Map.Diplomacy.Hostility(ctx.Rival, x), constants);
+                    var hostilityTerm = sign * (pWar - 0.5f) * constants.warAskHostilityValue;
+                    var proposerTerm = StrengthTerm(ctx, ctx.Proposer, constants);
+                    var targetTerm = -sign * StrengthTerm(ctx, x, constants);
+                    var lossTerm = -sign * ctx.WarCost(ctx.Rival, x);
+
+                    var total = hostilityTerm + proposerTerm + targetTerm + lossTerm;
+                    verdict.ThirdPartyWorth += total;
+                    verdict.AskTerms.Add(new AskTerm
+                    {
+                        kind = item.kind, third = x, worth = total,
+                        host = hostilityTerm, proposerStrength = proposerTerm, thirdStrength = targetTerm, loss = lossTerm,
+                    });
+                    AddAskFactor(verdict, item.kind, x, "hostility", hostilityTerm);
+                    AddAskFactor(verdict, item.kind, x, "proposer", proposerTerm);
+                    AddAskFactor(verdict, item.kind, x, "target", targetTerm);
+                    AddAskFactor(verdict, item.kind, x, "losses", lossTerm);
+                }
+
+                var combined = Math.Max(warCost + verdict.ThirdPartyWorth - penalty, floor);
+                combinedWorth = combined;
+                verdict.PeaceWorth = combined - verdict.ThirdPartyWorth;
                 if (warCost > 0f) verdict.Factors.Add(new DealFactor { Text = "The war is costing them", Helps = true });
                 if (penalty > 0f) verdict.Factors.Add(new DealFactor { Text = "They are angry with you", Helps = false });
             }
@@ -131,7 +215,7 @@ namespace FlatSpace.AI
             }
 
             verdict.TangibleDelta = verdict.Receive - verdict.Give;
-            verdict.Net = verdict.Receive - verdict.Give + verdict.PeaceWorth;
+            verdict.Net = verdict.Receive - verdict.Give + combinedWorth;   // not PeaceWorth + ThirdPartyWorth: that sum can round off by 1e-6
             verdict.Band = BandOf(verdict.Net, constants.dealMeterScale);
             verdict.Accept = DealDecision.Accepts(verdict);
             return verdict;

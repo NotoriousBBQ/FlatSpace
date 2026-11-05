@@ -183,6 +183,10 @@ public class GameAIConstants : ScriptableObject
     public float peacePriceCapFraction = 0.5f;
     // Value points peace costs a rival at maximum hostility (scaled by hostility / hostilityMax).
     public float peaceHostilityPenaltyValue = 50f;
+    // Value points a third-party war/peace ask swings on the rival's war probability toward the third player (centred on 0.5).
+    public float warAskHostilityValue = 50f;
+    // Value points per doubling (clamped to +-2) of the strength ratios in a third-party ask.
+    public float thirdPartyStrengthValue = 20f;
     // Value points of net gain per step of the acceptance meter.
     public float dealMeterScale = 10f;
 

@@ -16,8 +16,10 @@ public static class DealSelfCheck
         var ok = RunConstantsCheck();
         ok &= RunWarCostChecks();
         ok &= RunEvaluatorChecks();
+        ok &= RunAskEvaluatorChecks();
         ok &= RunFleetValueChecks();
         ok &= RunExecutorChecks();
+        ok &= RunAskExecutorChecks();
         ok &= RunProposeChecks();
         Debug.Log(ok
             ? "[DealSelfCheck] ALL PASSED"
@@ -43,6 +45,8 @@ public static class DealSelfCheck
         ok &= Check(Near(c.peacePriceCapFraction, 0.5f), "peacePriceCapFraction defaults to 0.5");
         ok &= Check(Near(c.peaceHostilityPenaltyValue, 50f), "peaceHostilityPenaltyValue defaults to 50");
         ok &= Check(Near(c.dealMeterScale, 10f), "dealMeterScale defaults to 10");
+        ok &= Check(Near(c.warAskHostilityValue, 50f), "warAskHostilityValue defaults to 50");
+        ok &= Check(Near(c.thirdPartyStrengthValue, 20f), "thirdPartyStrengthValue defaults to 20");
         Object.DestroyImmediate(c);
         return ok;
     }
@@ -225,6 +229,150 @@ public static class DealSelfCheck
         return ok;
     }
 
+    public static bool RunAskEvaluatorChecks()
+    {
+        var ok = true;
+        var junk = new List<Object>();
+        var mapGo = new GameObject("DealSelfCheckAskMap");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            junk.Add(constants);
+            map.GameAIMapInit(new List<PlanetSpawnData> { MakeSpawn("Big", 20f, 0f, junk), MakeSpawn("Small", 5f, 100f, junk), MakeSpawn("Huge", 30f, 200f, junk) }, constants);
+
+            // players: human 0 = proposer, rival 1, third player 2
+            var costs = new Dictionary<(int, int), float>();
+            var strength = new Dictionary<(int, int), float>();
+            var rivalScore = 1000f;
+            var ctx = new DealContext
+            {
+                Map = map, Proposer = 0, Rival = 1,
+                Settings = new PlayerValue.ValueSettings { TechDivisor = 1f, FleetDivisor = 1f },
+                Stats = new WarshipStats(null),
+                ScoreOf = p => new PlayerValue.ScoreBreakdown { Planets = rivalScore },
+                WarCost = (victim, attacker) => costs.TryGetValue((victim, attacker), out var w) ? w : 0f,
+                Research = p => new List<CatalogItem>(),
+                Strength = (obs, subj) => strength.TryGetValue((obs, subj), out var s) ? s : 0f,
+            };
+            System.Action<int, int, float> setH = (a, b, h) => { var p = map.Diplomacy.Get(a, b); p.Hostility = h; map.Diplomacy.Set(a, b, p); };
+            System.Func<float, float> P = h => StanceMatrix.WarProbability(h, constants);
+            System.Action reset = () =>
+            {
+                costs.Clear(); strength.Clear(); rivalScore = 1000f;
+                constants.peaceHostilityPenaltyValue = 50f;
+                setH(1, 2, 30f); setH(1, 0, 0f);
+                strength[(1, 0)] = 100f; strength[(1, 1)] = 100f; strength[(1, 2)] = 100f;
+            };
+            var warAsk = new DealItem { kind = "startWar", name = "2" };
+            var peaceAsk = new DealItem { kind = "endWarWith", name = "2" };
+            System.Func<DealItem, Deal> dealOf = item => { var d = new Deal(); d.Get.Add(item); return d; };
+            var endWar = new DealItem { kind = "endWar" };
+
+            ok &= Check(DealEvaluator.IsAsk(warAsk) && DealEvaluator.IsAsk(peaceAsk) && !DealEvaluator.IsAsk(endWar) && !DealEvaluator.IsAsk(null), "IsAsk covers startWar and endWarWith only");
+            ok &= Check(DealEvaluator.AskTarget(warAsk) == 2 && DealEvaluator.AskTarget(new DealItem { kind = "startWar", name = "x" }) == -1, "AskTarget parses the id, -1 otherwise");
+
+            // neutral war ask
+            reset();
+            var v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.ThirdPartyWorth, 0f) && Near(v.Net, 0f) && v.Accept, "neutral war ask: worth 0, net 0, accepts (tie)");
+            ok &= Check(v.AskTerms.Count == 1 && v.AskTerms[0].kind == "startWar" && v.AskTerms[0].third == 2 && Near(v.AskTerms[0].worth, 0f), "AskTerms records the ask");
+
+            // hostility to X 0
+            reset(); setH(1, 2, 0f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.ThirdPartyWorth, (P(0f) - 0.5f) * 50f) && v.ThirdPartyWorth < -24f && !v.Accept, "war ask at hostility 0: about -25, declined");
+            var sweetened = dealOf(warAsk); sweetened.Give.Add(PlanetItem("Huge"));
+            ok &= Check(DealEvaluator.Evaluate(ctx, sweetened).Accept, "war ask plus a gift worth 30 is accepted");
+            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
+            ok &= Check(Near(v.ThirdPartyWorth, (0.5f - P(0f)) * 50f), "peace ask at hostility 0 is the mirror");
+
+            // strength terms
+            reset(); strength[(1, 0)] = 200f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 20f), "human 200 vs 100 adds 20 to a war ask");
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 20f), "human 200 vs 100 adds 20 to a peace ask");
+            strength[(1, 0)] = 1000f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 40f), "human 1000 vs 100 is clamped to +40");
+            reset(); strength[(1, 2)] = 400f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, -40f), "X 400 vs 100 subtracts 40 from a war ask");
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 40f), "X 400 vs 100 adds 40 to a peace ask");
+            reset(); strength[(1, 2)] = 0f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 0f), "rival cannot see X: the X term is 0, not a bonus");
+            reset(); strength[(1, 1)] = 0f; strength[(1, 0)] = 400f; strength[(1, 2)] = 400f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 0f)
+                        && Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 0f), "rival with no strength of its own: every strength term is 0");
+
+            // null Strength delegate
+            reset(); ctx.Strength = null;
+            v = null;
+            try { v = DealEvaluator.Evaluate(ctx, dealOf(warAsk)); } catch (System.Exception e) { Debug.LogError(e); }
+            ok &= Check(v != null && Near(v.ThirdPartyWorth, 0f), "a null Strength delegate evaluates and leaves strength terms at 0");
+            ctx.Strength = (obs, subj) => strength.TryGetValue((obs, subj), out var s) ? s : 0f;
+
+            // losses
+            reset(); costs[(1, 2)] = 30f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, -30f), "WarCost(1,2) 30 lowers a war ask by 30");
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 30f), "WarCost(1,2) 30 raises a peace ask by 30");
+
+            // hostility toward the human: the penalty once
+            reset(); setH(1, 0, 100f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, -50f) && Near(v.Net, -50f), "war ask: hostility 100 toward the human costs the full 50");
+            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, -50f), "peace ask: hostility 100 toward the human costs the full 50");
+
+            // endWar + war ask: one penalty
+            reset(); setH(1, 2, 0f); setH(1, 0, 50f); costs[(1, 0)] = 30f;
+            var both = dealOf(warAsk); both.Get.Add(endWar);
+            v = DealEvaluator.Evaluate(ctx, both);
+            var askTerm = (P(0f) - 0.5f) * 50f;
+            ok &= Check(Near(v.ThirdPartyWorth, askTerm), "endWar + ask: ThirdPartyWorth is the ask terms only");
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, System.Math.Max(30f + askTerm - 25f, -500f)), "endWar + ask: the anger penalty is subtracted once");
+            ok &= Check(Near(v.Net, v.PeaceWorth + v.ThirdPartyWorth), "endWar + ask: Net is the combined worth");
+
+            // floor for an ask
+            reset(); rivalScore = 40f; constants.peaceHostilityPenaltyValue = 500f; setH(1, 0, 100f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, -20f) && !v.Accept, "ask: combined worth is floored at -0.5 x rival score");
+            var priced = dealOf(warAsk); priced.Give.Add(PlanetItem("Big"));
+            v = DealEvaluator.Evaluate(ctx, priced);
+            ok &= Check(Near(v.Net, 0f) && v.Accept, "a gift of 20 buys the floored ask (net 0 accepts)");
+
+            // factor lines
+            reset(); setH(1, 2, 100f); setH(1, 0, 100f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(v.Factors.Any(f => f.Helps) && v.Factors.Any(f => !f.Helps), "war ask with high hostility to X and to the human: one helping and one hurting line");
+            ok &= Check(v.Factors.Count(f => f.Helps) == 1 && v.Factors.Count(f => !f.Helps) == 1, "exactly one of each (hostility to X, anger)");
+
+            // factor wording: distinct per (kind, term, sign) and free of numbers
+            var texts = new HashSet<string>();
+            var allDistinct = true; var noDigits = true;
+            foreach (var kind in new[] { "startWar", "endWarWith" })
+                foreach (var term in new[] { "hostility", "proposer", "target", "losses" })
+                    foreach (var positive in new[] { true, false })
+                    {
+                        var text = DealEvaluator.AskFactorText(kind, term, positive, "them");
+                        allDistinct &= texts.Add(text);
+                        noDigits &= !text.Any(char.IsDigit);
+                    }
+            // term parts add up to the ask's worth
+            reset(); setH(1, 2, 0f); strength[(1, 0)] = 200f; strength[(1, 2)] = 400f; costs[(1, 2)] = 10f;
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            var at = v.AskTerms[0];
+            ok &= Check(Near(at.host, (P(0f) - 0.5f) * 50f) && Near(at.proposerStrength, 20f) && Near(at.thirdStrength, -40f) && Near(at.loss, -10f)
+                        && Near(at.worth, at.host + at.proposerStrength + at.thirdStrength + at.loss), "AskTerm carries the four parts and they sum to worth");
+
+            ok &= Check(allDistinct, "ask factor texts are distinct per (kind, term, sign)");
+            ok &= Check(noDigits, "ask factor texts contain no numbers");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mapGo);
+            foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
+        }
+        return ok;
+    }
+
     public static bool RunFleetValueChecks()
     {
         var ok = true;
@@ -297,6 +445,167 @@ public static class DealSelfCheck
     }
 
     private static int Count(Planet planet, int player) => planet.Population.Count(i => i.Player == player);
+
+    public static bool RunAskExecutorChecks()
+    {
+        var ok = true;
+        var junk = new List<Object>();
+        var mapGo = new GameObject("DealSelfCheckAskExecMap");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            junk.Add(constants);
+            map.GameAIMapInit(new List<PlanetSpawnData>
+            {
+                MakeSpawn("A", 10f, 0f, junk), MakeSpawn("B", 10f, 100f, junk),
+                MakeSpawn("C", 10f, 200f, junk), MakeSpawn("D", 10f, 300f, junk),
+            }, constants);
+            var a = map.GetPlanet("A");
+            SetPop(a, 0, 0, 0);                         // proposer 0: A and D
+            SetPop(map.GetPlanet("B"), 1, 1, 1);        // rival 1
+            SetPop(map.GetPlanet("C"), 2, 2, 2);        // third player 2
+            SetPop(map.GetPlanet("D"), 0, 0);
+            map.Diplomacy.Enabled = true;
+            map.Diplomacy.Turn = 5;
+            map.Knowledge.SetKnownPlanets(0, new[] { "A", "B", "C" });
+            map.Knowledge.SetKnownPlanets(1, new[] { "A", "B", "C" });
+
+            var ctx = new DealContext { Map = map, Proposer = 0, Rival = 1 };
+            System.Func<int, string> noCapital = p => null;
+            System.Func<int, PlayerAI> aiOf = p => null;
+            System.Func<string, string, Deal> getOf = (kind, name) => { var d = new Deal(); d.Get.Add(new DealItem { kind = kind, name = name }); return d; };
+            System.Action resetStances = () =>
+            {
+                foreach (var (p, q) in new[] { (0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 1) })
+                {
+                    map.Diplomacy.SetStance(p, q, Stance.Peace, 0);
+                    var pair = map.Diplomacy.Get(p, q); pair.TruceUntil = 0; pair.LastChangeTurn = 0; map.Diplomacy.Set(p, q, pair);
+                }
+            };
+            resetStances();
+
+            // legal asks
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == null, "a legal war ask validates (rival at Peace with 2)");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "a peace ask while the rival is at Peace with 2 refuses NotAtWarWithThem");
+            map.Diplomacy.SetStance(1, 2, Stance.War, 1);
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == null, "a legal peace ask validates (rival's own stance toward 2 is War)");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == "AlreadyAtWar", "a war ask while the rival's stance toward 2 is War refuses AlreadyAtWar");
+
+            // unknown third party
+            foreach (var name in new[] { "0", "1", "9", "x", "", null })
+                ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", name), noCapital) == "UnknownThirdParty", $"startWar naming '{name}' refuses UnknownThirdParty");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "x"), noCapital) == "UnknownThirdParty", "endWarWith naming x refuses UnknownThirdParty");
+            resetStances();
+            ctx.Met = p => p != 2;
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == "UnknownThirdParty", "a player the proposer has not met refuses UnknownThirdParty");
+            ctx.Met = null;
+            map.Knowledge.SetKnownPlanets(1, new[] { "A", "B" });
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == "UnknownThirdParty", "a player unknown to the rival refuses UnknownThirdParty");
+            map.Knowledge.SetKnownPlanets(1, new[] { "A", "B", "C" });
+            map.Knowledge.SetKnownPlanets(0, new[] { "A", "B" });
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == "UnknownThirdParty", "no Met delegate: falls back to the proposer's contact set");
+            map.Knowledge.SetKnownPlanets(0, new[] { "A", "B", "C" });
+
+            // asks only in Get
+            foreach (var kind in new[] { "startWar", "endWarWith" })
+            {
+                var give = new Deal(); give.Give.Add(new DealItem { kind = kind, name = "2" });
+                ok &= Check(DealExecutor.Validate(ctx, give, noCapital) == "UnknownKind", $"{kind} in Give refuses UnknownKind");
+            }
+
+            // A peace ask tests EFFECTIVE war (either side's War, no truce); a war ask still tests the rival's own stance
+            resetStances();
+            map.Diplomacy.SetStance(2, 1, Stance.War, 1);
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == null, "own stance Peace but 2 declared on it: a peace ask validates (effective war)");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == null, "own stance Peace but 2 declared on it: a war ask validates");
+            resetStances();
+            map.Diplomacy.SetStance(1, 2, Stance.War, 1);
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == null, "only the rival holds War: a peace ask validates");
+            resetStances();
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "neither side holds War: a peace ask refuses NotAtWarWithThem");
+            map.Diplomacy.SetStance(1, 2, Stance.War, 1);
+            map.Diplomacy.SetStance(2, 1, Stance.War, 1);
+            foreach (var (p, q) in new[] { (1, 2), (2, 1) })
+            {
+                var pair = map.Diplomacy.Get(p, q); pair.TruceUntil = 10; map.Diplomacy.Set(p, q, pair);
+            }
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "a truce on the pair counts as no war: a peace ask refuses NotAtWarWithThem");
+
+            // truce
+            resetStances();
+            foreach (var (p, q) in new[] { (1, 2), (2, 1) })
+            {
+                var pair = map.Diplomacy.Get(p, q); pair.TruceUntil = 10; map.Diplomacy.Set(p, q, pair);
+            }
+            ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == "Truce", "a war ask during a truce on the pair refuses Truce");
+            resetStances();
+
+            // duplicates
+            var dup = new Deal();
+            dup.Get.Add(new DealItem { kind = "startWar", name = "2" });
+            dup.Get.Add(new DealItem { kind = "startWar", name = "2" });
+            ok &= Check(DealExecutor.Validate(ctx, dup, noCapital) == "DuplicateItem", "the same ask twice is a DuplicateItem");
+            dup = new Deal();
+            dup.Get.Add(new DealItem { kind = "startWar", name = "2" });
+            dup.Get.Add(new DealItem { kind = "endWarWith", name = "2" });
+            ok &= Check(DealExecutor.Validate(ctx, dup, noCapital) == "DuplicateItem", "startWar and endWarWith naming the same player is a DuplicateItem");
+
+            // Execute: a war ask changes only the rival's own stance toward 2
+            DealExecutor.Execute(ctx, getOf("startWar", "2"), 7, constants, aiOf, noCapital);
+            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.War, "Execute of a war ask sets the rival's stance toward 2 to War");
+            ok &= Check(map.Diplomacy.Get(1, 2).LastChangeTurn == 7, "LastChangeTurn is stamped with the turn");
+            ok &= Check(map.Diplomacy.StanceToward(2, 1) == Stance.Peace, "2's stance toward the rival is untouched");
+            ok &= Check(map.Diplomacy.StanceToward(0, 1) == Stance.Peace && map.Diplomacy.StanceToward(1, 0) == Stance.Peace
+                        && map.Diplomacy.StanceToward(0, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 0) == Stance.Peace, "the human's stances are untouched");
+            ok &= Check(map.Diplomacy.Get(1, 2).TruceUntil == 0 && map.Diplomacy.Get(2, 1).TruceUntil == 0, "no truce is started");
+
+            // Execute: a peace ask sets BOTH stances of the pair to Peace (state here: 1->2 War since 7, 2->1 Peace)
+            map.Diplomacy.SetStance(2, 1, Stance.War, 1);
+            var peaceResults = new List<(string kind, int player, int target, bool changed)>();
+            DealExecutor.Execute(ctx, getOf("endWarWith", "2"), 8, constants, aiOf, noCapital, peaceResults);
+            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 1) == Stance.Peace, "Execute of a peace ask sets both stances to Peace");
+            ok &= Check(map.Diplomacy.Get(1, 2).LastChangeTurn == 8 && map.Diplomacy.Get(2, 1).LastChangeTurn == 8, "both change turns are stamped");
+            ok &= Check(map.Diplomacy.Get(1, 2).TruceUntil == 0 && map.Diplomacy.Get(2, 1).TruceUntil == 0, "a peace ask starts no truce");
+            ok &= Check(peaceResults.Count == 2 && peaceResults[0] == ("endWarWith", 1, 2, true) && peaceResults[1] == ("endWarWith", 2, 1, true),
+                "askResults reports the rival's stance then X's, both changed");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "a second peace ask is refused: no war is left");
+
+            // Execute: a peace ask when only the rival holds War reports changed for it and not for X
+            map.Diplomacy.SetStance(1, 2, Stance.War, 9);
+            peaceResults.Clear();
+            DealExecutor.Execute(ctx, getOf("endWarWith", "2"), 10, constants, aiOf, noCapital, peaceResults);
+            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 1) == Stance.Peace, "only the rival held War: both end at Peace");
+            ok &= Check(peaceResults.Count == 2 && peaceResults[0].changed && !peaceResults[1].changed, "changed flags: rival's stance true, X's (already Peace) false");
+
+            // Review Focus 5: a valid ask plus an invalid second item applies nothing
+            resetStances();
+            var mixed = getOf("startWar", "2");
+            mixed.Get.Add(new DealItem { kind = "planet", name = "C" });   // C is not the rival's
+            var threw = false;
+            try { DealExecutor.Execute(ctx, mixed, 7, constants, aiOf, noCapital); }
+            catch (System.InvalidOperationException) { threw = true; }
+            ok &= Check(threw && map.Diplomacy.StanceToward(1, 2) == Stance.Peace, "an invalid second item throws and the ask is not applied");
+
+            // startWar + endWar + a gift in one deal
+            resetStances();
+            map.Diplomacy.SetStance(0, 1, Stance.War, 1);
+            var all = getOf("startWar", "2");
+            all.Give.Add(new DealItem { kind = "endWar" });
+            all.Give.Add(new DealItem { kind = "planet", name = "A" });
+            ok &= Check(DealExecutor.Validate(ctx, all, noCapital) == null, "war ask + endWar + a planet gift validates");
+            DealExecutor.Execute(ctx, all, 9, constants, aiOf, noCapital);
+            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.War, "combined deal: the war ask applied");
+            ok &= Check(map.Diplomacy.StanceToward(0, 1) == Stance.Peace && map.Diplomacy.StanceToward(1, 0) == Stance.Peace, "combined deal: endWar applied");
+            ok &= Check(a.Owner == 1, "combined deal: the planet gift applied");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mapGo);
+            foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
+        }
+        return ok;
+    }
 
     public static bool RunExecutorChecks()
     {
@@ -554,6 +863,15 @@ public static class DealSelfCheck
             Processor.Deal.Research = p => p == 0 ? humanItems : p == 1 ? Rival.ResearchCatalog.catalogItems : null;
         }
 
+        // Player 2 gets a warship at D, which both the human and rival 1 know, so all three have met; every strength reads 100 (no strength term).
+        public void AttachThird()
+        {
+            Map.GetPlanet("D").DockShipFromSave(Ship.ShipKind.WarShip, 2, new List<string>());
+            Map.Knowledge.SetKnownPlanets(1, new List<string> { "C", "D" });
+            Processor.Deal.Strength = (observer, subject) => 100f;
+            Processor.Deal.Met = id => true;
+        }
+
         public void SetHostility(float value)
         {
             var pair = Map.Diplomacy.Get(1, 0);
@@ -727,6 +1045,58 @@ public static class DealSelfCheck
             ok &= Check(!results[1].applied && results[1].reason == "NotOwned", "giving a ship already sent in the batch is refused NotOwned: " + results[1].reason);
             ok &= Check(s.Map.GetPlanet("A").DockedShips.Count(x => x.Owner == 0) == 2, "both ships are still the human's");
         }
+
+        // Third-party asks through the processor. Rival 1 at Peace with 2, hostility toward 2 is 0, equal strengths, war cost 0:
+        // the war ask is worth about -25 on its own; planet B (20) plus two warships (10) covers it.
+        var warAsk = new DealItem { kind = "startWar", name = "2" };
+        var peaceAsk = new DealItem { kind = "endWarWith", name = "2" };
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            var bare = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = none, dealGet = Items(warAsk) });
+            ok &= Check(bare.Refusal == null && !bare.Accept, "preview of a bare war ask: no refusal, not accepted (net " + bare.Net + ")");
+            var paid = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = Items(PlanetItem("B"), WarshipItem(2)), dealGet = Items(warAsk) });
+            ok &= Check(paid.Refusal == null && paid.Accept, "preview of a war ask with a 30-value gift: accepted (net " + paid.Net + ")");
+            ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.Peace && s.Map.GetPlanet("B").Owner == 0, "previews change nothing");
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            s.SetHostility(50f);   // rival -> human: the anger penalty is 50/100 x 50 = 25
+            var towardThird = s.Map.Diplomacy.Get(1, 2); towardThird.Hostility = 60f; s.Map.Diplomacy.Set(1, 2, towardThird);   // ask term about +24.97, net about 30 + 24.97 - 25 = +30
+            var result = s.Propose(Items(PlanetItem("B"), WarshipItem(2)), Items(warAsk));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted") && result.detail.Contains("startWar:2"), "war ask with a gift accepted: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.War, "the rival is at war with 2 afterwards");
+            ok &= Check(s.Map.GetPlanet("B").Owner == 1, "the planet changed hands");
+            ok &= Check(Near(s.Hostility, 40f), "hostility shifted as the gift alone would (50 - min(10, 30) = 40): " + s.Hostility);
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            s.SetHostility(50f);
+            var result = s.Propose(none, Items(warAsk));
+            ok &= Check(result.applied && result.detail.StartsWith("declined"), "a bare war ask is declined: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.Peace && Near(s.Hostility, 50f) && s.Map.GetPlanet("B").Owner == 0, "declined: nothing changed");
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            var command = new HumanCommand { type = "propose", rival = 1, dealGive = none, dealGet = Items(peaceAsk) };
+            ok &= Check(s.Processor.Check(command) == "NotAtWarWithThem", "Check of a peace ask while the rival is not at war with 2: NotAtWarWithThem");
+            ok &= Check(s.Processor.Preview(command).Refusal == "NotAtWarWithThem", "Preview carries Refusal NotAtWarWithThem");
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            s.Processor.Deal.Strength = null;   // no strength delegate: every strength term is 0, nothing throws
+            var gift = Items(PlanetItem("B"), WarshipItem(2));
+            var preview = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = gift, dealGet = Items(warAsk) });
+            ok &= Check(preview.Refusal == null && preview.Accept, "null Strength: the war ask still previews");
+            var result = s.Propose(gift, Items(warAsk));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "null Strength: the war ask still proposes: " + result.reason);
+        }
+        AITuningLogger.LogDealAsk(5, 0, 1, "startWar", 2, 1.5f, 10f, 0f, 1f, 2f, -3f, -4f, true);   // no match is logging: must not throw
+        ok &= Check(true, "LogDealAsk with no match logging does not throw");
 
         // Old JSON without the new fields still parses; new fields round-trip.
         var old = HumanCommandProcessor.Parse("{\"commands\":[{\"type\":\"declareWar\",\"rival\":1}]}", out var error);
