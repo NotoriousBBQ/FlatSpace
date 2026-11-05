@@ -488,14 +488,15 @@ namespace FlatSpace
                     return null;
                 }
 
-                var askResults = new List<(string kind, int third, bool changed)>();
+                var askResults = new List<(string kind, int player, int target, bool changed)>();
                 DealExecutor.Execute(ctx, deal, _turn, constants, ResolveAi, CapitalOf, askResults);
-                // An accepted ask is an ordinary stance change: log the same Stance line GameAI.ExecuteOrder writes (P = the rival).
+                // An accepted ask is an ordinary stance change: log the same Stance line GameAI.ExecuteOrder writes for EVERY stance
+                // that really changed (P = the player whose stance changed; a peace ask can change both sides of the pair).
                 foreach (var ask in askResults)
                 {
                     if (!ask.changed) continue;
-                    var stancePair = _map.Diplomacy.Get(ctx.Rival, ask.third);
-                    AITuningLogger.LogStance(_turn, ctx.Rival, ask.third, stancePair.Stance.ToString(), stancePair.Hostility,
+                    var stancePair = _map.Diplomacy.Get(ask.player, ask.target);
+                    AITuningLogger.LogStance(_turn, ask.player, ask.target, stancePair.Stance.ToString(), stancePair.Hostility,
                         stancePair.CutsTerm, stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar, stancePair.LossAccum,
                         stancePair.ConversionTerm);
                 }

@@ -1,5 +1,10 @@
 # Ask and trade, phase 3: asking a rival to go to war or make peace with a third player
 
+**Revision 2026-11-04 (owner's request):** the peace ask ("make peace with X") now validates on EFFECTIVE war between the rival and X (`IsAtWar(rival, X, true)`) and an accepted one sets BOTH stances to Peace
+(no truce), so the owner can ask the victim of a declaration to make a cheaper peace with the aggressor. The `startWar` rules are unchanged. A second peace ask is refused `NotAtWarWithThem` because no war is
+left. The "still at war with them; the fighting may go on" factor is removed (the caveat is false), the price is unchanged (the asked rival's view), and each stance that really changed logs its own `Stance` line (P = the player whose stance changed).
+Where the text below still reads "the rival's own stance" for the peace ask, this note wins.
+
 Date 2026-11-04. Roadmap entry: "Diplomacy, project 2: ask and trade" in `FUTURE_FEATURES.md` (the "Still open: phase 3" part). Builds on `docs/superpowers/specs/2026-10-30-ask-and-trade-design.md`
 (goal 4, "Third-party asks") and on phase 2 as built (`CLAUDE.md`, "Proposals (ask and trade, phase 2)"). Decisions are the owner's unless marked **(my call)**.
 
@@ -92,8 +97,7 @@ The ask is validated by `DealExecutor.Validate` (so the dry-run `Check`, the met
 - `AlreadyAtWar`: a war ask when **the rival's own stance toward X is already War**. **(my call, from the builder check)** The test is the rival's *own* stance, not the effective state `IsAtWar(rival, X, true)`:
   effective war also counts X's stance toward the rival, so a second peace ask after the rival set its own stance to Peace (X still at War) would pass, be accepted and change nothing, which is the anti-goal.
   A war ask while the rival's own stance is Peace but X has declared on it (a forced war) is valid and meaningful: it turns the forced war into the rival's own.
-- `NotAtWarWithThem`: a peace ask when **the rival's own stance toward X is not War**. **(my call)** Naming: do not reuse `NotAtWar`, which means "the human and the rival are not at war" for `endWar`. Consequence: the human cannot
-  ask a rival to end a war that only X holds on it (the rival has nothing of its own to end); accepted.
+- `NotAtWarWithThem`: a peace ask when **the rival and X are not at EFFECTIVE war** (`IsAtWar(rival, X, true)`: either side's stance is War, no truce; revised 2026-11-04, see the revision note at the end). **(my call)** Naming: do not reuse `NotAtWar`, which means "the human and the rival are not at war" for `endWar`.
 - `Truce`: a war ask while the rival and X are in a truce (`ApplyStanceOrder` already refuses a declaration then; the ask must be refused up front, not accepted and silently ignored).
 - `DuplicateItem`: the same ask twice, or a war ask and a peace ask naming the same X in one deal. **(my call)**
 
@@ -106,8 +110,8 @@ low-odds, proposal.
 `PlayerId` and X in `Data`), so the usual `Stance` log line, the war-forced logic for X, and `PlayerAI.ApplyWarState` all see an ordinary stance change. The pair's last-change turn is stamped by that
 function. Nothing else changes: no truce (unlike a bought `endWar`), no hostility shift from the ask itself.
 
-- **Peace with X is the rival's own stance only**, exactly like the human's "End the war": if X's stance toward the rival is War, the war may stay on. This is consistent with the
-  rest of the game and is the builder's to note in the refusal/reply text; it is not a bug.
+- **Peace with X sets both stances (revised 2026-11-04):** an accepted `endWarWith` sets the rival's stance toward X AND X's stance toward the rival to Peace, each through `ApplyStanceOrder`
+  (for X's stance `PlayerId` = X and `Data` = the rival). A stance already at Peace reports "not changed". No truce. A `startWar` still sets only the rival's own stance.
 - If a declaration on X is applied while X is the target, X is an AI and the existing `ApplyStanceOrder(.., targetIsHuman: false)` rules apply.
 - Validation runs again at execution; any failure throws before anything is applied (all or nothing), as phase 2 already does.
 - The existing hostility shift after an accepted deal is **unchanged** and uses `TangibleDelta` (the items only), so an ask contributes nothing to it. A gift attached to an ask
@@ -142,7 +146,7 @@ the window state).
 
 Extend `Assets/Editor/DealSelfCheck.cs` (already in `Run All AI Self-Checks`); no new suite. Cases the owner would want proven: each refusal above; a war ask accepted when the rival hates X and
 the human offers value, declined when it does not; a peace ask worth more after the rival lost ships to X (using `WarCost` as the existing checks fake it); the same ask declined at hostility
-to the human 100 and accepted after a gift; the price cap makes a feared X buyable (the "winning rival is buyable" pattern); execution sets only the rival's stance toward X and stamps the
+to the human 100 and accepted after a gift; the price cap makes a feared X buyable (the "winning rival is buyable" pattern); execution sets the rival's stance toward X (and, for a peace ask, X's toward the rival, see the revision note) and stamps the
 change turn; all-or-nothing when a second item fails; the verdict and the meter agree. A self-check must not touch `Gameboard.Instance` (build a minimal `GameAIMap`/`PlayerAI` set).
 
 ## What exists and what is new

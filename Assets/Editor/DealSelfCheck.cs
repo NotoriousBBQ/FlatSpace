@@ -355,18 +355,6 @@ public static class DealSelfCheck
                         allDistinct &= texts.Add(text);
                         noDigits &= !text.Any(char.IsDigit);
                     }
-            // a peace ask whose third player is itself at war with the rival: the fighting may go on
-            reset();
-            var stillAtWar = "Player 2 is still at war with them; the fighting may go on";
-            map.Diplomacy.SetStance(2, 1, Stance.Peace, 0);
-            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
-            ok &= Check(!v.Factors.Any(f => f.Text == stillAtWar), "peace ask: no 'still at war' line when X's own stance toward the rival is Peace");
-            map.Diplomacy.SetStance(2, 1, Stance.War, 0);
-            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
-            ok &= Check(v.Factors.Any(f => f.Text == stillAtWar && !f.Helps), "peace ask: a hurting 'still at war' line when X's own stance toward the rival is War");
-            ok &= Check(!DealEvaluator.Evaluate(ctx, dealOf(warAsk)).Factors.Any(f => f.Text == stillAtWar), "war ask: never the 'still at war' line");
-            map.Diplomacy.SetStance(2, 1, Stance.Peace, 0);
-
             // term parts add up to the ask's worth
             reset(); setH(1, 2, 0f); strength[(1, 0)] = 200f; strength[(1, 2)] = 400f; costs[(1, 2)] = 10f;
             v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
@@ -526,11 +514,23 @@ public static class DealSelfCheck
                 ok &= Check(DealExecutor.Validate(ctx, give, noCapital) == "UnknownKind", $"{kind} in Give refuses UnknownKind");
             }
 
-            // Review Focus 1: the rival's OWN stance decides, not effective war
+            // A peace ask tests EFFECTIVE war (either side's War, no truce); a war ask still tests the rival's own stance
             resetStances();
             map.Diplomacy.SetStance(2, 1, Stance.War, 1);
-            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "own stance Peace but 2 declared on it: a peace ask refuses NotAtWarWithThem");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == null, "own stance Peace but 2 declared on it: a peace ask validates (effective war)");
             ok &= Check(DealExecutor.Validate(ctx, getOf("startWar", "2"), noCapital) == null, "own stance Peace but 2 declared on it: a war ask validates");
+            resetStances();
+            map.Diplomacy.SetStance(1, 2, Stance.War, 1);
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == null, "only the rival holds War: a peace ask validates");
+            resetStances();
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "neither side holds War: a peace ask refuses NotAtWarWithThem");
+            map.Diplomacy.SetStance(1, 2, Stance.War, 1);
+            map.Diplomacy.SetStance(2, 1, Stance.War, 1);
+            foreach (var (p, q) in new[] { (1, 2), (2, 1) })
+            {
+                var pair = map.Diplomacy.Get(p, q); pair.TruceUntil = 10; map.Diplomacy.Set(p, q, pair);
+            }
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "a truce on the pair counts as no war: a peace ask refuses NotAtWarWithThem");
 
             // truce
             resetStances();
@@ -560,10 +560,23 @@ public static class DealSelfCheck
                         && map.Diplomacy.StanceToward(0, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 0) == Stance.Peace, "the human's stances are untouched");
             ok &= Check(map.Diplomacy.Get(1, 2).TruceUntil == 0 && map.Diplomacy.Get(2, 1).TruceUntil == 0, "no truce is started");
 
-            // Execute: a peace ask sets only the rival's stance toward 2 to Peace
+            // Execute: a peace ask sets BOTH stances of the pair to Peace (state here: 1->2 War since 7, 2->1 Peace)
             map.Diplomacy.SetStance(2, 1, Stance.War, 1);
-            DealExecutor.Execute(ctx, getOf("endWarWith", "2"), 8, constants, aiOf, noCapital);
-            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 1) == Stance.War, "Execute of a peace ask sets only the rival's own stance to Peace");
+            var peaceResults = new List<(string kind, int player, int target, bool changed)>();
+            DealExecutor.Execute(ctx, getOf("endWarWith", "2"), 8, constants, aiOf, noCapital, peaceResults);
+            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 1) == Stance.Peace, "Execute of a peace ask sets both stances to Peace");
+            ok &= Check(map.Diplomacy.Get(1, 2).LastChangeTurn == 8 && map.Diplomacy.Get(2, 1).LastChangeTurn == 8, "both change turns are stamped");
+            ok &= Check(map.Diplomacy.Get(1, 2).TruceUntil == 0 && map.Diplomacy.Get(2, 1).TruceUntil == 0, "a peace ask starts no truce");
+            ok &= Check(peaceResults.Count == 2 && peaceResults[0] == ("endWarWith", 1, 2, true) && peaceResults[1] == ("endWarWith", 2, 1, true),
+                "askResults reports the rival's stance then X's, both changed");
+            ok &= Check(DealExecutor.Validate(ctx, getOf("endWarWith", "2"), noCapital) == "NotAtWarWithThem", "a second peace ask is refused: no war is left");
+
+            // Execute: a peace ask when only the rival holds War reports changed for it and not for X
+            map.Diplomacy.SetStance(1, 2, Stance.War, 9);
+            peaceResults.Clear();
+            DealExecutor.Execute(ctx, getOf("endWarWith", "2"), 10, constants, aiOf, noCapital, peaceResults);
+            ok &= Check(map.Diplomacy.StanceToward(1, 2) == Stance.Peace && map.Diplomacy.StanceToward(2, 1) == Stance.Peace, "only the rival held War: both end at Peace");
+            ok &= Check(peaceResults.Count == 2 && peaceResults[0].changed && !peaceResults[1].changed, "changed flags: rival's stance true, X's (already Peace) false");
 
             // Review Focus 5: a valid ask plus an invalid second item applies nothing
             resetStances();

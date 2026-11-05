@@ -190,8 +190,6 @@ namespace FlatSpace.AI
                         kind = item.kind, third = x, worth = total,
                         host = hostilityTerm, proposerStrength = proposerTerm, thirdStrength = targetTerm, loss = lossTerm,
                     });
-                    if (!war && ctx.Map.Diplomacy.StanceToward(x, ctx.Rival) == Stance.War)
-                        verdict.Factors.Add(new DealFactor { Text = "Player " + x.ToString(CultureInfo.InvariantCulture) + " is still at war with them; the fighting may go on", Helps = false });
                     AddAskFactor(verdict, item.kind, x, "hostility", hostilityTerm);
                     AddAskFactor(verdict, item.kind, x, "proposer", proposerTerm);
                     AddAskFactor(verdict, item.kind, x, "target", targetTerm);

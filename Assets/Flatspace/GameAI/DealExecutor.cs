@@ -109,8 +109,9 @@ namespace FlatSpace.AI
             return null;
         }
 
-        // An ask is legal only in Get (the rival is the giver) and names a third player both sides have met. Tested against the
-        // rival's OWN stance, not effective war. Duplicate: the same third player asked twice, whatever the kinds.
+        // An ask is legal only in Get (the rival is the giver) and names a third player both sides have met. A war ask is tested
+        // against the rival's OWN stance; a peace ask against EFFECTIVE war (either side's War, no truce), because accepting it
+        // sets both stances to Peace. Duplicate: the same third player asked twice, whatever the kinds.
         private static string ValidateAsk(DealContext ctx, DealItem item, int giver,
             HashSet<(int giver, string kind, string name, string planet)> seen)
         {
@@ -126,7 +127,7 @@ namespace FlatSpace.AI
                 if (diplomacy.StanceToward(ctx.Rival, x) == Stance.War) return AlreadyAtWar;
                 if (diplomacy.InTruce(ctx.Rival, x, diplomacy.Turn)) return Truce;
             }
-            else if (diplomacy.StanceToward(ctx.Rival, x) != Stance.War) return NotAtWarWithThem;
+            else if (!diplomacy.IsAtWar(ctx.Rival, x, true)) return NotAtWarWithThem;   // peace ask: effective war (either side's War, no truce)
             return null;
         }
 
@@ -157,10 +158,11 @@ namespace FlatSpace.AI
         /// <summary>
         /// Applies a deal. Re-runs Validate first and throws InvalidOperationException (applying nothing) when it fails. capitalOf is the
         /// same delegate Validate takes and is required, so the capital rule can never be skipped (null throws ArgumentNullException).
-        /// askResults, when given, receives one (kind, third, changed) per ask: whether the rival's stance really changed.
+        /// askResults, when given, receives one (kind, player, target, changed) per stance an ask set: a war ask reports the rival's
+        /// stance toward X; a peace ask reports two entries (the rival toward X, then X toward the rival). changed is whether it really changed.
         /// </summary>
         public static void Execute(DealContext ctx, Deal deal, int turn, GameAIConstants constants, Func<int, PlayerAI> aiOf,
-            Func<int, string> capitalOf, List<(string kind, int third, bool changed)> askResults = null)
+            Func<int, string> capitalOf, List<(string kind, int player, int target, bool changed)> askResults = null)
         {
             if (capitalOf == null) throw new ArgumentNullException(nameof(capitalOf));
             var refusal = Validate(ctx, deal, capitalOf);
@@ -194,18 +196,31 @@ namespace FlatSpace.AI
                         break;
                     case "startWar":
                     case "endWarWith":
-                        // The rival changes only its OWN stance toward the third player (Validate guaranteed a legal ask).
+                        // A war ask changes only the rival's OWN stance toward the third player; a peace ask sets BOTH stances of
+                        // the pair to Peace (no truce). Validate guaranteed a legal ask.
                     {
+                        var x = DealEvaluator.AskTarget(item);
+                        var war = item.kind == "startWar";
+                        var type = war ? GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar : GameAI.GameAIOrder.OrderType.OrderTypeMakePeace;
                         var changed = GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
                         {
-                            Type = item.kind == "startWar"
-                                ? GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
-                                : GameAI.GameAIOrder.OrderType.OrderTypeMakePeace,
+                            Type = type,
                             TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
                             PlayerId = ctx.Rival,
-                            Data = DealEvaluator.AskTarget(item),
+                            Data = x,
                         }, turn);
-                        askResults?.Add((item.kind, DealEvaluator.AskTarget(item), changed));
+                        askResults?.Add((item.kind, ctx.Rival, x, changed));
+                        if (!war)
+                        {
+                            var changedOther = GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
+                            {
+                                Type = type,
+                                TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                                PlayerId = x,
+                                Data = ctx.Rival,
+                            }, turn);
+                            askResults?.Add((item.kind, x, ctx.Rival, changedOther));
+                        }
                         break;
                     }
                     case "endWar":
