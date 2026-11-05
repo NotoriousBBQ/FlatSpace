@@ -5,7 +5,7 @@ namespace FlatSpace.AI
 {
     /// <summary>
     /// One thing in a deal. kind: "planet" (name = planet), "fleet" (planet, name = ship kind name, count), "tech" (name),
-    /// "endWar" (nothing else).
+    /// "endWar" (nothing else), "startWar" / "endWarWith" (an ask of the rival: name = the third player's id, invariant culture).
     /// </summary>
     [Serializable]
     public class DealItem
@@ -37,6 +37,10 @@ namespace FlatSpace.AI
     public class DealVerdict
     {
         public float Receive, Give, PeaceWorth, Net, TangibleDelta;
+        /// <summary>Sum of the third-party asks' centred terms (each ask's own term is in AskTerms).</summary>
+        public float ThirdPartyWorth;
+        /// <summary>One entry per ask: its kind ("startWar" or "endWarWith"), the third player's id and that ask's own term.</summary>
+        public List<(string kind, int third, float worth)> AskTerms = new List<(string kind, int third, float worth)>();
         public DealBand Band;
         public bool Accept;
         public string Refusal;

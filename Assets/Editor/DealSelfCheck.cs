@@ -16,6 +16,7 @@ public static class DealSelfCheck
         var ok = RunConstantsCheck();
         ok &= RunWarCostChecks();
         ok &= RunEvaluatorChecks();
+        ok &= RunAskEvaluatorChecks();
         ok &= RunFleetValueChecks();
         ok &= RunExecutorChecks();
         ok &= RunProposeChecks();
@@ -43,6 +44,8 @@ public static class DealSelfCheck
         ok &= Check(Near(c.peacePriceCapFraction, 0.5f), "peacePriceCapFraction defaults to 0.5");
         ok &= Check(Near(c.peaceHostilityPenaltyValue, 50f), "peaceHostilityPenaltyValue defaults to 50");
         ok &= Check(Near(c.dealMeterScale, 10f), "dealMeterScale defaults to 10");
+        ok &= Check(Near(c.warAskHostilityValue, 50f), "warAskHostilityValue defaults to 50");
+        ok &= Check(Near(c.thirdPartyStrengthValue, 20f), "thirdPartyStrengthValue defaults to 20");
         Object.DestroyImmediate(c);
         return ok;
     }
@@ -216,6 +219,144 @@ public static class DealSelfCheck
             ok &= Check(DealEvaluator.MissingChain(rivalHas, "C").Select(i => i.itemName).SequenceEqual(new[] { "C" }), "chain stops at a researched item");
             ok &= Check(DealEvaluator.MissingChain(rivalHas, "B").Count == 0, "researched tech has an empty chain");
             ok &= Check(DealEvaluator.MissingChain(rivalHas, "Nope").Count == 0, "unknown tech has an empty chain");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mapGo);
+            foreach (var o in junk) if (o != null) Object.DestroyImmediate(o);
+        }
+        return ok;
+    }
+
+    public static bool RunAskEvaluatorChecks()
+    {
+        var ok = true;
+        var junk = new List<Object>();
+        var mapGo = new GameObject("DealSelfCheckAskMap");
+        try
+        {
+            var map = mapGo.AddComponent<GameAIMap>();
+            var constants = ScriptableObject.CreateInstance<GameAIConstants>();
+            junk.Add(constants);
+            map.GameAIMapInit(new List<PlanetSpawnData> { MakeSpawn("Big", 20f, 0f, junk), MakeSpawn("Small", 5f, 100f, junk) }, constants);
+
+            // players: human 0 = proposer, rival 1, third player 2
+            var costs = new Dictionary<(int, int), float>();
+            var strength = new Dictionary<(int, int), float>();
+            var rivalScore = 1000f;
+            var useStrength = true;
+            var ctx = new DealContext
+            {
+                Map = map, Proposer = 0, Rival = 1,
+                Settings = new PlayerValue.ValueSettings { TechDivisor = 1f, FleetDivisor = 1f },
+                Stats = new WarshipStats(null),
+                ScoreOf = p => new PlayerValue.ScoreBreakdown { Planets = rivalScore },
+                WarCost = (victim, attacker) => costs.TryGetValue((victim, attacker), out var w) ? w : 0f,
+                Research = p => new List<CatalogItem>(),
+                Strength = (obs, subj) => strength.TryGetValue((obs, subj), out var s) ? s : 0f,
+            };
+            System.Action<int, int, float> setH = (a, b, h) => { var p = map.Diplomacy.Get(a, b); p.Hostility = h; map.Diplomacy.Set(a, b, p); };
+            System.Func<float, float> P = h => StanceMatrix.WarProbability(h, constants);
+            System.Action reset = () =>
+            {
+                costs.Clear(); strength.Clear(); rivalScore = 1000f;
+                constants.peaceHostilityPenaltyValue = 50f;
+                setH(1, 2, 30f); setH(1, 0, 0f);
+                strength[(1, 0)] = 100f; strength[(1, 1)] = 100f; strength[(1, 2)] = 100f;
+            };
+            var warAsk = new DealItem { kind = "startWar", name = "2" };
+            var peaceAsk = new DealItem { kind = "endWarWith", name = "2" };
+            System.Func<DealItem, Deal> dealOf = item => { var d = new Deal(); d.Get.Add(item); return d; };
+            var endWar = new DealItem { kind = "endWar" };
+
+            ok &= Check(DealEvaluator.IsAsk(warAsk) && DealEvaluator.IsAsk(peaceAsk) && !DealEvaluator.IsAsk(endWar) && !DealEvaluator.IsAsk(null), "IsAsk covers startWar and endWarWith only");
+            ok &= Check(DealEvaluator.AskTarget(warAsk) == 2 && DealEvaluator.AskTarget(new DealItem { kind = "startWar", name = "x" }) == -1, "AskTarget parses the id, -1 otherwise");
+
+            // neutral war ask
+            reset();
+            var v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.ThirdPartyWorth, 0f) && Near(v.Net, 0f) && v.Accept, "neutral war ask: worth 0, net 0, accepts (tie)");
+            ok &= Check(v.AskTerms.Count == 1 && v.AskTerms[0].kind == "startWar" && v.AskTerms[0].third == 2 && Near(v.AskTerms[0].worth, 0f), "AskTerms records the ask");
+
+            // hostility to X 0
+            reset(); setH(1, 2, 0f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.ThirdPartyWorth, (P(0f) - 0.5f) * 50f) && v.ThirdPartyWorth < -24f && !v.Accept, "war ask at hostility 0: about -25, declined");
+            var sweetened = dealOf(warAsk); sweetened.Give.Add(PlanetItem("Big"));
+            ok &= Check(DealEvaluator.Evaluate(ctx, sweetened).Accept, "war ask plus a gift worth 20 is accepted");
+            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
+            ok &= Check(Near(v.ThirdPartyWorth, (0.5f - P(0f)) * 50f), "peace ask at hostility 0 is the mirror");
+
+            // strength terms
+            reset(); strength[(1, 0)] = 200f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 20f), "human 200 vs 100 adds 20 to a war ask");
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 20f), "human 200 vs 100 adds 20 to a peace ask");
+            strength[(1, 0)] = 1000f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 40f), "human 1000 vs 100 is clamped to +40");
+            reset(); strength[(1, 2)] = 400f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, -40f), "X 400 vs 100 subtracts 40 from a war ask");
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 40f), "X 400 vs 100 adds 40 to a peace ask");
+            reset(); strength[(1, 2)] = 0f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 0f), "rival cannot see X: the X term is 0, not a bonus");
+            reset(); strength[(1, 1)] = 0f; strength[(1, 0)] = 400f; strength[(1, 2)] = 400f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, 0f)
+                        && Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 0f), "rival with no strength of its own: every strength term is 0");
+
+            // null Strength delegate
+            reset(); ctx.Strength = null;
+            v = null;
+            try { v = DealEvaluator.Evaluate(ctx, dealOf(warAsk)); } catch (System.Exception e) { Debug.LogError(e); }
+            ok &= Check(v != null && Near(v.ThirdPartyWorth, 0f), "a null Strength delegate evaluates and leaves strength terms at 0");
+            ctx.Strength = (obs, subj) => strength.TryGetValue((obs, subj), out var s) ? s : 0f;
+
+            // losses
+            reset(); costs[(1, 2)] = 30f;
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(warAsk)).ThirdPartyWorth, -30f), "WarCost(1,2) 30 lowers a war ask by 30");
+            ok &= Check(Near(DealEvaluator.Evaluate(ctx, dealOf(peaceAsk)).ThirdPartyWorth, 30f), "WarCost(1,2) 30 raises a peace ask by 30");
+
+            // hostility toward the human: the penalty once
+            reset(); setH(1, 0, 100f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, -50f) && Near(v.Net, -50f), "war ask: hostility 100 toward the human costs the full 50");
+            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, -50f), "peace ask: hostility 100 toward the human costs the full 50");
+
+            // endWar + war ask: one penalty
+            reset(); setH(1, 2, 0f); setH(1, 0, 50f); costs[(1, 0)] = 30f;
+            var both = dealOf(warAsk); both.Get.Add(endWar);
+            v = DealEvaluator.Evaluate(ctx, both);
+            var askTerm = (P(0f) - 0.5f) * 50f;
+            ok &= Check(Near(v.ThirdPartyWorth, askTerm), "endWar + ask: ThirdPartyWorth is the ask terms only");
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, System.Math.Max(30f + askTerm - 25f, -500f)), "endWar + ask: the anger penalty is subtracted once");
+            ok &= Check(Near(v.Net, v.PeaceWorth + v.ThirdPartyWorth), "endWar + ask: Net is the combined worth");
+
+            // floor for an ask
+            reset(); rivalScore = 40f; constants.peaceHostilityPenaltyValue = 500f; setH(1, 0, 100f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(Near(v.PeaceWorth + v.ThirdPartyWorth, -20f) && !v.Accept, "ask: combined worth is floored at -0.5 x rival score");
+            var priced = dealOf(warAsk); priced.Give.Add(PlanetItem("Big"));
+            v = DealEvaluator.Evaluate(ctx, priced);
+            ok &= Check(Near(v.Net, 0f) && v.Accept, "a gift of 20 buys the floored ask (net 0 accepts)");
+
+            // factor lines
+            reset(); setH(1, 2, 100f); setH(1, 0, 100f);
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            ok &= Check(v.Factors.Any(f => f.Helps) && v.Factors.Any(f => !f.Helps), "war ask with high hostility to X and to the human: one helping and one hurting line");
+            ok &= Check(v.Factors.Count(f => f.Helps) == 1 && v.Factors.Count(f => !f.Helps) == 1, "exactly one of each (hostility to X, anger)");
+
+            // factor wording: distinct per (kind, term, sign) and free of numbers
+            var texts = new HashSet<string>();
+            var allDistinct = true; var noDigits = true;
+            foreach (var kind in new[] { "startWar", "endWarWith" })
+                foreach (var term in new[] { "hostility", "proposer", "target", "losses" })
+                    foreach (var positive in new[] { true, false })
+                    {
+                        var text = DealEvaluator.AskFactorText(kind, term, positive, "them");
+                        allDistinct &= texts.Add(text);
+                        noDigits &= !text.Any(char.IsDigit);
+                    }
+            ok &= Check(allDistinct, "ask factor texts are distinct per (kind, term, sign)");
+            ok &= Check(noDigits, "ask factor texts contain no numbers");
         }
         finally
         {
