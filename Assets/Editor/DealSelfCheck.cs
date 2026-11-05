@@ -238,7 +238,7 @@ public static class DealSelfCheck
             var map = mapGo.AddComponent<GameAIMap>();
             var constants = ScriptableObject.CreateInstance<GameAIConstants>();
             junk.Add(constants);
-            map.GameAIMapInit(new List<PlanetSpawnData> { MakeSpawn("Big", 20f, 0f, junk), MakeSpawn("Small", 5f, 100f, junk) }, constants);
+            map.GameAIMapInit(new List<PlanetSpawnData> { MakeSpawn("Big", 20f, 0f, junk), MakeSpawn("Small", 5f, 100f, junk), MakeSpawn("Huge", 30f, 200f, junk) }, constants);
 
             // players: human 0 = proposer, rival 1, third player 2
             var costs = new Dictionary<(int, int), float>();
@@ -282,8 +282,8 @@ public static class DealSelfCheck
             reset(); setH(1, 2, 0f);
             v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
             ok &= Check(Near(v.ThirdPartyWorth, (P(0f) - 0.5f) * 50f) && v.ThirdPartyWorth < -24f && !v.Accept, "war ask at hostility 0: about -25, declined");
-            var sweetened = dealOf(warAsk); sweetened.Give.Add(PlanetItem("Big"));
-            ok &= Check(DealEvaluator.Evaluate(ctx, sweetened).Accept, "war ask plus a gift worth 20 is accepted");
+            var sweetened = dealOf(warAsk); sweetened.Give.Add(PlanetItem("Huge"));
+            ok &= Check(DealEvaluator.Evaluate(ctx, sweetened).Accept, "war ask plus a gift worth 30 is accepted");
             v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
             ok &= Check(Near(v.ThirdPartyWorth, (0.5f - P(0f)) * 50f), "peace ask at hostility 0 is the mirror");
 
