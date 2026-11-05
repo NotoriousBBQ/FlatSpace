@@ -225,7 +225,11 @@ namespace Game.UI.MainGameScreenUI
                 var line = HumanUiKit.Row();
                 line.Add(Swatch(other.Rival));
                 line.Add(HumanUiKit.Cell(other.Label, 120f));
-                line.Add(HumanUiKit.Text(other.Stance.ToString(), other.Stance == Stance.War ? HumanUiKit.Bad : HumanUiKit.Good));
+                // A war only the other side declared counts too (the pair is at war on both sides' screens); say who declared it.
+                var otherText = other.Stance == Stance.War ? "War"
+                    : other.AtWar && other.TheirStance == Stance.War ? $"War (declared by {other.Label})"
+                    : other.Stance.ToString();
+                line.Add(HumanUiKit.Text(otherText, other.AtWar || other.Stance == Stance.War ? HumanUiKit.Bad : HumanUiKit.Good));
                 _detail.Add(line);
             }
 

@@ -1130,6 +1130,15 @@ public static class HumanUiSelfCheck
             var view = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal);
             ok &= Check(view.Others.Count == 1 && view.Others[0].Rival == 2 && view.Others[0].Stance == diplomacy.StanceToward(1, 2),
                 "the others block holds exactly the other met rival, with the rival's own stance toward it");
+            // A war only the other side declared shows from both sides: player 2 declared on player 1, so 1's view of 2 is at war though 1's own stance is Peace.
+            diplomacy.SetStance(2, 1, Stance.War, 5);
+            var declaredOnRival = HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal).Others[0];
+            ok &= Check(declaredOnRival.Stance == Stance.Peace && declaredOnRival.TheirStance == Stance.War && declaredOnRival.AtWar,
+                "a war only the other player declared: own stance Peace, their stance War, at war");
+            var declaredByRival = HumanDiplomacyView.Build(f.Map, 0, 2, seesAll, stats, refusal).Others.Find(o => o.Rival == 1);
+            ok &= Check(declaredByRival.Stance == Stance.War && declaredByRival.AtWar, "and from the declarer's side it is War, at war");
+            diplomacy.SetStance(2, 1, Stance.Peace, 6);
+            ok &= Check(!HumanDiplomacyView.Build(f.Map, 0, 1, seesAll, stats, refusal).Others[0].AtWar, "peace again: not at war");
             ok &= Check(view.Hostility == diplomacy.Hostility(1, 0) && view.HostilityMax == f.Constants.hostilityMax, "hostility is the rival's toward the human, against the maximum");
 
             ok &= Check(view.MyScore.Total == 0f && view.RivalScore.Total == 0f, "without scoreOf both scores are zeros");

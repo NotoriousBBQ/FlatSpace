@@ -31,12 +31,14 @@ namespace FlatSpace
             public float Strength;
         }
 
-        /// <summary>The rival's stance toward another player the human has met.</summary>
+        /// <summary>The rival's stance toward another player the human has met, and that player's stance back (so a war only the other side declared shows too).</summary>
         public class OtherStance
         {
             public int Rival;
             public string Label;
-            public Stance Stance;
+            public Stance Stance;        // the picked rival's own stance toward this player
+            public Stance TheirStance;   // this player's stance toward the picked rival
+            public bool AtWar;           // effective war between the two (either stance War, no truce)
         }
 
         /// <summary>Everything the right-hand pane of the Diplomacy screen shows for one rival.</summary>
@@ -141,7 +143,13 @@ namespace FlatSpace
 
                 foreach (var other in contacts)
                     if (other != rival)
-                        view.Others.Add(new OtherStance { Rival = other, Label = Label(other), Stance = diplomacy.StanceToward(rival, other) });
+                        view.Others.Add(new OtherStance
+                        {
+                            Rival = other, Label = Label(other),
+                            Stance = diplomacy.StanceToward(rival, other),
+                            TheirStance = diplomacy.StanceToward(other, rival),
+                            AtWar = diplomacy.IsAtWar(rival, other, true),
+                        });
 
                 foreach (var planet in map.PlanetList)
                 {
