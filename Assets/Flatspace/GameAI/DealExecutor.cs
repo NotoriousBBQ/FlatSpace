@@ -19,6 +19,10 @@ namespace FlatSpace.AI
         public const string NotAtWar = "NotAtWar";
         public const string UnknownKind = "UnknownKind";
         public const string DuplicateItem = "DuplicateItem";
+        public const string UnknownThirdParty = "UnknownThirdParty";
+        public const string AlreadyAtWar = "AlreadyAtWar";
+        public const string NotAtWarWithThem = "NotAtWarWithThem";
+        public const string Truce = "Truce";
 
         private static bool TryKind(DealItem item, out Ship.ShipKind kind)
         {
@@ -82,6 +86,13 @@ namespace FlatSpace.AI
                         if (!seen.Add((giver, "endWar", null, null))) return DuplicateItem;
                         if (!ctx.Map.Diplomacy.IsAtWar(ctx.Proposer, ctx.Rival, true)) return NotAtWar;
                         break;
+                    case "startWar":
+                    case "endWarWith":
+                    {
+                        var askRefusal = ValidateAsk(ctx, item, giver, seen);
+                        if (askRefusal != null) return askRefusal;
+                        break;
+                    }
                     default:
                         return UnknownKind;
                 }
@@ -95,6 +106,27 @@ namespace FlatSpace.AI
                 if (remaining == 0) return LastPlanet;
                 if (capitalOf(giver) == name) return Capital;
             }
+            return null;
+        }
+
+        // An ask is legal only in Get (the rival is the giver) and names a third player both sides have met. Tested against the
+        // rival's OWN stance, not effective war. Duplicate: the same third player asked twice, whatever the kinds.
+        private static string ValidateAsk(DealContext ctx, DealItem item, int giver,
+            HashSet<(int giver, string kind, string name, string planet)> seen)
+        {
+            if (giver != ctx.Rival) return UnknownKind;
+            var x = DealEvaluator.AskTarget(item);
+            if (x < 0 || x == ctx.Proposer || x == ctx.Rival) return UnknownThirdParty;
+            var met = ctx.Met != null ? ctx.Met(x) : ctx.Map.Knowledge.ContactPlayers(ctx.Map, ctx.Proposer).Contains(x);
+            if (!met || !ctx.Map.Knowledge.ContactPlayers(ctx.Map, ctx.Rival).Contains(x)) return UnknownThirdParty;
+            if (!seen.Add((giver, "ask", x.ToString(), null))) return DuplicateItem;
+            var diplomacy = ctx.Map.Diplomacy;
+            if (item.kind == "startWar")
+            {
+                if (diplomacy.StanceToward(ctx.Rival, x) == Stance.War) return AlreadyAtWar;
+                if (diplomacy.InTruce(ctx.Rival, x, diplomacy.Turn)) return Truce;
+            }
+            else if (diplomacy.StanceToward(ctx.Rival, x) != Stance.War) return NotAtWarWithThem;
             return null;
         }
 
@@ -158,6 +190,19 @@ namespace FlatSpace.AI
                     }
                     case "tech":
                         aiOf(receiver).GrantTech(item.name);
+                        break;
+                    case "startWar":
+                    case "endWarWith":
+                        // The rival changes only its OWN stance toward the third player (Validate guaranteed a legal ask).
+                        GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
+                        {
+                            Type = item.kind == "startWar"
+                                ? GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
+                                : GameAI.GameAIOrder.OrderType.OrderTypeMakePeace,
+                            TimingType = GameAI.GameAIOrder.OrderTimingType.OrderTimingTypeImmediate,
+                            PlayerId = ctx.Rival,
+                            Data = DealEvaluator.AskTarget(item),
+                        }, turn);
                         break;
                     case "endWar":
                     {
