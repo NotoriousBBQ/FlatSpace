@@ -79,6 +79,24 @@ public static class HumanUiSelfCheck
                     && ProposalText.RefusalSentence("UnknownKind").Contains("warships") && ProposalText.RefusalSentence("NoContact") != "NoContact"
                     && ProposalText.RefusalSentence("SomethingNew") == "SomethingNew",
             "ProposalText: refusal reasons read as sentences, an unknown one stays as it is");
+
+        var askWar = new DealItem { kind = "startWar", name = "2" };
+        var askPeace = new DealItem { kind = "endWarWith", name = "2" };
+        ok &= Check(ProposalText.RowText(askWar, false).Contains("2") && ProposalText.RowText(askPeace, false).Contains("2")
+                    && ProposalText.RowText(askWar, false) != ProposalText.RowText(askPeace, false)
+                    && !string.IsNullOrEmpty(ProposalText.RowText(askWar, true)),
+            "ProposalText: ask rows name the player and differ between the kinds");
+        ok &= Check(ProposalText.Describe(askWar).Contains("2") && ProposalText.Describe(askPeace).Contains("2")
+                    && ProposalText.Describe(askWar) != ProposalText.Describe(askPeace),
+            "ProposalText: ask sentences name the player and differ between the kinds");
+        var newReasons = new[] { "UnknownThirdParty", "AlreadyAtWar", "NotAtWarWithThem", "Truce" };
+        var sentences = true;
+        foreach (var reason in newReasons) sentences &= ProposalText.RefusalSentence(reason) != reason;
+        ok &= Check(sentences, "ProposalText: the ask refusal reasons read as sentences");
+        ok &= Check(ProposalText.SameItem(askWar, new DealItem { kind = "startWar", name = "2" })
+                    && !ProposalText.SameItem(askWar, new DealItem { kind = "startWar", name = "3" })
+                    && !ProposalText.SameItem(askWar, askPeace),
+            "ProposalText: asks are the same by kind and player");
         return ok;
     }
 

@@ -183,6 +183,11 @@ namespace Game.UI.MainGameScreenUI
                 menu.Add(CategoryButton("Planet...", "planet"));
                 menu.Add(CategoryButton("Fleet...", "fleet"));
                 menu.Add(CategoryButton("Tech...", "tech"));
+                if (!isGive)
+                {
+                    menu.Add(CategoryButton("Ask them to declare war on...", "askWar"));
+                    menu.Add(CategoryButton("Ask them to make peace with...", "askPeace"));
+                }
                 // At war: peace as a linked pair, one row in each list, removed together.
                 if (AtWar() && !Give.Exists(i => i.kind == "endWar"))
                     menu.Add(HumanUiKit.Btn("End the war with them", () =>
@@ -345,6 +350,22 @@ namespace Game.UI.MainGameScreenUI
                             Label = chain.Count > 1 ? $"{tech.itemName} (+{chain.Count - 1} lower tiers)" : tech.itemName,
                             Item = item,
                         });
+                    }
+                    break;
+
+                case "askWar":
+                case "askPeace":
+                    // Asks live in the get list only. A player is offered when a preview of just that ask is not refused.
+                    if (isGive) break;
+                    var askKind = category == "askWar" ? "startWar" : "endWarWith";
+                    foreach (var third in board.HumanMetPlayers())
+                    {
+                        if (third == human || third == _rival) continue;
+                        var ask = new DealItem { kind = askKind, name = third.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+                        if (InDeal(ask, false)) continue;
+                        var check = board.PreviewDeal(_rival, new List<DealItem>(), new List<DealItem> { ask });
+                        if (!string.IsNullOrEmpty(check.Refusal)) continue;
+                        options.Add(new MenuOption { Label = HumanDiplomacyView.Label(third), Item = ask });
                     }
                     break;
             }
