@@ -1031,7 +1031,8 @@ public static class DealSelfCheck
         using (var s = new DealScene())
         {
             s.AttachThird();
-            s.SetHostility(50f);
+            s.SetHostility(50f);   // rival -> human: the anger penalty is 50/100 x 50 = 25
+            var towardThird = s.Map.Diplomacy.Get(1, 2); towardThird.Hostility = 60f; s.Map.Diplomacy.Set(1, 2, towardThird);   // ask term about +24.97, net about 30 + 24.97 - 25 = +30
             var result = s.Propose(Items(PlanetItem("B"), WarshipItem(2)), Items(warAsk));
             ok &= Check(result.applied && result.detail.StartsWith("accepted") && result.detail.Contains("startWar:2"), "war ask with a gift accepted: " + result.reason + " " + result.detail);
             ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.War, "the rival is at war with 2 afterwards");
