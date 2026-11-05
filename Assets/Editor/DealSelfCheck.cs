@@ -245,7 +245,6 @@ public static class DealSelfCheck
             var costs = new Dictionary<(int, int), float>();
             var strength = new Dictionary<(int, int), float>();
             var rivalScore = 1000f;
-            var useStrength = true;
             var ctx = new DealContext
             {
                 Map = map, Proposer = 0, Rival = 1,
@@ -356,6 +355,25 @@ public static class DealSelfCheck
                         allDistinct &= texts.Add(text);
                         noDigits &= !text.Any(char.IsDigit);
                     }
+            // a peace ask whose third player is itself at war with the rival: the fighting may go on
+            reset();
+            var stillAtWar = "Player 2 is still at war with them; the fighting may go on";
+            map.Diplomacy.SetStance(2, 1, Stance.Peace, 0);
+            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
+            ok &= Check(!v.Factors.Any(f => f.Text == stillAtWar), "peace ask: no 'still at war' line when X's own stance toward the rival is Peace");
+            map.Diplomacy.SetStance(2, 1, Stance.War, 0);
+            v = DealEvaluator.Evaluate(ctx, dealOf(peaceAsk));
+            ok &= Check(v.Factors.Any(f => f.Text == stillAtWar && !f.Helps), "peace ask: a hurting 'still at war' line when X's own stance toward the rival is War");
+            ok &= Check(!DealEvaluator.Evaluate(ctx, dealOf(warAsk)).Factors.Any(f => f.Text == stillAtWar), "war ask: never the 'still at war' line");
+            map.Diplomacy.SetStance(2, 1, Stance.Peace, 0);
+
+            // term parts add up to the ask's worth
+            reset(); setH(1, 2, 0f); strength[(1, 0)] = 200f; strength[(1, 2)] = 400f; costs[(1, 2)] = 10f;
+            v = DealEvaluator.Evaluate(ctx, dealOf(warAsk));
+            var at = v.AskTerms[0];
+            ok &= Check(Near(at.host, (P(0f) - 0.5f) * 50f) && Near(at.proposerStrength, 20f) && Near(at.thirdStrength, -40f) && Near(at.loss, -10f)
+                        && Near(at.worth, at.host + at.proposerStrength + at.thirdStrength + at.loss), "AskTerm carries the four parts and they sum to worth");
+
             ok &= Check(allDistinct, "ask factor texts are distinct per (kind, term, sign)");
             ok &= Check(noDigits, "ask factor texts contain no numbers");
         }
@@ -1064,7 +1082,7 @@ public static class DealSelfCheck
             var result = s.Propose(gift, Items(warAsk));
             ok &= Check(result.applied && result.detail.StartsWith("accepted"), "null Strength: the war ask still proposes: " + result.reason);
         }
-        AITuningLogger.LogDealAsk(5, 0, 1, "startWar", 2, 1.5f, 10f, 0f, true);   // no match is logging: must not throw
+        AITuningLogger.LogDealAsk(5, 0, 1, "startWar", 2, 1.5f, 10f, 0f, 1f, 2f, -3f, -4f, true);   // no match is logging: must not throw
         ok &= Check(true, "LogDealAsk with no match logging does not throw");
 
         // Old JSON without the new fields still parses; new fields round-trip.

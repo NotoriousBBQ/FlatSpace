@@ -479,7 +479,8 @@ namespace FlatSpace
                 // One DealAsk line per ask item, hostility read now (before Execute can change anything).
                 foreach (var ask in verdict.AskTerms)
                     AITuningLogger.LogDealAsk(_turn, HumanId, ctx.Rival, ask.kind, ask.third, ask.worth,
-                        _map.Diplomacy.Hostility(ctx.Rival, HumanId), _map.Diplomacy.Hostility(ctx.Rival, ask.third), verdict.Accept);
+                        _map.Diplomacy.Hostility(ctx.Rival, HumanId), _map.Diplomacy.Hostility(ctx.Rival, ask.third),
+                        ask.host, ask.proposerStrength, ask.thirdStrength, ask.loss, verdict.Accept);
                 var terms = $"rival {ctx.Rival} give {give} get {get} net {verdict.Net.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}";
                 if (!verdict.Accept)
                 {
@@ -487,7 +488,17 @@ namespace FlatSpace
                     return null;
                 }
 
-                DealExecutor.Execute(ctx, deal, _turn, constants, ResolveAi, CapitalOf);
+                var askResults = new List<(string kind, int third, bool changed)>();
+                DealExecutor.Execute(ctx, deal, _turn, constants, ResolveAi, CapitalOf, askResults);
+                // An accepted ask is an ordinary stance change: log the same Stance line GameAI.ExecuteOrder writes (P = the rival).
+                foreach (var ask in askResults)
+                {
+                    if (!ask.changed) continue;
+                    var stancePair = _map.Diplomacy.Get(ctx.Rival, ask.third);
+                    AITuningLogger.LogStance(_turn, ctx.Rival, ask.third, stancePair.Stance.ToString(), stancePair.Hostility,
+                        stancePair.CutsTerm, stancePair.NearTerm, stancePair.StrengthTerm, stancePair.PWar, stancePair.LossAccum,
+                        stancePair.ConversionTerm);
+                }
 
                 var pair = _map.Diplomacy.Get(ctx.Rival, HumanId);
                 var before = pair.Hostility;

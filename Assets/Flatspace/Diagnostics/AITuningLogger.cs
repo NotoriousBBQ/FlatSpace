@@ -187,13 +187,16 @@ public static class AITuningLogger
             net.ToString("0.##", ci), band, accepted ? "1" : "0") });
     }
 
-    /// <summary>One third-party ask in a proposal: T&lt;turn&gt;|P&lt;human&gt;|DealAsk|rival|kind (startWar or endWarWith)|third|worth (the ask's own term)|hostToHuman|hostToThird (the rival's hostility, read before the deal ran)|accepted (1 or 0).</summary>
-    public static void LogDealAsk(int turn, int human, int rival, string kind, int third, float worth, float hostToHuman, float hostToThird, bool accepted)
+    /// <summary>One third-party ask in a proposal: T&lt;turn&gt;|P&lt;human&gt;|DealAsk|rival|kind (startWar or endWarWith)|third|worth (the ask's own term)|hostToHuman|hostToThird (the rival's hostility, read before the deal ran)|hostTerm|proposerStrengthTerm|thirdStrengthTerm|lossTerm (the four parts of worth)|accepted (1 or 0).</summary>
+    public static void LogDealAsk(int turn, int human, int rival, string kind, int third, float worth, float hostToHuman, float hostToThird,
+        float hostTerm, float proposerStrengthTerm, float thirdStrengthTerm, float lossTerm, bool accepted)
     {
         if (_currentLogPath == null) return;
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         AppendLines(new List<string> { FormatLine(turn, human, "DealAsk", rival.ToString(ci), kind, third.ToString(ci),
-            worth.ToString("0.##", ci), hostToHuman.ToString("0.##", ci), hostToThird.ToString("0.##", ci), accepted ? "1" : "0") });
+            worth.ToString("0.##", ci), hostToHuman.ToString("0.##", ci), hostToThird.ToString("0.##", ci),
+            hostTerm.ToString("0.##", ci), proposerStrengthTerm.ToString("0.##", ci), thirdStrengthTerm.ToString("0.##", ci),
+            lossTerm.ToString("0.##", ci), accepted ? "1" : "0") });
     }
 
     /// <summary>An accepted deal moved a rival's hostility toward the human: T&lt;turn&gt;|P&lt;rival&gt;|DealHostility|human|delta|hostilityAfter (delta is the change actually applied after clamping).</summary>

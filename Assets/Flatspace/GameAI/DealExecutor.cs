@@ -157,9 +157,10 @@ namespace FlatSpace.AI
         /// <summary>
         /// Applies a deal. Re-runs Validate first and throws InvalidOperationException (applying nothing) when it fails. capitalOf is the
         /// same delegate Validate takes and is required, so the capital rule can never be skipped (null throws ArgumentNullException).
+        /// askResults, when given, receives one (kind, third, changed) per ask: whether the rival's stance really changed.
         /// </summary>
         public static void Execute(DealContext ctx, Deal deal, int turn, GameAIConstants constants, Func<int, PlayerAI> aiOf,
-            Func<int, string> capitalOf)
+            Func<int, string> capitalOf, List<(string kind, int third, bool changed)> askResults = null)
         {
             if (capitalOf == null) throw new ArgumentNullException(nameof(capitalOf));
             var refusal = Validate(ctx, deal, capitalOf);
@@ -194,7 +195,8 @@ namespace FlatSpace.AI
                     case "startWar":
                     case "endWarWith":
                         // The rival changes only its OWN stance toward the third player (Validate guaranteed a legal ask).
-                        GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
+                    {
+                        var changed = GameAI.ApplyStanceOrder(ctx.Map.Diplomacy, new GameAI.GameAIOrder
                         {
                             Type = item.kind == "startWar"
                                 ? GameAI.GameAIOrder.OrderType.OrderTypeDeclareWar
@@ -203,7 +205,9 @@ namespace FlatSpace.AI
                             PlayerId = ctx.Rival,
                             Data = DealEvaluator.AskTarget(item),
                         }, turn);
+                        askResults?.Add((item.kind, DealEvaluator.AskTarget(item), changed));
                         break;
+                    }
                     case "endWar":
                     {
                         var order = new GameAI.GameAIOrder

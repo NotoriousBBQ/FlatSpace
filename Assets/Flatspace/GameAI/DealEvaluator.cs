@@ -160,6 +160,7 @@ namespace FlatSpace.AI
             foreach (var item in deal.Give) verdict.Receive += ItemValue(ctx, ctx.Proposer, item);
             foreach (var item in deal.Get) verdict.Give += ItemValue(ctx, ctx.Rival, item);
 
+            var combinedWorth = 0f;
             var endsWar = deal.Give.Concat(deal.Get).Any(i => i != null && i.kind == "endWar");
             var hasAsk = deal.Get.Any(i => i != null && IsAsk(i));
             if (endsWar || hasAsk)
@@ -184,7 +185,13 @@ namespace FlatSpace.AI
 
                     var total = hostilityTerm + proposerTerm + targetTerm + lossTerm;
                     verdict.ThirdPartyWorth += total;
-                    verdict.AskTerms.Add((item.kind, x, total));
+                    verdict.AskTerms.Add(new AskTerm
+                    {
+                        kind = item.kind, third = x, worth = total,
+                        host = hostilityTerm, proposerStrength = proposerTerm, thirdStrength = targetTerm, loss = lossTerm,
+                    });
+                    if (!war && ctx.Map.Diplomacy.StanceToward(x, ctx.Rival) == Stance.War)
+                        verdict.Factors.Add(new DealFactor { Text = "Player " + x.ToString(CultureInfo.InvariantCulture) + " is still at war with them; the fighting may go on", Helps = false });
                     AddAskFactor(verdict, item.kind, x, "hostility", hostilityTerm);
                     AddAskFactor(verdict, item.kind, x, "proposer", proposerTerm);
                     AddAskFactor(verdict, item.kind, x, "target", targetTerm);
@@ -192,6 +199,7 @@ namespace FlatSpace.AI
                 }
 
                 var combined = Math.Max(warCost + verdict.ThirdPartyWorth - penalty, floor);
+                combinedWorth = combined;
                 verdict.PeaceWorth = combined - verdict.ThirdPartyWorth;
                 if (warCost > 0f) verdict.Factors.Add(new DealFactor { Text = "The war is costing them", Helps = true });
                 if (penalty > 0f) verdict.Factors.Add(new DealFactor { Text = "They are angry with you", Helps = false });
@@ -209,7 +217,7 @@ namespace FlatSpace.AI
             }
 
             verdict.TangibleDelta = verdict.Receive - verdict.Give;
-            verdict.Net = verdict.Receive - verdict.Give + verdict.PeaceWorth + verdict.ThirdPartyWorth;
+            verdict.Net = verdict.Receive - verdict.Give + combinedWorth;   // not PeaceWorth + ThirdPartyWorth: that sum can round off by 1e-6
             verdict.Band = BandOf(verdict.Net, constants.dealMeterScale);
             verdict.Accept = DealDecision.Accepts(verdict);
             return verdict;
