@@ -832,6 +832,15 @@ public static class DealSelfCheck
             Processor.Deal.Research = p => p == 0 ? humanItems : p == 1 ? Rival.ResearchCatalog.catalogItems : null;
         }
 
+        // Player 2 gets a warship at D, which both the human and rival 1 know, so all three have met; every strength reads 100 (no strength term).
+        public void AttachThird()
+        {
+            Map.GetPlanet("D").DockShipFromSave(Ship.ShipKind.WarShip, 2, new List<string>());
+            Map.Knowledge.SetKnownPlanets(1, new List<string> { "C", "D" });
+            Processor.Deal.Strength = (observer, subject) => 100f;
+            Processor.Deal.Met = id => true;
+        }
+
         public void SetHostility(float value)
         {
             var pair = Map.Diplomacy.Get(1, 0);
@@ -1005,6 +1014,57 @@ public static class DealSelfCheck
             ok &= Check(!results[1].applied && results[1].reason == "NotOwned", "giving a ship already sent in the batch is refused NotOwned: " + results[1].reason);
             ok &= Check(s.Map.GetPlanet("A").DockedShips.Count(x => x.Owner == 0) == 2, "both ships are still the human's");
         }
+
+        // Third-party asks through the processor. Rival 1 at Peace with 2, hostility toward 2 is 0, equal strengths, war cost 0:
+        // the war ask is worth about -25 on its own; planet B (20) plus two warships (10) covers it.
+        var warAsk = new DealItem { kind = "startWar", name = "2" };
+        var peaceAsk = new DealItem { kind = "endWarWith", name = "2" };
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            var bare = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = none, dealGet = Items(warAsk) });
+            ok &= Check(bare.Refusal == null && !bare.Accept, "preview of a bare war ask: no refusal, not accepted (net " + bare.Net + ")");
+            var paid = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = Items(PlanetItem("B"), WarshipItem(2)), dealGet = Items(warAsk) });
+            ok &= Check(paid.Refusal == null && paid.Accept, "preview of a war ask with a 30-value gift: accepted (net " + paid.Net + ")");
+            ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.Peace && s.Map.GetPlanet("B").Owner == 0, "previews change nothing");
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            s.SetHostility(50f);
+            var result = s.Propose(Items(PlanetItem("B"), WarshipItem(2)), Items(warAsk));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted") && result.detail.Contains("startWar:2"), "war ask with a gift accepted: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.War, "the rival is at war with 2 afterwards");
+            ok &= Check(s.Map.GetPlanet("B").Owner == 1, "the planet changed hands");
+            ok &= Check(Near(s.Hostility, 40f), "hostility shifted as the gift alone would (50 - min(10, 30) = 40): " + s.Hostility);
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            s.SetHostility(50f);
+            var result = s.Propose(none, Items(warAsk));
+            ok &= Check(result.applied && result.detail.StartsWith("declined"), "a bare war ask is declined: " + result.reason + " " + result.detail);
+            ok &= Check(s.Map.Diplomacy.StanceToward(1, 2) == Stance.Peace && Near(s.Hostility, 50f) && s.Map.GetPlanet("B").Owner == 0, "declined: nothing changed");
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            var command = new HumanCommand { type = "propose", rival = 1, dealGive = none, dealGet = Items(peaceAsk) };
+            ok &= Check(s.Processor.Check(command) == "NotAtWarWithThem", "Check of a peace ask while the rival is not at war with 2: NotAtWarWithThem");
+            ok &= Check(s.Processor.Preview(command).Refusal == "NotAtWarWithThem", "Preview carries Refusal NotAtWarWithThem");
+        }
+        using (var s = new DealScene())
+        {
+            s.AttachThird();
+            s.Processor.Deal.Strength = null;   // no strength delegate: every strength term is 0, nothing throws
+            var gift = Items(PlanetItem("B"), WarshipItem(2));
+            var preview = s.Processor.Preview(new HumanCommand { type = "propose", rival = 1, dealGive = gift, dealGet = Items(warAsk) });
+            ok &= Check(preview.Refusal == null && preview.Accept, "null Strength: the war ask still previews");
+            var result = s.Propose(gift, Items(warAsk));
+            ok &= Check(result.applied && result.detail.StartsWith("accepted"), "null Strength: the war ask still proposes: " + result.reason);
+        }
+        AITuningLogger.LogDealAsk(5, 0, 1, "startWar", 2, 1.5f, 10f, 0f, true);   // no match is logging: must not throw
+        ok &= Check(true, "LogDealAsk with no match logging does not throw");
 
         // Old JSON without the new fields still parses; new fields round-trip.
         var old = HumanCommandProcessor.Parse("{\"commands\":[{\"type\":\"declareWar\",\"rival\":1}]}", out var error);

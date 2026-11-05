@@ -397,6 +397,7 @@ namespace FlatSpace
                 {
                     Map = _map, Proposer = HumanId, Rival = rival,
                     Settings = Deal.Settings, Stats = Deal.Stats, ScoreOf = Deal.ScoreOf, WarCost = Deal.WarCost, Research = Deal.Research,
+                    Strength = Deal.Strength, Met = Deal.Met,
                 };
                 deal = new Deal
                 {
@@ -454,6 +455,7 @@ namespace FlatSpace
                     {
                         case "fleet": return $"fleet:{i.count} {i.name}@{i.planet}";
                         case "endWar": return "endWar";
+                        // The third-party asks print as startWar:<id> and endWarWith:<id> (name holds the player id).
                         default: return $"{i.kind}:{i.name}";
                     }
                 }));
@@ -474,6 +476,10 @@ namespace FlatSpace
                 var give = Terms(deal.Give);
                 var get = Terms(deal.Get);
                 AITuningLogger.LogProposal(_turn, HumanId, ctx.Rival, give, get, verdict.Net, verdict.Band.ToString(), verdict.Accept);
+                // One DealAsk line per ask item, hostility read now (before Execute can change anything).
+                foreach (var ask in verdict.AskTerms)
+                    AITuningLogger.LogDealAsk(_turn, HumanId, ctx.Rival, ask.kind, ask.third, ask.worth,
+                        _map.Diplomacy.Hostility(ctx.Rival, HumanId), _map.Diplomacy.Hostility(ctx.Rival, ask.third), verdict.Accept);
                 var terms = $"rival {ctx.Rival} give {give} get {get} net {verdict.Net.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}";
                 if (!verdict.Accept)
                 {
